@@ -1,20 +1,25 @@
 /** CDP 릴레이 - 티켓이 쥔 브라우저의 화면을 SSE로 흘리고 입력을 받는다 (DESIGN.md §11-11
- *  결정 2-3). 선례는 `home/pty/[id]/route.ts`(GET 스트림 - POST 입력)와 같은 모양이지만
- *  **DELETE가 없다** - 이 브라우저는 세션이 빌린 슬롯이라, 화면이 탭을 닫으며 release를 부르면
- *  일하고 있는 세션의 브라우저가 죽는다(결정 2). 탭을 닫는 동작은 스트림을 끊는 것까지다.
+ *  결정 2-3, §11-15 결정 2). 선례는 `home/pty/[id]/route.ts`(GET 스트림 - POST 입력)와 같은
+ *  모양이지만 **DELETE가 없다** - 이 브라우저는 세션이 빌린 슬롯이라, 화면이 탭을 닫으며
+ *  release를 부르면 일하고 있는 세션의 브라우저가 죽는다(결정 2). 탭을 닫는 동작은 스트림을
+ *  끊는 것까지다.
  *
  *  프로젝트 소유권을 다시 확인하지 않는다 - `hash`는 `^[0-9a-f]{8}$`로 재고(결정 1, 신뢰 경계),
  *  그 값으로 마는 `/tmp/qa-<해시>` 경로는 프로젝트별로 안 갈리는 시스템 전역 자리다.
  *
- *  **릴레이는 CDP 프록시가 아니다**(결정 3) - GET이 아는 것은 screencast 셋뿐이고 POST가 아는
- *  것은 `Input.dispatch*` 둘뿐이다. 클라이언트가 보낸 메서드 이름을 그대로 실어 나르는 줄이
- *  없다 - `toCdpInputCommand`가 그 화이트리스트다. */
+ *  **릴레이는 CDP 프록시가 아니다**(결정 3) - GET이 아는 것은 screencast 셋과 지금 주소
+ *  사건뿐이고 POST가 아는 것은 `Input.dispatch*` 둘과 `Page.navigate` 하나뿐이다. 클라이언트가
+ *  보낸 메서드 이름을 그대로 실어 나르는 줄이 없다 - `toCdpInputCommand`/`toCdpNavigateCommand`가
+ *  그 화이트리스트다. `navigate`는 링크 슬롯(`c0ffee00`, §11-15 결정 1) 하나에만 선다. */
 import { readFile } from "node:fs/promises";
 import {
   browserPortPath,
+  isNavigableUrl,
   isValidCdpHash,
+  LINK_SLOT_HASH,
   portFromDevToolsFile,
   toCdpInputCommand,
+  toCdpNavigateCommand,
 } from "@/lib/cdp-relay";
 
 async function validHash(params: Promise<{ hash: string }>): Promise<string | null> {
@@ -27,15 +32,16 @@ async function activePort(hash: string): Promise<number | null> {
   return portFromDevToolsFile(raw);
 }
 
-type CdpTarget = { type: string; webSocketDebuggerUrl?: string };
+type CdpTarget = { type: string; url?: string; webSocketDebuggerUrl?: string };
 
-/** `/json`에서 `type`이 `page`인 첫 대상의 `webSocketDebuggerUrl`을 얻는다(결정 2). */
-async function pageWsUrl(port: number): Promise<string | null> {
+/** `/json`에서 `type`이 `page`인 첫 대상을 얻는다(결정 2) - `webSocketDebuggerUrl`은 소켓을
+ *  여는 데 쓰고, `url`은 GET이 붙은 직후 보내는 첫 `event: url`의 값이다. */
+async function pageTarget(port: number): Promise<CdpTarget | null> {
   const res = await fetch(`http://127.0.0.1:${port}/json`).catch(() => null);
   if (!res?.ok) return null;
   const targets = (await res.json().catch(() => null)) as CdpTarget[] | null;
   if (!Array.isArray(targets)) return null;
-  return targets.find((t) => t.type === "page")?.webSocketDebuggerUrl ?? null;
+  return targets.find((t) => t.type === "page") ?? null;
 }
 
 /** 화면 스트림 - screencast를 열고 프레임마다 SSE 사건 하나(`data:`의 값이 base64 JPEG 그대로,
@@ -46,8 +52,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
   if (!hash) return new Response("bad hash", { status: 400 });
   const port = await activePort(hash);
   if (!port) return new Response("no browser", { status: 404 });
-  const wsUrl = await pageWsUrl(port);
-  if (!wsUrl) return new Response("no browser", { status: 404 });
+  const target = await pageTarget(port);
+  if (!target?.webSocketDebuggerUrl) return new Response("no browser", { status: 404 });
+  const wsUrl = target.webSocketDebuggerUrl;
 
   let ws: WebSocket | null = null;
   let closed = false;
@@ -56,9 +63,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
     start(controller) {
       const enc = new TextEncoder();
       let nextId = 1;
+      const sendUrl = (url: string) => {
+        try {
+          controller.enqueue(enc.encode(`event: url\ndata: ${url}\n\n`));
+        } catch {
+          // 구독자가 이미 정리된 뒤 - cancel()이 늦게 온 경우
+        }
+      };
       ws = new WebSocket(wsUrl);
 
       ws.addEventListener("open", () => {
+        // Page.frameNavigated 사건은 Page 도메인을 켜야 온다(§11-15 결정 2).
+        ws?.send(JSON.stringify({ id: nextId++, method: "Page.enable" }));
+        if (target.url) sendUrl(target.url);
         ws?.send(
           JSON.stringify({
             id: nextId++,
@@ -70,10 +87,19 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
 
       ws.addEventListener("message", (ev) => {
         if (closed) return;
-        let msg: { method?: string; params?: { data?: string; sessionId?: number } };
+        let msg: {
+          method?: string;
+          params?: { data?: string; sessionId?: number; frame?: { url?: string; parentId?: string } };
+        };
         try {
           msg = JSON.parse(String(ev.data));
         } catch {
+          return;
+        }
+        if (msg.method === "Page.frameNavigated") {
+          const frame = msg.params?.frame;
+          // 최상위 프레임만 - `parentId`가 있으면 iframe이다(§11-15 결정 2).
+          if (frame && !frame.parentId && typeof frame.url === "string") sendUrl(frame.url);
           return;
         }
         if (msg.method !== "Page.screencastFrame" || !msg.params?.data) return;
@@ -159,15 +185,19 @@ function sendCdpCommand(
   });
 }
 
-/** 입력 - 본문의 `type`으로만 `Input.dispatchMouseEvent`/`Input.dispatchKeyEvent` 중 하나를
- *  고른다(결정 3, `toCdpInputCommand`). 그 둘 중 어느 쪽도 아니면 400이다. */
+/** 입력 - 본문의 `type`으로 `Input.dispatchMouseEvent`/`Input.dispatchKeyEvent`/`navigate`
+ *  중 하나를 고른다(결정 3, `toCdpInputCommand`/`toCdpNavigateCommand`). 어느 쪽도 아니면
+ *  400이다. `navigate`는 링크 슬롯(`c0ffee00`) 밖이면 403이고 스킴이 http/https 밖이면
+ *  400이다(§11-15 결정 2) - 릴레이가 실어 나르는 메서드가 다섯에서 여섯으로 늘 뿐, 클라이언트가
+ *  보낸 메서드 이름을 그대로 옮기는 갈래는 여전히 0개다. */
 export async function POST(req: Request, { params }: { params: Promise<{ hash: string }> }) {
   const hash = await validHash(params);
   if (!hash) return new Response("bad hash", { status: 400 });
   const port = await activePort(hash);
   if (!port) return new Response("no browser", { status: 404 });
-  const wsUrl = await pageWsUrl(port);
-  if (!wsUrl) return new Response("no browser", { status: 404 });
+  const target = await pageTarget(port);
+  if (!target?.webSocketDebuggerUrl) return new Response("no browser", { status: 404 });
+  const wsUrl = target.webSocketDebuggerUrl;
 
   let body: unknown;
   try {
@@ -175,6 +205,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ hash: s
   } catch {
     return new Response("bad body", { status: 400 });
   }
+
+  const navCmd = toCdpNavigateCommand(body);
+  if (navCmd) {
+    if (hash !== LINK_SLOT_HASH) return new Response("forbidden", { status: 403 });
+    if (!isNavigableUrl(navCmd.url)) return new Response("bad url", { status: 400 });
+    const ok = await sendCdpCommand(wsUrl, "Page.navigate", { url: navCmd.url });
+    return Response.json({ ok });
+  }
+
   const cmd = toCdpInputCommand(body);
   if (!cmd) return new Response("bad body", { status: 400 });
 

@@ -47,6 +47,33 @@ export function toCdpInputCommand(body: unknown): CdpInputCommand | null {
   return null;
 }
 
+/** 앱 안의 링크가 여는 슬롯 해시 하나(DESIGN.md §11-15 결정 1) - `navigate`는 이 해시에만
+ *  선다. 값을 만드는 자리는 이 티켓 밖(§11-15 결정 1의 화면 쪽)이고, 여기는 그 값과 비교만
+ *  한다. */
+export const LINK_SLOT_HASH = "c0ffee00";
+
+export type CdpNavigateCommand = { url: string };
+
+/** POST 본문 -> `navigate` 요청. `type`이 `"navigate"`이고 `url`이 문자열일 때만 값을 낸다 -
+ *  스킴 재고는 `isNavigableUrl`이 따로 한다(§11-15 결정 2, 403과 400을 가르는 자리가 다르다). */
+export function toCdpNavigateCommand(body: unknown): CdpNavigateCommand | null {
+  if (!body || typeof body !== "object") return null;
+  const { type, url } = body as Record<string, unknown>;
+  if (type !== "navigate" || typeof url !== "string") return null;
+  return { url };
+}
+
+/** `http:`/`https:` 밖의 스킴(`javascript:` - `file:` - `data:`)은 전부 거절한다(§11-15
+ *  결정 2) - 주소가 사람의 입력에서 오는 신뢰 경계라 서버가 한 번 더 잰다. */
+export function isNavigableUrl(url: string): boolean {
+  try {
+    const scheme = new URL(url).protocol;
+    return scheme === "http:" || scheme === "https:";
+  } catch {
+    return false;
+  }
+}
+
 export type CdpFrameOutcome = "ok" | "disconnected" | "aborted";
 
 /** GET 응답(`text/event-stream`)을 읽는다 - `data:` 줄 하나가 프레임 하나(base64 JPEG 그대로,

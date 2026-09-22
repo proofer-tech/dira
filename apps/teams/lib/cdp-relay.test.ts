@@ -2,10 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   browserPortPath,
+  isNavigableUrl,
   isValidCdpHash,
   portFromDevToolsFile,
   readCdpFrameStream,
   toCdpInputCommand,
+  toCdpNavigateCommand,
 } from "./cdp-relay.ts";
 
 test("해시는 8자리 소문자 hex만 통과한다", () => {
@@ -56,6 +58,25 @@ test("모르는 type이나 형식이 아닌 본문은 null이다 - 임의 메서
   assert.equal(toCdpInputCommand({ method: "Page.navigate" }), null);
   assert.equal(toCdpInputCommand(null), null);
   assert.equal(toCdpInputCommand("mousePressed"), null);
+});
+
+test("navigate 본문은 type이 navigate이고 url이 문자열일 때만 값을 낸다", () => {
+  assert.deepEqual(toCdpNavigateCommand({ type: "navigate", url: "https://example.com" }), {
+    url: "https://example.com",
+  });
+  assert.equal(toCdpNavigateCommand({ type: "navigate", url: 1 }), null);
+  assert.equal(toCdpNavigateCommand({ type: "mousePressed", url: "https://example.com" }), null);
+  assert.equal(toCdpNavigateCommand(null), null);
+  assert.equal(toCdpNavigateCommand("navigate"), null);
+});
+
+test("http/https 밖의 스킴은 이동을 못 한다", () => {
+  assert.equal(isNavigableUrl("https://example.com"), true);
+  assert.equal(isNavigableUrl("http://example.com"), true);
+  assert.equal(isNavigableUrl("javascript:alert(1)"), false);
+  assert.equal(isNavigableUrl("file:///etc/passwd"), false);
+  assert.equal(isNavigableUrl("data:text/html,hi"), false);
+  assert.equal(isNavigableUrl("not a url"), false);
 });
 
 function sseOf(chunks: string[]): ReadableStream<Uint8Array> {
