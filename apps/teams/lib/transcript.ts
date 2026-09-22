@@ -397,11 +397,12 @@ function ticketAssignmentPattern(): RegExp | null {
 /** 참견 문구가 **엔진의 티켓 배정**인가(§2-9 ②) — 참인 것은 말풍선이 아니라 기록으로 간다. */
 const isTicketAssignment = (text: string): boolean => ticketAssignmentPattern()?.test(text) ?? false;
 
-/** `tick.sh`의 계획 재촉 리터럴로 만든 정규식(§2-9 §개정) — `ticketAssignmentPattern()`과 같은
- *  수법이다: 문구를 이 파일에 베끼지 않는다. `tick.sh`가 fd 9에 보내는 문장은 `PN_KIND`에 따라
- *  `if`/`else` 두 갈래로 나뉜 `PN_MSG` 대입인데, 여기서는 `else` 갈래(`PN_KIND`가 `section`이
- *  아닌 통상 경로)의 리터럴 하나만 골라낸다. 변수 보간이 없는 리터럴이라 따옴표 안에 `$`가
- *  없는 것으로 걸러진다. 엔진 레포를 못 찾으면 `null`. */
+/** `tick.sh`가 fd 9로 내보내는 재촉 리터럴 전부로 만든 정규식(§2-9 §개정, P431-1) —
+ *  `ticketAssignmentPattern()`과 같은 수법이다: 문구를 이 파일에 베끼지 않는다. 갈래는 셋 —
+ *  `PN_KIND=section`일 때의 `PN_MSG` 대입, 그 `else`(통상 경로)일 때의 `PN_MSG` 대입, 그리고
+ *  밀린 백그라운드 작업을 미는 별도 리터럴(REUSE 판정 앞, `PN_MSG`를 안 거친다). 셋 다 변수
+ *  보간이 없는 리터럴이라 따옴표 안에 `$`가 없는 것으로 걸러진다 — `tick.sh:1876`의 재활용
+ *  프롬프트(`"$RPROMPT"`)는 `$`가 있어서 이 필터에 안 걸린다. 엔진 레포를 못 찾으면 `null`. */
 let nudgePattern: RegExp | null | undefined;
 
 function planNudgePattern(): RegExp | null {
@@ -411,10 +412,12 @@ function planNudgePattern(): RegExp | null {
     const repo = engineRepo();
     if ("path" in repo) {
       const sh = readFileSync(path.join(repo.path, "tick.sh"), "utf8");
-      const m = sh.match(/^\s*else\s*\n\s*PN_MSG="([^"$]+)"\s*$/m);
-      if (m) {
-        const escaped = m[1].replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        nudgePattern = new RegExp(`^${escaped}`);
+      const literals = [...sh.matchAll(/PN_MSG="([^"$]+)"/g)].map((m) => m[1]);
+      const bg = sh.match(/^\s*"([^"$]+)"\s*>&9\s*$/m);
+      if (bg) literals.push(bg[1]);
+      if (literals.length) {
+        const alts = literals.map((l) => l.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+        nudgePattern = new RegExp(`^(?:${alts})`);
       }
     }
   } catch {

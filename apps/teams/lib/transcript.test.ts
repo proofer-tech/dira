@@ -405,16 +405,20 @@ test("참견 — 배정 문구 뒤에 참조 컨텍스트·언어 문장이 더 
 
 // ---------- 계획 재촉 문구도 말풍선이 아니다 (§2-9 §개정) ----------
 
-/** `tick.sh`가 fd 9에 보내는 재촉 리터럴을 **여기서도 베끼지 않는다** — 배정 문구 테스트와
- *  같은 수법으로 `tick.sh`를 직접 읽는다. 문구는 `PN_KIND`에 따라 `if`/`else` 두 갈래로 나뉜
- *  `PN_MSG` 대입이라, `else` 갈래(통상 경로) 하나만 뽑는다(`$` 없는 리터럴이라 재활용 프롬프트
- *  줄과 안 섞인다). `tick.sh`의 그 리터럴을 바꾸면 이 값도 같이 갈리므로, 문구를 하드코딩했을
- *  때는 못 잡는 회귀를 잡는다. */
-const NUDGE_MATCH = TICK_SH.match(/^\s*else\s*\n\s*PN_MSG="([^"$]+)"\s*$/m);
-if (!NUDGE_MATCH) throw new Error("tick.sh에서 계획 재촉 리터럴을 못 읽었다 — 판정 회귀 테스트가 무의미해진다");
-const nudgeText = NUDGE_MATCH[1];
+/** `tick.sh`가 fd 9에 보내는 재촉 리터럴 셋을 **여기서도 베끼지 않는다**(§2-9 §개정, P431-1) —
+ *  배정 문구 테스트와 같은 수법으로 `tick.sh`를 직접 읽는다. 갈래는 `PN_KIND=section`일 때의
+ *  `PN_MSG` 대입, 그 `else`(통상 경로)일 때의 `PN_MSG` 대입, 밀린 백그라운드 작업을 미는 별도
+ *  리터럴(`PN_MSG`를 안 거친다) 셋이다. `tick.sh`의 리터럴 중 하나라도 바뀌면 이 값들도 같이
+ *  갈리므로, 문구를 하드코딩했을 때는 못 잡는 회귀를 잡는다. */
+const PN_MSG_MATCHES = [...TICK_SH.matchAll(/PN_MSG="([^"$]+)"/g)];
+if (PN_MSG_MATCHES.length !== 2) throw new Error("tick.sh에서 PN_MSG 리터럴 두 갈래를 못 읽었다 — 판정 회귀 테스트가 무의미해진다");
+const sectionNudgeText = PN_MSG_MATCHES[0][1];
+const nudgeText = PN_MSG_MATCHES[1][1];
+const BG_NUDGE_MATCH = TICK_SH.match(/^\s*"([^"$]+)"\s*>&9\s*$/m);
+if (!BG_NUDGE_MATCH) throw new Error("tick.sh에서 백그라운드 재촉 리터럴을 못 읽었다 — 판정 회귀 테스트가 무의미해진다");
+const bgNudgeText = BG_NUDGE_MATCH[1];
 
-test("참견 — tick.sh의 계획 재촉 문구는 접힌다. 사람 참견은 그대로 말풍선이다", () => {
+test("참견 — tick.sh의 계획 재촉 문구(else 갈래)는 접힌다. 사람 참견은 그대로 말풍선이다", () => {
   const nudge = enqueueOf(nudgeText);
   assert.notEqual(nudge.label, ""); // 기록(접힌 줄) — 말풍선이 아니다
   assert.equal(nudge.kind, "interject"); // 종류는 그대로다. 갈리는 것은 문법(label)뿐이다
@@ -422,6 +426,20 @@ test("참견 — tick.sh의 계획 재촉 문구는 접힌다. 사람 참견은 
 
   const human = enqueueOf(INTERJECT);
   assert.equal(human.label, ""); // 사람이 쓴 참견은 여전히 말풍선이다
+});
+
+test("참견 — tick.sh의 계획 재촉 문구(PN_KIND=section 갈래)도 접힌다", () => {
+  const sectionNudge = enqueueOf(sectionNudgeText);
+  assert.notEqual(sectionNudge.label, "");
+  assert.equal(sectionNudge.kind, "interject");
+  assert.equal(sectionNudge.body, sectionNudgeText);
+});
+
+test("참견 — 밀린 백그라운드 작업을 미는 재촉 문구도 접힌다", () => {
+  const bgNudge = enqueueOf(bgNudgeText);
+  assert.notEqual(bgNudge.label, "");
+  assert.equal(bgNudge.kind, "interject");
+  assert.equal(bgNudge.body, bgNudgeText);
 });
 
 test("참견 — 재촉 문구를 본문 안에 인용한 사람 글은 여전히 말풍선이다(과잉 필터 방어)", () => {
