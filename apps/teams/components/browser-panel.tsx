@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocale, useT } from "@/components/language-provider";
-import { LINK_BROWSER_HASH, readCdpFrameStream } from "@/lib/cdp-relay";
+import { LINK_SLOT_HASH, readCdpFrameStream } from "@/lib/cdp-relay";
 import { keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
 import { useTrackedRouter } from "@/lib/route-pending";
@@ -30,7 +30,7 @@ function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
 export function browserOwnerLabel(row: BrowserPoolRow, t: (key: string) => string): string | null {
   // 해시가 `c0ffee00`인 줄만 이름을 `링크`로 옮긴다(§11-15 결정 1 §좌측 브라우저 패널은
   // 이 줄을 해시로 가른다) — `owner` 토큰(`home`)은 안 바뀌고 표시 이름만 특례다.
-  if (row.hash === LINK_BROWSER_HASH) return t("home.surface.browser.owner.link");
+  if (row.hash === LINK_SLOT_HASH) return t("home.surface.browser.owner.link");
   if (row.ownerKind === "worker") return row.ownerName;
   if (row.ownerKind === "home") return t("home.surface.browser.owner.home");
   if (row.ownerKind === "external") return t("home.surface.browser.owner.external");

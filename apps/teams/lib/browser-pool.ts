@@ -10,7 +10,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { localDir } from "./paths.ts";
-import { LINK_BROWSER_HASH, isValidCdpHash } from "./cdp-relay.ts";
+import { LINK_SLOT_HASH, isValidCdpHash } from "./cdp-relay.ts";
 import { alive } from "./workers.ts";
 
 function poolDir(): string {
@@ -91,6 +91,6 @@ export async function poolLimit(): Promise<number> {
 export async function linkOpenBlocked(): Promise<{ blocked: boolean; used: number; limit: number }> {
   const { slots } = await listBrowserPoolSlots();
   const limit = await poolLimit();
-  if (slots.some((s) => s.hash === LINK_BROWSER_HASH)) return { blocked: false, used: slots.length, limit };
+  if (slots.some((s) => s.hash === LINK_SLOT_HASH)) return { blocked: false, used: slots.length, limit };
   return { blocked: slots.length >= limit, used: slots.length, limit };
 }

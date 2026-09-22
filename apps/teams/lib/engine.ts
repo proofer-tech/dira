@@ -10,7 +10,7 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
-import { LINK_BROWSER_HASH } from "./cdp-relay.ts";
+import { LINK_SLOT_HASH } from "./cdp-relay.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { NAME_RE, isHash, resolveWithin } from "./paths.ts";
 import { findPath, listTickets, type Suffixes } from "./queue.ts";
@@ -180,7 +180,7 @@ export async function reclaimBrowserPool(root: string): Promise<Run> {
 export async function openLinkBrowser(root: string, url: string): Promise<Run> {
   return execScript(
     "bash",
-    [path.join(root, "browse.sh"), LINK_BROWSER_HASH, "goto", url],
+    [path.join(root, "browse.sh"), LINK_SLOT_HASH, "goto", url],
     undefined,
     { ...process.env, DIRA_SESSION_KIND: "home" },
   );
@@ -190,7 +190,7 @@ export async function openLinkBrowser(root: string, url: string): Promise<Run> {
  *  해시를 안 받는다 — 이 액션이 여는 슬롯은 `c0ffee00` 하나뿐이라 화면이 다른 해시를 실어
  *  나를 길을 원천에서 막는다. */
 export async function releaseLinkBrowser(root: string): Promise<Run> {
-  return execScript("bash", [path.join(root, "browse.sh"), LINK_BROWSER_HASH, "release"]);
+  return execScript("bash", [path.join(root, "browse.sh"), LINK_SLOT_HASH, "release"]);
 }
 
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).
