@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
+import { createHash } from "node:crypto";
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -417,6 +418,17 @@ const nudgeText = PN_MSG_MATCHES[1][1];
 const BG_NUDGE_MATCH = TICK_SH.match(/^\s*"([^"$]+)"\s*>&9\s*$/m);
 if (!BG_NUDGE_MATCH) throw new Error("tick.sh에서 백그라운드 재촉 리터럴을 못 읽었다 — 판정 회귀 테스트가 무의미해진다");
 const bgNudgeText = BG_NUDGE_MATCH[1];
+
+/** 위 세 상수는 tick.sh를 실행 시점에 다시 읽어 만든 값이라, 문구를 한 글자 고쳐도
+ *  `planNudgePattern()`과 여기가 같이 갈려 자기 자신과는 항상 일치한다(P431-2 QA 발견,
+ *  §수용조건 5 부분 실패). 그래서 문구가 아니라 **문구의 해시**를 이 파일에 고정값으로
+ *  박는다 — `tick.sh`의 세 리터럴 중 하나라도 한 글자 바뀌면 이 해시 비교가 깨진다. */
+const sha256 = (text: string) => createHash("sha256").update(text, "utf8").digest("hex");
+test("회귀 방어 — tick.sh 재촉 리터럴 셋의 해시가 고정값과 일치한다(문구가 바뀌면 여기서 빨개진다)", () => {
+  assert.equal(sha256(sectionNudgeText), "864575717f36bcbc3f8d5936223688c66cb6e0e9772cff04cd8bec01f2efefb9");
+  assert.equal(sha256(nudgeText), "f6e67850df86c10658d8e4ff0e27d0674bc53621f3ad7f3971ae8237eb7d5c86");
+  assert.equal(sha256(bgNudgeText), "73a1ee9b1f9aba7934ac160bcff162496a2feee0c890e30d2692069b0d5ec90d");
+});
 
 test("참견 — tick.sh의 계획 재촉 문구(else 갈래)는 접힌다. 사람 참견은 그대로 말풍선이다", () => {
   const nudge = enqueueOf(nudgeText);
