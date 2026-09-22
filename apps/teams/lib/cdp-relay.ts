@@ -12,6 +12,11 @@ export function isValidCdpHash(hash: string): boolean {
   return HASH_RE.test(hash);
 }
 
+/** 앱 안 링크가 쓰는 슬롯의 고정 해시(§11-15 결정 1). `isValidCdpHash`의 관문을 그대로
+ *  통과하는 8자리 16진수다 - 링크마다 해시를 새로 만들면 그 값을 어딘가에 저장해야 하는데,
+ *  화면이 새로 저장할 값을 0개로 두려는 선택이 값 하나를 고정한다. */
+export const LINK_BROWSER_HASH = "c0ffee00";
+
 /** `browser.sh`의 `_existing_port()`가 읽는 것과 같은 경로(결정 1). */
 export function browserPortPath(hash: string, tmpDir = "/tmp"): string {
   return `${tmpDir}/qa-${hash}/chrome-profile/DevToolsActivePort`;

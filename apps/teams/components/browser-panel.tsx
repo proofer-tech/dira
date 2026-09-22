@@ -9,14 +9,15 @@
  *  시작한다. `TerminalSurface`처럼 탭을 오가는 동안(표면 전환)은 `hidden`으로만 접히므로
  *  그 사이에는 걷힌 상태가 유지된다 — 결정 6이 요구하는 것은 새로고침·탭 닫기 재시작 둘뿐이다. */
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { useLocale, useT } from "@/components/language-provider";
-import { readCdpFrameStream } from "@/lib/cdp-relay";
+import { LINK_BROWSER_HASH, readCdpFrameStream } from "@/lib/cdp-relay";
 import { keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
 import { useTrackedRouter } from "@/lib/route-pending";
 import { writeStoredActiveTab } from "@/lib/tabs";
-import { openBrowserTabAction, type BrowserPoolRow } from "@/app/(app)/p/[project]/home/actions";
-import { wrap } from "@/lib/i18n";
+import { openBrowserTabAction, openLinkAction, type BrowserPoolRow } from "@/app/(app)/p/[project]/home/actions";
+import { linkCapToastMessage, wrap, type Locale } from "@/lib/i18n";
 
 function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
@@ -27,10 +28,23 @@ function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
  *  `home` - `external`은 여기서 i18n으로 옮긴다. `owner`가 없는 옛 슬롯은 `null`이다 —
  *  추정으로 메우지 않는다(결정 1 마지막 줄과 같은 경계). */
 export function browserOwnerLabel(row: BrowserPoolRow, t: (key: string) => string): string | null {
+  // 해시가 `c0ffee00`인 줄만 이름을 `링크`로 옮긴다(§11-15 결정 1 §좌측 브라우저 패널은
+  // 이 줄을 해시로 가른다) — `owner` 토큰(`home`)은 안 바뀌고 표시 이름만 특례다.
+  if (row.hash === LINK_BROWSER_HASH) return t("home.surface.browser.owner.link");
   if (row.ownerKind === "worker") return row.ownerName;
   if (row.ownerKind === "home") return t("home.surface.browser.owner.home");
   if (row.ownerKind === "external") return t("home.surface.browser.owner.external");
   return null;
+}
+
+/** 앱 안 링크를 링크 슬롯(`c0ffee00`)에서 연다(§11-15 결정 1 · 4) — P430-3의 클릭 리스너·
+ *  터미널 링크 제공자·피드백 링크가 부를 이름 하나다. 서버 액션(`openLinkAction`)이 상한을
+ *  재고, 막혔으면 토스트 한 줄로 알린다(결정 4 §알리는 자리는 토스트 한 줄이다). */
+export async function openLink(projectId: string, url: string, locale: Locale): Promise<void> {
+  const result = await openLinkAction(projectId, url);
+  if (!result.ok && result.reason === "cap") {
+    toast(linkCapToastMessage(locale, result.used, result.limit));
+  }
 }
 
 /** 이름 끝 글자의 받침 여부로 주격 조사(이/가)를 고른다. 로마자·숫자·빈 문자열은 받침이 없는

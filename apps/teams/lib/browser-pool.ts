@@ -10,7 +10,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { localDir } from "./paths.ts";
-import { isValidCdpHash } from "./cdp-relay.ts";
+import { LINK_BROWSER_HASH, isValidCdpHash } from "./cdp-relay.ts";
 import { alive } from "./workers.ts";
 
 function poolDir(): string {
@@ -74,4 +74,23 @@ export async function listBrowserPoolSlots(): Promise<BrowserPoolSlots> {
     slots.push({ hash, owner, busy: busyPid !== null && alive(busyPid) });
   }
   return { slots, hasDeadSlot };
+}
+
+/** 풀 상한(§11-15 결정 4) — `browser.sh`의 `_limit()`과 같은 판정이다: `browser-limit`
+ *  첫 줄이 정수가 아니거나 파일이 없으면 기본값 6(2026-09-16 재조정, 요구 `cc2e4f22`). 두 벌로
+ *  판정하면 셸과 화면이 다른 상한을 볼 수 있다 — 여기서는 셸이 이미 쓴 파일을 그대로 읽는다. */
+export async function poolLimit(): Promise<number> {
+  const raw = await readTrimmed(path.join(localDir(), "browser-limit"));
+  const n = Number.parseInt(raw, 10);
+  return Number.isInteger(n) && n > 0 ? n : 6;
+}
+
+/** 링크가 열릴 슬롯이 막혔는지(§11-15 결정 4). `c0ffee00` 슬롯이 이미 있으면 상한과 무관하게
+ *  안 막힌다 — 도는 것이 `goto` 하나라 새 슬롯을 안 빌린다(결정 4 첫 줄). 그 슬롯이 없을 때만
+ *  상한을 잰다. `used`·`limit`은 토스트 문구가 쓴다. */
+export async function linkOpenBlocked(): Promise<{ blocked: boolean; used: number; limit: number }> {
+  const { slots } = await listBrowserPoolSlots();
+  const limit = await poolLimit();
+  if (slots.some((s) => s.hash === LINK_BROWSER_HASH)) return { blocked: false, used: slots.length, limit };
+  return { blocked: slots.length >= limit, used: slots.length, limit };
 }

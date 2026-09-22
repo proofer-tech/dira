@@ -8,7 +8,7 @@ import path from "node:path";
 const LOCAL = mkdtempSync(path.join(tmpdir(), "browser-pool-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
-const { listBrowserPoolSlots } = await import("./browser-pool.ts");
+const { linkOpenBlocked, listBrowserPoolSlots, poolLimit } = await import("./browser-pool.ts");
 
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
@@ -55,4 +55,41 @@ test("listBrowserPoolSlots — owner·busy를 같이 읽는다. owner 없으면 
   assert.deepStrictEqual(byHash["11223344"], { hash: "11223344", owner: "worker:w3", busy: true });
   assert.deepStrictEqual(byHash["55667788"], { hash: "55667788", owner: null, busy: false });
   assert.deepStrictEqual(byHash["99aabbcc"], { hash: "99aabbcc", owner: null, busy: false });
+});
+
+// ── poolLimit · linkOpenBlocked (DESIGN.md §11-15 결정 4, 요구 `69b74fed`) ──────────────────
+
+test("poolLimit — browser-limit이 없으면 기본값 6, 정수 밖 값도 6으로 물러난다", async () => {
+  assert.strictEqual(await poolLimit(), 6); // 이 시점까지 browser-limit을 아무도 안 썼다
+  writeFileSync(path.join(LOCAL, "browser-limit"), "허튼값\n");
+  assert.strictEqual(await poolLimit(), 6);
+  writeFileSync(path.join(LOCAL, "browser-limit"), "3\n");
+  assert.strictEqual(await poolLimit(), 3);
+});
+
+test("linkOpenBlocked — c0ffee00 슬롯이 있으면 상한이 다 차 있어도 안 막힌다", async () => {
+  writeFileSync(path.join(LOCAL, "browser-limit"), "1\n"); // 지금 슬롯 수(위 테스트들 누적)보다 낮게
+  slot("slot-link", { hash: "c0ffee00", pid: String(process.pid), owner: "home" });
+  const gate = await linkOpenBlocked();
+  assert.strictEqual(gate.blocked, false);
+  assert.strictEqual(gate.limit, 1);
+});
+
+test("linkOpenBlocked — c0ffee00 슬롯이 없고 상한이 다 찼으면 막힌다", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "browser-pool-local-cap-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  try {
+    writeFileSync(path.join(local, "browser-limit"), "1\n");
+    mkdirSync(path.join(local, "browser-pool", "slot-other"), { recursive: true });
+    writeFileSync(path.join(local, "browser-pool", "slot-other", "hash"), "deadbeef");
+    writeFileSync(path.join(local, "browser-pool", "slot-other", "pid"), String(process.pid));
+    const gate = await linkOpenBlocked();
+    assert.strictEqual(gate.blocked, true);
+    assert.strictEqual(gate.used, 1);
+    assert.strictEqual(gate.limit, 1);
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+    rmSync(local, { recursive: true, force: true });
+  }
 });

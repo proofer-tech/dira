@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync, spawn } from "node:child_process";
-import { discardGateDirty, findTicket, preempt, runWorker, unassign } from "./engine.ts";
+import { discardGateDirty, findTicket, openLinkBrowser, preempt, releaseLinkBrowser, runWorker, unassign } from "./engine.ts";
 import { listTickets, type Suffixes } from "./queue.ts";
 import { commonSourceLine } from "./workers.ts";
 import { scaffold } from "./scaffold.ts";
@@ -263,6 +263,39 @@ test("discardGateDirty — 서버 cwd가 딴 레포여도 `root`가 가리키는
   assert.strictEqual(git(project, "status", "--porcelain", "-uno").trim(), ""); // project 쪽 잔해가 버려졌다
   assert.strictEqual(git(project, "show", "HEAD:foo.txt"), "B\n"); // 되돌아간 게 아니라 버려진 것
   assert.strictEqual(readFileSync(path.join(other, "bar.txt"), "utf8"), "더러움\n"); // other는 안 건드렸다
+});
+
+// ── openLinkBrowser · releaseLinkBrowser (DESIGN.md §11-15 결정 1 · 4, 요구 `69b74fed`) ──
+
+test("openLinkBrowser — browse.sh c0ffee00 goto <url>을 DIRA_SESSION_KIND=home으로 부른다", async () => {
+  const r = mkdtempSync(path.join(tmpdir(), "fst-link-open-"));
+  process.on("exit", () => rmSync(r, { recursive: true, force: true }));
+  writeFileSync(
+    path.join(r, "browse.sh"),
+    `#!/bin/sh\nprintf '%s|%s\\n' "$DIRA_SESSION_KIND" "$*" >> "${path.join(r, "ran.txt")}"\nprintf 'ok'\n`,
+    { mode: 0o755 },
+  );
+  const run = await openLinkBrowser(r, "https://example.com");
+  assert.strictEqual(run.ok, true, run.output);
+  assert.strictEqual(run.output, "ok");
+  assert.strictEqual(
+    readFileSync(path.join(r, "ran.txt"), "utf8").trim(),
+    "home|c0ffee00 goto https://example.com",
+  );
+});
+
+test("releaseLinkBrowser — browse.sh c0ffee00 release만 부른다(다른 해시는 인자로 안 실린다)", async () => {
+  const r = mkdtempSync(path.join(tmpdir(), "fst-link-release-"));
+  process.on("exit", () => rmSync(r, { recursive: true, force: true }));
+  writeFileSync(
+    path.join(r, "browse.sh"),
+    `#!/bin/sh\necho "$@" >> "${path.join(r, "ran.txt")}"\nprintf 'released'\n`,
+    { mode: 0o755 },
+  );
+  const run = await releaseLinkBrowser(r);
+  assert.strictEqual(run.ok, true, run.output);
+  assert.strictEqual(run.output, "released");
+  assert.strictEqual(readFileSync(path.join(r, "ran.txt"), "utf8").trim(), "c0ffee00 release");
 });
 
 test("unassign — 산 세션은 코드 3으로 거부하고 --force면 끊고 푼다", async () => {

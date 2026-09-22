@@ -2206,6 +2206,14 @@ export const ko: Record<string, string> = {
   "home.surface.browser.owner.external": "외부 호출",
   "browser.mirror.inUse.suffix": "쓰는 중",
 
+  // 링크 슬롯(§11-15 결정 1 · 4) — 해시 `c0ffee00`인 줄의 이름과 상한 토스트. 문구는
+  // `linkCapToastMessage`(`lib/i18n.ts`)가 접두·수·구분자·수·접미 순으로 이어 붙인다 —
+  // `settings.workers.sessionCapTotalPrefix` 한 벌과 같은 조립 방식이다.
+  "home.surface.browser.owner.link": "링크",
+  "browser.linkCap.prefix": "브라우저 자리가 ",
+  "browser.linkCap.sep": "/",
+  "browser.linkCap.suffix": "으로 다 차서 링크를 못 엽니다.",
+
   // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
   // push·pull. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이
   // 사전을 안 거친다(§비주얼 §72 ④ — 화면이 코드를 그대로 `font-mono`로 보여준다).
@@ -4513,6 +4521,10 @@ export const en: Record<string, string> = {
 
   "home.surface.browser.owner.home": "Home chat",
   "home.surface.browser.owner.external": "External call",
+  "home.surface.browser.owner.link": "Link",
+  "browser.linkCap.prefix": "Browser slots are full (",
+  "browser.linkCap.sep": "/",
+  "browser.linkCap.suffix": ") — can't open the link.",
   "browser.mirror.inUse.suffix": "in use",
 
   "home.scm.checkout": "Checkout",
@@ -5350,4 +5362,12 @@ export function t(locale: Locale, key: string): string {
  *  `앞·변수·뒤` 셋이고, 그 이상이 나오면 그때 만든다. */
 export function wrap(prefix: string, mid: string, suffix: string): string {
   return [prefix, mid, suffix].filter(Boolean).join(" ");
+}
+
+/** 링크 슬롯이 상한에 막혔을 때의 토스트 한 줄(§11-15 결정 4 §알리는 자리는 토스트 한 줄이다.
+ *  문구에 상한과 지금 쓰는 수를 적는다). `browser.linkCap.prefix` + 씀 + `.sep` + 상한 +
+ *  `.suffix` 순으로 이어 붙인다 — `settings.workers.sessionCapTotalPrefix`/`Sep`과 같은
+ *  조립 방식이고, 자리표시자 치환기는 `wrap`의 ponytail 결정과 같은 이유로 안 만든다. */
+export function linkCapToastMessage(locale: Locale, used: number, limit: number): string {
+  return `${t(locale, "browser.linkCap.prefix")}${used}${t(locale, "browser.linkCap.sep")}${limit}${t(locale, "browser.linkCap.suffix")}`;
 }

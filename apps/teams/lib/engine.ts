@@ -10,6 +10,7 @@
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { promisify } from "node:util";
+import { LINK_BROWSER_HASH } from "./cdp-relay.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { NAME_RE, isHash, resolveWithin } from "./paths.ts";
 import { findPath, listTickets, type Suffixes } from "./queue.ts";
@@ -33,7 +34,7 @@ export type Run = { ok: boolean; output: string; code?: number };
  *  워커 스크립트 경로가 프로젝트마다 다른 건 제약 2가 요구하는 설계다. */
 /** `runWorker`·`discardGateDirty`가 같이 쓰는 실행 한 벌 — 성공/실패 모양(`Run`)을 여기 한
  *  곳에서만 만든다. */
-async function execScript(cmd: string, args: string[], cwd?: string): Promise<Run> {
+async function execScript(cmd: string, args: string[], cwd?: string, env?: NodeJS.ProcessEnv): Promise<Run> {
   try {
     // f1aa3bb7 — 60초였고 `unassign --force`가 그 위로 넘었다. 이 경로는 엔진 안에서만 15초를
     // 두 번 기다린다(부모의 release, 그리고 kill 확인 — `tick.sh:469`, DESIGN.md 표 코드 `1`)
@@ -45,6 +46,7 @@ async function execScript(cmd: string, args: string[], cwd?: string): Promise<Ru
       timeout: 180_000,
       maxBuffer: 4 << 20,
       ...(cwd ? { cwd } : {}),
+      ...(env ? { env } : {}),
     });
     return { ok: true, output: (stdout + stderr).trim(), code: 0 };
   } catch (e) {
@@ -168,6 +170,27 @@ export async function discardGateDirty(root: string): Promise<Run> {
  *  않는다(§11-13 결정 4 §화면은 죽은 pid를 본 그 순간에만 회수를 부른다). */
 export async function reclaimBrowserPool(root: string): Promise<Run> {
   return execScript("bash", [path.join(root, "browser.sh"), "reclaim"]);
+}
+
+/** `DIRA_SESSION_KIND=home bash <root>/browse.sh c0ffee00 goto <url>` — 링크 슬롯을 열고(없으면
+ *  띄우고, 있으면 그 자리에서) 그 주소로 이동한다(§11-15 결정 1). `acquire`·`owner` 기록·이동이
+ *  이 한 번에 다 들어 있다 — `reclaimBrowserPool`과 같은 `execScript` 한 벌이고 새 셸 진입점은
+ *  0개다. `DIRA_SESSION_KIND=home`이 `browse.sh`의 `_owner_value` 판정 1순위라 `owner` 파일이
+ *  `home`으로 적힌다(다른 갈래인 `worktrees/<워커>` cwd 판정보다 앞선다). */
+export async function openLinkBrowser(root: string, url: string): Promise<Run> {
+  return execScript(
+    "bash",
+    [path.join(root, "browse.sh"), LINK_BROWSER_HASH, "goto", url],
+    undefined,
+    { ...process.env, DIRA_SESSION_KIND: "home" },
+  );
+}
+
+/** `bash <root>/browse.sh c0ffee00 release` — 링크 슬롯 하나만 반납한다(§11-15 결정 4). 인자로
+ *  해시를 안 받는다 — 이 액션이 여는 슬롯은 `c0ffee00` 하나뿐이라 화면이 다른 해시를 실어
+ *  나를 길을 원천에서 막는다. */
+export async function releaseLinkBrowser(root: string): Promise<Run> {
+  return execScript("bash", [path.join(root, "browse.sh"), LINK_BROWSER_HASH, "release"]);
 }
 
 /** 해시 → 실제 티켓 경로. 없으면 null(404의 근거).

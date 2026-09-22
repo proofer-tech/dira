@@ -9,7 +9,7 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-i18n-"));
 process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
-const { t, ko, en, wrap } = await import("./i18n.ts");
+const { t, ko, en, wrap, linkCapToastMessage } = await import("./i18n.ts");
 // 파일 읽기/쓰기는 `registryPath()` 옆에 있다 — `i18n.ts`가 클라이언트 번들로 가기 때문이다
 // (그 파일 머리 주석, `keymap.test.ts`와 같은 이유로 같이 검증한다).
 const { languagePath, readLanguage, setLanguage } = await import("./projects.ts");
@@ -465,6 +465,12 @@ test("wrap — 빈 조각은 빠지고 공백이 겹치지 않는다", () => {
   assert.strictEqual(wrap("", "가운데", "뒤"), "가운데 뒤");
   assert.strictEqual(wrap("앞", "가운데", ""), "앞 가운데");
   assert.strictEqual(wrap("", "혼자", ""), "혼자");
+});
+
+// §11-15 결정 4 — 문구에 상한과 지금 쓰는 수가 들어간다. 언어를 바꾸면 그 자리가 영어다.
+test("linkCapToastMessage — 상한과 지금 쓰는 수가 문구에 들어간다(ko·en)", () => {
+  assert.strictEqual(linkCapToastMessage("ko", 6, 6), "브라우저 자리가 6/6으로 다 차서 링크를 못 엽니다.");
+  assert.strictEqual(linkCapToastMessage("en", 6, 6), "Browser slots are full (6/6) — can't open the link.");
 });
 
 // 93c106b3 — 프로토콜 화면(묶음 7). 변수가 낀 조각 조립이 이행 전 원문과 바이트 단위로

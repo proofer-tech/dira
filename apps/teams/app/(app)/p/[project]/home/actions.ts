@@ -52,8 +52,8 @@ import {
   type HomeChunk,
   type ScheduleView,
 } from "@/lib/home-session";
-import { listBrowserPoolSlots } from "@/lib/browser-pool";
-import { reclaimBrowserPool } from "@/lib/engine";
+import { listBrowserPoolSlots, linkOpenBlocked } from "@/lib/browser-pool";
+import { openLinkBrowser, reclaimBrowserPool, releaseLinkBrowser, type Run } from "@/lib/engine";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
 import { killPty, openPty, ptyStatuses, restartPty, type PtyStatus } from "@/lib/pty";
 import {
@@ -464,6 +464,39 @@ export async function browserPoolTickets(projectId: string): Promise<BrowserPool
     rows.push({ hash: slot.hash, ownerKind, ownerName, busy: slot.busy });
   }
   return rows;
+}
+
+/** `openLinkAction`의 결과(§11-15 결정 1 · 4) — `reason: "cap"`일 때만 토스트가 상한·지금
+ *  쓰는 수를 적는다(`browser-panel.tsx`의 `openLink`). 그 밖의 실패(`"error"`)는 상한과
+ *  무관한 셸 실패라 화면이 원인 문구를 그대로 보여줄 수 있게 `output`을 싣는다. */
+export type LinkOpenResult =
+  | { ok: true }
+  | { ok: false; reason: "cap"; used: number; limit: number }
+  | { ok: false; reason: "error"; output: string };
+
+/** 앱 안 링크가 여는 서버 액션 하나(§11-15 결정 1) — `DIRA_SESSION_KIND=home bash
+ *  <root>/browse.sh c0ffee00 goto <url>`을 부른다. 슬롯이 이미 있으면 상한과 무관하게
+ *  `goto`만 돌고(결정 4 첫 줄), 없고 상한이 다 찼으면 셸을 안 부르고 `"cap"`으로 물러난다 —
+ *  워커가 쥔 슬롯은 하나도 안 건드린다. */
+export async function openLinkAction(projectId: string, url: string): Promise<LinkOpenResult> {
+  let project;
+  try {
+    project = await required(projectId);
+  } catch {
+    return { ok: false, reason: "error", output: "" };
+  }
+  const gate = await linkOpenBlocked();
+  if (gate.blocked) return { ok: false, reason: "cap", used: gate.used, limit: gate.limit };
+  const run = await openLinkBrowser(project.root, url);
+  return run.ok ? { ok: true } : { ok: false, reason: "error", output: run.output };
+}
+
+/** `bash <root>/browse.sh c0ffee00 release` — 링크 슬롯만 반납한다(§11-15 결정 4). 다른
+ *  해시를 인자로 못 받는 자리에서부터 막는다 — `releaseLinkBrowser`가 이미 해시를 고정한다. */
+export async function releaseLinkAction(projectId: string): Promise<Run> {
+  const project = await required(projectId).catch(() => null);
+  if (!project) return { ok: false, output: "" };
+  return releaseLinkBrowser(project.root);
 }
 
 /** 파일 하나를 스테이지 - 해제한다(§11-3 결정 2). 성공 여부와 무관하게 최신 status를 다시
