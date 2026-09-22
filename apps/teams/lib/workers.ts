@@ -2418,12 +2418,12 @@ export const WATCHDOG_FILE = "watchdog.sh";
  *  파일 자신은 서브커맨드를 그 둘로 넘기는 얇은 뼈대다. `self-heal.sh`와 같은 순서로 자기
  *  `$0`을 먼저 자기치유에 넘긴다(reaper.sh 선례). */
 export const WATCHDOG_SH = `#!/bin/bash
-# 디스패치 감시자 (DESIGN.md §디스패치 감시자) — 프로젝트마다 한 벌, cron */5로 돈다.
-# GUI가 만들고 관리한다. 손으로 고치지 않는다.
-#
-# 프로젝트마다 하나가 멎음을 읽고(\`diagnose\`, P428-1) 되돌릴 수 있는 것만 고치고(\`recover\`,
-# P428-2) 진짜 못 고칠 때만 사람을 부른다(\`alert\`, P428-3). 인자 없이 부르는 것(셋을 순서대로
-# 도는 것)은 아직 없다 - 배선은 별도 티켓이다.
+# 디스패치 감시자 - docs/DESIGN.md \`§디스패치 감시자\`. 프로젝트마다 하나가 멎음을 읽고
+# (\`diagnose\`, P428-1, 티켓 6d9919ad) 되돌릴 수 있는 것만 고치고(\`recover\`, P428-2, 티켓
+# 3db4cc2a) 진짜 못 고칠 때만 사람을 부른다(\`alert\`, P428-3, 티켓 4eb963cd). \`tick\`이 셋을
+# 순서대로 한 프로세스에서 돈다(§개정, P429-1) - 워커가 훅 맨 앞에서 이 서브커맨드를 부른다
+# (P429-2, 별도 티켓). \`tick\`은 무슨 일이 있어도 종료 코드 0이다 - 감시자가 죽는 것이
+# 디스패치를 막으면 값이 뒤집힌다.
 #
 # workers/ 밖에 둔다 - 안에 두면 GUI의 listWorkers가 이 파일을 워커로 읽는다(reaper.sh
 # 머리 주석과 같은 이유).
@@ -2439,6 +2439,24 @@ ROOT="$(cd "$(dirname "\${BASH_SOURCE[0]}")" && pwd -P)"
 . "$ROOT/self-heal.sh" "$(dirname "$ROOT")/tick.sh"
 
 case "\${1:-diagnose}" in
+  tick)
+    # 루트당 한 번만 - mkdir이 원자적이라 그 자체가 락이다(push.sh acquire_lock과 같은 수법,
+    # 다만 여기는 기다리지 않는다: 못 잡으면 바로 넘어간다). 죽은 세션이 남긴 락(600초보다
+    # 오래됨)은 다음 tick이 걷고 재시도하되, 그 시도까지 실패하면 역시 조용히 넘어간다.
+    _wd_lock="$ROOT/workers/.watchdog.lock"
+    mkdir -p "$(dirname "$_wd_lock")" 2>/dev/null
+    if ! mkdir "$_wd_lock" 2>/dev/null; then
+      _wd_age=$(( $(date +%s) - $(stat -f %m "$_wd_lock" 2>/dev/null || date +%s) ))
+      if [ "$_wd_age" -le 600 ] || ! rmdir "$_wd_lock" 2>/dev/null || ! mkdir "$_wd_lock" 2>/dev/null; then
+        exit 0
+      fi
+    fi
+    # 진단이 죽든 처방이 실패하든(watchdog_gates.py가 없어도) 이 갈래는 exit 0으로 끝난다 -
+    # set -e가 없어 python3의 실패가 스크립트를 끊지 않는다. 락은 성공-실패 관계없이 뗀다.
+    python3 "$ROOT/watchdog_gates.py" tick "$ROOT" >>"$ROOT/workers/runner.log" 2>&1
+    rmdir "$_wd_lock" 2>/dev/null
+    exit 0
+    ;;
   diagnose)
     exec python3 "$ROOT/watchdog_gates.py" "$ROOT"
     ;;
@@ -2455,9 +2473,10 @@ case "\${1:-diagnose}" in
 esac
 `;
 
-/** 템플릿 안의 관리 표식 — `DISPATCH_GATE_MARKER`와 같은 문장을 그대로 쓴다(§4-14 §소급의
- *  판정과 같은 계약이어야 화면이 두 파일을 다른 규칙으로 안 읽는다). */
-const WATCHDOG_MARKER = "GUI가 만들고 관리한다";
+/** 템플릿 안의 관리 표식. P429가 머리 주석을 §개정에 맞게 고치며 `DISPATCH_GATE_MARKER`와
+ *  같던 문구("GUI가 만들고 관리한다")가 빠졌다(티켓 bf7c9d89) - `workers/` 밖에 두는 이유를
+ *  설명하는 이 줄은 구버전·신버전 다 그대로 남아 있어 대신 쓴다. */
+const WATCHDOG_MARKER = "GUI의 listWorkers가 이 파일을 워커로 읽는다";
 
 export type WatchdogState = "none" | "latest" | "stale" | "handEdited";
 

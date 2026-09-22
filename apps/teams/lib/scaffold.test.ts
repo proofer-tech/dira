@@ -178,6 +178,9 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   const watchdog = path.join(first.root, "watchdog.sh");
   execFileSync("bash", ["-n", watchdog]);
   assert.equal(await readFile(watchdog, "utf8"), WATCHDOG_SH);
+  // 상수 자체가 낡아도 바이트 비교만으로는 못 잡는다(티켓 bf7c9d89) — `tick` 갈래가 있는지
+  // 별도로 잰다. 이 큐 실물(`.dira/watchdog.sh`)과 상수가 갈라지면 여기서 먼저 깨진다.
+  assert.match(WATCHDOG_SH, /^\s*tick\)/m, "WATCHDOG_SH에 tick 서브커맨드 갈래가 없다");
 
   // ⑧-2 감시자 훅(§디스패치 감시자 §개정, P429-3) — 크론 줄이 아니라 워커 몸통 훅 1개다.
   // 게이트 줄보다 앞이어야 한다(감시자가 고쳐야 할 상황이 그 뒤 훅들이 tick을 끊는 상황이라서).

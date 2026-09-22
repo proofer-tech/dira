@@ -1557,7 +1557,9 @@ test("watchdogState — 없음·최신·낡음·손으로 깐 판 (`dispatchGate
   writeFileSync(path.join(root, WATCHDOG_FILE), WATCHDOG_SH);
   assert.strictEqual(await watchdogState(root), "latest");
 
-  writeFileSync(path.join(root, WATCHDOG_FILE), WATCHDOG_SH.replace("*/5", "*/10"));
+  // P429 이전 버전을 흉내 낸다 - 락 상한 수를 바꿔 상수와 바이트는 다르지만 표식 문구
+  // (`GUI의 listWorkers가...`)는 그대로 남긴다(티켓 bf7c9d89).
+  writeFileSync(path.join(root, WATCHDOG_FILE), WATCHDOG_SH.replace("-le 600", "-le 300"));
   assert.strictEqual(await watchdogState(root), "stale");
 
   writeFileSync(path.join(root, WATCHDOG_FILE), "#!/bin/bash\necho 손으로 짠 감시자\n");
