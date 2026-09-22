@@ -13,7 +13,14 @@ import {
   preflight,
   scaffold,
 } from "./scaffold.ts";
-import { cronLine, dispatchGateSourceLine, parseContextBlock, selfHealSourceLine, WATCHDOG_SH } from "./workers.ts";
+import {
+  cronLine,
+  dispatchGateSourceLine,
+  parseContextBlock,
+  selfHealSourceLine,
+  watchdogHookSourceLine,
+  WATCHDOG_SH,
+} from "./workers.ts";
 
 /** §0-3 스캐폴딩 집합. **이 목록이 계약이다** — 여기 없는 파일을 쓰면 실패한다. */
 const SET = [
@@ -167,10 +174,18 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.equal(sh.split(gateLine).length - 1, 1);
 
   // ⑧-1 디스패치 감시자(§디스패치 감시자, P428-4) — 자리표시자가 없어 상수와 바이트가 같다.
-  // 크론 등록 줄·워커 파일은 이 함수의 몫이 아니다(DESIGN.md P428-4 서두 — 파일 셋 밖).
+  // 워커 파일은 이 함수의 몫이 아니다(DESIGN.md P428-4 서두 — 파일 셋 밖).
   const watchdog = path.join(first.root, "watchdog.sh");
   execFileSync("bash", ["-n", watchdog]);
   assert.equal(await readFile(watchdog, "utf8"), WATCHDOG_SH);
+
+  // ⑧-2 감시자 훅(§디스패치 감시자 §개정, P429-3) — 크론 줄이 아니라 워커 몸통 훅 1개다.
+  // 게이트 줄보다 앞이어야 한다(감시자가 고쳐야 할 상황이 그 뒤 훅들이 tick을 끊는 상황이라서).
+  const hookLine = watchdogHookSourceLine(first.root);
+  const hookAt = lines.findIndex((l) => l === hookLine);
+  assert.ok(hookAt >= 0, `감시자 훅 줄이 없다: ${sh.slice(0, 300)}`);
+  assert.ok(hookAt < gateAt, `감시자 훅은 게이트 줄보다 앞이어야 한다 (훅 ${hookAt}, 게이트 ${gateAt})`);
+  assert.equal(sh.split(hookLine).length - 1, 1, "훅 줄은 정확히 1개다");
 
   // ⑨ 통합 push 헬퍼(§통합 브랜치가 설정이 된다 결정 4-5) — 브랜치가 치환되고, `master`가 브랜치로
   // 쓰인 자리가 0줄이며, 실행 모드는 워커와 같다.

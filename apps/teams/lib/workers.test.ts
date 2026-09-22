@@ -55,14 +55,8 @@ const {
   selfHealSourceLine,
   WATCHDOG_FILE,
   WATCHDOG_SH,
-  watchdogCronLine,
-  watchdogCronRegister,
-  watchdogCronRegisterCmd,
-  watchdogCronUnregister,
-  watchdogCronUnregisterCmd,
+  watchdogHookSourceLine,
   watchdogState,
-  registerWatchdogCron,
-  unregisterWatchdogCron,
   engineArgv,
   engineCell,
   exampleWorkers,
@@ -1544,38 +1538,14 @@ test("cronRegister — 후행 개행이 없는 crontab에서도 줄이 이어 �
   ]);
 });
 
-test("watchdogCronLine — 감시자는 워커와 달리 1줄, `*/5` 간격 (§디스패치 감시자 §계약)", () => {
-  const line = watchdogCronLine("/tmp/p/.dira");
-  assert.strictEqual(line.split("\n").length, 1, "감시자 등록 단위는 1줄이다 — sleep 30 짝이 없다");
-  assert.strictEqual(line, `*/5 * * * * "/tmp/p/.dira/watchdog.sh" >> "/tmp/p/.dira/workers/runner.log" 2>&1`);
-});
-
-test("watchdogCronRegister/watchdogCronUnregister — 1줄만 오가고 두 번 등록해도 중복이 없다 (파일을 안 읽는 순수 함수)", () => {
-  const FIXTURE = ["# 주석", "* * * * * /Users/x/Projects/stream/.dira/workers/w1.sh", ""].join("\n");
-  const root = "/Users/x/Projects/p/.dira";
-
-  const added = watchdogCronRegister(FIXTURE, root);
-  assert.strictEqual(added, `${FIXTURE}${watchdogCronLine(root)}\n`);
-  assert.strictEqual(added.split("\n").length - FIXTURE.split("\n").length, 1, "감시자는 딱 1줄만 는다");
-
-  // 두 번 등록해도 줄이 안 는다 — 먼저 지우고 넣는다
-  assert.strictEqual(watchdogCronRegister(added, root), added);
+test("watchdogHookSourceLine — 워커 훅 1줄, exit 0개(`; true`) (§디스패치 감시자 §개정)", () => {
+  const line = watchdogHookSourceLine("/tmp/p/.dira");
+  assert.strictEqual(line.split("\n").length, 1, "크론 줄이 아니라 훅 1줄이다");
   assert.strictEqual(
-    added.split("\n").filter((l) => l.includes("watchdog.sh")).length,
-    1,
-    "두 번 등록해도 감시자 줄은 1개다",
+    line,
+    `[ -f "/tmp/p/.dira/watchdog.sh" ] && bash "/tmp/p/.dira/watchdog.sh" tick; true   # 디스패치 감시자(§디스패치 감시자)`,
   );
-
-  // 해제하면 원본으로 돌아오고 다른 프로젝트 줄은 그대로다
-  assert.strictEqual(watchdogCronUnregister(added, root), FIXTURE);
-  assert.strictEqual(watchdogCronUnregister(FIXTURE, root), FIXTURE); // 미등록 해제는 no-op
-  assert.strictEqual(watchdogCronUnregister(added, root).includes("stream"), true);
-});
-
-test("watchdogCronRegisterCmd/watchdogCronUnregisterCmd — `cronRegisterCmd`와 같은 규약(먼저 지우고 넣는다)", () => {
-  const root = "/tmp/p/.dira";
-  assert.match(watchdogCronRegisterCmd(root), /^\(crontab -l 2>\/dev\/null \| grep -Fv .*; printf '%s\\n' .*\) \| crontab -$/);
-  assert.strictEqual(watchdogCronUnregisterCmd(root), `crontab -l | grep -Fv -e '/tmp/p/.dira/watchdog.sh' | crontab -`);
+  assert.match(line, /; true\s*#/, "감시자가 죽어도 훅 자신은 exit 0으로 끝나야 한다");
 });
 
 test("watchdogState — 없음·최신·낡음·손으로 깐 판 (`dispatchGateState`와 같은 계약)", async () => {
@@ -3099,42 +3069,6 @@ test("crontab 쓰기 거부 — 상한을 안 기다리고 즉시 실패하고 �
     await assert.rejects(registerCron(w1), /앱 관리.*시스템 설정 > 개인정보 보호 및 보안/);
     assert.ok(Date.now() - t0 < 5_000, `거부는 상한을 기다리지 않는다 (${Date.now() - t0}ms)`);
     assert.strictEqual(c.tab(), "0 3 * * * /Users/x/bin/backup.sh\n"); // 남의 줄 그대로
-  } finally {
-    c.restore();
-  }
-});
-
-test("registerWatchdogCron/unregisterWatchdogCron — 진짜 crontab에 1줄만 오간다, 두 번 등록해도 1개 (§디스패치 감시자 §계약)", async () => {
-  const root = "/Users/x/Projects/p/.dira";
-  const other = "0 3 * * * /Users/x/bin/backup.sh\n";
-  const c = withLiveCrontab(other);
-  try {
-    assert.strictEqual(await registerWatchdogCron(root), true);
-    assert.strictEqual(c.tab(), `${other}${watchdogCronLine(root)}\n`);
-    assert.strictEqual(c.tab().split("\n").filter((l) => l.includes("watchdog.sh")).length, 1);
-
-    // 두 번 등록해도 감시자 줄은 여전히 1개다(no-op 판정은 registerCron과 같은 계약)
-    assert.strictEqual(await registerWatchdogCron(root), false);
-    assert.strictEqual(c.tab().split("\n").filter((l) => l.includes("watchdog.sh")).length, 1);
-
-    // 해제하면 그 줄만 사라지고 다른 프로젝트(여기선 남의 잡) 줄은 한 바이트도 안 갈린다
-    assert.strictEqual(await unregisterWatchdogCron(root), true);
-    assert.strictEqual(c.tab(), other);
-    assert.strictEqual(await unregisterWatchdogCron(root), false); // 미등록 해제는 no-op
-  } finally {
-    c.restore();
-  }
-});
-
-test("registerWatchdogCron — crontab 쓰기가 거부되면 상한을 안 기다리고 사유가 '앱 관리'다 (registerCron과 같은 계약)", async () => {
-  const c = withLiveCrontab("0 3 * * * /Users/x/bin/backup.sh\n", {
-    failWrite: "crontab: error renaming /var/at/tmp/tmp.1 to /var/at/tabs/me: Operation not permitted",
-  });
-  const t0 = Date.now();
-  try {
-    await assert.rejects(registerWatchdogCron("/Users/x/Projects/p/.dira"), /앱 관리.*시스템 설정 > 개인정보 보호 및 보안/);
-    assert.ok(Date.now() - t0 < 5_000, `거부는 상한을 기다리지 않는다 (${Date.now() - t0}ms)`);
-    assert.strictEqual(c.tab(), "0 3 * * * /Users/x/bin/backup.sh\n"); // 남의 줄 그대로 — 아무것도 안 썼다
   } finally {
     c.restore();
   }
