@@ -11,16 +11,30 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocale, useT } from "@/components/language-provider";
-import { LINK_SLOT_HASH, readCdpFrameStream } from "@/lib/cdp-relay";
+import { LINK_SLOT_HASH, normalizeAddressInput, readCdpFrameStream } from "@/lib/cdp-relay";
 import { keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useTrackedRouter } from "@/lib/route-pending";
 import { writeStoredActiveTab } from "@/lib/tabs";
-import { openBrowserTabAction, openLinkAction, type BrowserPoolRow } from "@/app/(app)/p/[project]/home/actions";
+import {
+  openBrowserTabAction,
+  openLinkAction,
+  releaseLinkAction,
+  type BrowserPoolRow,
+} from "@/app/(app)/p/[project]/home/actions";
 import { linkCapToastMessage, wrap, type Locale } from "@/lib/i18n";
 
 function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
+}
+
+function postNavigate(url: string, addr: string): void {
+  fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ type: "navigate", url: addr }),
+  }).catch(() => {});
 }
 
 /** 슬롯 하나의 주인 이름(§11-13 결정 3 §주인 이름을 만드는 표) — `worker:` 값은 서버
@@ -81,6 +95,7 @@ export function BrowserMirror({
   hash,
   ownerName,
   busy,
+  onRelease,
 }: {
   projectId: string;
   hash: string;
@@ -89,13 +104,19 @@ export function BrowserMirror({
   ownerName: string | null;
   /** 명령이 도는 동안만 참(§11-13 결정 2) — 이름 옆 점의 출처. */
   busy: boolean;
+  /** `반납` 단추를 누르고 셸이 실제로 끝난 뒤 불린다(§11-15 결정 5) — 이 탭 자체를 닫는 것은
+   *  부모(`home-ui.tsx`의 `closeTab`) 몫이다, 여기서는 셸 하나(`releaseLinkAction`)만 안다. */
+  onRelease?: () => void;
 }) {
   const t = useT();
   const locale = useLocale();
   const url = `/p/${projectId}/cdp/${hash}`;
+  const isLinkSlot = hash === LINK_SLOT_HASH;
   const [frame, setFrame] = useState<string | null>(null);
   const [lost, setLost] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+  const [address, setAddress] = useState<string | null>(null);
+  const [addressInput, setAddressInput] = useState("");
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -108,7 +129,15 @@ export function BrowserMirror({
       } catch {
         return; // abort(언마운트) — 조용히 물러난다
       }
-      const outcome = await readCdpFrameStream(res, (b64) => setFrame(b64), ac.signal);
+      const outcome = await readCdpFrameStream(
+        res,
+        (b64) => setFrame(b64),
+        ac.signal,
+        (u) => {
+          setAddress(u);
+          setAddressInput(u);
+        },
+      );
       if (outcome === "disconnected") setLost(true);
     })();
     return () => ac.abort();
@@ -153,6 +182,46 @@ export function BrowserMirror({
           )}
         </div>
       )}
+      {/* 주소 한 줄 - 주인 이름 줄 아래, 상시(§11-15 결정 4·5). `c0ffee00`만 입력칸이고
+          그 밖은 읽기 전용 텍스트다 - 링크 슬롯 밖은 세션이 쥔 자리라 사람이 못 돌린다. */}
+      <div className="flex items-center gap-1.5 border-b bg-muted/30 px-3 py-1 text-xs">
+        {isLinkSlot ? (
+          <Input
+            value={addressInput}
+            onChange={(e) => setAddressInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              const target = normalizeAddressInput(addressInput);
+              setAddressInput(target);
+              postNavigate(url, target);
+            }}
+            className="h-6 flex-1 text-xs"
+          />
+        ) : (
+          <span className="flex-1 truncate text-muted-foreground">{address}</span>
+        )}
+        <Button
+          size="xs"
+          variant="ghost"
+          disabled={!address}
+          onClick={() => {
+            if (address) window.open(address, "_blank", "noopener");
+          }}
+        >
+          {t("browser.addressBar.openExternal")}
+        </Button>
+        {isLinkSlot && (
+          <Button
+            size="xs"
+            variant="ghost"
+            onClick={() => {
+              void releaseLinkAction(projectId).then(() => onRelease?.());
+            }}
+          >
+            {t("browser.addressBar.release")}
+          </Button>
+        )}
+      </div>
       <div
         ref={containerRef}
         tabIndex={unlocked ? 0 : -1}

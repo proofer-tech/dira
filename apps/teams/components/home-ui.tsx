@@ -1159,6 +1159,7 @@ export function HomeUI({
               tabs={home.tabs.filter((tb) => tb.kind === "browser")}
               activeTab={activeTab}
               browserRows={browserRows}
+              onReleaseTab={(tab) => void closeTab(tab)}
             />
           ) : (
             <>
@@ -2520,6 +2521,7 @@ function BrowserSurface({
   tabs,
   activeTab,
   browserRows,
+  onReleaseTab,
 }: {
   project: string;
   tabs: Tab[];
@@ -2527,6 +2529,9 @@ function BrowserSurface({
   /** 미러 머리 줄의 주인 이름 · 점 출처(§11-13 결정 3) — `HomeUI`가 한 폴링으로 든 값을
    *  그대로 내려받는다. 탭에 슬롯이 없으면(회수된 뒤 남은 탭 등) 이름 없이 그린다. */
   browserRows: BrowserPoolRow[];
+  /** 주소표시줄의 `반납`이 셸을 끝낸 뒤 부른다(§11-15 결정 5) — 탭 자체를 닫는 것은 `HomeUI`의
+   *  `closeTab`(종전 X 닫기와 같은 통로) 몫이라 여기서는 그 탭을 넘겨 주기만 한다. */
+  onReleaseTab: (tab: Tab) => void;
 }) {
   const t = useT();
   return (
@@ -2542,6 +2547,7 @@ function BrowserSurface({
                 hash={tab.id}
                 ownerName={row ? browserOwnerLabel(row, t) : null}
                 busy={row?.busy ?? false}
+                onRelease={() => onReleaseTab(tab)}
               />
             </div>
           );

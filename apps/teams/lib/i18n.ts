@@ -2213,6 +2213,8 @@ export const ko: Record<string, string> = {
   "browser.linkCap.prefix": "브라우저 자리가 ",
   "browser.linkCap.sep": "/",
   "browser.linkCap.suffix": "으로 다 차서 링크를 못 엽니다.",
+  "browser.addressBar.openExternal": "기본 브라우저에서 열기",
+  "browser.addressBar.release": "반납",
 
   // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
   // push·pull. `word.*` 넷은 `--porcelain=v2`의 아는 코드 넷의 낱말이고, 모르는 코드는 이
@@ -4525,6 +4527,8 @@ export const en: Record<string, string> = {
   "browser.linkCap.prefix": "Browser slots are full (",
   "browser.linkCap.sep": "/",
   "browser.linkCap.suffix": ") — can't open the link.",
+  "browser.addressBar.openExternal": "Open in default browser",
+  "browser.addressBar.release": "Release",
   "browser.mirror.inUse.suffix": "in use",
 
   "home.scm.checkout": "Checkout",

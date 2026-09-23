@@ -4,6 +4,7 @@ import {
   browserPortPath,
   isNavigableUrl,
   isValidCdpHash,
+  normalizeAddressInput,
   portFromDevToolsFile,
   readCdpFrameStream,
   toCdpInputCommand,
@@ -137,4 +138,39 @@ test("signal이 이미 끊긴 채 읽기가 던지면 aborted다", async () => {
   const outcome = await readCdpFrameStream(res, (f) => frames.push(f), ac.signal);
   assert.equal(outcome, "aborted");
   assert.deepEqual(frames, []);
+});
+
+test("event: url 줄이 붙은 data:는 프레임이 아니라 onUrl로 간다", async () => {
+  const res = new Response(
+    sseOf(["event: url\ndata: https://example.com\n\n", "data: aGVsbG8=\n\n"]),
+    { status: 200 },
+  );
+  const frames: string[] = [];
+  const urls: string[] = [];
+  const outcome = await readCdpFrameStream(res, (f) => frames.push(f), undefined, (u) => urls.push(u));
+  assert.equal(outcome, "ok");
+  assert.deepEqual(frames, ["aGVsbG8="]);
+  assert.deepEqual(urls, ["https://example.com"]);
+});
+
+test("event: url이 여러 번 와도 그때마다 onUrl 한 번씩이다 - 프레임 카운트는 안 는다", async () => {
+  const res = new Response(
+    sseOf(["event: url\ndata: https://a.example\n\n", "event: url\ndata: https://b.example\n\n"]),
+    { status: 200 },
+  );
+  const frames: string[] = [];
+  const urls: string[] = [];
+  const outcome = await readCdpFrameStream(res, (f) => frames.push(f), undefined, (u) => urls.push(u));
+  assert.equal(outcome, "disconnected"); // 프레임이 0장이면 종전 판정 그대로
+  assert.deepEqual(urls, ["https://a.example", "https://b.example"]);
+});
+
+test("스킴이 없으면 https를 붙인다", () => {
+  assert.equal(normalizeAddressInput("example.com"), "https://example.com");
+  assert.equal(normalizeAddressInput("  example.com  "), "https://example.com");
+});
+
+test("스킴을 이미 적었으면 그대로 둔다", () => {
+  assert.equal(normalizeAddressInput("https://example.com"), "https://example.com");
+  assert.equal(normalizeAddressInput("http://example.com"), "http://example.com");
 });

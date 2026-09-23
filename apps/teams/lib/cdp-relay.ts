@@ -77,12 +77,15 @@ export function isNavigableUrl(url: string): boolean {
 export type CdpFrameOutcome = "ok" | "disconnected" | "aborted";
 
 /** GET 응답(`text/event-stream`)을 읽는다 - `data:` 줄 하나가 프레임 하나(base64 JPEG 그대로,
- *  결정 2). 청크 경계가 줄 중간에서 끊겨도 버퍼에 남겨 다음 청크와 이어 붙인다. `readPtyStream`과
- *  같은 세 갈래(`ok`/`disconnected`/`aborted`)를 쓴다. */
+ *  결정 2). 앞에 `event: url` 줄이 붙은 `data:`는 프레임이 아니라 지금 주소다(§11-15 결정 2) -
+ *  그 한 줄은 `onUrl`로 가르고 `frames` 카운트·`onFrame`은 건드리지 않는다. `event:` 없이 온
+ *  `data:`는 종전대로 프레임이다. 청크 경계가 줄 중간에서 끊겨도 버퍼에 남겨 다음 청크와 이어
+ *  붙인다. `readPtyStream`과 같은 세 갈래(`ok`/`disconnected`/`aborted`)를 쓴다. */
 export async function readCdpFrameStream(
   res: Response,
   onFrame: (base64Jpeg: string) => void,
   signal?: AbortSignal,
+  onUrl?: (url: string) => void,
 ): Promise<CdpFrameOutcome> {
   if (!res.ok) return "disconnected";
   const reader = res.body?.getReader();
@@ -90,6 +93,7 @@ export async function readCdpFrameStream(
   const decoder = new TextDecoder();
   let buf = "";
   let frames = 0;
+  let pendingEvent: string | null = null;
   try {
     for (;;) {
       const { done, value } = await reader.read();
@@ -98,13 +102,32 @@ export async function readCdpFrameStream(
       const lines = buf.split("\n");
       buf = lines.pop() ?? "";
       for (const line of lines) {
+        if (line.startsWith("event:")) {
+          pendingEvent = line.slice(6).trim();
+          continue;
+        }
         if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trimStart();
+        const event = pendingEvent;
+        pendingEvent = null;
+        if (event === "url") {
+          onUrl?.(data);
+          continue;
+        }
         frames++;
-        onFrame(line.slice(5).trimStart());
+        onFrame(data);
       }
     }
   } catch {
     return signal?.aborted ? "aborted" : "disconnected";
   }
   return frames === 0 ? "disconnected" : "ok";
+}
+
+/** 주소칸 입력 -> 실제로 부를 주소(§11-15 결정 2 §스킴이 없으면 https를 붙인다). 스킴을 이미
+ *  적었으면(`scheme://`) 그대로 두고, 없으면 `https://`를 붙인다 - 최종 재고는 서버의
+ *  `isNavigableUrl`이 한다(신뢰 경계는 서버 쪽, 이 함수는 사람이 흔히 생략하는 스킴만 채운다). */
+export function normalizeAddressInput(value: string): string {
+  const trimmed = value.trim();
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
