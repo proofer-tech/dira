@@ -52,6 +52,12 @@ _log() {
 # 맨 앞에서 죽은 슬롯을 회수한다(결정 4) - pid(빌린 세션)가 죽었으면 브라우저 그룹을 죽이고
 # 프로필을 지우고 슬롯을 비운다. cold boot의 수거(§실측 3)와 겹쳐도 안전 - 죽은 pgid에 kill은
 # 무해하다.
+#
+# 세션이 살아 있어도 크롬 자신이 먼저 죽는 경우(OOM-킬 - 크래시)가 있다(ef3c728b 실측 -
+# 열세 번 재현 동안 `DevToolsActivePort` 파일이 죽은 크롬의 것으로 남아 있었고,
+# `_existing_port`가 그 값을 그대로 돌려줘 이후 모든 CDP 호출이 응답 없는 포트에
+# `Page.navigate 응답 시간초과`로 막혔다 - 머신 로드와 상관없이 재현됐다). 세션 pid만 보면
+# 이 경우를 놓치므로 pgid도 같이 살아 있는지 본다.
 _reclaim() {
   local slot pid pgid hash waited
   for slot in "$_pool"/*/; do
@@ -59,8 +65,10 @@ _reclaim() {
     slot=${slot%/}
     pid=$(cat "$slot/pid" 2>/dev/null)
     [ -n "$pid" ] || continue
-    kill -0 "$pid" 2>/dev/null && continue
     pgid=$(cat "$slot/pgid" 2>/dev/null)
+    if kill -0 "$pid" 2>/dev/null; then
+      { [ -z "$pgid" ] || kill -0 -- "-$pgid" 2>/dev/null; } && continue
+    fi
     hash=$(cat "$slot/hash" 2>/dev/null)
     if [ -n "$pgid" ]; then
       kill -TERM -- "-$pgid" 2>/dev/null
