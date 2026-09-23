@@ -336,7 +336,8 @@ it. When a ticket holds the browser, that name is the ticket's persona and title
 queue has no ticket under that hash the worker's own name stands there alone.
 
 A browser opened from the home chat lands in the same list under the name `Home chat`, and one
-you started yourself by calling `browse.sh` in a terminal reads `External call`. Some rows carry
+you started yourself by calling `browse.sh` in a terminal reads `External call`. A row opened by
+pressing a link inside the app reads `Link` (see [The screens](/docs/screens)). Some rows carry
 a hash and nothing else. Those are older browsers, opened before the rule that writes the owner
 into the slot, and the app will not guess a name to fill the gap.
 
@@ -352,8 +353,9 @@ you move to it. That makes four kinds of tab, and the limit of twelve is shared 
 Up in the tab strip there is no room for a name, so a browser tab carries the hash alone with
 the same dot beside it.
 
-**Nothing in the app turns a browser on or off.** Opening it and handing it back are the work
-of whoever holds it. Close the tab and the browser keeps going. What closes is the one pipe
+**Almost nothing in the app turns a browser on or off.** Opening it and handing it back are the
+work of whoever holds it. The one exception is the `Link` browser: the screen opens that one and
+the screen hands it back. Close the tab and the browser keeps going. What closes is the one pipe
 carrying the picture. The row leaves the list on the left once the owner finishes and hands the
 browser back.
 

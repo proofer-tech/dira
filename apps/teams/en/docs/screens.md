@@ -161,6 +161,78 @@ is exactly one place an answer file is born — after the deadline passes and th
 `Awaiting answer` — and that screen looks like any other question (see
 [The states a ticket passes through](/docs/states)).
 
+## Links inside the app
+
+An address written into a ticket body, a deploy URL printed in the progress record, an
+`http://localhost:3000` your terminal just spat out. Press a link like that inside the app window
+and the built-in browser opens it. Your Mac's default browser stays shut.
+
+The press lands you on the `Browser` surface at home with a tab named `Link` already picked. A row
+by the same name stands in the list on the left, alongside the rows workers and the home chat
+hold, and the hash beside it reads `c0ffee00`.
+
+**Every link after the first reuses that tab.** Press a hundred links and there is still one
+browser. That keeps links from eating the slots a worker needs to borrow.
+
+In the terminal, only text starting `http://` or `https://` becomes a link. Hover and it picks up
+an underline; press it then. A full stop or closing bracket riding on the end of the address is
+trimmed off.
+
+**Links on the landing page and in this manual go to your default browser.** Those two screens
+open in a web browser with no app at all, so they sit outside the product and skip the built-in
+browser. Links to screens inside the app, and anchors within a page, behave exactly as before.
+What gets caught is outside addresses.
+
+### The address bar
+
+One line carrying the current address stands in the head row of a browser tab, right under the
+owner's name. Every browser tab has it. Turn the page on the worker's side and the value follows.
+The `Working in browser` section on a ticket has no such line; that place is for watching.
+
+**`Link` is the only tab where you can edit the address.** There the line is a field: clear it,
+type another address, press enter, and the browser goes there. Type `example.com` with no scheme
+and `https://` gets put on the front for you.
+
+On every other tab the same line is read-only text. What decides it is who opened that browser.
+The screen opens exactly one browser, `Link`, and that is the only one the screen may drive. The
+browsers workers and the home chat hold belong to a session at work, and an address you swap out
+from here would throw off what that run is measuring.
+
+Nothing outside `http:` and `https:` is accepted. Put in a value starting `javascript:`, press
+enter, and the browser stays where it is.
+
+### Handing back a browser you are done with
+
+`Release` sits at the right-hand end of the address bar on the `Link` tab. Press it and that
+browser goes away on the spot, and its row leaves the list on the left. The next link you press
+opens a fresh one.
+
+No other tab carries this button. There is still no way for you to take back a browser a worker
+is holding (see [Terminal, files, and source control](/docs/ide)). The screen only takes back what
+the screen opened.
+
+### Sending a page out to the default browser
+
+Press `Open in default browser` beside the address and the current address opens in your Mac's
+default browser. Every browser tab has this button. On a tab with no address yet it does nothing.
+
+The built-in browser has no back button and no bookmarks, and it inherits none of the logins from
+the browser you use every day. A screen you have to sign into with a Google account, or one that
+needs an extension to work, is what this button is for.
+
+### When the slots are full
+
+Six browsers run at a time. **With the `Link` browser already up, the limit does not come into
+it.** All that runs then is one move to a new address, so no new slot gets borrowed.
+
+With no `Link` browser and all six slots taken, pressing a link raises one line of toast.
+
+> Browser slots are full (6/6) — can't open the link.
+
+The screen stays where it is. The app will not take back a worker's browser to make room either.
+Wait for a worker to finish and free a slot.
+
+
 ## Hashes and P numbers in the writing
 
 Open a ticket body and you find other tickets' hashes all over it. A session writes things like
