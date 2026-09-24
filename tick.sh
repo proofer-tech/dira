@@ -1078,6 +1078,83 @@ the prose inside those sections changes language."
   ;;
 esac
 
+# --- 주도성 주입: $LOCAL/autonomy.json의 level이 무엇이든 언어 안내 바로 뒤에 그 수준
+# 문장이 실린다(§주도성 결정 1-3, 요구 862c7d6e, 답 e68990f2). 흡수 판정은 파일 없음·JSON
+# 깨짐·객체 아님·정수 아님·1~5 밖 다섯 경우 전부 4로 읽는다(GUI readAutonomy와 같은 판정,
+# 언어의 readLanguage와 같은 틀). 무주입은 없다. 자리는 언어 case 바로 뒤, TAIL을 떼기
+# 전이라 persona if 밖이고 persona 없는 티켓에도 붙는다. 블록은 상수 -- 수준이 늘면 case에
+# 문장 한 짝만 는다. 우선순위는 CORE.md 머리에 한 줄로 박혀 있다(더 안 늘린다).
+LEVEL=$(python3 -c 'import json, sys
+try:
+    o = json.load(open(sys.argv[1], encoding="utf-8"))
+    v = o.get("level") if isinstance(o, dict) else None
+    print(v if isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 5 else 4)
+except Exception:
+    print(4)' "$LOCAL/autonomy.json" 2>/dev/null)
+case "$LEVEL" in
+  1|2|3|4|5) ;;
+  *) LEVEL=4 ;;
+esac
+case "$LEVEL" in
+1)
+  ROW_KO="사람에게 묻는 것: \`## Done when\`과 스펙에 적히지 않은 선택 전부 -- 이름·파일
+위치·구현 방식·문구까지 묻습니다. 스스로 정하는 것: 없습니다 -- 선택지가 하나뿐인 일만
+진행하세요."
+  ROW_EN="What you ask: every choice not written in \`## Done when\` or the spec --
+names, file locations, implementation approach, even wording. What you decide
+alone: nothing -- proceed only when exactly one option exists."
+  ;;
+2)
+  ROW_KO="사람에게 묻는 것: 스펙·화면·동작·파일 계약에 드러나는 선택과, 대안이 둘 이상인
+설계 선택입니다. 스스로 정하는 것: 밖에서 안 보이는 구현 세부입니다."
+  ROW_EN="What you ask: choices visible in the spec, screens, behavior, or file
+contracts, and design choices with two or more alternatives. What you decide
+alone: implementation details invisible from outside."
+  ;;
+3)
+  ROW_KO="사람에게 묻는 것: 지금 규약 그대로입니다 -- 모호한 요구, Human calls 넷, 엔진
+수정 승인. 스스로 정하는 것: 지금 규약이 세션에 맡긴 것입니다."
+  ROW_EN="What you ask: exactly today's protocol -- ambiguous requests, the four
+Human calls, engine-edit approval. What you decide alone: whatever today's
+protocol already leaves to the session."
+  ;;
+4)
+  ROW_KO="사람에게 묻는 것: Human calls 넷과 엔진 수정 승인뿐입니다 -- 금지 명령과 큐
+불변도 그대로 지킵니다. 스스로 정하는 것: 모호한 요구와 설계 선택입니다 -- 목표에 가장
+가까운 쪽을 골라 진행하고, 고른 것과 이유를 \`## 결과\`에 한 줄씩 남기세요."
+  ROW_EN="What you ask: only the four Human calls and engine-edit approval --
+forbidden commands and queue invariants still hold. What you decide alone:
+ambiguous requests and design choices -- pick whichever is closest to the
+goal, and record each pick and why in \`## 결과\`, one line at a time."
+  ;;
+5)
+  ROW_KO="묻지 않습니다 -- 예외 한 가지만 남습니다: 비밀번호·로그인·결제 수단·2단계 인증
+코드처럼 사람만 가진 것이 없어 진행이 불가능하면 그때는 \`## 블록\`을 쓰세요. 스펙 모순,
+읽기 전용 영역, 새 외부 의존성, push 실패 처리, 엔진 수정, 금지 명령, 큐 불변까지 목표에
+가장 가까운 방향으로 스스로 정하고, 규약을 넘은 판단은 \`주도성 5 판단:\`으로 시작하는
+줄로 \`## 결과\`에 남기세요."
+  ROW_EN="You do not ask -- one exception remains: if progress is impossible
+without something only the human holds (password, login, payment method, 2FA
+code), write \`## 블록\` even at level 5. Otherwise decide alone, picking
+whichever is closest to the goal, even across spec contradictions, read-only
+areas, new external dependencies, push-failure handling, engine edits,
+forbidden commands, and queue invariants -- record any judgment that crosses
+protocol in \`## 결과\` on a line starting with \`주도성 5 판단:\`."
+  ;;
+esac
+case "$LOCALE" in
+en)
+  PROMPT="$PROMPT
+
+Autonomy note: $LEVEL/5. $ROW_EN"
+  ;;
+*)
+  PROMPT="$PROMPT
+
+주도성 안내: $LEVEL/5. $ROW_KO"
+  ;;
+esac
+
 # --- 캐시 갈래(P295-10): 여기부터는 안 변하는 문서 층이다. 꼬리(위에서 쌓은 티켓 해시 문장 -
 # 참조 컨텍스트 - 언어 안내)를 TAIL로 떼어 두고 PROMPT를 비운다 - 아래 프로토콜-온톨로지-페르소나-
 # CORE 4개 블록이 이 빈 PROMPT 앞에 종전과 같은 순서로 쌓여 문서 층만 남긴다. 스트리밍 프라임

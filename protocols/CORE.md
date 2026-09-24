@@ -1,18 +1,19 @@
 # Core protocol
 
 Inlined into every dispatch. Beats a project doc, persona profile, or ticket
-on conflict. Worker dir: `<root>/worktrees/<worker>`.
+on conflict. Tail's autonomy note outranks this file, the profile, AGENTS.md
+on asking, blocking, approval, forbidden commands. Worker dir:
+`<root>/worktrees/<worker>`.
 
 ## Ticket lifecycle
 
 1. Read `.dira/tickets/<hash>.wip.md`. `## Goal` + `## Done when` are the
    contract.
 2. Before anything else, append `## 진행 계획`: handoff-size steps, one
-   checkbox per line - `- [ ] step (<start> -> <end>)`, ISO 8601 + offset like
-   `assigned_at`, stamped `(<start>)` on start and `-> <end>` on check, read
-   live, never pre-filled or backfilled. Full rules: `protocols/계획-규약.md`.
-   **Push, retrospective, `## 결과`, `.done` rename aren't plan items** - they
-   repeat every ticket; the list is this ticket's own work.
+   checkbox per line - `- [ ] step (<start> -> <end>)`, ISO 8601+offset like
+   `assigned_at`, stamped on start and check, read live, never pre-filled.
+   Full rules: `protocols/계획-규약.md`. **Push, retrospective, `## 결과`,
+   `.done` rename aren't plan items** - they repeat every ticket.
 3. Do the work. Nothing outside `## Done when`. Flip each box `- [ ]` -> `- [x]`
    the moment it is actually true - not in a batch at the end, not before.
 4. Append `## 결과` - what changed, how verified (one-line summary, not full
@@ -31,9 +32,9 @@ skip. Format: `CORE-MEMORY.md`.
 
 - `work` - instruction. Do it, `.done` it.
 - `request` - ask/question. Answer with a new `kind: feedback` ticket, never
-  appended to the original; `.done` it. A human demand splits into work tickets -
-  each gets `req: <original hash>` (not `deps`), fully split
-  -> `.done` the original. Can't split without guessing -> ask back and drop it,
+  appended to the original; `.done` it. A human demand splits into work
+  tickets, each with `req: <original hash>` (not `deps`); once fully split,
+  `.done` the original. Can't split without guessing -> ask back and drop,
   **not `## 블록`** (`CORE-TICKETS.md` - Asking back).
 - `feedback` - report/critique. Recipient opens follow-ups or `.done`s it.
 
@@ -47,14 +48,14 @@ Syntax: `CORE-TICKETS.md`.
 
 No guessing forward. Append `## 블록` - one-line summary, then a question in
 `CORE-TICKETS.md` §Question format (`### <n>.` + `- (a)`) - no format means a
-fixed four-choice fallback card. Exit leaving the file `.wip`, not `.done`.
-`reap` escalates it (`CORE-TICKETS.md` - Asking back); re-dispatched -> read the
-`awaiting` stem's `.done.md`, not the original.
+four-choice fallback card. Exit leaving `.wip`, not `.done`. `reap` escalates
+it (`CORE-TICKETS.md` - Asking back); re-dispatched -> read the `awaiting`
+stem's `.done.md`, not the original.
 
-Human calls: contradictory spec, read-only area, a new external dep, push 3x
-failed. Only a command to run, nothing to decide -> polling wait
-(`workers/<w>.sh poll`), not a block. Waiting on a queue ticket -> `deps:`
-append + `unassign` (`CORE-TICKETS.md` - Waiting on a ticket), not a block.
+Human calls: contradictory spec, read-only area, new external dep, push 3x
+failed. Just a command to run, nothing to decide -> poll
+(`workers/<w>.sh poll`), not a block. Waiting on a ticket -> `deps:` append +
+`unassign` (`CORE-TICKETS.md` - Waiting on a ticket), not a block.
 
 ## Characters (특수문자)
 
@@ -63,7 +64,7 @@ punctuation only - not code under `apps/**`. Allowed set:
 
 `` ` ~ ! @ # $ % ^ & * ( ) - _ = + [ ] { } \ | ; : ' " , . < > / ? ``
 
-Outside it, never invent a substitution - the decided list and the exemption for
+Outside it, never invent a substitute - the decided list and the exemption for
 already-written files are in `CORE-TICKETS.md` - Characters.
 
 ## Queue invariants
