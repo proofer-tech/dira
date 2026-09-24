@@ -26,10 +26,16 @@ import { join } from "node:path";
 
 function readDesktopVersion(): string {
   if (process.env.DIRA_APP_VERSION) return process.env.DIRA_APP_VERSION;
-  const pkg = JSON.parse(
-    readFileSync(join(process.cwd(), "..", "desktop", "package.json"), "utf8"),
-  ) as { version: string };
-  return pkg.version;
+  // ponytail: 읽기·파싱 실패는 원인 규명용 부가 정보(버전 표기)일 뿐이라 서버 기동을
+  // 막을 이유가 없다 - 실패하면 "unknown"으로 대체하고 기동을 계속한다.
+  try {
+    const pkg = JSON.parse(
+      readFileSync(join(process.cwd(), "..", "desktop", "package.json"), "utf8"),
+    ) as { version?: string };
+    return pkg.version || "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 export const diraVersion: string = readDesktopVersion();
