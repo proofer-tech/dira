@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { badgeText, nextCount, type DockCounts } from "./dock-badge.ts";
 import { classifyLink } from "./link.ts";
 import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
+import { describeReadyTimeout, readyTimeoutHint, type ReadyTimeoutState } from "./ready-timeout.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
@@ -38,6 +39,15 @@ const POLL_MS = 30_000;
 
 let child: ChildProcess | null = null;
 let stderr = "";
+/** stdout 마지막 몇 줄만 든다 — 준비 타임아웃에 살아 있는 채 멈춘 자식이 그 직전에 어디까지
+ *  나갔는지 실패 화면에 보여줄 몫이다(§고정하는 것 2). `startServer`가 자식을 새로 띄울 때마다
+ *  비워서 지난 자식의 출력이 이번 자식 것처럼 섞이지 않게 한다. */
+let stdoutTail = "";
+const STDOUT_TAIL_LINES = 20;
+
+function appendStdoutTail(chunk: string) {
+  stdoutTail = (stdoutTail + chunk).split("\n").slice(-STDOUT_TAIL_LINES).join("\n");
+}
 let win: BrowserWindow | null = null;
 let tray: Tray | null = null;
 let quitting = false;
@@ -163,6 +173,7 @@ function gaCredentials(): Record<string, string> {
 }
 
 function startServer(port: number): ChildProcess {
+  stdoutTail = ""; // 새 자식이다 — 지난 자식의 꼬리를 물려주지 않는다
   const engine = extractEngine();
   // node 바이너리가 PATH에 있다고 가정하지 않는다 — Electron 자신을 노드로 돌린다.
   const proc = spawn(nodeBin(), [SERVER], {
@@ -181,7 +192,10 @@ function startServer(port: number): ChildProcess {
     stdio: ["ignore", "pipe", "pipe"],
   });
   proc.stderr?.on("data", (b) => (stderr += b));
-  proc.stdout?.on("data", (b) => process.stdout.write(b));
+  proc.stdout?.on("data", (b) => {
+    process.stdout.write(b);
+    appendStdoutTail(b.toString());
+  });
   proc.on("error", (e) => (stderr += `${e.message}\n`));
   // 고정하는 것 9 — 자식이 죽는 것을 본다. `killServer()`가 먼저 지운 것(정상 종료·재시작
   // 중 정리)이면 `killedIntentionally`가 이 자식을 가리키고 있어 조용히 넘어간다. 그 참조가
@@ -198,12 +212,19 @@ function startServer(port: number): ChildProcess {
   return proc;
 }
 
-/** 준비 판정은 HTTP다 — stdout의 `Ready` 문자열은 버전마다 바뀌고 깨져도 조용하다 (고정하는 것 2). */
-async function waitForReady(origin: string, proc: ChildProcess): Promise<string | null> {
+/** 실패 화면에 낼 사유 문장과 행동 단서 — 판정 자체는 `ready-timeout.ts`의 순수 함수가 한다.
+ *  `hint`는 살아 있는 채 멈춘 경우에만 채워진다(빈 문자열이면 `showFailure`가 그 블록을 건너뛴다). */
+type ReadyTimeoutResult = { reason: string; hint: string };
+
+/** 준비 판정은 HTTP다 — stdout의 `Ready` 문자열은 버전마다 바뀌고 깨져도 조용하다 (고정하는 것 2).
+ *  타임아웃 시점에 자식이 아직 살아 있으면(`exitCode`도 `signalCode`도 안 났으면) 그 사실과 PID,
+ *  그리고 그때까지의 stdout 꼬리를 실어 죽은 경우와 다른 문장으로 보고한다. */
+async function waitForReady(origin: string, proc: ChildProcess): Promise<ReadyTimeoutResult | null> {
   const deadline = Date.now() + READY_TIMEOUT_MS;
   while (Date.now() < deadline) {
     if (proc.exitCode !== null || proc.signalCode !== null) {
-      return `서버 프로세스가 준비되기 전에 종료했습니다 (code ${proc.exitCode ?? proc.signalCode})`;
+      const state: ReadyTimeoutState = { kind: "exited", code: proc.exitCode, signal: proc.signalCode };
+      return { reason: describeReadyTimeout(READY_TIMEOUT_MS / 1000, origin, state), hint: readyTimeoutHint(state) };
     }
     try {
       await fetch(`${origin}/`, { signal: AbortSignal.timeout(2_000) });
@@ -212,7 +233,8 @@ async function waitForReady(origin: string, proc: ChildProcess): Promise<string 
       await new Promise((r) => setTimeout(r, 200));
     }
   }
-  return `${READY_TIMEOUT_MS / 1000}초 안에 ${origin}/ 가 응답하지 않았습니다`;
+  const state: ReadyTimeoutState = { kind: "hung", pid: proc.pid, stdoutTail };
+  return { reason: describeReadyTimeout(READY_TIMEOUT_MS / 1000, origin, state), hint: readyTimeoutHint(state) };
 }
 
 function killServer() {
@@ -224,11 +246,14 @@ function killServer() {
   holdSleep(false); // N6의 caffeinate도 여기서 놓는다 — `-w`는 크래시용이고 정상 경로가 아니다
 }
 
-/** 실패 화면. §비주얼 §6 에러 3요소 — 무엇이 실패했는지 · 원인 원문 · 다음 행동. */
-function showFailure(reason: string) {
+/** 실패 화면. §비주얼 §6 에러 3요소 — 무엇이 실패했는지 · 원인 원문 · 다음 행동.
+ *  `hint`는 살아 있는 채 타임아웃한 경우에만 오고(§고정하는 것 2), 비어 있으면 그 블록째
+ *  안 그린다 — 준비 전에 죽은 경우는 종료 코드가 이미 `reason`에 있어 더 적을 것이 없다. */
+function showFailure(reason: string, hint = "") {
   const esc = (s: string) =>
     s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   const cmd = `cd ${dirname(SERVER)} && PORT=7332 node ${basename(SERVER)}`;
+  const hintBlock = hint ? `<p>다음 행동 단서:</p><pre>${esc(hint)}</pre>` : "";
   const html = `<!doctype html><meta charset="utf-8"><title>dira</title>
 <style>
   :root { color-scheme: light dark }
@@ -241,6 +266,7 @@ function showFailure(reason: string) {
 <h1>dira 서버를 띄우지 못했습니다</h1>
 <p>${esc(reason)}</p>
 <pre>${esc(stderr.trim() || "(서버가 stderr에 아무것도 쓰지 않았습니다)")}</pre>
+${hintBlock}
 <p>직접 띄워서 원인을 봅니다:</p>
 <pre>${esc(cmd)}</pre>`;
   const win = new BrowserWindow({ width: 720, height: 520, title: "dira" });
@@ -993,12 +1019,12 @@ async function showWindow() {
     const port = await freePort();
     origin = `http://127.0.0.1:${port}`;
     child = startServer(port);
-    const reason = await waitForReady(origin, child);
-    if (reason) {
+    const timeout = await waitForReady(origin, child);
+    if (timeout) {
       killServer();
       if (win && !win.isDestroyed()) win.destroy();
       win = null;
-      showFailure(reason); // 흰 창을 그대로 두지 않는다
+      showFailure(timeout.reason, timeout.hint); // 흰 창을 그대로 두지 않는다
       return;
     }
     readyOrigin = origin;
@@ -1016,10 +1042,10 @@ async function boot() {
   child = startServer(port);
   console.log(`[dira] ${SERVER} → ${origin}`);
 
-  const reason = await waitForReady(origin, child);
-  if (reason) {
+  const timeout = await waitForReady(origin, child);
+  if (timeout) {
     killServer();
-    showFailure(reason);
+    showFailure(timeout.reason, timeout.hint);
     return;
   }
   readyOrigin = origin; // 여기부터 `second-instance`가 창을 열 수 있다
