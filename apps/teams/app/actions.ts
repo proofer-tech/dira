@@ -61,6 +61,9 @@ import {
   writeKeymap,
   readLanguage,
   setLanguage,
+  readAutonomy,
+  setAutonomy,
+  type AutonomyLevel,
   readMultiplay,
   setMultiplayEnabled,
   isMultiTokenAllowed,
@@ -750,6 +753,19 @@ export async function markResumeReadAction(toMsList: number[]): Promise<void> {
  *  재시작·새로고침을 요구하지 않는다. */
 export async function setLanguageAction(locale: Locale): Promise<void> {
   await setLanguage(locale);
+}
+
+/** 설정 트리 `언어` 바로 아래 노드 `주도성` (DESIGN.md §주도성 결정 4) — 다이얼로그가 열릴 때
+ *  한 줄이 읽는다(`AnalyticsSection`과 같은 이유). 값은 `autonomy.json`에 머신 스코프로 쓴다. */
+export async function readAutonomyAction(): Promise<AutonomyLevel> {
+  return readAutonomy();
+}
+
+/** 라디오 다섯 중 하나. 이미 도는 세션은 안 바뀌고 다음 디스패치부터 먹는다 — 그 사실은
+ *  파일 쓰기가 아니라 화면 문구(`settings.autonomy.savedHint`)가 알린다. */
+export async function setAutonomyAction(level: AutonomyLevel): Promise<AutonomyLevel> {
+  await setAutonomy(level);
+  return readAutonomy();
 }
 
 /** 설정 트리 여섯째 노드 `웹훅` (DESIGN.md §0-10 §화면 · §비주얼 §45 ⑪) — 다이얼로그가 열릴 때

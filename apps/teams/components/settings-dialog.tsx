@@ -37,6 +37,7 @@ import {
   deleteEngineProfileAction,
   deleteTokenAction,
   readAnalyticsAction,
+  readAutonomyAction,
   readEngineProfileRowsAction,
   readIntegrationBranchAction,
   readMultiplayAction,
@@ -53,6 +54,7 @@ import {
   sendSetupCodeAction,
   setActiveEngineProfileAction,
   setAnalyticsAction,
+  setAutonomyAction,
   setBindingAction,
   setEngineProfileEnabledAction,
   setEngineProfileLabelAction,
@@ -86,6 +88,7 @@ import { OntologyImport, OntologyLocationEditor } from "@/components/ontology-ui
 import { ConfigTable, OntologyMetricsField, OntologyMigration } from "@/components/projects-ui";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
+import type { AutonomyLevel } from "@/lib/projects";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, actionName, formatCombo, type ActionId } from "@/lib/keymap";
 import { wrap } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -144,6 +147,7 @@ type SettingsNode =
   | "keymap"
   | "stats"
   | "language"
+  | "autonomy"
   | "webhook"
   | "multiplay"
   | "workers"
@@ -459,6 +463,85 @@ function LanguageSection({ className }: { className?: string }) {
           {t("settings.language.en")}
         </Button>
       </div>
+    </section>
+  );
+}
+
+/** §주도성 §설정 노드 — `언어` 바로 아래 노드(결정 4). 항목은 1~5 라디오 다섯 줄, 4에
+ *  `기본` 배지가 붙는다. `LanguageSection`과 같은 판정으로 `switch`도 새 `radio-group`도
+ *  설치하지 않는다 — `role="radio"` Button을 줄마다 두고 옆에 그 수준이 묻는 것 한 줄을 적는다.
+ *
+ *  값은 다이얼로그가 열릴 때 읽는다(`AnalyticsSection`과 같은 이유 — 이 컴포넌트가 마운트되는
+ *  자리가 하나뿐이라 프롭으로 안 내린다). 고르면 즉시 저장하고 그 값으로 라디오가 갈린다 —
+ *  `router.refresh()`는 안 부른다, 이 값을 읽는 화면이 이 패널 자신뿐이라서다(언어와 다른 점). */
+function AutonomySection({ className }: { className?: string }) {
+  const t = useT();
+  const [level, setLevel] = useState<AutonomyLevel | null>(null);
+  const [pending, start] = useTransition();
+
+  useEffect(() => {
+    void readAutonomyAction().then(setLevel);
+  }, []);
+
+  const choose = (next: AutonomyLevel) => {
+    if (next === level) return;
+    start(async () => setLevel(await setAutonomyAction(next)));
+  };
+
+  const rows: { value: AutonomyLevel; label: string }[] = [
+    { value: 1, label: t("settings.autonomy.level1") },
+    { value: 2, label: t("settings.autonomy.level2") },
+    { value: 3, label: t("settings.autonomy.level3") },
+    { value: 4, label: t("settings.autonomy.level4") },
+    { value: 5, label: t("settings.autonomy.level5") },
+  ];
+
+  return (
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
+      <h3 data-setting="autonomy" className="text-sm font-medium">
+        {t("settings.autonomy.label")}
+      </h3>
+
+      {level !== null && (
+        <>
+          <div
+            role="radiogroup"
+            aria-label={t("settings.autonomy.label")}
+            className="space-y-1.5"
+          >
+            {rows.map((row) => (
+              <div
+                key={row.value}
+                data-setting={`autonomy.${row.value}`}
+                className="flex items-center gap-2"
+              >
+                <Button
+                  type="button"
+                  role="radio"
+                  aria-checked={level === row.value}
+                  variant={level === row.value ? "default" : "outline"}
+                  size="icon-sm"
+                  disabled={pending}
+                  onClick={() => choose(row.value)}
+                >
+                  {row.value}
+                </Button>
+                <span className="text-sm">{row.label}</span>
+                {row.value === 4 && (
+                  <Badge variant="outline">{t("settings.autonomy.default")}</Badge>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* 1·2에서만 뜬다(결정 4, 수용조건 9) — 되묻기가 큐를 늦춘다는 사실 한 줄 */}
+          {(level === 1 || level === 2) && (
+            <p className="text-xs text-muted-foreground">{t("settings.autonomy.delayHint")}</p>
+          )}
+
+          <p className="text-xs text-muted-foreground">{t("settings.autonomy.savedHint")}</p>
+        </>
+      )}
     </section>
   );
 }
@@ -1649,6 +1732,7 @@ export function SettingsDialog({
   const t = useT();
   const locale = useLocale();
   const languageLabel = t("settings.language.label");
+  const autonomyLabel = t("settings.autonomy.label");
 
   // §0-15 §검색 — 항목 열 전부 + 트리 노드 이름 자신(§45 ④). 키설정 8줄은 `DEFAULT_KEYMAP`에서
   // 유도한다(레지스트리에 문자열 복사 0) — 이름을 옮기면 검색도 저절로 따라온다(§0-6).
@@ -1765,6 +1849,9 @@ export function SettingsDialog({
       name: t("settings.language.en"),
       anchor: "language.en",
     },
+    // §주도성 §설정 노드 검색 — 노드 자신 하나면 충분하다(수용조건 10). 라디오 다섯 줄은
+    // 이름이 아니라 문장이라 검색 색인에 안 싣는다(다른 노드의 상태 줄과 같은 판단).
+    { node: "autonomy", crumbs: "", name: autonomyLabel, anchor: "autonomy" },
     // §0-10 §화면 · §비주얼 §45 ⑪ 검색 — 노드 이름 하나 + 항목 둘(§검색 층 규칙 그대로).
     // 지금 상태 한 줄은 값이라 안 싣는다(정적 인덱스에 실을 이름이 없다).
     { node: "webhook", crumbs: "", name: webhookCrumb, anchor: "webhook" },
@@ -2117,6 +2204,16 @@ export function SettingsDialog({
                       <span>{languageLabel}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  {/* §주도성 §설정 노드 결정 4 — `언어` 바로 아래, 같은 그릇·같은 헤더 없는 그룹 */}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeNode === "autonomy"}
+                      aria-current={activeNode === "autonomy" ? "true" : undefined}
+                      onClick={() => selectNode("autonomy")}
+                    >
+                      <span>{autonomyLabel}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                   {/* §0-10 §화면 · §비주얼 §45 §개정 `475d3385` — 여섯째 노드, `언어` 다음이자
                       둘째 그룹의 마지막 줄. sans(엔진 넷의 `font-mono`가 아니다) - 표식이 설 수
                       없는 줄이다(§45 §표식). */}
@@ -2392,6 +2489,7 @@ export function SettingsDialog({
             <KeymapSection className={cn(activeNode !== "keymap" && "md:hidden")} />
             <AnalyticsSection className={cn(activeNode !== "stats" && "md:hidden")} />
             <LanguageSection className={cn(activeNode !== "language" && "md:hidden")} />
+            <AutonomySection className={cn(activeNode !== "autonomy" && "md:hidden")} />
             <WebhookSection className={cn(activeNode !== "webhook" && "md:hidden")} />
             <WorkersSection
               className={cn(activeNode !== "workers" && "md:hidden")}

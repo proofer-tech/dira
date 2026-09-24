@@ -178,6 +178,41 @@ export async function setLanguage(locale: Locale): Promise<void> {
   await writeFile(p, JSON.stringify({ locale }, null, 2) + "\n", "utf8");
 }
 
+// ── 주도성 설정 파일 (DESIGN.md §주도성 결정 1) ────────────────────────────
+//
+// 판정은 엔진(`tick.sh`)과 여기가 한 벌로 같다 — 없음·깨진 JSON·객체 아님·정수 아님·1~5 밖
+// 다섯 경우 전부 기본값(4)으로 흡수한다(`readLanguage`와 같은 판정). 스코프는 머신 하나다
+// (답 `e68990f2` 1.(b)) — 프로젝트마다 갈리지 않는다.
+
+export type AutonomyLevel = 1 | 2 | 3 | 4 | 5;
+
+export const DEFAULT_AUTONOMY: AutonomyLevel = 4;
+
+/** 레지스트리·언어 설정과 같은 디렉터리다(엔진의 `$LOCAL`). */
+export function autonomyPath(): string {
+  return path.join(path.dirname(registryPath()), "autonomy.json");
+}
+
+/** 던지지 않는다. 흡수하는 다섯 경우는 파일 없음 - 깨진 JSON - 객체 아님 - 정수 아님 - 1~5
+ *  범위 밖이다. */
+export async function readAutonomy(): Promise<AutonomyLevel> {
+  try {
+    const o: unknown = JSON.parse(await readFile(autonomyPath(), "utf8"));
+    const level = o && typeof o === "object" && !Array.isArray(o) ? (o as { level?: unknown }).level : undefined;
+    return typeof level === "number" && Number.isInteger(level) && level >= 1 && level <= 5
+      ? (level as AutonomyLevel)
+      : DEFAULT_AUTONOMY;
+  } catch {
+    return DEFAULT_AUTONOMY;
+  }
+}
+
+export async function setAutonomy(level: AutonomyLevel): Promise<void> {
+  const p = autonomyPath();
+  await mkdir(path.dirname(p), { recursive: true });
+  await writeFile(p, JSON.stringify({ level }, null, 2) + "\n", "utf8");
+}
+
 // ── 멀티플레잉 스위치 파일 (DESIGN.md §0-18 §스위치) ────────────────────────
 //
 // 담는 값이 참/거짓 하나뿐이라 JSON을 안 만든다 — **파일이 있으면 허용, 없으면 비허용**이고

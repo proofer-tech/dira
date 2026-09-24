@@ -182,6 +182,18 @@ export const ko: Record<string, string> = {
   "settings.language.ko": "한국어",
   "settings.language.en": "English",
 
+  // 언어 바로 아래 노드 `주도성` (DESIGN.md §주도성 결정 4). 다섯 줄은 결정 2 표를 한 줄
+  // 문구로 줄인 것이지 원문이 아니다 — 이 화면 문구는 developer가 직접 짓는다(PROFILE.md).
+  "settings.autonomy.label": "주도성",
+  "settings.autonomy.level1": "사소한 선택까지 전부 되묻는다",
+  "settings.autonomy.level2": "스펙에 드러나는 설계 선택을 되묻는다",
+  "settings.autonomy.level3": "모호한 요구와 막힘만 되묻는다",
+  "settings.autonomy.level4": "막힘과 엔진 수정 승인만 되묻는다",
+  "settings.autonomy.level5": "되묻지 않고 스스로 정한다",
+  "settings.autonomy.default": "기본",
+  "settings.autonomy.delayHint": "되묻기 한 번이 약 40분 걸립니다.",
+  "settings.autonomy.savedHint": "지금 도는 세션은 그대로이고, 다음 디스패치부터 적용됩니다.",
+
   // §비주얼 §45 ⑪ (5) — 노드 이름·`테스트 보내기`·성공/실패 문장은 §0-10이 정한 글자다(새 문구
   // 아님). placeholder·`보내는 중...`·`보내지 않습니다`·거절 문장 넷은 이 절이 새로 고른 값이다.
   "settings.webhook.urlLabel": "주소",
@@ -2898,6 +2910,16 @@ export const en: Record<string, string> = {
   // 언어 이름은 그 언어로 적는다 — 영어 화면에서도 `한국어`가 `Korean`이 되지 않는다.
   "settings.language.ko": "한국어",
   "settings.language.en": "English",
+
+  "settings.autonomy.label": "Autonomy",
+  "settings.autonomy.level1": "Asks back on even minor choices",
+  "settings.autonomy.level2": "Asks back on design choices visible in the spec",
+  "settings.autonomy.level3": "Asks back only on ambiguous asks and blocks",
+  "settings.autonomy.level4": "Asks back only on blocks and engine-change approval",
+  "settings.autonomy.level5": "Never asks back — decides everything itself",
+  "settings.autonomy.default": "Default",
+  "settings.autonomy.delayHint": "One round of asking back takes about 40 minutes.",
+  "settings.autonomy.savedHint": "Sessions already running are unaffected — this takes effect from the next dispatch.",
 
   "settings.webhook.urlLabel": "Address",
   "settings.webhook.urlPlaceholder": "https://",
