@@ -47,6 +47,49 @@ def _real_git_version():
     return (out.returncode, (out.stdout or "") + (out.stderr or ""))
 
 
+# G8: 조각 티켓 판정에 쓰는 stem 규칙 - tickets.py의 CLOSED_SUFFIXES와 같은 값(같은 환경변수).
+_STEM_SUFFIXES = (
+    os.environ.get("TICKET_INPROGRESS") or ".wip",
+    os.environ.get("TICKET_DONE") or ".done",
+)
+
+
+def _ticket_stem(base):
+    # base는 ".md"를 뗀 이름. tickets.py의 stem 규칙과 같다 - 상태 접미사를 하나 더 뗀다.
+    for sfx in _STEM_SUFFIXES:
+        if base.endswith(sfx):
+            return base[: -len(sfx)]
+    return base
+
+
+def _has_frontmatter(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            first = f.readline().strip()
+    except OSError:
+        return True  # 못 읽으면 보수적으로 있다고 본다 - 읽기 실패로 사람을 부르지 않는다
+    return first == "---"
+
+
+def _alive_cooldowns(run_dir, now):
+    # diagnose와 recover의 G3 판정식을 한 벌로 묶는다 - 첫 줄 값이 now보다 큰 것만 산다.
+    alive = []
+    if not os.path.isdir(run_dir):
+        return alive
+    for name in sorted(os.listdir(run_dir)):
+        if not name.startswith("cooldown-"):
+            continue
+        try:
+            with open(os.path.join(run_dir, name), encoding="utf-8", errors="replace") as f:
+                first = f.readline().strip()
+            until = int(first)
+        except (OSError, ValueError):
+            continue
+        if until > now:
+            alive.append((name, until))
+    return alive
+
+
 def diagnose(root, local=None, now=None, pgrep_count=_real_pgrep_count,
              crontab_lines=_real_crontab_lines, git_version=_real_git_version):
     """`<코드> <자력|사람> <한 줄>` 목록을 반환한다. 하나도 안 걸리면 빈 리스트.
@@ -104,18 +147,7 @@ def diagnose(root, local=None, now=None, pgrep_count=_real_pgrep_count,
     # --- G3: 엔진 쿨다운이 살아 있다 (run/cooldown-*, 무접미사 + 슬롯 접미사 둘 다) ---
     run_dir = os.path.join(local, "run")
     if os.path.isdir(run_dir):
-        alive = []
-        for name in sorted(os.listdir(run_dir)):
-            if not name.startswith("cooldown-"):
-                continue
-            try:
-                with open(os.path.join(run_dir, name), encoding="utf-8", errors="replace") as f:
-                    first = f.readline().strip()
-                until = int(first)
-            except (OSError, ValueError):
-                continue
-            if until > now:
-                alive.append((name, until))
+        alive = _alive_cooldowns(run_dir, now)
         if alive:
             has_eligible = False
             tokens_path = os.path.join(local, "tokens.json")
@@ -182,6 +214,27 @@ def diagnose(root, local=None, now=None, pgrep_count=_real_pgrep_count,
     if code != 0:
         first_line = out.splitlines()[0] if out else "(출력 없음)"
         lines.append(f"G7 사람 git --version이 죽는다: {first_line}")
+
+    # --- G8: tickets/에 stem이 같은 파일이 둘 이상, 또는 fm 없는 열린 티켓 파일이 있다
+    # (§같은 해시에 파일이 둘 결정 3, P434-3) - 처방 없음, 지우거나 옮기는 것은 사람 몫이다 ---
+    if os.path.isdir(tickets_dir):
+        by_stem = {}
+        fm_missing = []
+        for name in sorted(os.listdir(tickets_dir)):
+            if not name.endswith(".md"):
+                continue
+            base = name[:-3]
+            stem = _ticket_stem(base)
+            by_stem.setdefault(stem, []).append(name)
+            if stem == base and not _has_frontmatter(os.path.join(tickets_dir, name)):
+                # stem == base는 상태 접미사가 안 떨어졌다는 뜻 - 진짜 "열린"(미할당) 파일이다.
+                fm_missing.append(name)
+        flagged = set(fm_missing)
+        for stem, names in by_stem.items():
+            if len(names) > 1:
+                flagged.update(names)
+        if flagged:
+            lines.append(f"G8 사람 조각/중복 티켓 파일 - {', '.join(sorted(flagged))}")
 
     return lines
 
@@ -331,9 +384,7 @@ def recover(root, local=None, now=None, lines=None,
     # --- G3: 엔진 쿨다운. eligible 토큰이 있을 때만(diagnose가 이미 그렇게 갈랐다) ---
     if codes.get("G3", "").startswith("G3 자력"):
         run_dir = os.path.join(local, "run")
-        alive = []
-        if os.path.isdir(run_dir):
-            alive = sorted(n for n in os.listdir(run_dir) if n.startswith("cooldown-"))
+        alive = [name for name, _ in _alive_cooldowns(run_dir, now)]
         signature = "G3:" + ",".join(alive)
         if _already_treated(root, "G3", signature):
             out.append("G3 건너뜀 이미 처방했다")
@@ -371,7 +422,36 @@ def recover(root, local=None, now=None, lines=None,
     return out
 
 
+def tick(root, local=None, now=None, pgrep_count=_real_pgrep_count,
+         crontab_lines=_real_crontab_lines, git_version=_real_git_version,
+         classify=_real_classify, restore=_real_restore, pids_by_age=_real_pids_by_age,
+         kill=_real_kill, token_rotate=_real_token_rotate, notify_fn=None):
+    """diagnose -> recover -> alert를 이 프로세스 안에서 순서대로 돈다(§디스패치 감시자
+    §개정, P429-1). diagnose가 낸 lines를 파일이나 파이프로 다시 안 읽고 그대로 recover와
+    alert에 넘긴다. 락은 이 함수가 안 쥔다 - 루트당 한 번만 부르는 것은 watchdog.sh tick의
+    mkdir 락이 보장한다. 반환값 (diagnose_lines, recover_out, created_ticket_hashes)."""
+    import watchdog_alert as _alert  # 지연 import - _alert가 이 모듈을 top-level import하므로
+    now = now if now is not None else time.time()
+    lines = diagnose(root, local=local, now=now, pgrep_count=pgrep_count,
+                      crontab_lines=crontab_lines, git_version=git_version)
+    recover_out = recover(root, local=local, now=now, lines=lines, classify=classify,
+                          restore=restore, pids_by_age=pids_by_age, kill=kill,
+                          token_rotate=token_rotate)
+    alert_kwargs = {} if notify_fn is None else {"notify_fn": notify_fn}
+    created = _alert.alert(root, diagnose_lines=lines, **alert_kwargs)
+    return lines, recover_out, created
+
+
 def main(argv):
+    if len(argv) > 2 and argv[1] == "tick":
+        diag, rec, created = tick(argv[2])
+        for l in diag:
+            print("WATCHDOG diagnose", l)
+        for l in rec:
+            print("WATCHDOG recover", l)
+        for h in created:
+            print("WATCHDOG alert", h)
+        return 0
     if len(argv) > 2 and argv[1] == "recover":
         for line in recover(argv[2]):
             print(line)

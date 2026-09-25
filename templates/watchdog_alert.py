@@ -28,6 +28,7 @@ COMMANDS = {
     "G4": "claude setup-token",
     "G6": "GUI의 워커 화면에서 그 워커 줄의 '재등록' 버튼을 눌러 crontab 줄을 다시 심어 준다",
     "G7": "이 줄의 원문대로 사람 세션에서 git을 한 번 실행해 도구 라이선스에 동의해 준다",
+    "G8": "이 줄에 실린 tickets/의 조각/중복 파일을 확인해 지우거나 옮겨 준다(자동 처방 없음)",
 }
 DEFAULT_COMMAND = "자동 복구가 이미 한 번 실패했다. workers/runner.log에서 원인을 직접 확인해 준다"
 
@@ -58,9 +59,16 @@ def parse_line(line):
 
 
 def needs_alert(code, who, root):
-    """`사람` 줄이면 무조건, `자력` 줄이면 recover 표식이 이미 있을 때만."""
+    """`사람` 줄이면 무조건, `자력` 줄이면 recover 표식이 이미 있을 때만.
+
+    `G3 자력`은 예외다 - `recover`의 처방(`token-rotate.sh exhausted`)은 다음 엔진이 쓸
+    토큰을 갈아 둘 뿐이라 이미 살아 있는 쿨다운 파일의 만료를 못 당긴다. 그래서 표식이
+    남아 있어도 사람이 칠 것이 없다 (P432-1, `docs/DESIGN.md` §디스패치 감시자 §개정).
+    """
     if who == "사람":
         return True
+    if code == "G3":
+        return False
     marker = os.path.join(root, "workers", f".watchdog-{code}")
     return os.path.isfile(marker)
 
