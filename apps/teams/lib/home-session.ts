@@ -91,12 +91,14 @@ import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { mayHaveRefs, type RefIndex } from "./markdown-refs.ts";
 import {
   getProject,
+  readAutonomy,
   readLanguage,
   readProjects,
   registryPath,
   resolveConfig,
   ticketsCached,
   usingDefault,
+  type AutonomyLevel,
   type Project,
   type ProjectConfig,
 } from "./projects.ts";
@@ -1056,6 +1058,7 @@ export async function ask(
     config?.personas ? await personaBlock(config.personas, persona ?? HOME_PERSONA) : "",
   );
   const locale = await readLanguage(); // 위 §언어 층 둘 — 못 읽으면 `ko`로 흡수한다(같은 판정)
+  const autonomy = await readAutonomy(); // §주도성 — 못 읽으면 4로 흡수한다(같은 판정)
 
   const run = await runClaudeAt(
     bin,
@@ -1065,6 +1068,7 @@ export async function ask(
     [...(resumed ? ["--resume", sessionId] : ["--session-id", sessionId])],
     live,
     locale,
+    autonomy,
   );
 
   // **중지는 여기서 실패가 아니다**(`ok: true`): 중지한 턴도 트랜스크립트에 남고 같은 sid로
@@ -1377,10 +1381,65 @@ function languageNote(locale: Locale): string {
   return locale === "en" ? HOME_LANGUAGE_NOTE_EN : HOME_LANGUAGE_NOTE_KO;
 }
 
-/** `--append-system-prompt`로 넘길 값. `ko`는 지침 블록이 앞·언어 안내가 뒤다(워커 쪽 문서 층 -
- *  꼬리 순서와 같다). `en`은 지침 블록이 빠진다(§개정 5) - 언어 안내 한 짝만 남는다. */
-function systemPromptLayers(locale: Locale): string {
-  return locale === "en" ? languageNote(locale) : `${FLUENT_KO}\n\n${languageNote(locale)}`;
+// ── 주도성 안내 (P433-3, 요구 862c7d6e, 답 e68990f2) ─────────────────────────
+//
+// `tick.sh`의 `case "$LEVEL"` 블록과 문구가 바이트로 같다(§주도성 결정 1-3) — 워커든 홈이든
+// 같은 수준이 같은 말을 듣는다. 홈에는 `## 결과`가 없지만 문구는 그대로 둔다 — 갈라 두면
+// 두 판 유지 비용이 남는다. 홈에서 "묻는다"는 것은 대화로 되묻는 것이라는 차이는 문구가 아니라
+// 실행(홈은 티켓 없이 대화만 오간다)에서 이미 갈린다. 자리는 언어 안내 바로 뒤 — `tick.sh`와 같다.
+const AUTONOMY_ROW_KO: Record<AutonomyLevel, string> = {
+  1: `사람에게 묻는 것: \`## Done when\`과 스펙에 적히지 않은 선택 전부 -- 이름·파일
+위치·구현 방식·문구까지 묻습니다. 스스로 정하는 것: 없습니다 -- 선택지가 하나뿐인 일만
+진행하세요.`,
+  2: `사람에게 묻는 것: 스펙·화면·동작·파일 계약에 드러나는 선택과, 대안이 둘 이상인
+설계 선택입니다. 스스로 정하는 것: 밖에서 안 보이는 구현 세부입니다.`,
+  3: `사람에게 묻는 것: 지금 규약 그대로입니다 -- 모호한 요구, Human calls 넷, 엔진
+수정 승인. 스스로 정하는 것: 지금 규약이 세션에 맡긴 것입니다.`,
+  4: `사람에게 묻는 것: Human calls 넷과 엔진 수정 승인뿐입니다 -- 금지 명령과 큐
+불변도 그대로 지킵니다. 스스로 정하는 것: 모호한 요구와 설계 선택입니다 -- 목표에 가장
+가까운 쪽을 골라 진행하고, 고른 것과 이유를 \`## 결과\`에 한 줄씩 남기세요.`,
+  5: `묻지 않습니다 -- 예외 한 가지만 남습니다: 비밀번호·로그인·결제 수단·2단계 인증
+코드처럼 사람만 가진 것이 없어 진행이 불가능하면 그때는 \`## 블록\`을 쓰세요. 스펙 모순,
+읽기 전용 영역, 새 외부 의존성, push 실패 처리, 엔진 수정, 금지 명령, 큐 불변까지 목표에
+가장 가까운 방향으로 스스로 정하고, 규약을 넘은 판단은 \`주도성 5 판단:\`으로 시작하는
+줄로 \`## 결과\`에 남기세요.`,
+};
+
+const AUTONOMY_ROW_EN: Record<AutonomyLevel, string> = {
+  1: `What you ask: every choice not written in \`## Done when\` or the spec --
+names, file locations, implementation approach, even wording. What you decide
+alone: nothing -- proceed only when exactly one option exists.`,
+  2: `What you ask: choices visible in the spec, screens, behavior, or file
+contracts, and design choices with two or more alternatives. What you decide
+alone: implementation details invisible from outside.`,
+  3: `What you ask: exactly today's protocol -- ambiguous requests, the four
+Human calls, engine-edit approval. What you decide alone: whatever today's
+protocol already leaves to the session.`,
+  4: `What you ask: only the four Human calls and engine-edit approval --
+forbidden commands and queue invariants still hold. What you decide alone:
+ambiguous requests and design choices -- pick whichever is closest to the
+goal, and record each pick and why in \`## 결과\`, one line at a time.`,
+  5: `You do not ask -- one exception remains: if progress is impossible
+without something only the human holds (password, login, payment method, 2FA
+code), write \`## 블록\` even at level 5. Otherwise decide alone, picking
+whichever is closest to the goal, even across spec contradictions, read-only
+areas, new external dependencies, push-failure handling, engine edits,
+forbidden commands, and queue invariants -- record any judgment that crosses
+protocol in \`## 결과\` on a line starting with \`주도성 5 판단:\`.`,
+};
+
+function autonomyNote(locale: Locale, level: AutonomyLevel): string {
+  return locale === "en"
+    ? `Autonomy note: ${level}/5. ${AUTONOMY_ROW_EN[level]}`
+    : `주도성 안내: ${level}/5. ${AUTONOMY_ROW_KO[level]}`;
+}
+
+/** `--append-system-prompt`로 넘길 값. `ko`는 지침 블록이 앞·언어 안내가 가운데다(워커 쪽 문서
+ *  층 - 꼬리 순서와 같다). `en`은 지침 블록이 빠진다(§개정 5) - 언어 안내 한 짝만 남는다.
+ *  주도성 안내는 두 로케일 다 언어 안내 바로 뒤, 맨 끝이다(`tick.sh`와 같은 자리). */
+function systemPromptLayers(locale: Locale, autonomy: AutonomyLevel): string {
+  const base = locale === "en" ? languageNote(locale) : `${FLUENT_KO}\n\n${languageNote(locale)}`;
+  return `${base}\n\n${autonomyNote(locale, autonomy)}`;
 }
 
 /** `cwd`는 자식 프로세스가 실제로 도는 디렉터리다 — 부르는 쪽이 그대로 정한다. `ask()`는 큐
@@ -1396,6 +1455,7 @@ export async function runClaudeAt(
   session: string[],
   live: Live,
   locale: Locale,
+  autonomy: AutonomyLevel,
 ): Promise<Run & { reason?: AnswerReason; stopped?: boolean }> {
   const args = [
     "-p",
@@ -1408,7 +1468,7 @@ export async function runClaudeAt(
     "--include-partial-messages",
     "--verbose", // 빼면 stdout 0바이트 + stderr 한 줄로 죽는다(머리 주석)
     "--append-system-prompt", // 위 §언어 층 둘 — 단일 값이라 variadic 함정이 없다
-    systemPromptLayers(locale),
+    systemPromptLayers(locale, autonomy),
   ];
 
   // tick.sh 57~59행과 **같은 한 줄**: claude 엔진일 때만 헤드리스 OAuth 토큰을 넣는다.

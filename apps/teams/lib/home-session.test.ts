@@ -55,7 +55,7 @@ type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { TAB_LIMIT } = await import("./tabs.ts");
 const { tailEvents } = await import("./transcript.ts");
 type StreamEvent = Awaited<ReturnType<typeof tailEvents>>["events"][number];
-const { registryPath, resolveConfig, addProject, setLanguage } = await import("./projects.ts");
+const { registryPath, resolveConfig, addProject, setLanguage, setAutonomy } = await import("./projects.ts");
 const { listTickets } = await import("./queue.ts");
 const { listWorkers, lockPath } = await import("./workers.ts");
 const { engineRepo } = await import("./scaffold.ts");
@@ -972,6 +972,69 @@ echo '{"type":"result","is_error":false,"result":"답"}'
     process.env.PATH = path0;
     delete process.env.LANG_LOG;
     await setLanguage("ko"); // 기본값으로 되돌린다 — 다음 테스트가 이 로케일을 물려받지 않게
+  }
+});
+
+test("ask — --append-system-prompt에 주도성 안내가 언어 안내 뒤에 한 번 실리고, 로케일과 설정을 따른다 (P433-3, 수용조건 11)", async () => {
+  const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-auto-")), ".dira");
+  tmps.push(path.dirname(root));
+  mkdirSync(path.join(root, "workers"), { recursive: true });
+
+  const bin = mkdtempSync(path.join(tmpdir(), "ha-bin-"));
+  tmps.push(bin);
+  const logDefault = path.join(LOCAL, "auto-argv-default.log");
+  const logLevel1 = path.join(LOCAL, "auto-argv-level1.log");
+  const logEn = path.join(LOCAL, "auto-argv-en.log");
+  writeFileSync(
+    path.join(bin, "claude"),
+    `#!/bin/sh
+printf '%s\\n' "$*" >> "\${AUTO_LOG}"
+echo '{"type":"result","is_error":false,"result":"답"}'
+`,
+    { mode: 0o755 },
+  );
+
+  const project = { id: "auto-test-1", name: "큐", root };
+  const path0 = process.env.PATH;
+  process.env.PATH = `${bin}:${path0 ?? ""}`;
+  try {
+    await setLanguage("ko");
+    // ① 설정 파일 없음 — 기본값 4/5가 실린다
+    process.env.AUTO_LOG = logDefault;
+    const def = await ask(project, "질문 하나");
+    assert.strictEqual(def.ok, true, def.output);
+    const argvDefault = readFileSync(logDefault, "utf8");
+    assert.ok(argvDefault.includes("주도성 안내: 4/5. 사람에게 묻는 것: Human calls 넷과 엔진"));
+    // 언어 안내 뒤에 온다(끝 위치도 뒤다) — 순서 검증
+    assert.ok(
+      argvDefault.indexOf("언어 안내: 이번 세션") < argvDefault.indexOf("주도성 안내: 4/5"),
+      "주도성 안내가 언어 안내보다 앞에 왔다",
+    );
+    // 한 번만 실린다
+    assert.strictEqual(argvDefault.split("주도성 안내:").length - 1, 1);
+
+    // ② 설정을 바꾸고 다음 턴을 보내면 새 수준이 실린다
+    await setAutonomy(1);
+    process.env.AUTO_LOG = logLevel1;
+    const lvl1 = await ask(project, "둘째 질문");
+    assert.strictEqual(lvl1.ok, true, lvl1.output);
+    const argvLevel1 = readFileSync(logLevel1, "utf8");
+    assert.ok(argvLevel1.includes("주도성 안내: 1/5. 사람에게 묻는 것: `## Done when`"));
+    assert.ok(!argvLevel1.includes("주도성 안내: 4/5"));
+
+    // ③ en 로케일에서는 영어 문구를 따른다
+    await setLanguage("en");
+    process.env.AUTO_LOG = logEn;
+    const en = await ask({ ...project, id: "auto-test-en" }, "질문 셋");
+    assert.strictEqual(en.ok, true, en.output);
+    const argvEn = readFileSync(logEn, "utf8");
+    assert.ok(argvEn.includes("Autonomy note: 1/5. What you ask: every choice not written"));
+    assert.ok(!argvEn.includes("주도성 안내:"));
+  } finally {
+    process.env.PATH = path0;
+    delete process.env.AUTO_LOG;
+    await setLanguage("ko");
+    await setAutonomy(4);
   }
 });
 

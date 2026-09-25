@@ -20,7 +20,7 @@ import { execClaude } from "./auth.ts";
 import { newLive, runClaudeAt } from "./home-session.ts";
 import { DEFAULT_LOCALE } from "./i18n.ts";
 import { kickTicket } from "./kick.ts";
-import { resolveConfig, type Project } from "./projects.ts";
+import { readAutonomy, resolveConfig, type Project } from "./projects.ts";
 import { listTickets } from "./queue.ts";
 
 export type SelfHealInput = {
@@ -57,6 +57,7 @@ export async function selfHeal(input: SelfHealInput): Promise<SelfHealOutcome> {
     ["--session-id", randomUUID()],
     newLive(),
     DEFAULT_LOCALE,
+    await readAutonomy(), // §주도성 — 홈과 같은 판정(못 읽으면 4)
   );
   if (!run.ok) return "noop";
 
