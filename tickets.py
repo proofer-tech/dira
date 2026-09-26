@@ -1408,11 +1408,18 @@ def find_any(troot, want):
 
 
 def _find_stem(troot, want):
+    """같은 stem에 파일이 여럿이면 `.done` - `.wip` - 열림 순으로 고른다(DESIGN.md §같은 해시에
+    파일이 둘 §결정 2) - 조각(fm 없는 열린 파일)이 완료본보다 먼저 판정되지 않게."""
+    found = {}
     for pth in tickets_in(troot):
         stem = nfc(os.path.basename(pth))[:-3]
         for sfx in ("",) + CLOSED_SUFFIXES:
-            if stem == want + nfc(sfx):
-                return pth
+            if stem == want + nfc(sfx) and sfx not in found:
+                found[sfx] = pth
+                break
+    for sfx in (DONE, IN_PROGRESS, ""):
+        if sfx in found:
+            return found[sfx]
     return None
 
 
