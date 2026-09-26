@@ -56,7 +56,9 @@ export function TerminalPanel({
   // 바꾸거나 라우터가 재구성될 때마다 pty 스트림이 끊겼다 다시 붙는다(§11-1 §다시 연결을
   // 하지 않는다). 링크를 누르는 순간에만 최신 값을 읽으면 된다.
   const linkCtxRef = useRef({ locale, push: router.push });
-  linkCtxRef.current = { locale, push: router.push };
+  useEffect(() => {
+    linkCtxRef.current = { locale, push: router.push };
+  });
 
   useEffect(() => {
     const url = `/p/${projectId}/home/pty/${id}`;
