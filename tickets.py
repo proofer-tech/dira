@@ -1238,6 +1238,10 @@ def reap_release(path, reason=None, local=None):
     그물에 걸리게 한다. 실패하면 frontmatter를 안 건드리고 `REAP-FAIL <해시> <사유>`를
     반환한다(빈 문자열 = 성공).
 
+    `.done` 이름을 되돌릴 때는 `awaiting` stem이 큐 어디에도 없으면(답 파일이 영영 안 생긴다)
+    그 stem을 `deps`에서 뺀다(DESIGN.md §P437 결정 1) - `awaiting` 키는 남긴다. `.wip`을
+    되돌리는 갈래는 안 건드린다.
+
     `reason`은 `tick.sh`가 **이 세션 자신의 판정**(`VERDICT`-`REASON`-`RC`)에서 이미 가른 값이다
     -- `dead_reason`처럼 `runner.log`를 다시 읽지 않는다, 지금 죽는 이 세션이 그 판정의
     당사자다(P362-2, §엔진 수정 서른세 번째 승인). `None`(기존 호출 셋 - assign 실패·cwd
@@ -1257,9 +1261,9 @@ def reap_release(path, reason=None, local=None):
     함수 하나가 갈래 둘을 다 받는다.
     """
     try:
-        fm, _, _ = read_fm(path)
+        fm, lines, end = read_fm(path)
     except (OSError, UnicodeDecodeError):
-        fm = {}
+        fm, lines, end = {}, [], -1
     h = ticket_hash(path, fm)
     stem = nfc(os.path.basename(path))[:-3]
     suffix = DONE if stem.endswith(nfc(DONE)) else IN_PROGRESS
@@ -1270,9 +1274,19 @@ def reap_release(path, reason=None, local=None):
     if not did_release:
         # 남이 먼저 되돌렸다(판정 3) - 이 손은 attempts도 안 올리고 아무것도 안 쓴다.
         return "REAP {} - 남이 먼저 되돌렸다, attempts 안 씀".format(h)
+    # DESIGN.md §P437 결정 1 - 되돌린 `.done`이 답 없는 `awaiting` stem을 deps에 아직 물고
+    # 있으면 뺀다. `.wip`을 되돌리는 갈래는 안 건드린다(닫은 적 없는 세션엔 잠금 근거가 없다).
+    cleared = ""
+    if suffix == DONE and end >= 0:
+        awaiting = (fm.get("awaiting") or "").strip()
+        if awaiting and not find_any(os.path.dirname(os.path.dirname(newpath)), awaiting):
+            deps = deps_of(lines, end)
+            if awaiting in deps:
+                set_deps(newpath, [d for d in deps if d != awaiting])
+                cleared = ", 답 없는 잠금 {} 해제".format(awaiting)
     if reason not in ("bad_request", "other", "plan"):
         set_fm_keys(newpath, {k: "" for k in REAP_CLEAR})
-        return ""
+        return cleared
     attempts = int((fm.get("attempts") or "0").strip() or 0) + 1
     upd = {"attempts": attempts}
     upd.update({k: "" for k in REAP_CLEAR})
@@ -1281,9 +1295,9 @@ def reap_release(path, reason=None, local=None):
     if attempts > budget:
         local = local or os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
         count = _arm_backoff(local, h)
-        return "REAP {} attempts={} - {}, 백오프 {}초(누적 {}회째)".format(
-            h, attempts, reason, _fibonacci(count) * REAP_BACKOFF_SEC, count)
-    return "REAP {} attempts={} - {}, 백로그 복귀".format(h, attempts, reason)
+        return "REAP {} attempts={} - {}, 백오프 {}초(누적 {}회째){}".format(
+            h, attempts, reason, _fibonacci(count) * REAP_BACKOFF_SEC, count, cleared)
+    return "REAP {} attempts={} - {}, 백로그 복귀{}".format(h, attempts, reason, cleared)
 
 
 def reap_manual(path, fm, now):
