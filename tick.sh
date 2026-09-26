@@ -1618,19 +1618,60 @@ bg_pending() {
   tail -n +"$(( OUTOFFSET + 1 ))" "$OUTF" 2>/dev/null | grep -qF 'moved to the background (ID: '
 }
 
-# 유예 걸음 1·2 공용 - LASTLINE(호출 시점의 줄 수) 대비 출력이 TICKET_BG_GRACE초 안에
-# 자라면 0(알림이 왔다). POLL 간격으로 본다 - is_result 감시 루프와 같은 박자다. 세션이
-# 그 사이 죽으면(kill -0 실패) 더 기다릴 이유가 없어 즉시 판정한다.
+# P435 결정 1 - $1(줄 번호) 뒤에 새로 생긴 줄 중 assistant/user/result 타입이 하나라도
+# 있으면 참. system 줄(bg_task_stopped가 보는 것과 같은 부류 - task_notification 등)은
+# 안 센다 - 턴이 닫히며 하네스가 붙이는 정리 이벤트라 다음 result가 온다는 신호가 아니다.
+bg_real_growth() {
+  [ "$(wc -l < "$OUTF")" -gt "$1" ] || return 1
+  tail -n +"$(( $1 + 1 ))" "$OUTF" 2>/dev/null | python3 -c '
+import json,sys
+for ln in sys.stdin:
+    ln = ln.strip()
+    if not ln:
+        continue
+    try:
+        o = json.loads(ln)
+    except Exception:
+        continue
+    if isinstance(o, dict) and o.get("type") in ("assistant", "user", "result"):
+        sys.exit(0)
+sys.exit(1)'
+}
+
+# P435 결정 1 §2 - 이번 구간(OUTOFFSET 뒤, bg_pending과 같은 자리)에 task_notification
+# (status stopped)이 이미 있으면 더 기다릴 이유가 없다.
+bg_task_stopped() {
+  tail -n +"$(( OUTOFFSET + 1 ))" "$OUTF" 2>/dev/null | python3 -c '
+import json,sys
+for ln in sys.stdin:
+    ln = ln.strip()
+    if not ln:
+        continue
+    try:
+        o = json.loads(ln)
+    except Exception:
+        continue
+    if isinstance(o, dict) and o.get("type") == "system" \
+            and o.get("subtype") == "task_notification" and o.get("status") == "stopped":
+        sys.exit(0)
+sys.exit(1)'
+}
+
+# 유예 걸음 1·2 공용 - LASTLINE(호출 시점의 줄 수) 대비 진짜 성장(bg_real_growth)이
+# TICKET_BG_GRACE초 안에 나면 0. 그사이 stopped 알림이 보이면 더 기다리지 않고 2를 낸다
+# (P435 결정 1 §2, 호출부가 문구를 가른다). POLL 간격으로 본다 - is_result 감시 루프와
+# 같은 박자다. 세션이 그 사이 죽으면(kill -0 실패) 더 기다릴 이유가 없어 즉시 판정한다.
 bg_wait_grow() {
   local lastline elapsed
   lastline=$(wc -l < "$OUTF")
   elapsed=0
   while [ "$elapsed" -lt "$TICKET_BG_GRACE" ]; do
-    [ "$(wc -l < "$OUTF")" -gt "$lastline" ] && return 0
+    bg_real_growth "$lastline" && return 0
+    bg_task_stopped && return 2
     kill -0 "$CPID" 2>/dev/null || break
     sleep "$POLL"; elapsed=$((elapsed + POLL))
   done
-  [ "$(wc -l < "$OUTF")" -gt "$lastline" ]
+  bg_real_growth "$lastline"
 }
 
 # §4-11 조건 ⑤: 같은 페르소나 후보를 종전 선정과 같은 임계구역·게이트에서 다시 claim한다.
@@ -1909,14 +1950,22 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
       IFS='|' read -r _BGSID BG_SEGOK _BGREASON _BGRESET _BGCTX <<< "$BG_SEG"
       if bg_pending "$BG_SEGOK"; then
         BG_GRACE_USED=$((BG_GRACE_USED + 1))
-        if bg_wait_grow; then
+        bg_wait_grow; BG_GROW_RC=$?
+        if [ "$BG_GROW_RC" -eq 0 ]; then
           continue     # 1. 기다린다 - 자랐다. offset 그대로 두고 다음 result를 다시 기다린다
+        fi
+        # P435 결정 1 §2 - 이미 stopped였으면(BG_GROW_RC=2) 기다리지 않고 바로 밀되 문구가
+        # 갈린다. 민 뒤 판정(아래 2-3걸음)은 두 갈래 다 같다.
+        if [ "$BG_GROW_RC" -eq 2 ]; then
+          BG_MSG="턴을 닫아 밀린 작업이 중단됐습니다. 같은 명령을 timeout을 명시해 포그라운드로 다시 돌리거나 폴링 대기로 넘겨 주세요."
+        else
+          BG_MSG="밀려 있는 백그라운드 작업의 출력을 확인해서 마무리하거나 폴링 대기로 넘겨 주세요."
         fi
         # 2. 민다 - 참견과 같은 FIFO·같은 JSON 한 줄 모양이다. 새 장치를 안 만든다.
         python3 -c 'import json,sys
 sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
                             ensure_ascii=False, separators=(",", ":")) + "\n")' \
-          "밀려 있는 백그라운드 작업의 출력을 확인해서 마무리하거나 폴링 대기로 넘겨 주세요." >&9
+          "$BG_MSG" >&9
         log "NUDGE $THASH bg"
         if bg_wait_grow; then
           continue     # 주입 뒤에 자랐다. 1과 같이 offset 그대로 두고 돌아간다
@@ -2169,8 +2218,15 @@ rm -f "$CDOWN"          # 세션이 끝까지 갔다 = 엔진이 멀쩡하다. �
 # `.wip`이면 신선한 `## 블록`이 있는 경우만 종전대로 DONE이고, 그 밖은 턴을 닫고 죽은 것과
 # 다르지 않다 - FAIL로 남긴다(새 로그 낱말 0, §0-5 판정 1 화이트리스트를 그대로 재사용).
 # 종료코드는 안 건드린다 - 이 승인이 뒤집는 것은 로그 낱말 하나지 세션 종료 판정 자체가 아니다.
+# P435 결정 2 - 이 run에서 밀린 백그라운드 작업을 한 번이라도 봤으면(BG_GRACE_USED>0)
+# reason=bg를 단다. `dead_reason`이 이 값을 "백그라운드 중단"으로 갈라 `reclaim`을 답변
+# 대기가 아니라 백오프로 보낸다 - 밀림이 없던 세션의 FAIL 줄은 그대로다.
 if [ -f "$TPATH" ] && ! fresh_block_sh "$TPATH"; then
-  log "FAIL $THASH 세션이 ok로 끝났는데 .wip을 남겼다(신선한 블록 없음) sid=${REAL:-$SID}"
+  if [ "${BG_GRACE_USED:-0}" -gt 0 ]; then
+    log "FAIL $THASH 세션이 ok로 끝났는데 .wip을 남겼다(신선한 블록 없음) reason=bg sid=${REAL:-$SID}"
+  else
+    log "FAIL $THASH 세션이 ok로 끝났는데 .wip을 남겼다(신선한 블록 없음) sid=${REAL:-$SID}"
+  fi
   exit 0
 fi
 # 엔진 수정 서른일곱 번째 승인 §판정 2 - `.wip`이 이미 없으면(위 갈래를 지나 여기 왔으니

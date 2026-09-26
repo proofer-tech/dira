@@ -14,6 +14,7 @@
 import os
 import re
 import stat
+import sys
 import time
 import shutil
 import tempfile
@@ -47,6 +48,14 @@ RESULT_LINE = (
 GROW_LINE = (
     "printf '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\",\"text\":\"grew\"}]}}\\n'"
 )
+# P435 결정 1 - system 줄은 성장으로 안 센다. 진짜 assistant/user/result가 아닌 정리 이벤트다.
+SYSTEM_GROW_LINE = (
+    "printf '{\"type\":\"system\",\"subtype\":\"background_tasks_changed\"}\\n'"
+)
+# P435 결정 1 §2 - 턴을 닫으며 하네스가 붙이는 stopped 알림. 이게 보이면 더 안 기다린다.
+STOPPED_LINE = (
+    "printf '{\"type\":\"system\",\"subtype\":\"task_notification\",\"status\":\"stopped\"}\\n'"
+)
 
 ENGINE = """\
 #!/bin/bash
@@ -68,6 +77,15 @@ if IFS= read -r -t {window} _nudge; then
 fi\
 """
 BODY_NO_GROW = "sleep 60"
+# P435 결정 1 §2 - delay초 뒤 stopped를 찍고, 그 뒤 주입된 nudge를 __CAPTURE__ 파일에 받는다
+# (Case.__init__이 그 자리를 자기 tmp 경로로 바꿔 쓴다). 그 뒤로는 안 자란다.
+BODY_STOP_THEN_CAPTURE = """\
+sleep {delay}
+{stopped_line}
+if IFS= read -r -t {window} _nudge; then
+  printf '%s' "$_nudge" > "__CAPTURE__"
+fi\
+"""
 
 
 def mk(root, name, body):
@@ -112,8 +130,9 @@ class Case:
             f.write(WORKER.format(tmp=self.tmp, tick=TICK, grace=grace, bgmax=bgmax, maxrun=maxrun))
         os.chmod(w, 0o755)
         eng = os.path.join(self.tmp, "fake-stream.sh")
+        self.capture = os.path.join(self.tmp, "nudge.json")
         with open(eng, "w", encoding="utf-8") as f:
-            f.write(engine_body)
+            f.write(engine_body.replace("__CAPTURE__", self.capture))
         os.chmod(eng, 0o755)
 
         raw = mk(root, "bg0001", "")
@@ -132,6 +151,13 @@ class Case:
             return ""
         with open(self.runlog, encoding="utf-8") as f:
             return f.read()
+
+    def captured_nudge(self):
+        try:
+            with open(self.capture, encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return ""
 
     def close(self):
         self.proc.kill()
@@ -180,38 +206,117 @@ with Case(eng3, grace=2) as c:
         "유예 창이 지났는데 주입이 안 났다\n" + c.log()
     assert wait_for(lambda: FAIL_TAIL in c.log(), 15), \
         "주입 뒤에도 안 자랐는데 종전 종료가 안 났다(수용조건 4)\n" + c.log()
-print("PASS 3 - 끝까지 안 자라면 주입 뒤 종전 종료 경로가 그대로 돈다(수용조건 4·5)")
+    assert "reason=bg" in c.log(), \
+        "이번 구간에 밀림이 있었는데 FAIL 줄에 reason=bg가 없다(P435 결정 2)\n" + c.log()
+print("PASS 3 - 끝까지 안 자라면 주입 뒤 종전 종료 경로가 그대로 돈다(수용조건 4·5, P435 결정 2)")
 
 # 4 - TICKET_BG_GRACE=0이면 장치가 한 번도 안 돌고 즉시 종전 종료다.
+# ponytail: "얼마나 빨리 끝났나"를 초 단위로 재는 별도 assert는 뺐다 - 이 큐의 동시 워커
+# 부하에서 프로세스 기동 자체가 수 초에서 수십 초까지 흔들려(실측: 12.1s, 15.5s, 18.8s로
+# 문턱을 계속 넘었다) 숫자를 아무리 올려도 쫓아다니게 된다. "NUDGE가 안 났다"는 아래
+# 존재 여부 assert 하나로 이미 grace=0의 계약(유예를 안 걸었다)을 증명한다.
 eng4 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE, body=BODY_NO_GROW)
-t0 = time.time()
 with Case(eng4, grace=0) as c:
     assert wait_for(lambda: FAIL_TAIL in c.log(), 15), "GRACE=0인데 종전 종료가 안 났다\n" + c.log()
-    elapsed = time.time() - t0
     assert "NUDGE bg0001 bg" not in c.log(), "GRACE=0인데 주입이 났다\n" + c.log()
-    assert elapsed < 12, "GRACE=0인데 유예를 기다린 것처럼 오래 걸렸다({:.1f}s)".format(elapsed)
 print("PASS 4 - TICKET_BG_GRACE=0이면 장치가 안 돌고 즉시 종전 종료다(수용조건 6)")
 
 # 5 - 조건 3(밀린 작업 문구)이 거짓이면 유예가 안 걸리고 즉시 종전 종료다(GRACE가 켜져 있어도).
 eng5 = ENGINE.format(bg_line="", result_line=RESULT_LINE, body=BODY_NO_GROW)
-t0 = time.time()
 with Case(eng5, grace=20) as c:
     assert wait_for(lambda: FAIL_TAIL in c.log(), 15), "밀린 문구가 없는데 종전 종료가 안 났다\n" + c.log()
-    elapsed = time.time() - t0
     assert "NUDGE bg0001 bg" not in c.log(), "밀린 문구가 없는데 주입이 났다\n" + c.log()
-    assert elapsed < 12, "밀린 문구가 없는데 유예(20s)를 기다린 것처럼 오래 걸렸다({:.1f}s)".format(elapsed)
-print("PASS 5 - 밀린 작업 문구가 없으면 유예가 안 걸린다(수용조건 1의 조건 3)")
+    assert "reason=bg" not in c.log(), \
+        "밀림이 없었는데 FAIL 줄에 reason=bg가 붙었다(P435 결정 2)\n" + c.log()
+print("PASS 5 - 밀린 작업 문구가 없으면 유예가 안 걸리고 reason=bg도 안 붙는다(수용조건 1의 조건 3, P435 결정 2)")
 
 # 6 - 유예 중에도 MAXRUN 상한이 그대로 걸린다. GRACE(20s)보다 훨씬 짧은 MAXRUN(3s)을 걸면
 # bg_wait_grow의 kill -0 감시가 그 죽음을 즉시 보고 유예를 20초까지 안 채우고 끊는다 - 그래서
 # NUDGE가 GRACE(20s)보다 한참 이른 시각에 온다. 이후 최종 FAIL까지는 기존 워치독 꼬리
 # (`kill -TERM; sleep 20; kill -KILL`, 이 티켓이 안 건드린 종전 코드)가 더 걸려 여기서는
-# 안 기다린다 - 유예가 안 끝까지 갔다는 사실 자체가 수용조건 8의 증거다.
+# 안 기다린다 - 유예가 안 끝까지 갔다는 사실 자체가 수용조건 8의 증거다. wait_for의 12s
+# 자체 상한이 이미 "20초를 다 안 채웠다"는 증거라 별도 elapsed assert는 안 둔다(사례 4·5와
+# 같은 이유 - 부하에서 숫자 문턱만 쫓아다니게 된다).
 eng6 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE, body=BODY_NO_GROW)
-t0 = time.time()
 with Case(eng6, grace=20, maxrun=3) as c:
     assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 12), \
         "MAXRUN이 유예 중에도 걸려야 하는데 주입조차 안 났다\n" + c.log()
-    elapsed = time.time() - t0
-    assert elapsed < 12, "MAXRUN(3s)이 걸려야 하는데 유예(20s)를 거의 다 기다린 것처럼 오래 걸렸다({:.1f}s)".format(elapsed)
 print("PASS 6 - 유예 중에도 MAXRUN 상한이 그대로 걸려 유예가 20초를 못 채운다(수용조건 8)")
+
+# 7 - P435 결정 1 - system 줄(task_updated/background_tasks_changed 부류)만 자라면 그건
+# 진짜 성장이 아니다. 고치기 전이면 wc -l만 보고 "자랐다"로 오판해 NUDGE 없이 무한히
+# 기다렸을 자리 - 지금은 system 줄을 무시하고 유예가 끝나면 그대로 NUDGE가 난다.
+eng7 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE,
+                      body=BODY_AUTO_GROW.format(delay=1, grow_line=SYSTEM_GROW_LINE))
+with Case(eng7, grace=3) as c:
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+        "system 줄만 자랐는데 진짜 성장으로 오판해 NUDGE가 안 났다(P435 결정 1)\n" + c.log()
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 15), \
+        "주입 뒤에도 system 줄만 더 자라 결국 종전 종료가 안 났다\n" + c.log()
+print("PASS 7 - system 줄만 자라면 진짜 성장이 아니라 그대로 NUDGE·종료가 난다(P435 결정 1)")
+
+# 8 - P435 결정 1 §2 - stopped 알림이 유예 창 안에 보이면 더 기다리지 않고(끝까지 안 채우고)
+# 전용 문구로 민다. 문구가 §P435 결정 1의 문장과 바이트로 같은지까지 검증한다.
+STOP_MSG = ("턴을 닫아 밀린 작업이 중단됐습니다. 같은 명령을 timeout을 명시해 포그라운드로 "
+            "다시 돌리거나 폴링 대기로 넘겨 주세요.")
+eng8 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE,
+                      body=BODY_STOP_THEN_CAPTURE.format(delay=1, stopped_line=STOPPED_LINE, window=10))
+with Case(eng8, grace=20) as c:
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+        "stopped 알림이 왔는데 NUDGE가 안 났다(P435 결정 1 §2)\n" + c.log()
+    captured = wait_for(lambda: c.captured_nudge() or None, 15) or ""
+    assert STOP_MSG in captured, \
+        "stopped 갈래의 주입 문구가 결정 1의 문장과 다르다: {!r}".format(captured)
+print("PASS 8 - stopped를 보면 유예를 안 채우고 바로 전용 문구로 민다(P435 결정 1 §2)")
+
+# 9 - P435 결정 2 - reason=bg FAIL이 attempts 상한을 넘기면 dead_reason이 "백그라운드 중단"을
+# 내고 reclaim이 답변 대기가 아니라 백오프로 돌린다(ask_human을 안 부른다).
+sys.path.insert(0, HERE)
+import tickets as T  # noqa: E402
+
+
+def _mk_bg_ticket(root):
+    d = os.path.join(root, "tickets")
+    os.makedirs(d, exist_ok=True)
+    p = os.path.join(d, "bg9001.wip.md")
+    with open(p, "w", encoding="utf-8") as f:
+        f.write("---\nticket: bg9001\ntitle: t\nattempts: 3\nowner: x\nsession_id: s\n"
+                 "pid: 1\n---\n\n## Goal\ntest\n")
+    return p
+
+
+def _mk_runlog(root, lines):
+    d = os.path.join(root, "workers")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "runner.log"), "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+tmp9 = tempfile.mkdtemp()
+try:
+    root9 = os.path.join(tmp9, "dira")
+    p9 = _mk_bg_ticket(root9)
+    _mk_runlog(root9, [
+        "2026-09-25 20:00:00 [w9] DISPATCH bg9001 kind=work persona=developer sid=s log=x prio=3",
+        "2026-09-25 20:05:00 [w9] FAIL bg9001 세션이 ok로 끝났는데 .wip을 남겼다(신선한 블록 없음) reason=bg sid=s",
+    ])
+    reason9 = T.dead_reason(T._log_lines(root9), "bg9001")
+    assert reason9 == "백그라운드 중단", \
+        "reason=bg FAIL을 dead_reason이 '백그라운드 중단'으로 못 갈랐다: {!r}".format(reason9)
+    fm9, lines9, end9 = T.read_fm(p9)
+    fm9["attempts"] = "3"
+    out9 = T.reclaim(p9, fm9, "테스트", local=os.path.join(tmp9, "local"))
+    assert out9.startswith("REAP ") and "백오프" in out9, \
+        "reason=bg가 상한을 넘겼는데 백오프로 안 돌았다: {!r}".format(out9)
+    p9b = T.find_any(root9, "bg9001")  # release()가 .wip -> 열림으로 rename했다
+    assert p9b, "reclaim 뒤 bg9001을 다시 못 찾았다"
+    fm9b, lines9b, end9b = T.read_fm(p9b)
+    assert not fm9b.get("awaiting"), \
+        "reason=bg 백오프인데 awaiting:이 걸려 답변 대기로 갔다"
+    assert not any(l.strip().startswith("## 질문") for l in lines9b[end9b:]), \
+        "reason=bg 백오프인데 ## 질문 절이 생겼다"
+    backoff9 = os.path.join(tmp9, "local", "run", "backoff-bg9001")
+    assert os.path.exists(backoff9), "reason=bg 백오프인데 run/backoff-<해시>가 안 생겼다"
+finally:
+    shutil.rmtree(tmp9, ignore_errors=True)
+print("PASS 9 - reason=bg가 상한을 넘기면 dead_reason이 백그라운드 중단, reclaim이 답변 대기 없이 백오프한다(P435 결정 2)")

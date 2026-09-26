@@ -155,7 +155,28 @@ try:
     gopen = os.path.join(ws, "tickets/gggg7777.md")
     assert T.read_fm(gopen)[0]["attempts"].strip() == "1", "G: attempts 기록이 다르다"
 
-    print("PASS 7/7")
+    # H) P435 결정 2 - reason=bg FAIL이 상한을 넘기면 dead_reason이 "백그라운드 중단"을 내고
+    #    E(요청 오류)와 같은 모양으로 상신이 아니라 백오프로 돌린다(awaiting 없이 열린다).
+    ph = mk(ws, "hhhh8888", ["attempts: " + str(T.REAP_MAX_ATTEMPTS)],
+            body="## Goal\n테스트\n\n## Done when\n- [ ] 하나\n")
+    write_log(ws, [
+        L("2026-09-25 23:00:00", "w2", "hhhh8888", "DISPATCH {h} kind=work"),
+        L("2026-09-25 23:20:00", "w2", "hhhh8888",
+          "FAIL {h} 세션이 ok로 끝났는데 .wip을 남겼다(신선한 블록 없음) reason=bg sid=x"),
+    ])
+    hfm = T.read_fm(ph)[0]
+    assert T.dead_reason(T._log_lines(ws), "hhhh8888") == "백그라운드 중단", \
+        "H: reason=bg를 백그라운드 중단으로 못 갈랐다"
+    out = T.reclaim(ph, hfm, "세션 죽음", local=local)
+    assert "백오프" in out, "H: reason=bg가 상한을 넘겼는데 백오프를 안 걸었다\n" + out
+    assert "ASK" not in out, "H: reason=bg인데 여전히 상신한다\n" + out
+    hopen = os.path.join(ws, "tickets/hhhh8888.md")
+    assert os.path.exists(hopen), "H: 백로그 복귀 안 됨(백오프도 열린 티켓이어야 한다)"
+    hfm2 = T.read_fm(hopen)[0]
+    assert not (hfm2.get("awaiting") or "").strip(), "H: reason=bg인데 awaiting이 걸렸다"
+    assert T.backoff_active(local, "hhhh8888"), "H: 백오프 표식이 안 걸렸다"
+
+    print("PASS 8/8")
 finally:
     shutil.rmtree(ws, ignore_errors=True)
     shutil.rmtree(local, ignore_errors=True)
