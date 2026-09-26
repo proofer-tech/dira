@@ -1278,7 +1278,7 @@ def reap_release(path, reason=None, local=None):
     # 있으면 뺀다. `.wip`을 되돌리는 갈래는 안 건드린다(닫은 적 없는 세션엔 잠금 근거가 없다).
     cleared = ""
     if suffix == DONE and end >= 0:
-        awaiting = (fm.get("awaiting") or "").strip()
+        awaiting = (fm.get("awaiting") or "").strip().strip("\"'")
         if awaiting and not find_any(os.path.dirname(os.path.dirname(newpath)), awaiting):
             deps = deps_of(lines, end)
             if awaiting in deps:

@@ -515,10 +515,16 @@ export function isAwaiting(t: Ticket): boolean {
 
 /** 표시만 있고 잠금이 없는 상태 — PM이 `awaiting`만 쓰고 `deps`에 안 걸었다.
  *  판정을 `unmet`이 아니라 `deps`로 하는 이유: 답이 달린 뒤엔 `awaiting`이 unmet에서 빠지는데
- *  그때도 경고를 띄우면 "답변 전에 디스패치된다"가 거짓말이 된다(정상적으로 답을 받은 티켓이다). */
-export function awaitingUnlocked(t: Ticket): boolean {
+ *  그때도 경고를 띄우면 "답변 전에 디스패치된다"가 거짓말이 된다(정상적으로 답을 받은 티켓이다).
+ *
+ *  `tickets`·`sfx`로 그 stem이 큐 어디에도 없는 경우(`resolveDep` null)는 뺀다(DESIGN.md §P437
+ *  결정 1) — `reap_release`가 답 없는 `awaiting` stem을 `deps`에서 일부러 뺀 상태라 "deps에
+ *  도로 넣으라"는 문구가 거짓 경고가 된다. 어차피 큐에 없는 해시는 `deps`에 넣어도 영구 미충족일
+ *  뿐이라, PM이 오타로 없는 해시를 적은 경우에도 이 경고는 똑같이 쓸모가 없다. */
+export function awaitingUnlocked(t: Ticket, tickets: Ticket[], sfx: Suffixes): boolean {
   const a = nfc(awaitingOf(t));
-  return t.state === "open" && !!a && !t.deps.some((d) => nfc(d) === a);
+  if (t.state !== "open" || !a || t.deps.some((d) => nfc(d) === a)) return false;
+  return !!resolveDep(tickets, a, sfx);
 }
 
 // ── 폴링 대기 (DESIGN.md §폴링 대기 결정 2·4·9) ───────────────────────────────

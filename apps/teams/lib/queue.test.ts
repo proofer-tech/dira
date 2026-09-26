@@ -1183,11 +1183,20 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
       awaiting: "a1111111",
     }) + "사람이 쓴 요구 전문.\n\n## 질문 1\n\n어느 화면인가?\n\n### 보기\n\n- 보드\n\n## 참고\n\n질문 아니다.\n",
   );
-  // 잠금 없는 답변 대기 — `awaiting`만 있고 `deps`가 없다
+  // 잠금 없는 답변 대기 — `awaiting`만 있고 `deps`가 없다. b2222222는 큐에 실재한다
+  // (PM이 링크만 빠뜨렸다 — 결정 1로 정리된 상태와 구분하려면 대상이 실재해야 한다)
   await write(
     r,
     "r0000002.md",
     fm({ ticket: "r0000002", title: "잠금 없음", kind: "request", awaiting: "b2222222" }),
+  );
+  await write(r, "b2222222.md", fm({ ticket: "b2222222", title: "잠금 없음의 대상" }));
+  // 결정 1로 정리된 상태 — `awaiting`만 남고 `deps`엔 없는데, 그 stem이 큐 어디에도 없다
+  // (`reap_release`가 답 없는 잠금을 뺐다). "deps에 도로 넣으라" 경고는 뜨면 안 된다(P437-3).
+  await write(
+    r,
+    "r0000005.md",
+    fm({ ticket: "r0000005", title: "결정 1로 정리됨", kind: "request", awaiting: "e5555555" }),
   );
   // `.wip` — 답변칸이 없어야 한다(제약 5). `awaiting`이 걸려 있어도 마찬가지다
   await write(
@@ -1218,13 +1227,17 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   const at = (h: string) => before.find((t) => t.hash === h)!;
   assert.strictEqual(isAwaiting(at("r0000001")), true);
   assert.strictEqual(awaitingOf(at("r0000001")), "a1111111");
-  assert.strictEqual(awaitingUnlocked(at("r0000001")), false);
-  // 잠금 없음: 경고는 뜨고 답변칸은 안 뜬다(엔진이 이미 디스패치 후보로 본다)
-  assert.strictEqual(awaitingUnlocked(at("r0000002")), true);
+  assert.strictEqual(awaitingUnlocked(at("r0000001"), before, DEFAULT), false);
+  // 잠금 없음: 대상(b2222222)이 큐에 실재하니 경고는 뜨고 답변칸은 안 뜬다(엔진이 이미
+  // 디스패치 후보로 본다)
+  assert.strictEqual(awaitingUnlocked(at("r0000002"), before, DEFAULT), true);
   assert.strictEqual(isAwaiting(at("r0000002")), false);
   // `.wip`은 state로 걸러진다 — 답변칸도 경고도 없다
   assert.strictEqual(isAwaiting(at("r0000003")), false);
-  assert.strictEqual(awaitingUnlocked(at("r0000003")), false);
+  assert.strictEqual(awaitingUnlocked(at("r0000003"), before, DEFAULT), false);
+  // 결정 1로 정리된 상태 — 대상(e5555555)이 큐 어디에도 없으니 "deps에 도로 넣으라" 경고는
+  // 안 뜬다(P437-3 ①)
+  assert.strictEqual(awaitingUnlocked(at("r0000005"), before, DEFAULT), false);
   // 결정 11 ⑩ — 답변 대기(true)인데 `## 질문 n`이 없어 스레드가 0건이다. 화면(`session-stream.tsx` ·
   // `AnswerThread`)은 이 조합(`isAwaiting && threadOf(...).length === 0`) 하나로 빈 상태 문구를 켠다.
   assert.strictEqual(isAwaiting(at("r0000004")), true);
@@ -1267,7 +1280,7 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   // `awaiting`은 지우지 않았는데 판정이 저절로 꺼진다(이력이 남는다 — 결정 5)
   assert.strictEqual(awaitingOf(req), "a1111111");
   assert.strictEqual(isAwaiting(req), false);
-  assert.strictEqual(awaitingUnlocked(req), false);
+  assert.strictEqual(awaitingUnlocked(req, after, DEFAULT), false);
   assert.deepStrictEqual(req.unmet, []);
   assert.strictEqual(statusOf(req), "open");
 

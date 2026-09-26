@@ -8,7 +8,10 @@
 생각이 없다) 영구히 멈춘다. `awaiting` 키는 남기고(GUI 판정은 deps로만 한다) deps만 뺀다.
 
 넷 - (1) 답 파일 없음 -> deps에서 뺀다, awaiting은 남는다, 반환 문자열이 정해진 접미사로
-끝난다 (2) 답 파일 있음 -> deps를 안 건드린다 (3) `.wip` 되돌림 -> deps를 안 건드린다.
+끝난다 (2) 답 파일 있음 -> deps를 안 건드린다 (3) `.wip` 되돌림 -> deps를 안 건드린다
+(4) `awaiting` 값이 따옴표로 감싸여 있어도(사람이 손으로 고친 frontmatter) (1)과 같이 뺀다
+(P437-3 ②) - 고치기 전엔 `awaiting in deps` 비교가 따옴표 비대칭 때문에 항상 거짓이라
+조용히 안 걸렸다.
 """
 import os
 import shutil
@@ -67,7 +70,18 @@ try:
         "3: .wip 되돌림인데 deps가 바뀌었다 - " + repr(fm3.get("deps"))
     assert ", 답 없는 잠금" not in out3, "3: .wip 되돌림인데 해제 메시지를 냈다\n" + out3
 
-    print("PASS 4/4 - (1) 답 없는 stem 제거+awaiting 유지+반환 문자열 접미사 "
-          "(2) 답 있으면 무변 (3) .wip 되돌림 무변")
+    # (4) `awaiting: "X"`처럼 따옴표가 붙어도 (1)과 같은 결과가 나온다(따옴표 비대칭 회귀).
+    p4 = mk(ws, "dddd4444", ['awaiting: "nosuchstem3"', "deps: [ffff9999, nosuchstem3]"],
+            suffix=T.DONE)
+    out4 = T.reap_release(p4, "plan")
+    open4 = os.path.join(ws, "tickets", "dddd4444.md")
+    fm4 = T.read_fm(open4)[0]
+    assert fm4.get("deps", "").strip() == "[ffff9999]", \
+        "4: 따옴표 붙은 awaiting이 deps에서 안 빠졌다 - " + repr(fm4.get("deps"))
+    assert out4.endswith(", 답 없는 잠금 nosuchstem3 해제"), \
+        "4: 따옴표 붙은 awaiting에서 반환 문자열이 정해진 접미사로 안 끝난다 - " + out4
+
+    print("PASS (1)-(4) - 답 없는 stem 제거+awaiting 유지+반환 문자열 접미사 / "
+          "답 있으면 무변 / .wip 되돌림 무변 / 따옴표 붙은 awaiting도 제거")
 finally:
     shutil.rmtree(ws, ignore_errors=True)

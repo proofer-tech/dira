@@ -544,7 +544,7 @@ export default async function TicketDetail({
 
           {/* 표시만 있고 잠금이 없다 — PM이 `awaiting`을 쓰고 `deps`에 안 걸었다. 조용히 두면
               사람이 답하기 전에 워커가 이 티켓을 집어 간다(§요구사항 레이어 결정 5) */}
-          {awaitingUnlocked(ticket) && (
+          {awaitingUnlocked(ticket, tickets, config) && (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
               <AlertTitle>{t(locale, "ticketDetail.unlockedAwaitingTitle")}</AlertTitle>
