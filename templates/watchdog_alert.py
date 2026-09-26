@@ -58,16 +58,24 @@ def parse_line(line):
     return code, who, text
 
 
-def needs_alert(code, who, root):
+def needs_alert(code, who, root, just_treated=None):
     """`사람` 줄이면 무조건, `자력` 줄이면 recover 표식이 이미 있을 때만.
 
     `G3 자력`은 예외다 - `recover`의 처방(`token-rotate.sh exhausted`)은 다음 엔진이 쓸
     토큰을 갈아 둘 뿐이라 이미 살아 있는 쿨다운 파일의 만료를 못 당긴다. 그래서 표식이
     남아 있어도 사람이 칠 것이 없다 (P432-1, `docs/DESIGN.md` §디스패치 감시자 §개정).
+
+    `just_treated`는 이번 tick의 `recover`가 방금 "처방"한 코드 집합이다(P436, 티켓
+    `80b66dcb`) - 표식 파일은 recover가 처방하는 그 순간에 쓰이므로, 같은 주기 안에서는
+    "방금 고쳤다"와 "예전에 고쳤는데 또 걸렸다"를 파일 존재만으로 못 가른다. 이번 주기에
+    처방한 코드는 표식이 있어도 사람을 안 부른다 - recover가 건너뛴(이미 처방했다) 경우만
+    표식을 근거로 escalate한다.
     """
     if who == "사람":
         return True
     if code == "G3":
+        return False
+    if just_treated and code in just_treated:
         return False
     marker = os.path.join(root, "workers", f".watchdog-{code}")
     return os.path.isfile(marker)
@@ -128,7 +136,7 @@ def notify_real(title, message):
         pass
 
 
-def alert(root, diagnose_lines=None, notify_fn=notify_real):
+def alert(root, diagnose_lines=None, notify_fn=notify_real, just_treated=None):
     """사람을 불러야 할 줄마다 알림 + (코드당 하나) 티켓. 새로 낸 해시 목록을 반환한다."""
     if diagnose_lines is None:
         diagnose_lines = _gates.diagnose(root)
@@ -137,7 +145,7 @@ def alert(root, diagnose_lines=None, notify_fn=notify_real):
     created = []
     for line in diagnose_lines:
         code, who, text = parse_line(line)
-        if not needs_alert(code, who, root):
+        if not needs_alert(code, who, root, just_treated=just_treated):
             continue
         notify_fn(f"dira 감시자: {code} 사람이 필요하다", text)
         if code in existing:

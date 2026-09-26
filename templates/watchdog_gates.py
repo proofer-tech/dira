@@ -429,7 +429,11 @@ def tick(root, local=None, now=None, pgrep_count=_real_pgrep_count,
     """diagnose -> recover -> alert를 이 프로세스 안에서 순서대로 돈다(§디스패치 감시자
     §개정, P429-1). diagnose가 낸 lines를 파일이나 파이프로 다시 안 읽고 그대로 recover와
     alert에 넘긴다. 락은 이 함수가 안 쥔다 - 루트당 한 번만 부르는 것은 watchdog.sh tick의
-    mkdir 락이 보장한다. 반환값 (diagnose_lines, recover_out, created_ticket_hashes)."""
+    mkdir 락이 보장한다. 반환값 (diagnose_lines, recover_out, created_ticket_hashes).
+
+    recover_out에서 "<코드> 처방 ..."인 줄의 코드를 골라 alert에 just_treated로 넘긴다
+    (§개정 - 처방한 그 주기에는 사람을 안 부른다, P436, 티켓 `80b66dcb`) - recover가 표식을
+    막 쓴 코드를 alert가 "예전에 고쳤는데 또 걸렸다"로 오판하지 않게 한다."""
     import watchdog_alert as _alert  # 지연 import - _alert가 이 모듈을 top-level import하므로
     now = now if now is not None else time.time()
     lines = diagnose(root, local=local, now=now, pgrep_count=pgrep_count,
@@ -437,8 +441,10 @@ def tick(root, local=None, now=None, pgrep_count=_real_pgrep_count,
     recover_out = recover(root, local=local, now=now, lines=lines, classify=classify,
                           restore=restore, pids_by_age=pids_by_age, kill=kill,
                           token_rotate=token_rotate)
+    just_treated = {l.split(" ", 2)[0] for l in recover_out
+                    if l.split(" ", 2)[1:2] == ["처방"]}
     alert_kwargs = {} if notify_fn is None else {"notify_fn": notify_fn}
-    created = _alert.alert(root, diagnose_lines=lines, **alert_kwargs)
+    created = _alert.alert(root, diagnose_lines=lines, just_treated=just_treated, **alert_kwargs)
     return lines, recover_out, created
 
 
