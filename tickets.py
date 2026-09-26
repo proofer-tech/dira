@@ -1065,6 +1065,11 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
         # 지시어는 `아래`다 -- 인용(결정 6)은 정형문 다음에 붙고, 화면에선 답변칸이 본문 위에 있다.
         head = "{}. 엔진은 더 시도하지 않습니다 — {}\n".format(cause, ask)
         options = _ask_options(1)
+    # 읽기(위 read_fm)와 여기 쓰기 사이에 다른 프로세스가 티켓을 옮기면(reap·DONE rename 등)
+    # `open(path, "a")`가 옛 경로에 frontmatter 없는 조각 파일을 새로 만든다(2026-09-25 12시간
+    # 디스패치 정지). 쓰기 직전 재확인 하나로 막는다 - 없으면 아무것도 쓰지 않고 실패를 알린다.
+    if not os.path.exists(path):
+        return "ASK-FAIL {} 대상이 옮겨졌다".format(h)
     with open(path, "a", encoding="utf-8") as f:
         f.write("\n## 질문 {}\n\n{}{}{}".format(
             sum(1 for l in body if re.match(r"^##\s*질문", l)) + 1, head, options, ctx))
