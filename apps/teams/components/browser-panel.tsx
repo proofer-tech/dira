@@ -23,7 +23,7 @@ import {
   releaseLinkAction,
   type BrowserPoolRow,
 } from "@/app/(app)/p/[project]/home/actions";
-import { linkCapToastMessage, wrap, type Locale } from "@/lib/i18n";
+import { linkCapToastMessage, linkErrorToastMessage, wrap, type Locale } from "@/lib/i18n";
 
 function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
@@ -51,12 +51,14 @@ export function browserOwnerLabel(row: BrowserPoolRow, t: (key: string) => strin
   return null;
 }
 
-/** 앱 안 링크를 링크 슬롯(`c0ffee00`)에서 연다(§11-15 결정 1 · 4) — P430-3의 클릭 리스너·
- *  터미널 링크 제공자·피드백 링크가 부를 이름 하나다. 서버 액션(`openLinkAction`)이 상한을
- *  재고, 막혔으면 토스트 한 줄로 알린다(결정 4 §알리는 자리는 토스트 한 줄이다). 셸이 실제로
- *  열렸을 때만(`ok: true`) 홈의 `c0ffee00` 탭으로 옮긴다 — `TicketBrowserSection`의
- *  `openInHomeTab`과 같은 두 줄(`writeStoredActiveTab` 다음 `navigate`)이다. 막혔거나 셸이
- *  실패했으면 지금 화면에 그대로 머문다 — 보여 줄 것이 없는 탭으로 옮길 이유가 없다. */
+/** 앱 안 링크를 링크 슬롯(`c0ffee00`)에서 연다(§11-15 결정 1 · 4, §P438 결정 2) — P430-3의
+ *  클릭 리스너·터미널 링크 제공자·피드백 링크가 부를 이름 하나다. 서버 액션(`openLinkAction`)이
+ *  상한을 재고, 막혔으면 토스트 한 줄로 알린다(결정 4 §알리는 자리는 토스트 한 줄이다). 셸이
+ *  그 밖의 이유로 실패했을 때도 말없이 끝내지 않고 같은 자리에 원인 문구가 실린 토스트를
+ *  띄운다(§P438 결정 2). 셸이 실제로 열렸을 때만(`ok: true`) 홈의 `c0ffee00` 탭으로 옮긴다 —
+ *  `TicketBrowserSection`의 `openInHomeTab`과 같은 두 줄(`writeStoredActiveTab` 다음
+ *  `navigate`)이다. 막혔거나 셸이 실패했으면 지금 화면에 그대로 머문다 — 보여 줄 것이 없는
+ *  탭으로 옮길 이유가 없다. */
 export async function openLink(
   projectId: string,
   url: string,
@@ -66,6 +68,7 @@ export async function openLink(
   const result = await openLinkAction(projectId, url);
   if (!result.ok) {
     if (result.reason === "cap") toast(linkCapToastMessage(locale, result.used, result.limit));
+    else toast(linkErrorToastMessage(locale, result.output));
     return;
   }
   writeStoredActiveTab(projectId, LINK_SLOT_HASH);

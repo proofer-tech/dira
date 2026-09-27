@@ -2225,6 +2225,7 @@ export const ko: Record<string, string> = {
   "browser.linkCap.prefix": "브라우저 자리가 ",
   "browser.linkCap.sep": "/",
   "browser.linkCap.suffix": "으로 다 차서 링크를 못 엽니다.",
+  "browser.linkError.text": "링크를 못 열었습니다.",
   "browser.addressBar.openExternal": "기본 브라우저에서 열기",
   "browser.addressBar.release": "반납",
 
@@ -4549,6 +4550,7 @@ export const en: Record<string, string> = {
   "browser.linkCap.prefix": "Browser slots are full (",
   "browser.linkCap.sep": "/",
   "browser.linkCap.suffix": ") — can't open the link.",
+  "browser.linkError.text": "Couldn't open the link.",
   "browser.addressBar.openExternal": "Open in default browser",
   "browser.addressBar.release": "Release",
   "browser.mirror.inUse.suffix": "in use",
@@ -5396,4 +5398,14 @@ export function wrap(prefix: string, mid: string, suffix: string): string {
  *  조립 방식이고, 자리표시자 치환기는 `wrap`의 ponytail 결정과 같은 이유로 안 만든다. */
 export function linkCapToastMessage(locale: Locale, used: number, limit: number): string {
   return `${t(locale, "browser.linkCap.prefix")}${used}${t(locale, "browser.linkCap.sep")}${limit}${t(locale, "browser.linkCap.suffix")}`;
+}
+
+/** 링크 셸이 실패했을 때의 토스트 한 줄(§P438 결정 2) — `browser.linkError.text` 뒤에
+ *  `output`의 마지막 비어 있지 않은 줄(최대 120자)을 붙인다. 빈 줄만 있거나 `output`이
+ *  비었으면 앞 문장만 남는다 — `wrap`이 빈 조각을 걸러 준다. */
+export function linkErrorToastMessage(locale: Locale, output: string): string {
+  const lines = output.split("\n").map((line) => line.trim()).filter((line) => line.length > 0);
+  const last = lines.length > 0 ? lines[lines.length - 1] : "";
+  const truncated = last.length > 120 ? last.slice(0, 120) : last;
+  return wrap(t(locale, "browser.linkError.text"), truncated, "");
 }
