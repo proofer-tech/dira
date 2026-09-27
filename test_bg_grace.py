@@ -41,6 +41,12 @@ BG_LINE = (
     "printf '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\","
     "\"text\":\"moved to the background (ID: fakebg01). Output is being written.\"}]}}\\n'"
 )
+# P435 결정 4 - 세션이 run_in_background로 직접 띄운 명령이 하네스에 붙이는 문구.
+# 'moved to the background'와는 다른 낱말이라 고치기 전 bg_pending은 이 문구를 못 잡았다.
+CMD_LINE = (
+    "printf '{\"type\":\"assistant\",\"message\":{\"content\":[{\"type\":\"text\","
+    "\"text\":\"Command running in background with ID: fakecmd01.\"}]}}\\n'"
+)
 RESULT_LINE = (
     "printf '{\"type\":\"result\",\"subtype\":\"success\",\"is_error\":false,"
     "\"session_id\":\"fake-sid\",\"result\":\"ok\"}\\n'"
@@ -320,3 +326,28 @@ try:
 finally:
     shutil.rmtree(tmp9, ignore_errors=True)
 print("PASS 9 - reason=bg가 상한을 넘기면 dead_reason이 백그라운드 중단, reclaim이 답변 대기 없이 백오프한다(P435 결정 2)")
+
+# 10 - P435 결정 4 - 하네스 문구('moved to the background') 없이 세션이 직접 띄운 명령
+# 문구('Command running in background with ID: ')만 있어도 같은 밀림이다. 유예 끝까지
+# 안 자라면 종전 FAIL과 reason=bg가 그대로 난다(수용조건 1-2, 고치기 전에는 이 구간에서
+# bg_pending이 거짓을 내 NUDGE도 reason=bg도 안 났다).
+eng10 = ENGINE.format(bg_line=CMD_LINE, result_line=RESULT_LINE, body=BODY_NO_GROW)
+with Case(eng10, grace=2) as c:
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+        "'Command running in background' 문구만 있는데 주입이 안 났다(P435 결정 4)\n" + c.log()
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 15), \
+        "주입 뒤에도 안 자랐는데 종전 종료가 안 났다\n" + c.log()
+    assert "reason=bg" in c.log(), \
+        "'Command running in background' 문구만 있었는데 FAIL 줄에 reason=bg가 없다(P435 결정 4)\n" + c.log()
+print("PASS 10 - 세션이 직접 띄운 명령 문구만 있어도 같은 밀림으로 세어 NUDGE와 reason=bg가 난다(P435 결정 4)")
+
+# 11 - 두 문구가 다 없으면 유예가 안 걸리고 종전 FAIL 줄은 한 글자도 안 갈린다(수용조건 3).
+eng11 = ENGINE.format(bg_line="", result_line=RESULT_LINE, body=BODY_NO_GROW)
+with Case(eng11, grace=20) as c:
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 15), "밀림 문구가 없는데 종전 종료가 안 났다\n" + c.log()
+    assert "NUDGE bg0001 bg" not in c.log(), "밀림 문구가 없는데 주입이 났다\n" + c.log()
+    log11 = c.log()
+    fail_line = next(l for l in log11.splitlines() if "FAIL bg0001" in l)
+    assert "reason=bg" not in fail_line, \
+        "밀림 문구가 둘 다 없었는데 FAIL 줄에 reason=bg가 붙었다: {!r}".format(fail_line)
+print("PASS 11 - 두 밀림 문구가 다 없으면 FAIL 줄이 종전과 같다(수용조건 3)")

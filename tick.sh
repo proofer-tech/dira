@@ -1615,7 +1615,10 @@ bg_pending() {
   local segok="$1"
   [ "$segok" = "ok" ] || return 1
   [ -f "$TPATH" ] || return 1
-  tail -n +"$(( OUTOFFSET + 1 ))" "$OUTF" 2>/dev/null | grep -qF 'moved to the background (ID: '
+  # P435 결정 4 - 하네스가 붙이는 문구('moved to the background (ID: ')뿐 아니라 세션이
+  # `run_in_background`로 직접 띄운 명령의 문구('Command running in background with ID: ')도
+  # 같은 밀림으로 센다. 둘 다 "이번 구간에 백그라운드로 넘어간 작업이 있다"는 같은 사실이다.
+  tail -n +"$(( OUTOFFSET + 1 ))" "$OUTF" 2>/dev/null | grep -qF -e 'moved to the background (ID: ' -e 'Command running in background with ID: '
 }
 
 # P435 결정 1 - $1(줄 번호) 뒤에 새로 생긴 줄 중 assistant/user/result 타입이 하나라도
