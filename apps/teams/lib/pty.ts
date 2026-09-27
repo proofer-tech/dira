@@ -317,3 +317,33 @@ export function subscribePty(
   entry.listeners.add(onChunk);
   return { backlog: entry.backlog, alive: !entry.exited, unsubscribe: () => entry.listeners.delete(onChunk) };
 }
+
+/** 홈 스냅샷의 `## 지금 열린 탭` 절(DESIGN.md §11-16 결정 2)이 쓰는 화면 요약 — 최근 40줄,
+ *  ANSI·OSC 이스케이프를 걷어내고 4,000B로 자른다. **구독하지 않는다** — `subscribePty`처럼
+ *  리스너를 남기면 스냅샷마다 연결이 쌓인다. 없는 id는 `null`이다(탭은 있는데 pty가 이미 사라진
+ *  경우 — 죽은 탭은 `alive: false`로 호출자가 cwd만 싣는다). */
+const SNAPSHOT_TAIL_LINES = 40;
+const SNAPSHOT_TAIL_BYTES = 4_000;
+
+/** 문자열을 UTF-8 바이트 상한으로 자르되 멀티바이트 문자 중간을 안 끊는다. 연속 바이트
+ *  (`0x80`-`0xBF`)를 건너뛰어 자르는 자리를 문자 경계로 옮긴다. */
+function tailBytes(s: string, cap: number): string {
+  const buf = Buffer.from(s, "utf8");
+  if (buf.byteLength <= cap) return s;
+  let start = buf.byteLength - cap;
+  while (start < buf.byteLength && (buf[start] & 0xc0) === 0x80) start++;
+  return buf.subarray(start).toString("utf8");
+}
+
+export function terminalTail(id: string): { lines: string; alive: boolean } | null {
+  const entry = ptys.get(id);
+  if (!entry) return null;
+  const clean = entry.backlog
+    .replace(OSC_ESCAPE, "")
+    .replace(ANSI_ESCAPE, "")
+    .replace(SHORT_ESCAPE, "")
+    .replace(PUA_CHAR, "")
+    .replace(CONTROL_CHAR, "");
+  const tail = clean.split("\n").slice(-SNAPSHOT_TAIL_LINES).join("\n");
+  return { lines: tailBytes(tail, SNAPSHOT_TAIL_BYTES), alive: !entry.exited };
+}

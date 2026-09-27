@@ -173,6 +173,128 @@ test("renderSnapshot — 워커 0개도 사실이다 (빈 표 대신 한 줄)", 
   assert.match(s, /열림 0 · 진행중 0 · 완료 0/);
 });
 
+// §11-16 — `## 지금 열린 탭` 절. 아래 다섯 테스트가 티켓 f97e0897의 Done when을 한 항목씩 잰다.
+const EMPTY_CONFIG = {
+  personas: "/tmp/x/.dira/personas",
+  protocols: "/tmp/x/.dira/protocols",
+  inProgress: ".wip",
+  done: ".done",
+  ontology: "/tmp/x/.dira/ontology",
+  cwd: "/tmp/x",
+  cwdByWorker: {},
+  assumed: [],
+  unresolved: [],
+  conflicts: [],
+};
+const noTabsSnapshot = () =>
+  renderSnapshot({
+    project: { name: "테스트", root: "/tmp/q/.dira" },
+    config: EMPTY_CONFIG,
+    tickets: [],
+    workers: [],
+    newTicketHash: "deadbeef",
+  });
+
+test("renderSnapshot — 탭 0개면 `## 지금 열린 탭` 절에 `열린 탭이 없다.`가 뜬다", () => {
+  const s = noTabsSnapshot();
+  assert.match(s, /## 지금 열린 탭/);
+  assert.match(s, /열린 탭이 없다\./);
+});
+
+test("renderSnapshot — 탭 네 종류가 lastViewed 내림차순으로 뜨고 (이 대화)·(저장 안 함) 표시가 붙는다", () => {
+  const s = renderSnapshot({
+    project: { name: "테스트", root: "/tmp/q/.dira" },
+    config: EMPTY_CONFIG,
+    tickets: [],
+    workers: [],
+    newTicketHash: "deadbeef",
+    currentSessionId: "chat-1",
+    tabs: [
+      { kind: "chat", id: "chat-1", lastViewed: "2026-01-01T00:00:00.000Z", title: "옛 대화", persona: "qa" },
+      {
+        kind: "terminal",
+        id: "term-1",
+        lastViewed: "2026-01-03T00:00:00.000Z",
+        cwd: "/terminal-cwd",
+        alive: true,
+        tail: "echo hi",
+      },
+      { kind: "file", id: "/file/a.ts", lastViewed: "2026-01-02T00:00:00.000Z", path: "/file/a.ts", unsaved: true },
+      {
+        kind: "browser",
+        id: "c0ffee00",
+        lastViewed: "2026-01-04T00:00:00.000Z",
+        info: { owner: "home", url: "https://x", title: "X" },
+      },
+    ],
+  });
+  const section = s.slice(s.indexOf("## 지금 열린 탭"));
+  const order = ["c0ffee00", "/terminal-cwd", "/file/a.ts", "옛 대화"].map((needle) => section.indexOf(needle));
+  assert.ok(order.every((i) => i >= 0), "네 줄 중 못 찾은 것이 있다");
+  for (let i = 1; i < order.length; i++) assert.ok(order[i - 1] < order[i], "lastViewed 내림차순이 아니다");
+  assert.match(section, /옛 대화[\s\S]*\(이 대화\)/);
+  assert.match(section, /\/file\/a\.ts[\s\S]*\(저장 안 함\)/);
+});
+
+test("renderSnapshot — 브라우저 탭 명령 줄은 주인이 home·링크 슬롯(c0ffee00)일 때만 붙는다", () => {
+  const base = { config: EMPTY_CONFIG, tickets: [], workers: [], newTicketHash: "deadbeef" };
+  const readOnly = noTabsSnapshotWith([
+    { kind: "browser" as const, id: "11111111", lastViewed: "t", info: { owner: "worker:w1", url: "https://a", title: "A" } },
+  ]);
+  assert.ok(!readOnly.includes("browse.sh"));
+  assert.match(readOnly, /읽기 전용/);
+
+  const homeOwned = noTabsSnapshotWith([
+    { kind: "browser" as const, id: "22222222", lastViewed: "t", info: { owner: "home", url: "https://b", title: "B" } },
+  ]);
+  assert.match(homeOwned, /browse\.sh 22222222/);
+
+  const linkSlot = noTabsSnapshotWith([
+    { kind: "browser" as const, id: "c0ffee00", lastViewed: "t", info: { owner: "external", url: "https://c", title: "C" } },
+  ]);
+  assert.match(linkSlot, /browse\.sh c0ffee00/);
+
+  function noTabsSnapshotWith(tabs: Parameters<typeof renderSnapshot>[0]["tabs"]) {
+    return renderSnapshot({ ...base, project: { name: "테스트", root: "/tmp/q/.dira" }, tabs });
+  }
+});
+
+test("renderSnapshot — 브라우저 탭의 슬롯 정보가 없으면 (슬롯 없음)이 뜬다", () => {
+  const s = renderSnapshot({
+    project: { name: "테스트", root: "/tmp/q/.dira" },
+    config: EMPTY_CONFIG,
+    tickets: [],
+    workers: [],
+    newTicketHash: "deadbeef",
+    tabs: [{ kind: "browser", id: "33333333", lastViewed: "t", info: null }],
+  });
+  assert.match(s, /브라우저 33333333 — \(슬롯 없음\)/);
+});
+
+test("snapshotOf — 브라우저 탭의 슬롯이 사라진 상태에서도 CDP 1초 상한을 안 탄다", async () => {
+  // 이 머신은 fs·프로세스 호출 자체가 느려(다른 renderSnapshot/snapshotOf 테스트도 수 초씩 든다)
+  // 절대 시각으로 "1초 안"을 재면 환경 잡음으로 흔들린다. 그래서 탭 없는 호출을 기준선으로 두고,
+  // 탭 하나(슬롯 없는 브라우저)가 그 위에 얹는 추가 시간만 잰다 — CDP `fetch`를 실제로 타면
+  // 1초 abort 타이머를 거의 그대로 먹으므로 900ms 문턱으로도 충분히 가른다.
+  const root = fixture();
+  const project = { id: "tabs-project", name: "테스트큐", root };
+
+  const t0 = Date.now();
+  const baseline = await snapshotOf(project);
+  const baselineMs = Date.now() - t0;
+  assert.ok(!baseline.includes("브라우저"));
+
+  await openBrowserTab(project.id, "deadbeef");
+  const t1 = Date.now();
+  const s = await snapshotOf(project);
+  const withTabMs = Date.now() - t1;
+  assert.ok(
+    withTabMs - baselineMs < 900,
+    `브라우저 탭 하나가 기준선보다 ${withTabMs - baselineMs}ms를 더 먹었다 — 슬롯 없는 해시에서 CDP를 두드린 것 같다`,
+  );
+  assert.match(s, /브라우저 deadbeef — \(슬롯 없음\)/);
+});
+
 test("snapshotOf — 새 티켓 해시를 8-hex로 밀고 그 stem은 큐에 없는 값이다. 못 읽으면 그 줄이 없다", async () => {
   const root = fixture(); // 워커 2개 · 티켓 4건짜리 픽스처(위와 같은 것)
   const project = { name: "테스트큐", root };

@@ -18,6 +18,7 @@ import {
   registerShutdownHandlers,
   restartPty,
   subscribePty,
+  terminalTail,
   writePty,
 } from "./pty.ts";
 
@@ -64,6 +65,31 @@ test("ls --color=always emits SGR escapes", async () => {
   writePty(id, "ls --color=always\n");
   await waitFor(() => out.includes("\x1b["));
   killPty(id);
+});
+
+test("terminalTail — 10,000B+ANSI backlog가 4,000B 이하 · ESC 없는 꼬리로 접힌다 (DESIGN.md §11-16 결정 2, 티켓 f97e0897)", async () => {
+  const cwd = tmpDir();
+  const { id } = openPty(cwd, "/bin/sh") as { id: string };
+  // 각 줄이 SGR 이스케이프로 감싼 20바이트짜리라 1,000줄이면 backlog가 10,000B를 넉넉히 넘는다.
+  writePty(id, "printf '\\033[31mline-%03d\\033[0m\\n' $(seq 1 1000)\n");
+  await waitFor(() => (terminalTail(id)?.lines.length ?? 0) > 0);
+  await new Promise((r) => setTimeout(r, 300)); // printf 출력이 다 흐를 시간
+  const tail = terminalTail(id);
+  assert.ok(tail);
+  assert.ok(!tail!.lines.includes("\x1b["), `ESC가 안 걷혔다: ${JSON.stringify(tail!.lines.slice(0, 40))}`);
+  assert.ok(Buffer.byteLength(tail!.lines, "utf8") <= 4000);
+  killPty(id);
+});
+
+test("terminalTail — 없는 id는 null, 살아 있는 pty는 alive:true다", async () => {
+  assert.strictEqual(terminalTail("no-such-id"), null);
+  const cwd = tmpDir();
+  const { id } = openPty(cwd, "/bin/sh") as { id: string };
+  writePty(id, "echo hi\n");
+  await waitFor(() => (terminalTail(id)?.lines.includes("hi") ?? false));
+  assert.strictEqual(terminalTail(id)?.alive, true);
+  killPty(id);
+  assert.strictEqual(terminalTail(id), null); // killPty가 지운 id는 없는 것과 같다
 });
 
 test("closing a tab sends SIGTERM and the process group goes away", async () => {

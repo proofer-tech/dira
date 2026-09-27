@@ -104,7 +104,9 @@ import {
 } from "./projects.ts";
 import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queue.ts";
 import { openTab, closeTab as closeTabPure, type Tab } from "./tabs.ts";
-import { isValidCdpHash } from "./cdp-relay.ts";
+import { browserPortPath, isValidCdpHash, LINK_SLOT_HASH, portFromDevToolsFile } from "./cdp-relay.ts";
+import { listBrowserPoolSlots } from "./browser-pool.ts";
+import { terminalTail } from "./pty.ts";
 import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
@@ -644,6 +646,19 @@ async function workerSessionsById(projectId: string): Promise<WorkerSession[]> {
 // `TICKET_ENGINE` 해석의 합이다. 그 판정은 새로 쓰지 않고 `listWorkers`·`statusOf`·`isAwaiting`·
 // `engineCell`을 그대로 부른다 — 화면과 다른 수를 말하면 이 에이전트는 거짓말을 한다.
 
+/** 브라우저 탭 한 줄이 아는 것(§11-16 결정 2 표) — CDP `/json/list`가 준 지금 주소·제목과
+ *  풀 슬롯의 `owner`. **`null`은 "슬롯 없음"이다**(슬롯이 아예 없거나 1초 안에 안 답한 경우
+ *  둘 다 여기로 합친다 — 결정 2 §슬롯이 없거나 1초 안에 응답이 없으면). */
+export type BrowserTabInfo = { owner: string; url: string; title: string } | null;
+
+/** `## 지금 열린 탭`의 한 줄이 그리는 값 — 종류마다 다른 것을 싣는다(결정 2 표). fs·pty·CDP는
+ *  전부 `snapshotOf`가 읽어 여기 채운 값으로 넘긴다 — `renderSnapshot`은 이 타입만 보고 그린다. */
+export type SnapshotTab =
+  | { kind: "chat"; id: string; lastViewed: string; title: string; persona: string }
+  | { kind: "terminal"; id: string; lastViewed: string; cwd: string; alive: boolean; tail: string }
+  | { kind: "file"; id: string; lastViewed: string; path: string; unsaved: boolean }
+  | { kind: "browser"; id: string; lastViewed: string; info: BrowserTabInfo };
+
 export type SnapshotInput = {
   project: Pick<Project, "name" | "root">;
   config: ProjectConfig;
@@ -652,6 +667,12 @@ export type SnapshotInput = {
   /** 이번 턴에 새 요구사항 티켓을 쓸 때 쓰는 8-hex(§7 §해시는 사람이 손으로 안 민다). 서버
    *  (`snapshotOf`)가 밀고 충돌 검사까지 마친 값을 인자로 받는다 — 여기서 `crypto`를 안 탄다. */
   newTicketHash: string;
+  /** §11-16 결정 2 — 우측 탭 줄. 안 주면(옛 호출부·테스트) 빈 목록이라 절이 "열린 탭이 없다"로
+   *  뜬다. */
+  tabs?: SnapshotTab[];
+  /** 이 턴이 잇는 대화의 session id(§11-16 결정 2 §`chat`행 — 이 턴을 도는 대화 자신이면
+   *  `(이 대화)`). 안 주면 아무 chat 탭도 안 걸린다. */
+  currentSessionId?: string;
 };
 
 /** 스냅샷 문자열. **순수 함수다**(fs를 안 탄다) — `home-session.test.ts`가 이걸 검증한다.
@@ -659,7 +680,51 @@ export type SnapshotInput = {
  *  `readSummary`를 부르지 않고 같은 판정 함수를 직접 부른다: 저건 `listWorkers`를 **티켓 없이**
  *  불러서 `holding`이 항상 null이고(§7 표가 요구하는 "물고 있는 티켓"이 통째로 빈다), 여기서
  *  다시 부르면 큐를 두 번 읽는다. 세는 식(`state === "open"` …)은 그 파일과 글자로 같다. */
-export function renderSnapshot({ project, config, tickets, workers, newTicketHash }: SnapshotInput): string {
+/** 탭 한 줄(§11-16 결정 2 표 · 결정 4). 브라우저 행의 명령 줄은 주인이 `home`이거나 탭 id가
+ *  링크 슬롯(`c0ffee00`)일 때만 붙는다 — 그 밖(`worker:<이름>`·`external`·주인 모름)은
+ *  읽기 전용이다. */
+function renderTabLine(tab: SnapshotTab, currentSessionId: string, queueRoot: string): string {
+  switch (tab.kind) {
+    case "chat": {
+      const flag = tab.id === currentSessionId ? " (이 대화)" : "";
+      return `- 대화 — ${tab.title || "(제목 없음)"} · 페르소나 ${tab.persona || HOME_PERSONA}${flag}`;
+    }
+    case "terminal": {
+      if (!tab.alive) return `- 터미널 — ${tab.cwd} (끊김)`;
+      return [`- 터미널 — ${tab.cwd}`, "```", tab.tail, "```"].join("\n");
+    }
+    case "file": {
+      const flag = tab.unsaved ? " (저장 안 함)" : "";
+      return `- 파일 — ${tab.path}${flag}`;
+    }
+    case "browser": {
+      if (!tab.info) return `- 브라우저 ${tab.id} — (슬롯 없음)`;
+      const controllable = tab.info.owner === "home" || tab.id === LINK_SLOT_HASH;
+      const control = controllable
+        ? `bash ${path.join(queueRoot, "browse.sh")} ${tab.id} <명령>`
+        : "읽기 전용 - 주인이 쓰는 중";
+      return `- 브라우저 ${tab.id} — ${tab.info.url || "(주소 모름)"} · ${tab.info.title || "(제목 없음)"} · ${control}`;
+    }
+  }
+}
+
+/** `## 지금 열린 탭` 절(§11-16 결정 2) — `lastViewed` 내림차순. 0개면 "열린 탭이 없다."뿐이다
+ *  (§결정 2 §탭이 0개면 — 목록을 못 받은 것과 탭이 없는 것을 구분해야 한다). */
+function renderTabsSection(tabs: SnapshotTab[], currentSessionId: string, queueRoot: string): string[] {
+  if (tabs.length === 0) return ["열린 탭이 없다."];
+  const sorted = [...tabs].sort((a, b) => b.lastViewed.localeCompare(a.lastViewed));
+  return sorted.map((tab) => renderTabLine(tab, currentSessionId, queueRoot));
+}
+
+export function renderSnapshot({
+  project,
+  config,
+  tickets,
+  workers,
+  newTicketHash,
+  tabs = [],
+  currentSessionId = "",
+}: SnapshotInput): string {
   const count = (s: Ticket["state"]) => tickets.filter((t) => t.state === s).length;
   const title = (stem: string) => tickets.find((t) => t.stem === stem)?.title ?? "";
 
@@ -703,6 +768,10 @@ export function renderSnapshot({ project, config, tickets, workers, newTicketHas
           "`stopped`(락 없음 + cron 미등록) · `stale`(락 있음 + pid 죽음, 회수 대상).",
         ]),
     "",
+    "## 지금 열린 탭",
+    "",
+    ...renderTabsSection(tabs, currentSessionId, project.root),
+    "",
     "## 여기 없는 것은 이 파일들을 읽어라",
     "",
     `- 티켓 전부: \`${path.join(project.root, "tickets")}/\` — 파일명이 곧 상태다`,
@@ -714,13 +783,84 @@ export function renderSnapshot({ project, config, tickets, workers, newTicketHas
   ].join("\n");
 }
 
+/** 브라우저 슬롯 포트의 `/json/list`에서 지금 주소·제목을 읽는다(§11-16 결정 2). **슬롯이
+ *  없으면 여기까지 안 온다** — 부르는 쪽(`resolveTabs`)이 `ownerByHash`에 없는 해시를 걸러
+ *  네트워크를 아예 안 탄다. 1초 안에 안 답하거나 `page` 대상이 없으면 `null`(슬롯 없음)이다. */
+async function browserTabInfo(hash: string, owner: string | null): Promise<BrowserTabInfo> {
+  const port = portFromDevToolsFile(await readFile(browserPortPath(hash), "utf8").catch(() => null));
+  if (port === null) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 1000);
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: controller.signal });
+    if (!res.ok) return null;
+    const targets = (await res.json().catch(() => null)) as { type?: string; url?: string; title?: string }[] | null;
+    const page = Array.isArray(targets) ? targets.find((t) => t.type === "page") : undefined;
+    return page ? { owner: owner ?? "", url: page.url ?? "", title: page.title ?? "" } : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 우측 탭 줄(`readHome`) → 스냅샷이 그릴 뷰(§11-16 결정 2). 같은 프로세스라 pty는 파일 없이
+ *  읽는다(`terminalTail`) — 없는 id는 죽은 탭으로 흡수한다. 브라우저 탭은 `listBrowserPoolSlots`로
+ *  주인을 먼저 재고, 슬롯 자체가 없는 해시는 CDP를 안 두드린다(`browserTabInfo` 주석). */
+async function resolveTabs(projectId: string): Promise<SnapshotTab[]> {
+  const home = await readHome(projectId).catch(() => null);
+  if (!home || home.tabs.length === 0) return [];
+  const hasBrowserTab = home.tabs.some((t) => t.kind === "browser");
+  const ownerByHash = new Map<string, string | null>();
+  if (hasBrowserTab) {
+    const { slots } = await listBrowserPoolSlots().catch(() => ({ slots: [], hasDeadSlot: false }));
+    for (const s of slots) ownerByHash.set(s.hash, s.owner);
+  }
+  return Promise.all(
+    home.tabs.map(async (tab): Promise<SnapshotTab> => {
+      if (tab.kind === "chat") {
+        const conv = home.conversations.find((c) => c.id === tab.id);
+        return {
+          kind: "chat",
+          id: tab.id,
+          lastViewed: tab.lastViewed,
+          title: conv?.title ?? "",
+          persona: conv?.persona ?? HOME_PERSONA,
+        };
+      }
+      if (tab.kind === "terminal") {
+        const t = terminalTail(tab.id);
+        return {
+          kind: "terminal",
+          id: tab.id,
+          lastViewed: tab.lastViewed,
+          cwd: tab.cwd ?? "",
+          alive: t?.alive ?? false,
+          tail: t?.lines ?? "",
+        };
+      }
+      if (tab.kind === "file") {
+        return { kind: "file", id: tab.id, lastViewed: tab.lastViewed, path: tab.id, unsaved: tab.unsaved === true };
+      }
+      const owner = ownerByHash.has(tab.id) ? (ownerByHash.get(tab.id) ?? null) : undefined;
+      const info = owner === undefined ? null : await browserTabInfo(tab.id, owner);
+      return { kind: "browser", id: tab.id, lastViewed: tab.lastViewed, info };
+    }),
+  );
+}
+
 /** 큐를 한 번 읽어 스냅샷을 만든다. 못 읽으면 **사유를 그대로 담은 스냅샷**이다 — 던지면
  *  질문 자체가 사라지고, 삼키면 에이전트가 "워커가 없다"고 거짓알려 준다(§6 에러 3요소).
  *
  *  **새 티켓 해시도 여기서 민다**(§7 §해시는 사람이 손으로 안 민다) — 큐를 못 읽으면 안 민다:
  *  쓰기도 못 하는 자리에서 못 쓸 값을 실어 주면 에이전트가 그걸 믿는다. 그래서 실패 갈래의
- *  스냅샷 문자열에는 그 줄이 없다. */
-export async function snapshotOf(project: Pick<Project, "name" | "root">): Promise<string> {
+ *  스냅샷 문자열에는 그 줄이 없다.
+ *
+ *  **`project.id`가 없으면 탭 절이 빈다**(§11-16 결정 2 — 옛 호출부·테스트가 여전히 돈다). */
+export async function snapshotOf(
+  project: Pick<Project, "name" | "root"> & Partial<Pick<Project, "id">>,
+  currentSessionId = "",
+): Promise<string> {
   try {
     const config = await resolveConfig(project);
     const tickets = await listTickets(project.root, config);
@@ -729,7 +869,8 @@ export async function snapshotOf(project: Pick<Project, "name" | "root">): Promi
     const stems = new Set(tickets.map((t) => t.stem));
     let newTicketHash = randomUUID().slice(0, 8);
     while (stems.has(newTicketHash)) newTicketHash = randomUUID().slice(0, 8);
-    return renderSnapshot({ project, config, tickets, workers, newTicketHash });
+    const tabs = project.id ? await resolveTabs(project.id) : [];
+    return renderSnapshot({ project, config, tickets, workers, newTicketHash, tabs, currentSessionId });
   } catch (e) {
     return [
       "# 지금 이 프로젝트의 상태",
@@ -844,6 +985,10 @@ ${ontologyDir} 안의 _ontology/SCHEMA.md가 지도입니다(객체·관계·액
 
 **경계는 도구가 아니라 이 글이 진다.** 큐 밖이든 안이든, 사람이 시키지 않은 것은 고치지
 않는다. 무엇을 왜 고치는지 확신이 안 서면 고치기 전에 먼저 물어본다.
+
+**스냅샷이 명령을 안 준 해시에는 \`browse.sh\`를 부르지 않는다.** \`## 지금 열린 탭\`의
+브라우저 줄 중 명령이 없는 것은 다른 세션이 쥔 슬롯이다(§11-16 결정 4) — 그 슬롯을 건드리면
+그 세션이 보던 페이지가 움직인다.
 
 **\`tickets/**\`에는 새 파일도 쓸 수 있다 — 사람이 그 턴에 요구사항으로 올려 달라고 했을
 때만.** 그때 만드는 것은 \`kind: request\` 티켓 하나뿐이다(\`work\`·\`feedback\`·\`answer\`는
@@ -1052,7 +1197,7 @@ export async function ask(
   // `51c730de`와 같은 선). 기본값(`<root>/ontology`)은 워커와 같이 존재를 잰다.
   const showOntology = config && !usingDefault(config, "ontology") ? true : await ontologyHasMarkdown(ontology);
   const prompt = buildPrompt(
-    await snapshotOf(project),
+    await snapshotOf(project, sessionId),
     q,
     showOntology ? ontology : "",
     config?.personas ? await personaBlock(config.personas, persona ?? HOME_PERSONA) : "",
