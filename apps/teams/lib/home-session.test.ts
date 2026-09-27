@@ -201,6 +201,48 @@ test("renderSnapshot — 탭 0개면 `## 지금 열린 탭` 절에 `열린 탭�
   assert.match(s, /열린 탭이 없다\./);
 });
 
+test("renderSnapshot — 탭 목록을 못 읽으면 사유 한 줄이 뜨고 `열린 탭이 없다.`는 안 뜬다", () => {
+  const s = noTabsSnapshot();
+  const withError = renderSnapshot({
+    project: { name: "테스트", root: "/tmp/q/.dira" },
+    config: EMPTY_CONFIG,
+    tickets: [],
+    workers: [],
+    newTicketHash: "deadbeef",
+    tabs: [],
+    tabsError: "ENOENT: no such file or directory",
+  });
+  assert.match(withError, /탭 목록을 못 읽었다: ENOENT/);
+  assert.ok(!withError.includes("열린 탭이 없다."));
+  // 사유가 없으면 그대로 "탭 0개"다 — 회귀를 막는 기준선.
+  assert.match(s, /열린 탭이 없다\./);
+});
+
+test("renderSnapshot — 살아 있는 터미널 탭의 마지막 명령과 작업중 여부가 그 줄에 실린다", () => {
+  const s = renderSnapshot({
+    project: { name: "테스트", root: "/tmp/q/.dira" },
+    config: EMPTY_CONFIG,
+    tickets: [],
+    workers: [],
+    newTicketHash: "deadbeef",
+    tabs: [
+      {
+        kind: "terminal",
+        id: "term-1",
+        lastViewed: "2026-01-01T00:00:00.000Z",
+        cwd: "/terminal-cwd",
+        alive: true,
+        tail: "echo marker-1116",
+        lastCommand: "echo marker-1116",
+        working: true,
+      },
+    ],
+  });
+  const section = s.slice(s.indexOf("## 지금 열린 탭"));
+  assert.match(section, /echo marker-1116/);
+  assert.match(section, /작업중/);
+});
+
 test("renderSnapshot — 탭 네 종류가 lastViewed 내림차순으로 뜨고 (이 대화)·(저장 안 함) 표시가 붙는다", () => {
   const s = renderSnapshot({
     project: { name: "테스트", root: "/tmp/q/.dira" },
@@ -218,6 +260,8 @@ test("renderSnapshot — 탭 네 종류가 lastViewed 내림차순으로 뜨고 
         cwd: "/terminal-cwd",
         alive: true,
         tail: "echo hi",
+        lastCommand: "",
+        working: false,
       },
       { kind: "file", id: "/file/a.ts", lastViewed: "2026-01-02T00:00:00.000Z", path: "/file/a.ts", unsaved: true },
       {

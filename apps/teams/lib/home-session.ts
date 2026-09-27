@@ -106,7 +106,7 @@ import { isAwaiting, listTickets, reqTitle, statusOf, type Ticket } from "./queu
 import { openTab, closeTab as closeTabPure, type Tab } from "./tabs.ts";
 import { browserPortPath, isValidCdpHash, LINK_SLOT_HASH, portFromDevToolsFile } from "./cdp-relay.ts";
 import { listBrowserPoolSlots } from "./browser-pool.ts";
-import { terminalTail } from "./pty.ts";
+import { ptyStatuses, terminalTail } from "./pty.ts";
 import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
@@ -655,7 +655,16 @@ export type BrowserTabInfo = { owner: string; url: string; title: string } | nul
  *  전부 `snapshotOf`가 읽어 여기 채운 값으로 넘긴다 — `renderSnapshot`은 이 타입만 보고 그린다. */
 export type SnapshotTab =
   | { kind: "chat"; id: string; lastViewed: string; title: string; persona: string }
-  | { kind: "terminal"; id: string; lastViewed: string; cwd: string; alive: boolean; tail: string }
+  | {
+      kind: "terminal";
+      id: string;
+      lastViewed: string;
+      cwd: string;
+      alive: boolean;
+      tail: string;
+      lastCommand: string;
+      working: boolean;
+    }
   | { kind: "file"; id: string; lastViewed: string; path: string; unsaved: boolean }
   | { kind: "browser"; id: string; lastViewed: string; info: BrowserTabInfo };
 
@@ -670,6 +679,10 @@ export type SnapshotInput = {
   /** §11-16 결정 2 — 우측 탭 줄. 안 주면(옛 호출부·테스트) 빈 목록이라 절이 "열린 탭이 없다"로
    *  뜬다. */
   tabs?: SnapshotTab[];
+  /** §11-16 결정 2 §탭 목록을 못 읽으면 사유 한 줄을 싣는다 — `resolveTabs`가 `readHome`
+   *  실패를 삼키지 않고 여기로 올린 사유다. 있으면 `## 지금 열린 탭` 절이 `tabs`(항상 빈
+   *  배열이다) 대신 이 사유를 싣는다 — "목록을 못 읽었다"와 "탭이 0개다"를 구분해야 한다. */
+  tabsError?: string;
   /** 이 턴이 잇는 대화의 session id(§11-16 결정 2 §`chat`행 — 이 턴을 도는 대화 자신이면
    *  `(이 대화)`). 안 주면 아무 chat 탭도 안 걸린다. */
   currentSessionId?: string;
@@ -691,7 +704,9 @@ function renderTabLine(tab: SnapshotTab, currentSessionId: string, queueRoot: st
     }
     case "terminal": {
       if (!tab.alive) return `- 터미널 — ${tab.cwd} (끊김)`;
-      return [`- 터미널 — ${tab.cwd}`, "```", tab.tail, "```"].join("\n");
+      const command = tab.lastCommand ? ` · 마지막 명령 \`${tab.lastCommand}\`` : "";
+      const status = tab.working ? " · 작업중" : "";
+      return [`- 터미널 — ${tab.cwd}${command}${status}`, "```", tab.tail, "```"].join("\n");
     }
     case "file": {
       const flag = tab.unsaved ? " (저장 안 함)" : "";
@@ -708,9 +723,16 @@ function renderTabLine(tab: SnapshotTab, currentSessionId: string, queueRoot: st
   }
 }
 
-/** `## 지금 열린 탭` 절(§11-16 결정 2) — `lastViewed` 내림차순. 0개면 "열린 탭이 없다."뿐이다
- *  (§결정 2 §탭이 0개면 — 목록을 못 받은 것과 탭이 없는 것을 구분해야 한다). */
-function renderTabsSection(tabs: SnapshotTab[], currentSessionId: string, queueRoot: string): string[] {
+/** `## 지금 열린 탭` 절(§11-16 결정 2) — `lastViewed` 내림차순. `tabsError`가 있으면 그 사유
+ *  한 줄뿐이다(§결정 2 §탭 목록을 못 읽으면 사유 한 줄을 싣는다). 그 외 0개면 "열린 탭이
+ *  없다."뿐이다 — 목록을 못 받은 것과 탭이 없는 것을 구분해야 한다. */
+function renderTabsSection(
+  tabs: SnapshotTab[],
+  currentSessionId: string,
+  queueRoot: string,
+  tabsError?: string,
+): string[] {
+  if (tabsError) return [`탭 목록을 못 읽었다: ${tabsError}`];
   if (tabs.length === 0) return ["열린 탭이 없다."];
   const sorted = [...tabs].sort((a, b) => b.lastViewed.localeCompare(a.lastViewed));
   return sorted.map((tab) => renderTabLine(tab, currentSessionId, queueRoot));
@@ -723,6 +745,7 @@ export function renderSnapshot({
   workers,
   newTicketHash,
   tabs = [],
+  tabsError,
   currentSessionId = "",
 }: SnapshotInput): string {
   const count = (s: Ticket["state"]) => tickets.filter((t) => t.state === s).length;
@@ -770,7 +793,7 @@ export function renderSnapshot({
     "",
     "## 지금 열린 탭",
     "",
-    ...renderTabsSection(tabs, currentSessionId, project.root),
+    ...renderTabsSection(tabs, currentSessionId, project.root, tabsError),
     "",
     "## 여기 없는 것은 이 파일들을 읽어라",
     "",
@@ -804,19 +827,33 @@ async function browserTabInfo(hash: string, owner: string | null): Promise<Brows
   }
 }
 
+/** `resolveTabs`의 반환 모양 — `tabs`는 읽었을 때 항상 채워지고(빈 배열도 사실이다), `error`는
+ *  `readHome`이 던졌을 때만 선다. 이 둘을 한 값에 같이 실어야 `snapshotOf`가 "탭이 0개다"와
+ *  "탭 목록을 못 읽었다"를 못 헷갈린다(§11-16 결정 2 §탭 목록을 못 읽으면 사유 한 줄을 싣는다). */
+type ResolvedTabs = { tabs: SnapshotTab[]; error?: string };
+
 /** 우측 탭 줄(`readHome`) → 스냅샷이 그릴 뷰(§11-16 결정 2). 같은 프로세스라 pty는 파일 없이
- *  읽는다(`terminalTail`) — 없는 id는 죽은 탭으로 흡수한다. 브라우저 탭은 `listBrowserPoolSlots`로
- *  주인을 먼저 재고, 슬롯 자체가 없는 해시는 CDP를 안 두드린다(`browserTabInfo` 주석). */
-async function resolveTabs(projectId: string): Promise<SnapshotTab[]> {
-  const home = await readHome(projectId).catch(() => null);
-  if (!home || home.tabs.length === 0) return [];
+ *  읽는다(`terminalTail`·`ptyStatuses`) — 없는 id는 죽은 탭으로 흡수한다. `ptyStatuses`는
+ *  터미널 탭 id를 모아 한 번만 부른다(`ps` 한 번 — §11-6 결정 3과 같은 배치 규칙). 브라우저
+ *  탭은 `listBrowserPoolSlots`로 주인을 먼저 재고, 슬롯 자체가 없는 해시는 CDP를 안 두드린다
+ *  (`browserTabInfo` 주석). */
+async function resolveTabs(projectId: string): Promise<ResolvedTabs> {
+  let home: Home;
+  try {
+    home = await readHome(projectId);
+  } catch (e) {
+    return { tabs: [], error: (e as Error).message };
+  }
+  if (home.tabs.length === 0) return { tabs: [] };
   const hasBrowserTab = home.tabs.some((t) => t.kind === "browser");
   const ownerByHash = new Map<string, string | null>();
   if (hasBrowserTab) {
     const { slots } = await listBrowserPoolSlots().catch(() => ({ slots: [], hasDeadSlot: false }));
     for (const s of slots) ownerByHash.set(s.hash, s.owner);
   }
-  return Promise.all(
+  const terminalIds = home.tabs.filter((t) => t.kind === "terminal").map((t) => t.id);
+  const statuses = terminalIds.length > 0 ? await ptyStatuses(terminalIds) : {};
+  const tabs = await Promise.all(
     home.tabs.map(async (tab): Promise<SnapshotTab> => {
       if (tab.kind === "chat") {
         const conv = home.conversations.find((c) => c.id === tab.id);
@@ -830,12 +867,15 @@ async function resolveTabs(projectId: string): Promise<SnapshotTab[]> {
       }
       if (tab.kind === "terminal") {
         const t = terminalTail(tab.id);
+        const status = statuses[tab.id];
         return {
           kind: "terminal",
           id: tab.id,
           lastViewed: tab.lastViewed,
           cwd: tab.cwd ?? "",
           alive: t?.alive ?? false,
+          lastCommand: status?.lastCommand ?? "",
+          working: status?.working ?? false,
           tail: t?.lines ?? "",
         };
       }
@@ -847,6 +887,7 @@ async function resolveTabs(projectId: string): Promise<SnapshotTab[]> {
       return { kind: "browser", id: tab.id, lastViewed: tab.lastViewed, info };
     }),
   );
+  return { tabs };
 }
 
 /** 큐를 한 번 읽어 스냅샷을 만든다. 못 읽으면 **사유를 그대로 담은 스냅샷**이다 — 던지면
@@ -869,8 +910,17 @@ export async function snapshotOf(
     const stems = new Set(tickets.map((t) => t.stem));
     let newTicketHash = randomUUID().slice(0, 8);
     while (stems.has(newTicketHash)) newTicketHash = randomUUID().slice(0, 8);
-    const tabs = project.id ? await resolveTabs(project.id) : [];
-    return renderSnapshot({ project, config, tickets, workers, newTicketHash, tabs, currentSessionId });
+    const resolved = project.id ? await resolveTabs(project.id) : { tabs: [] };
+    return renderSnapshot({
+      project,
+      config,
+      tickets,
+      workers,
+      newTicketHash,
+      tabs: resolved.tabs,
+      tabsError: resolved.error,
+      currentSessionId,
+    });
   } catch (e) {
     return [
       "# 지금 이 프로젝트의 상태",
