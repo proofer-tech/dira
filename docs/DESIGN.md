@@ -61532,6 +61532,76 @@ QA)도 같이 멈췄다. 같은 날 답변 대기 다섯 장 가운데 이 모�
 
 **에픽을 안 연다.** 두 장이 파일 둘에 걸린다 - §에픽 결정 20의 하한 아래다.
 
+### P438. 다른 프로젝트 터미널에서도 링크가 내장 브라우저로 열린다 (요구 `ee760d1f`, 왕복 0회)
+
+사람 요구: *"터미널에서 링크 누르면 브라우저가 안열립니다"*. pofol 큐(`a62274b0`)에 들어왔다가
+pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지만, 아래 실측만으로 원인이 하나로
+정해져서 되묻지 않았다.
+
+#### 실측 - 링크 슬롯을 여는 셸이 dira 큐에만 있다 (2026-09-28)
+
+- 터미널 링크를 누르면 `openLink` -> `openLinkAction` -> `openLinkBrowser`가
+  `bash <큐 루트>/browse.sh c0ffee00 goto <url>`을 부른다(§11-15 결정 1).
+- `~/.config/dira/gui-projects.json`에 등록된 프로젝트 일곱 개 가운데 `<루트>/browse.sh`가 있는
+  큐는 `dira` 하나다. `pofol` `stocky` `stream` `proofer-tech` `hsol-info` `hravengers` 여섯은
+  `browse.sh`도 `browser.sh`도 없다.
+- 원인은 `lib/scaffold.ts`다. 스캐폴딩이 `templates/hooks/push.sh`는 복사하지만 같은 폴더의
+  `browse.sh` `browser.sh`는 복사하지 않는다. dira 큐에만 사람이 손으로 넣은 사본이 있다.
+- 셸이 없으니 `openLinkAction`이 `reason: "error"`를 돌려주고, `openLink`는 `cap`이 아닌 실패에서
+  토스트 없이 끝난다. 사람 눈에는 클릭에 아무 반응이 없다.
+
+그러므로 §11-15의 수용조건은 dira 큐에서만 참이었다. 앱 창 링크 가로채기와 피드백 링크도 같은
+길을 지나므로 같이 막혀 있다.
+
+#### 결정 1 - 큐에 링크 셸 두 개가 없으면 GUI가 템플릿에서 설치한다
+
+- **새 프로젝트** - `scaffold.ts`가 `push.sh` 옆에서 `templates/hooks/browse.sh`와
+  `templates/hooks/browser.sh`를 `<루트>/browse.sh` `<루트>/browser.sh`로 복사한다. 모드는
+  0o755이고 규약은 기존 `put`(O_EXCL, 있으면 안 덮는다)이다. 두 파일 모두 자리표시자가 없어
+  템플릿 원문을 그대로 쓴다.
+- **이미 있는 프로젝트** - `openLinkAction`이 셸을 부르기 직전에 두 파일의 유무를 본다. 없는
+  파일만 같은 템플릿에서 O_EXCL로 쓴다. 있는 파일은 내용이 달라도 안 덮는다. 큐 사본을
+  고치는 일은 이 절의 몫이 아니다.
+- 템플릿 경로는 `engineRepo(locale)`가 준다(`workers.ts`의 `push.sh` 갱신과 같은 자리).
+  엔진 레포를 못 찾으면 설치를 건너뛰고 셸을 그대로 부른다. 그 실패는 결정 2가 알린다.
+
+#### 결정 2 - 링크를 못 열면 사유가 무엇이든 토스트 한 줄을 띄운다
+
+- `openLink`가 `reason: "error"`에서도 토스트를 띄운다. 문구는 `링크를 못 열었습니다.` 뒤에
+  `output`의 마지막 비어 있지 않은 줄(최대 120자)을 붙인다. `output`이 비었으면 앞 문장만 쓴다.
+- `cap` 토스트(`linkCapToastMessage`)는 그대로 둔다. 새 문구는 `lib/i18n.ts`의 ko - en 두 벌이다.
+- 성공 경로(`ok: true`)의 이동은 안 바꾼다.
+
+#### 결정 3 - 안 하는 것
+
+| 안 한다 | 왜 |
+|---|---|
+| 외부 기본 브라우저로 여는 길을 기본값으로 바꾸기 | §11-15 답 3(a)가 내장으로 정했다. 탈출구는 결정 5의 단추가 이미 있다 |
+| `@xterm/addon-web-links` 추가 | §11-15 결정 3. 새 의존성 0개 |
+| 엔진(`tick.sh` - `tickets.py` - 템플릿 `browse.sh` - `browser.sh`) 수정 | 복사만 한다 |
+| 이미 있는 큐 사본을 템플릿으로 덮기 | 사람이 손본 사본일 수 있다. 결정 1은 없는 파일만 채운다 |
+| 여러 줄에 걸쳐 접힌 URL 인식 | 이번 요구의 원인이 아니다. 실측으로 확인되면 그때 연다 |
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P438-1 | GUI - 결정 1. `lib/scaffold.ts`의 설치와 `openLinkAction` 직전의 설치, 테스트 | developer | - | 발행 |
+| P438-2 | GUI - 결정 2. `components/browser-panel.tsx` `openLink`의 `error` 토스트와 `lib/i18n.ts` 문구, 테스트 | developer | - | 발행 |
+| P438-3 | QA - P438-1 - P438-2 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P438-1, P438-2 | 발행 |
+
+**designer 0장 - writer 0장.** 새 화면이 없고 토스트 한 줄은 기존 `cap` 토스트와 같은 자리다.
+매뉴얼에 링크 셸 설치를 적은 문장이 없다.
+
+**에픽을 안 연다.** 세 장이 파일 넷에 걸리는 수선이다 - §에픽 결정 20의 하한 아래다.
+
+#### 수용조건
+
+- [ ] 빈 디렉터리에 스캐폴딩을 돌리면 `<루트>/browse.sh`와 `<루트>/browser.sh`가 생기고 `diff`로 `templates/hooks/`의 같은 이름 파일과 차이가 0이며 둘 다 실행 비트가 켜져 있다.
+- [ ] `browse.sh`가 없는 큐에서 `openLinkAction(<그 프로젝트>, "https://example.com")`을 부르면 두 파일이 생기고 결과가 `{ ok: true }`다.
+- [ ] 내용이 템플릿과 다른 `browse.sh`가 이미 있는 큐에서 같은 호출을 하면 그 파일의 바이트가 호출 전과 같다.
+- [ ] `openLinkAction`이 `{ ok: false, reason: "error", output: "a\nboom\n" }`을 돌려주면 `openLink`가 `링크를 못 열었습니다. boom` 토스트 한 번을 띄우고 이동하지 않는다.
+- [ ] pofol 프로젝트 홈의 터미널에 `echo https://example.com`을 찍고 그 글자를 누르면 홈의 `c0ffee00` 탭이 그 주소를 연다.
+- [ ] `git diff --stat master`에 `tick.sh` - `tickets.py` - `templates/hooks/` - `package.json`이 없다.
+
 ## 수용조건 (전체)
 
 개별 티켓의 `## Done when`이 계약이고, 아래는 제품 전체의 종료 조건이다.
