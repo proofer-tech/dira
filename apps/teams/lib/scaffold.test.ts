@@ -7,6 +7,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   engineRepo,
+  ensureBrowseHooks,
   ensureDenyCurrentBranch,
   ensureGitignoreLine,
   fillPlaceholders,
@@ -54,6 +55,8 @@ const SET = [
   ".dira/dispatch-gate.sh",
   ".dira/watchdog.sh",
   ".dira/push.sh",
+  ".dira/browse.sh",
+  ".dira/browser.sh",
   ".dira/integration-branch",
 ];
 
@@ -200,6 +203,15 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.doesNotMatch(pushText, /master/);
   assert.equal((await stat(push)).mode & 0o777, 0o755);
 
+  // ⑩ 링크 셸(§P438 결정 1) — 자리표시자가 없어 템플릿과 바이트가 같고, 모드는 push.sh와 같은
+  // 0o755다(P438-1 — 이게 없어서 dira 외 여섯 프로젝트 큐에서 링크가 안 열렸다).
+  for (const name of ["browse.sh", "browser.sh"]) {
+    const file = path.join(first.root, name);
+    execFileSync("bash", ["-n", file]);
+    assert.equal(await readFile(file, "utf8"), await readFile(path.join(repo.path, "templates/hooks", name), "utf8"));
+    assert.equal((await stat(file)).mode & 0o777, 0o755);
+  }
+
   // ④ 두 번 돌리면 전부 skipped이고 내용이 안 바뀐다
   const second = await scaffold(project, { branch: "other", specDoc: "docs/S.md" });
   assert.deepEqual(second.skipped.sort(), [...SET, ".gitignore"].sort());
@@ -208,6 +220,35 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.equal(await readFile(path.join(project, ".gitignore"), "utf8"), ".dira\n");
   // (D2) 소급 0 — 재실행해도 members 내용이 안 갈린다
   assert.equal(await readFile(path.join(project, ".dira/squads/default/members"), "utf8"), members);
+});
+
+/** P438-1 — `ensureBrowseHooks` 단독 호출. 스캐폴딩을 거치지 않은 기존 큐(§0-3 이전에 만든
+ *  dira 외 프로젝트)를 흉내 낸 픽스처에서 셸 둘을 채우고, 있던 파일은 건드리지 않는다. */
+test("ensureBrowseHooks — 없는 큐에 설치, 있는 browse.sh는 바이트 그대로 둔다", async (t) => {
+  const repo = engineRepo();
+  assert.ok("path" in repo, `엔진 레포를 못 찾았다: ${JSON.stringify(repo)}`);
+
+  const root = await tmp();
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  // 다른 내용의 browse.sh가 이미 있다 — O_EXCL이라 설치가 이 바이트를 못 건드린다.
+  const stale = "#!/bin/bash\necho stale\n";
+  await writeFile(path.join(root, "browse.sh"), stale);
+
+  const installed = await ensureBrowseHooks(root);
+  assert.deepEqual(installed.sort(), ["browser.sh"]);
+
+  assert.equal(await readFile(path.join(root, "browse.sh"), "utf8"), stale);
+  const browser = path.join(root, "browser.sh");
+  assert.equal(
+    await readFile(browser, "utf8"),
+    await readFile(path.join(repo.path, "templates/hooks/browser.sh"), "utf8"),
+  );
+  assert.equal((await stat(browser)).mode & 0o777, 0o755);
+
+  // 다시 부르면 둘 다 이미 있어 아무것도 안 바뀐다(멱등).
+  assert.deepEqual(await ensureBrowseHooks(root), []);
+  assert.equal(await readFile(path.join(root, "browse.sh"), "utf8"), stale);
 });
 
 /** §0-19 네 갈래 — 파서 없이 트림-완전일치로만 판정한다. */

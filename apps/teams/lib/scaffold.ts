@@ -122,6 +122,36 @@ export async function ensureDenyCurrentBranch(project: string): Promise<DenyCurr
   );
 }
 
+/** `templates/hooks/`에서 복사하는 실행 훅 중, 링크가 부르는 둘(§P438 결정 1) — `browse.sh`
+ *  (터미널·피드백 링크가 여는 셸)와 `browser.sh`(그 풀 회수). 자리표시자가 없어 그대로
+ *  바이트 복사다(`push.sh`처럼 브랜치 치환이 필요 없다). */
+const BROWSE_HOOK_FILES = ["browse.sh", "browser.sh"];
+
+/** `<root>`에 `browse.sh`·`browser.sh`가 없으면 엔진 `templates/hooks/`에서 설치한다(P438-1).
+ *  스캐폴딩(새 프로젝트)과 `openLinkAction`(이미 있는 프로젝트) 둘 다 이 함수 하나를 부른다 —
+ *  두 벌로 갈리면 새 프로젝트만 고치고 기존 여섯 프로젝트 큐는 여전히 셸이 없는 사고가
+ *  반복된다. O_EXCL — 있는 파일은 절대 안 덮는다(`scaffold`의 `put`과 같은 계약). 모드는
+ *  `push.sh`와 같은 0o755 — 링크 액션이 `bash` 없이 실행 비트로도 부를 수 있어야 한다.
+ *  `engineRepo()`가 error면 호출부(셸 실행)가 이미 그 실패를 사용자에게 보여주므로 여기서는
+ *  조용히 건너뛴다 — 링크 열기 자체를 막는 이유가 되지 않는다. */
+export async function ensureBrowseHooks(root: string, locale: Locale = DEFAULT_LOCALE): Promise<string[]> {
+  const repo = engineRepo(locale);
+  if ("error" in repo) return [];
+  const installed: string[] = [];
+  for (const name of BROWSE_HOOK_FILES) {
+    const text = await readFile(path.join(repo.path, "templates/hooks", name), "utf8").catch(() => null);
+    if (text === null) continue;
+    try {
+      await writeFile(path.join(root, name), text, { flag: "wx" });
+      await chmod(path.join(root, name), 0o755);
+      installed.push(name);
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    }
+  }
+  return installed;
+}
+
 export type Preflight =
   | { ok: true }
   | { ok: false; queue: boolean; root: string; message: string };
@@ -245,6 +275,12 @@ export async function scaffold(
   // 이 큐(도그푸딩)의 실제 사본이 이미 0o755라 그 모양을 그대로 따른다.
   const pushShText = await readFile(path.join(repo.path, "templates/hooks/push.sh"), "utf8");
   await put(PUSH_SH_FILE, pushSh(pushShText, opts.branch), 0o755);
+  // 링크 셸(§P438 결정 1) — `installed`에 없으면 이미 있던 것이라 skipped다(§0-3, `put`과 같은
+  // written/skipped 계약을 여기서도 지킨다).
+  const browseInstalled = await ensureBrowseHooks(root, locale);
+  for (const name of BROWSE_HOOK_FILES) {
+    (browseInstalled.includes(name) ? written : skipped).push(path.join(".dira", name));
+  }
   const example = await readFile(path.join(repo.path, "worker.sh.example"), "utf8");
   // 조립은 `firstWorkerBody`(`lib/workers.ts`) 하나다 — §4-18 생성 버튼 폴백도 같은 함수를
   // 부른다. 두 벌로 갈리면 스캐폴딩으로 태어난 첫 워커와 버튼으로 태어난 첫 워커가 다른 모양이 된다.

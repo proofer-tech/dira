@@ -30,6 +30,7 @@ import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import type { RefIndex } from "@/lib/markdown-refs";
 import { openWithinApp, type OpenResult } from "@/lib/paths";
 import { listTickets, type Ticket } from "@/lib/queue";
+import { ensureBrowseHooks } from "@/lib/scaffold";
 import {
   closeHomeTab,
   createSchedule as createScheduleRow,
@@ -487,6 +488,7 @@ export async function openLinkAction(projectId: string, url: string): Promise<Li
   }
   const gate = await linkOpenBlocked();
   if (gate.blocked) return { ok: false, reason: "cap", used: gate.used, limit: gate.limit };
+  await ensureBrowseHooks(project.root); // P438-1 — 셸이 없는 큐(스캐폴딩 이전 프로젝트)도 여기서 채운다
   const run = await openLinkBrowser(project.root, url);
   return run.ok ? { ok: true } : { ok: false, reason: "error", output: run.output };
 }
