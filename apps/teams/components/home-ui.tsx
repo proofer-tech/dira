@@ -102,7 +102,7 @@ import {
   useAttachments,
 } from "@/components/attachment-field";
 import { AttachmentPreview } from "@/components/attachment-preview";
-import { BrowserMirror, browserOwnerLabel } from "@/components/browser-panel";
+import { BrowserMirror, browserOwnerLabel, openLink } from "@/components/browser-panel";
 import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
 import { ExplorerPane, ExplorerTree, useExplorerOpen } from "@/components/explorer-ui";
@@ -206,6 +206,8 @@ import {
   writeStoredActiveTab,
   type Surface,
 } from "@/lib/tabs";
+import { LINK_SLOT_HASH } from "@/lib/cdp-relay";
+import { useTrackedRouter } from "@/lib/route-pending";
 import {
   chatRows,
   chatTabTitle,
@@ -364,6 +366,7 @@ export function HomeUI({
 }) {
   const t = useT();
   const locale = useLocale();
+  const router = useTrackedRouter();
   const [turns, setTurns] = useState<Turn[]>(initial.turns);
   // **새로고침해도 따라간다**: 서버가 "지금 도는 질문이 있다"를 알고 있어서(§7 실행층의 맵)
   // 이 값이 참으로 시작하면 폴링 효과가 그대로 다시 붙는다.
@@ -455,6 +458,10 @@ export function HomeUI({
   // 줄 · 우측 탭 줄 셋이 이름과 점을 그리려면 같은 값을 봐야 어긋나지 않는다. 폴링은 아래
   // 이펙트 하나뿐이다 — 세 자리가 각자 부르면 같은 왕복이 셋으로 는다.
   const [browserRows, setBrowserRows] = useState<BrowserPoolRow[]>([]);
+  // **`새 브라우저`가 연 뒤 주소표시줄에 포커스를 보내라는 신호 하나다**(§11-17 결정 1). 값
+  // 자체는 뜻이 없고 바뀌는 사건만 `BrowserMirror`의 이펙트가 본다 — 매 클릭마다 증가시켜
+  // 같은 탭(`c0ffee00`)으로 두 번 눌러도 이펙트가 다시 돈다.
+  const [browserFocusToken, setBrowserFocusToken] = useState(0);
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -971,6 +978,25 @@ export function HomeUI({
     setSurface(surfaceForTab(tab));
   };
 
+  /** 좌측 `브라우저` 패널의 `새 브라우저`(§11-17 결정 1) — 링크 슬롯 `c0ffee00`이 이미 있으면
+   *  셸을 새로 안 부르고 그 탭으로만 옮긴다(지금 보던 페이지를 `about:blank`로 덮지 않는다).
+   *  없으면 `openLink`(§11-15 결정 1 · 4가 이미 정한 셸 · 상한 · 토스트)를 그대로 부른다. 둘
+   *  다 끝에 포커스 신호를 한 번 올린다 — `BrowserMirror`가 그 값을 보고 주소표시줄로 포커스를
+   *  옮긴다(결정 1 §연 뒤 주소표시줄 입력칸에 포커스가 간다). */
+  const openNewBrowser = async () => {
+    if (browserRows.some((r) => r.hash === LINK_SLOT_HASH)) {
+      if (home.tabs.some((tb) => tb.id === LINK_SLOT_HASH)) {
+        setActiveTab(LINK_SLOT_HASH);
+      } else {
+        apply(await openBrowserTabAction(project, LINK_SLOT_HASH));
+        setActiveTab(LINK_SLOT_HASH);
+      }
+    } else {
+      await openLink(project, "about:blank", locale, router.push);
+    }
+    setBrowserFocusToken((n) => n + 1);
+  };
+
   /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
    *  §13 스크롤러(`message-scroller.tsx`)는 그 `stuck` 판정을 Provider 안 `useRef`로 감춰서
    *  뗄 손잡이가 없다 — 그 절이 "배선은 developer의 값"이라 넘긴 자리다.
@@ -1046,6 +1072,7 @@ export function HomeUI({
             onFocusTab={setActiveTab}
             terminalDisconnected={terminalDisconnected}
             browserRows={browserRows}
+            onNewBrowser={openNewBrowser}
             onTerminalReconnect={(id) =>
               setTerminalDisconnected((now) => {
                 if (!now.has(id)) return now;
@@ -1160,6 +1187,7 @@ export function HomeUI({
               activeTab={activeTab}
               browserRows={browserRows}
               onReleaseTab={(tab) => void closeTab(tab)}
+              focusAddressToken={browserFocusToken}
             />
           ) : (
             <>
@@ -2522,6 +2550,7 @@ function BrowserSurface({
   activeTab,
   browserRows,
   onReleaseTab,
+  focusAddressToken,
 }: {
   project: string;
   tabs: Tab[];
@@ -2532,6 +2561,9 @@ function BrowserSurface({
   /** 주소표시줄의 `반납`이 셸을 끝낸 뒤 부른다(§11-15 결정 5) — 탭 자체를 닫는 것은 `HomeUI`의
    *  `closeTab`(종전 X 닫기와 같은 통로) 몫이라 여기서는 그 탭을 넘겨 주기만 한다. */
   onReleaseTab: (tab: Tab) => void;
+  /** `새 브라우저`가 연 뒤 주소표시줄에 포커스를 보내라는 신호(§11-17 결정 1) — 값이 바뀔
+   *  때마다 `BrowserMirror`가 다시 포커스를 준다. 링크 슬롯이 아닌 미러는 무시한다. */
+  focusAddressToken: number;
 }) {
   const t = useT();
   return (
@@ -2548,6 +2580,7 @@ function BrowserSurface({
                 ownerName={row ? browserOwnerLabel(row, t) : null}
                 busy={row?.busy ?? false}
                 onRelease={() => onReleaseTab(tab)}
+                focusAddressToken={focusAddressToken}
               />
             </div>
           );
@@ -2570,6 +2603,7 @@ function BrowserLeftPanel({
   apply,
   onFocus,
   browserRows,
+  onNewBrowser,
 }: {
   project: string;
   tabs: Tab[];
@@ -2577,6 +2611,9 @@ function BrowserLeftPanel({
   apply: (c: HomeChunk) => void;
   onFocus: (id: string) => void;
   browserRows: BrowserPoolRow[];
+  /** `새 브라우저`(§11-17 결정 1) — 분기와 셸 호출은 `HomeUI`의 `openNewBrowser`가 다 들어서
+   *  여기서는 그 함수를 그대로 부른다. */
+  onNewBrowser: () => void;
 }) {
   const t = useT();
 
@@ -2591,9 +2628,21 @@ function BrowserLeftPanel({
 
   return (
     <SidebarGroup className="p-0">
-      <SidebarGroupLabel className="h-6 text-muted-foreground">{t("home.surface.browser")}</SidebarGroupLabel>
+      <SidebarGroupLabel className="h-6 text-muted-foreground">
+        {t("home.surface.browser")}
+        <Button variant="ghost" size="xs" className="ml-auto text-foreground" onClick={onNewBrowser}>
+          {t("home.surface.browser.new")}
+        </Button>
+      </SidebarGroupLabel>
       {browserRows.length === 0 ? (
-        <EmptyState text={t("home.surface.browser.empty")} />
+        <EmptyState
+          text={t("home.surface.browser.empty")}
+          action={
+            <Button variant="outline" size="sm" onClick={onNewBrowser}>
+              {t("home.surface.browser.new")}
+            </Button>
+          }
+        />
       ) : (
         <SidebarMenu aria-label={t("home.surface.browser")}>
           {browserRows.map((row) => {
@@ -2667,6 +2716,7 @@ function SidePanel({
   terminalDisconnected,
   onTerminalReconnect,
   browserRows,
+  onNewBrowser,
 }: {
   project: string;
   /** 소스 컨트롤 표면 루트 줄의 이름(§비주얼 §72 ⑤) — `<ScmSurface>`로 그대로 내린다. */
@@ -2710,6 +2760,9 @@ function SidePanel({
   /** `HomeUI`가 든 브라우저 풀 슬롯 목록(§11-13 결정 3) — `BrowserLeftPanel`이 이 값 하나로
    *  줄을 그린다. 셀프 폴링을 안 한다(우측 미러 · 탭 줄과 같은 값을 봐야 어긋나지 않는다). */
   browserRows: BrowserPoolRow[];
+  /** `브라우저` 좌측 패널의 `새 브라우저`(§11-17 결정 1) — 슬롯 유무 분기와 포커스 신호까지
+   *  `HomeUI`가 들고 있어서 이 컴포넌트는 그 결과만 부른다. */
+  onNewBrowser: () => void;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -2837,6 +2890,7 @@ function SidePanel({
             apply={apply}
             onFocus={onFocusTab}
             browserRows={browserRows}
+            onNewBrowser={onNewBrowser}
           />
         )}
         {surface === "session" && (

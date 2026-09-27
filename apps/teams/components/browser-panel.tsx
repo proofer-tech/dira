@@ -99,6 +99,7 @@ export function BrowserMirror({
   ownerName,
   busy,
   onRelease,
+  focusAddressToken,
 }: {
   projectId: string;
   hash: string;
@@ -110,6 +111,10 @@ export function BrowserMirror({
   /** `반납` 단추를 누르고 셸이 실제로 끝난 뒤 불린다(§11-15 결정 5) — 이 탭 자체를 닫는 것은
    *  부모(`home-ui.tsx`의 `closeTab`) 몫이다, 여기서는 셸 하나(`releaseLinkAction`)만 안다. */
   onRelease?: () => void;
+  /** `새 브라우저`가 연 뒤 주소표시줄에 포커스를 보내라는 신호(§11-17 결정 1) — `home-ui.tsx`의
+   *  `HomeUI`가 든 값을 그대로 받는다. 링크 슬롯이 아니면 무시한다(주소표시줄이 입력칸이
+   *  아니라서 포커스를 줄 곳이 없다). 미전달이면(§11-11의 다른 호출자) 이펙트가 안 돈다. */
+  focusAddressToken?: number;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -122,6 +127,13 @@ export function BrowserMirror({
   const [addressInput, setAddressInput] = useState("");
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const addressInputRef = useRef<HTMLInputElement>(null);
+
+  // §11-17 결정 1 — `새 브라우저`를 누른 뒤 주소표시줄로 포커스를 옮긴다. 토큰이 없는(구버전
+  // 호출자) 마운트에서는 안 돈다 — `undefined`에서 시작해 한 번도 안 바뀐다.
+  useEffect(() => {
+    if (isLinkSlot && focusAddressToken !== undefined) addressInputRef.current?.focus();
+  }, [isLinkSlot, focusAddressToken]);
 
   useEffect(() => {
     const ac = new AbortController();
@@ -190,6 +202,7 @@ export function BrowserMirror({
       <div className="flex items-center gap-1.5 border-b bg-muted/30 px-3 py-1 text-xs">
         {isLinkSlot ? (
           <Input
+            ref={addressInputRef}
             value={addressInput}
             onChange={(e) => setAddressInput(e.target.value)}
             onKeyDown={(e) => {
