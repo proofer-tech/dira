@@ -128,7 +128,21 @@ const components: Components = {
   // 코드 스팬과 펜스를 컴포넌트에서 가를 수 없다 — 값은 §10 표 그대로고 거는 자리만 부모다.
   // 높이 상한을 두지 않는다(§9의 `max-h-96`은 512px 컨테이너 안이라 필요했다. 본문은 페이지가 스크롤한다).
   pre: (p) => {
-    const code = nodeText(p.node?.children?.[0]).replace(/\n$/, "");
+    const codeNode = p.node?.children?.[0];
+    const code = nodeText(codeNode).replace(/\n$/, "");
+    // P444-2: 정보 문자열이 `autonomy`인 펜스(``` autonomy)는 캡션이다 — 줄바꿈하고 본문보다
+    // 작게, 복사 버튼 없이. hast `code` 노드의 `className`이 `["language-autonomy"]`로 온다
+    // (다른 언어 펜스와 같은 자리, 값만 다르다).
+    const lang =
+      codeNode && "properties" in codeNode ? codeNode.properties?.className : undefined;
+    if (Array.isArray(lang) && lang.includes("language-autonomy")) {
+      return (
+        <pre
+          {...drop(p)}
+          className="my-3 whitespace-pre-wrap rounded-md bg-muted p-3 text-xs text-muted-foreground [&>code]:bg-transparent [&>code]:p-0"
+        />
+      );
+    }
     return (
       <div className="group/codeblock relative my-3">
         <pre
