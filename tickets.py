@@ -1231,6 +1231,35 @@ def _arm_backoff(local, h):
     return count
 
 
+_PLAN_OPEN = re.compile(r"^-\s*\[ \]\s*(.*)$")
+
+
+def _note_plan_revert(path):
+    """`plan` 사유로 되돌린 티켓 끝에 `## 되돌림` 절을 한 번 붙인다(`## 선점`과 같은 자리).
+    다음 세션은 `## 결과`가 이미 적힌 티켓을 받아 재확인만 하고 다시 닫는다 - 왜 되돌아왔는지
+    본문에 없으면 남은 상자를 안 본다(2026-09-28 1f64c01a, 21회 반복)."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return
+    body = text.split("\n")
+    if _section(body, "되돌림"):
+        return
+    left = [m.group(1).strip() for m in map(_PLAN_OPEN.match, _section(body, "진행 계획").split("\n"))
+            if m and not m.group(1).strip().startswith("~~")]
+    if not left:
+        return
+    note = ("\n## 되돌림\n\n엔진이 이 티켓을 `.done`에서 열린 이름으로 되돌렸다. `## 진행 계획`에 "
+            "완료(`- [x]`)도 취소(`~~...~~`)도 아닌 항목이 남아 있다. 한 일이면 상자를 켜고, 안 한 "
+            "일이면 항목을 `~~`로 감싸고 뒤에 취소 사유를 적은 다음 닫는다. 그대로 닫으면 또 "
+            "되돌아온다.\n\n" + "".join("- {}\n".format(l) for l in left))
+    if not os.path.exists(path):
+        return
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(note)
+
+
 def reap_release(path, reason=None, local=None):
     """`tick.sh`의 조용한 실패 회수 자리 전용 - `reclaim`과 같은 순서·같은 낱말을 쓴다.
     `release`를 먼저 돌려 리퍼 경합에서 진 쪽이 이미 사라진 `.wip`을 되살리지 않게 하고
@@ -1253,9 +1282,9 @@ def reap_release(path, reason=None, local=None):
     | `None` / `"api_error"`(한도) / `"killed"`(밖에서 끊김 - 선점 포함) | 안 쓴다 | - |
     | `"bad_request"` | 쓴다 | `REAP_FAIL_BUDGET_BAD_REQUEST` 넘으면 백오프(`_arm_backoff`) |
     | `"other"`(그 밖의 FAIL·TIMEOUT) | 쓴다 | `REAP_FAIL_BUDGET_OTHER` 넘으면 백오프(`_arm_backoff`) |
-    | `"plan"`(§엔진 수정 서른일곱 번째 승인 §판정 2 - 안 켠 계획 상자를 남긴 `.done`) | 쓴다 | `REAP_FAIL_BUDGET_OTHER` 넘으면 백오프(`_arm_backoff`) |
+    | `"plan"`(§엔진 수정 서른일곱 번째 승인 §판정 2 - 안 켠 계획 상자를 남긴 `.done`) | 쓴다 | `REAP_FAIL_BUDGET_OTHER` 넘으면 `ask_human`(되돌릴 때마다 `## 되돌림` 절을 한 번 붙인다) |
 
-    둘 다 세션이 죽은 사건이라 사람이 쓸 답이 없다(§답변 대기 결정 1, P395-2) - 예산을
+    `plan`을 뺀 둘은 세션이 죽은 사건이라 사람이 쓸 답이 없다(§답변 대기 결정 1, P395-2) - 예산을
     넘겨도 `ask_human`으로 안 올라간다. `path`가 `.done` 이름이면 `release`(`.wip` 전용)
     대신 `_release_suffix`를 `DONE` 접미사로 직접 불러 되돌린다 - 새 서브커맨드 없이 같은
     함수 하나가 갈래 둘을 다 받는다.
@@ -1291,7 +1320,13 @@ def reap_release(path, reason=None, local=None):
     upd = {"attempts": attempts}
     upd.update({k: "" for k in REAP_CLEAR})
     set_fm_keys(newpath, upd)
+    if reason == "plan":
+        _note_plan_revert(newpath)
     budget = REAP_FAIL_BUDGET_BAD_REQUEST if reason == "bad_request" else REAP_FAIL_BUDGET_OTHER
+    if attempts > budget and reason == "plan":
+        # 2026-09-28 1f64c01a: 백오프만 타면 같은 세션이 같은 자리로 21번 닫았다. 계획 상자는
+        # 세션이 안 고치면 영영 안 낫는 사유라 서른일곱 번째 승인 판정 2대로 사람에게 올린다.
+        return ask_human(newpath, h, attempts, "계획 상자를 안 켠 채 .done으로 닫기 반복")
     if attempts > budget:
         local = local or os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
         count = _arm_backoff(local, h)

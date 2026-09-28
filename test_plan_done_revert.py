@@ -112,7 +112,16 @@ try:
     assert "FAIL aaaa2006" in log6, "6: FAIL이 안 찍혔다\n" + log6
     assert "DONE aaaa2006" not in log6, "6: 안 켠 상자인데 DONE도 찍혔다\n" + log6
     assert e6.ls() == ["aaaa2006.md"], "6: 열린 이름으로 안 돌아왔다: " + str(e6.ls())
-    assert "attempts: 1" in e6.read("aaaa2006.md"), "6: attempts가 안 올랐다"
+    body6 = e6.read("aaaa2006.md")
+    assert "attempts: 1" in body6, "6: attempts가 안 올랐다"
+    assert "## 되돌림" in body6 and "- 둘째 단계" in body6, "6: 되돌린 이유가 본문에 없다\n" + body6
+    assert "- 첫 단계" not in body6.split("## 되돌림")[1], "6: 켠 상자까지 남은 항목에 적었다"
+    passed += 1
+
+    # ---- 6-2. 두 번째로 되돌려도 `## 되돌림` 절은 한 벌이다 ------------------------------
+    r = e6.tick()
+    body6 = e6.read("aaaa2006.md")
+    assert body6.count("## 되돌림") == 1, "6-2: 되돌림 절이 두 벌이 됐다\n" + body6
     passed += 1
 
     # ---- 7. 같은 자리에서 취소선을 그으면 DONE이다 ----------------------------------------
@@ -148,14 +157,17 @@ try:
     assert e9.ls() == ["dddd2009.done.md"], "9: .done에서 되돌아갔다: " + str(e9.ls())
     passed += 1
 
-    # ---- 10. 예산(REAP_FAIL_BUDGET_OTHER=10)을 넘기면 서른세 번째 승인의 백오프가 걸린다 --
+    # ---- 10. 예산(REAP_FAIL_BUDGET_OTHER=10)을 넘기면 백오프 대신 답변 요청으로 올라간다
+    #          (2026-09-28 1f64c01a - 백오프만으로는 21회 반복을 못 멈췄다) --------------
     e10 = newenv("budget", "eeee2010", "- [ ] 안 한 단계\n", extra="attempts: 10\n")
     r = e10.tick()
     assert r.returncode == 0, "10: tick 실패\n" + r.stderr
     log10 = e10.runner_log()
     assert "FAIL eeee2010" in log10, "10: FAIL이 안 찍혔다\n" + log10
-    assert "백오프" in log10, "10: 예산 초과인데 백오프가 안 걸렸다\n" + log10
+    assert "ASK eeee2010" in log10, "10: 예산 초과인데 답변 요청으로 안 올라갔다\n" + log10
     assert e10.ls() == ["eeee2010.md"], "10: 열린 이름으로 안 돌아왔다: " + str(e10.ls())
+    body10 = e10.read("eeee2010.md")
+    assert "awaiting:" in body10 and "## 질문 1" in body10, "10: 답변 대기가 안 걸렸다\n" + body10
     passed += 1
 
     # ---- 11. `.wip`을 남긴 갈래(바로 앞 판정, test_wip_after_ok.py)와 안 갈린다 - 여기서는
