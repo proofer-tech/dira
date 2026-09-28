@@ -230,22 +230,24 @@ export function MarketDialog({ trigger }: { trigger: "landing" | "persona" }) {
       .catch(() => setData("error"));
   }, [locale]);
 
-  useEffect(() => {
-    if (open) reload();
-  }, [open, reload]);
+  // 여는 이벤트에서 읽는다 — effect에서 부르면 `setData("loading")`이 `react-hooks/set-state-in-effect`에 걸린다.
+  const openChange = (next: boolean) => {
+    setOpen(next);
+    if (next) reload();
+  };
 
   return (
     <>
       {trigger === "landing" ? (
-        <button type="button" className="btn" onClick={() => setOpen(true)}>
+        <button type="button" className="btn" onClick={() => openChange(true)}>
           {t("market.title")}
         </button>
       ) : (
-        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Button variant="outline" size="sm" onClick={() => openChange(true)}>
           {t("market.title")}
         </Button>
       )}
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={openChange}>
         <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-5xl">
           <DialogHeader className="sr-only">
             <DialogTitle>{t("market.title")}</DialogTitle>
