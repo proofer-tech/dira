@@ -6,15 +6,16 @@
  *  fs를 만지는 건 서버 액션뿐이다(`app/(app)/market/actions.ts`) — `personas-ui.tsx`와 같은
  *  자리 규칙이다. 판정(검색·태그 AND)은 클라이언트에서 한다(§화면의 ponytail 줄) — 항목이
  *  수백을 넘으면 그때 서버로 내린다. */
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { Check, CircleCheck, Search, Star, TriangleAlert, X } from "lucide-react";
-import type { MarketCardItem } from "@/app/(app)/market/page";
 import {
   getMarketItemDetailAction,
   importPersonaAction,
   importSquadAction,
+  loadMarketPaneData,
   toggleFavoriteAction,
   type ImportResult,
+  type MarketCardItem,
 } from "@/app/(app)/market/actions";
 import type { MarketItemDetail, MarketKind } from "@/lib/market";
 import { matchesMarketSearch } from "@/lib/market-search";
@@ -44,7 +45,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useT } from "@/components/language-provider";
+import { useLocale, useT } from "@/components/language-provider";
 
 type Project = { id: string; name: string };
 type Tab = MarketKind;
@@ -57,10 +58,15 @@ export function MarketPane({
   locale,
   items,
   projects,
+  onImported,
 }: {
   locale: Locale;
   items: MarketCardItem[];
   projects: Project[];
+  /** 가져오기가 끝난 뒤(다이얼로그를 안 닫고) 목록을 다시 읽으려는 부모에게 알린다
+   *  (§페르소나 마켓 §화면 - 다이얼로그로 연다 결정 3). `/market` 페이지는 안 줘도 된다 —
+   *  그 화면은 `revalidatePath`로 이미 다시 읽는다. */
+  onImported?: () => void;
 }) {
   const t = useT();
   const [tab, setTab] = useState<Tab>("persona");
@@ -194,8 +200,74 @@ export function MarketPane({
           favorite={favorites.has(selected.id)}
           onToggleFavorite={() => toggleFavorite(selected)}
           onClose={() => setSelected(null)}
+          onImported={onImported}
         />
       )}
+    </>
+  );
+}
+
+/** 입구 둘(홈 머리 · 페르소나 화면 머리)이 그대로 쓰는 다이얼로그 그릇(§페르소나 마켓 §화면 -
+ *  다이얼로그로 연다, 티켓 `71c41084`). 트리거 모양만 자리마다 다르고 — `settings-dialog.tsx`의
+ *  `trigger` 값 패턴과 같은 이유다: 부르는 쪽 하나가 서버 컴포넌트라 JSX를 못 넘긴다 — 나머지는
+ *  이 컴포넌트 하나가 진다. 목록은 열릴 때마다 `loadMarketPaneData`로 새로 읽는다(§결정 3) —
+ *  `/market` 페이지의 최초 읽기와 같은 액션이라 조립 로직이 두 벌이 안 된다. */
+export function MarketDialog({ trigger }: { trigger: "landing" | "persona" }) {
+  const locale = useLocale();
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<{ items: MarketCardItem[]; projects: Project[] } | "loading" | "error">(
+    "loading",
+  );
+
+  const reload = useCallback(() => {
+    setData("loading");
+    void loadMarketPaneData(locale)
+      .then(setData)
+      .catch(() => setData("error"));
+  }, [locale]);
+
+  useEffect(() => {
+    if (open) reload();
+  }, [open, reload]);
+
+  return (
+    <>
+      {trigger === "landing" ? (
+        <button type="button" className="btn" onClick={() => setOpen(true)}>
+          {t("market.title")}
+        </button>
+      ) : (
+        <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+          {t("market.title")}
+        </Button>
+      )}
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto sm:max-w-5xl">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{t("market.title")}</DialogTitle>
+          </DialogHeader>
+          {data === "loading" ? (
+            <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(18rem,1fr))]">
+              {Array.from({ length: 6 }, (_, i) => (
+                <Skeleton key={i} className="h-[104px]" />
+              ))}
+            </div>
+          ) : data === "error" ? (
+            <Alert variant="destructive">
+              <TriangleAlert aria-hidden />
+              <AlertTitle>{t("market.error.title")}</AlertTitle>
+              <AlertDescription>
+                <Button variant="outline" size="sm" onClick={reload}>
+                  {t("errorBoundary.retry")}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <MarketPane locale={locale} items={data.items} projects={data.projects} onImported={reload} />
+          )}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
@@ -323,6 +395,7 @@ function ItemDialog({
   favorite,
   onToggleFavorite,
   onClose,
+  onImported,
 }: {
   locale: Locale;
   item: MarketCardItem;
@@ -330,6 +403,7 @@ function ItemDialog({
   favorite: boolean;
   onToggleFavorite: () => void;
   onClose: () => void;
+  onImported?: () => void;
 }) {
   const t = useT();
   const [detail, setDetail] = useState<MarketItemDetail | null | "loading">("loading");
@@ -361,6 +435,7 @@ function ItemDialog({
       }
       setResult(r);
       setMode("result");
+      if (r.ok) onImported?.();
     });
 
   return (

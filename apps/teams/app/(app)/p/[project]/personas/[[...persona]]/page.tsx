@@ -14,16 +14,15 @@
  *  상태라 서버에서 한 번 더 갈라 봐야 두 벌이 된다). */
 import path from "node:path";
 import { notFound } from "next/navigation";
-import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 import { boardRevision } from "@/lib/board-revision";
 import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { EmptyState } from "@/components/empty-state";
+import { MarketDialog } from "@/components/market-ui";
 import { CreatePersonaButton, PersonasPane } from "@/components/personas-ui";
 import { TitleRefs } from "@/components/queue-ref";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { t } from "@/lib/i18n";
 import { marketRecord } from "@/lib/market";
@@ -192,11 +191,10 @@ export default async function Personas({
       <div className="flex items-center justify-between gap-4">
         <h1 className="text-lg font-semibold">{t(locale, "persona.word.squad")}</h1>
         <div className="flex items-center gap-2">
-          {/* 들어오는 링크 둘 중 하나(DESIGN.md §페르소나 마켓 §화면, §비주얼 §79 ①) — 이
-              화면 머리가 이미 쓰는 `<Button>`을 그대로 쓴다, 새 링크 스타일을 안 만든다. */}
-          <Button variant="outline" size="sm" render={<Link href="/market" />}>
-            {t(locale, "market.title")}
-          </Button>
+          {/* 들어오는 링크 둘 중 하나(DESIGN.md §페르소나 마켓 §화면 - 다이얼로그로 연다) —
+              페이지 이동 대신 `MarketDialog`를 연다(티켓 `71c41084`). 이 화면은 서버
+              컴포넌트라 트리거 값만 넘긴다(`settings-dialog.tsx`의 `trigger` 값 패턴과 같다). */}
+          <MarketDialog trigger="persona" />
           {personas.length > 0 && <CreatePersonaButton projectId={id} />}
         </div>
       </div>

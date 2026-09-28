@@ -13,19 +13,46 @@ import { revalidatePath } from "next/cache";
 import { DEFAULT_LOCALE, t, wrap, type Locale } from "@/lib/i18n";
 import {
   appendInstall,
+  firstLine,
   getMarketItem,
   importPersona,
   importSquad,
+  listMarketItems,
+  projectsThatImported,
   toggleFavorite,
   type ImportReason,
+  type MarketItem,
   type MarketItemDetail,
   type MarketKind,
 } from "@/lib/market";
-import { getProject, resolveConfig, setMarketInstall, squadsDir } from "@/lib/projects";
+import { getProject, readProjects, resolveConfig, setMarketInstall, squadsDir } from "@/lib/projects";
 
 export type ImportResult =
   | { ok: true; as: string; missingInMarket?: string[]; coImported?: string[] }
   | { ok: false; conflict?: true; message: string };
+
+export type MarketCardItem = MarketItem & { profileFirstLine: string; installedIn: string[] };
+
+/** 마켓 목록 조립 하나(§페르소나 마켓 §화면 - 다이얼로그로 연다 결정 3, 티켓 `71c41084`).
+ *  `/market` 페이지와 `MarketDialog`가 이 액션 하나를 같이 부른다 — 조립 로직 두 벌을 안 둔다. */
+export async function loadMarketPaneData(
+  locale: Locale,
+): Promise<{ items: MarketCardItem[]; projects: { id: string; name: string }[] }> {
+  const [items, projects] = await Promise.all([listMarketItems(), readProjects(locale)]);
+  const rows: MarketCardItem[] = await Promise.all(
+    items.map(async (item) => {
+      // 스쿼드는 `profile`이 항상 null이라 첫 줄도 항상 빈 문자열이다 — 별도 분기 없이
+      // `getMarketItem`이 이미 그 규칙을 지킨다.
+      const detail = item.kind === "persona" ? await getMarketItem("persona", item.owner, item.name) : null;
+      return {
+        ...item,
+        profileFirstLine: detail?.profile ? firstLine(detail.profile) : "",
+        installedIn: projectsThatImported(item.kind, item.owner, item.name, projects),
+      };
+    }),
+  );
+  return { items: rows, projects: projects.map((p) => ({ id: p.id, name: p.name })) };
+}
 
 function reasonMessage(reason: ImportReason, asName: string, locale: Locale): string {
   if (reason === "conflict") return t(locale, "market.import.conflict");

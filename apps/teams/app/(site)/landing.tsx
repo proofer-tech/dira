@@ -6,6 +6,7 @@ import Typed from "typed.js";
 import { Pause, Play, TriangleAlert } from "lucide-react";
 import { registerProject, type CreateState, type RegisterState } from "@/app/actions";
 import { ConfigTable, CreateDialog, CreateForm } from "@/components/projects-ui";
+import { MarketDialog } from "@/components/market-ui";
 import { CopyCommand } from "@/components/copy-command";
 import { PickPath } from "@/components/path-picker";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
@@ -425,9 +426,10 @@ export default function Landing({
           §비주얼 §46 ③). `btn-manual`은 풀 모드에서만 붙는다 — 랜딩-only 헤더(넷 이하)는
           이 접힘 규칙 밖이다. */}
       <a className={fullMode ? "btn btn-manual" : "btn"} href="/docs/">{t("landing.nav.manualLink")}</a>
-      {/* 들어오는 링크 둘 중 하나(DESIGN.md §페르소나 마켓 §화면, §비주얼 §79 ①). 랜딩-only에서는
-          `/market`이 404라 풀 모드에서만 붙인다 — `매뉴얼` 링크와 같은 자리, 같은 값. */}
-      {fullMode && <a className="btn" href="/market">{t("market.title")}</a>}
+      {/* 들어오는 링크 둘 중 하나(DESIGN.md §페르소나 마켓 §화면 - 다이얼로그로 연다). 페이지
+          이동 대신 `MarketDialog`를 연다(티켓 `71c41084`) — 랜딩-only에서는 마켓 저장소가
+          없어 `fullMode`에서만 붙이는 것은 그대로다. */}
+      {fullMode && <MarketDialog trigger="landing" />}
       <a className="btn star"
          href="https://github.com/proofer-tech/dira" target="_blank" rel="noopener"
          aria-label="Star proofer-tech/dira on GitHub">

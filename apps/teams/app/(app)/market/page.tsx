@@ -7,37 +7,18 @@
  *  마켓이 머신 한 대짜리라 항목 수가 적다는 전제 위에서 하는 선택이다(§79 ② `auto-fill` 근거와
  *  같은 전제). "가져간 곳" 표식도 같은 렌더에서 레지스트리 한 번으로 계산한다(새 fs 읽기 없이
  *  프로젝트 수만큼). */
-import {
-  firstLine,
-  getMarketItem,
-  listMarketItems,
-  projectsThatImported,
-  type MarketItem,
-} from "@/lib/market";
-import { readLanguage, readProjects } from "@/lib/projects";
+import { readLanguage } from "@/lib/projects";
 import { BrandMark, ShellHeader, ShellMain } from "@/components/project-switcher";
 import { MarketPane } from "@/components/market-ui";
+import { loadMarketPaneData, type MarketCardItem } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export type MarketCardItem = MarketItem & { profileFirstLine: string; installedIn: string[] };
+export type { MarketCardItem };
 
 export default async function MarketPage() {
   const locale = await readLanguage();
-  const [items, projects] = await Promise.all([listMarketItems(), readProjects(locale)]);
-
-  const rows: MarketCardItem[] = await Promise.all(
-    items.map(async (item) => {
-      // 스쿼드는 `profile`이 항상 null이라 첫 줄도 항상 빈 문자열이다 — 별도 분기 없이
-      // `getMarketItem`이 이미 그 규칙을 지킨다.
-      const detail = item.kind === "persona" ? await getMarketItem("persona", item.owner, item.name) : null;
-      return {
-        ...item,
-        profileFirstLine: detail?.profile ? firstLine(detail.profile) : "",
-        installedIn: projectsThatImported(item.kind, item.owner, item.name, projects),
-      };
-    }),
-  );
+  const { items, projects } = await loadMarketPaneData(locale);
 
   return (
     <>
@@ -45,11 +26,7 @@ export default async function MarketPage() {
         <BrandMark href="/" />
       </ShellHeader>
       <ShellMain>
-        <MarketPane
-          locale={locale}
-          items={rows}
-          projects={projects.map((p) => ({ id: p.id, name: p.name }))}
-        />
+        <MarketPane locale={locale} items={items} projects={projects} />
       </ShellMain>
     </>
   );
