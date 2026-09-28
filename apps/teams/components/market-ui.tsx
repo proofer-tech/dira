@@ -220,8 +220,11 @@ export function MarketDialog({ trigger }: { trigger: "landing" | "persona" }) {
     "loading",
   );
 
-  const reload = useCallback(() => {
-    setData("loading");
+  // `silent`가 있으면 카드째 다시 그리지 않는다 — `onImported`가 부르는 자리는 `ItemDialog`가
+  // 켠 결과 화면이 이 함수가 지우는 `MarketPane`(그리고 그 안의 `ItemDialog`) 밑에 있어서,
+  // `setData("loading")`이 그 결과 화면째 지웠다(티켓 ec861197). 최초로 열 때만 로딩 뼈대를 켠다.
+  const reload = useCallback((opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setData("loading");
     void loadMarketPaneData(locale)
       .then(setData)
       .catch(() => setData("error"));
@@ -258,13 +261,18 @@ export function MarketDialog({ trigger }: { trigger: "landing" | "persona" }) {
               <TriangleAlert aria-hidden />
               <AlertTitle>{t("market.error.title")}</AlertTitle>
               <AlertDescription>
-                <Button variant="outline" size="sm" onClick={reload}>
+                <Button variant="outline" size="sm" onClick={() => reload()}>
                   {t("errorBoundary.retry")}
                 </Button>
               </AlertDescription>
             </Alert>
           ) : (
-            <MarketPane locale={locale} items={data.items} projects={data.projects} onImported={reload} />
+            <MarketPane
+              locale={locale}
+              items={data.items}
+              projects={data.projects}
+              onImported={() => reload({ silent: true })}
+            />
           )}
         </DialogContent>
       </Dialog>
