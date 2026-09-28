@@ -1596,8 +1596,8 @@ const AUTONOMY_ROW_KO: Record<AutonomyLevel, string> = {
   5: `묻지 않습니다 -- 예외 한 가지만 남습니다: 비밀번호·로그인·결제 수단·2단계 인증
 코드처럼 사람만 가진 것이 없어 진행이 불가능하면 그때는 \`## 블록\`을 쓰세요. 스펙 모순,
 읽기 전용 영역, 새 외부 의존성, push 실패 처리, 엔진 수정, 금지 명령, 큐 불변까지 목표에
-가장 가까운 방향으로 스스로 정하고, 규약을 넘은 판단은 \`주도성 5 판단:\`으로 시작하는
-줄로 \`## 결과\`에 남기세요.`,
+가장 가까운 방향으로 스스로 정하고, 규약을 넘은 판단은 각 줄을 \`주도성 5 판단:\`으로 시작해
+답변이나 \`## 결과\` 끝, 정보 문자열 \`autonomy\`인 펜스 한 벌에 모으세요.`,
 };
 
 const AUTONOMY_ROW_EN: Record<AutonomyLevel, string> = {
@@ -1620,7 +1620,8 @@ code), write \`## 블록\` even at level 5. Otherwise decide alone, picking
 whichever is closest to the goal, even across spec contradictions, read-only
 areas, new external dependencies, push-failure handling, engine edits,
 forbidden commands, and queue invariants -- record any judgment that crosses
-protocol in \`## 결과\` on a line starting with \`주도성 5 판단:\`.`,
+protocol as a line starting with \`주도성 5 판단:\`, gathered into one fence
+with info string \`autonomy\` at the end of the reply or \`## 결과\`.`,
 };
 
 function autonomyNote(locale: Locale, level: AutonomyLevel): string {

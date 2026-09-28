@@ -92,6 +92,7 @@ try:
     assert got1 != got5, "level 1과 5의 안내 문장이 같다"
     assert "선택지가 하나뿐인 일만" in got1, "level 1 문장이 결정 2의 1행과 안 맞다\n" + got1
     assert "주도성 5 판단:" in got5, "level 5 문장에 기록 규칙이 없다\n" + got5
+    assert "autonomy" in got5, "level 5 문장에 펜스 정보 문자열 안내가 없다(P444-1)\n" + got5
 
     # 2) level 0 / "3"(문자열) / [] / 깨진 JSON 넷 다 4로 읽는다(수용조건 3) -- base와 동일.
     for body in (json.dumps({"level": 0}), json.dumps({"level": "3"}),
