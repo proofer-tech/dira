@@ -45492,6 +45492,101 @@ G5는 처방이 그 자리에서 끝나기 때문에, 다음 주기에 또 걸�
 11. `diff templates/watchdog_gates.py .dira/watchdog_gates.py`와
     `diff templates/watchdog_alert.py .dira/watchdog_alert.py`가 빈 출력이다.
 
+## 워커 한 명에 cron tick은 한 벌만 돈다 - 쌓인 셸은 감시자가 걷는다 (요구 `125cc2bd`, 왕복 0회)
+
+사람 문장은 *"이 문제가 계속 재발하는데, 적어도 우리 셸을 컨트롤할 수 있으니 우리 셸이
+불필요하게 쌓이지 않도록 만들 수는 없을까요?"*다. 부하가 우리 밖에서 시작되어도 우리 워커 셸만큼은
+쌓이지 않아야 한다는 뜻이다.
+
+### 실측 - 2026-09-28
+
+- 16:37에 dira 큐의 워커 셸이 119~130벌, 큐 다섯을 합쳐 약 300벌이었고 load average가 360~400이었다.
+  시작은 Chrome의 1Password 7 헬퍼 8~9개였다. 헬퍼를 끈 뒤에도 셸 수가 3분 동안 안 줄었고, 사람 쪽
+  세션이 최상위 워커 셸 트리를 손으로 SIGKILL하고 나서야 내려갔다.
+- 17:17에 PM이 다시 쟀을 때 dira 큐 워커 셸이 139벌, load average가 335였다. 이번에는 1Password
+  헬퍼가 CPU 상위에 없었다. 원인이 사라진 뒤에도 쌓인 셸끼리 CPU를 다투며 과부하를 유지한다.
+- `shell-cap.sh`는 동작했지만 상한이 워커당 25라서 큐 하나가 150벌까지 찬다. 새 tick만 막고
+  이미 떠 있는 셸은 못 줄인다.
+- 감시자 G5는 `runner.log`에 `diagnose G5 자력` 줄을 1,649번 냈는데 `G5 처방` 줄은 **한 번도**
+  안 냈다. `watchdog_gates.py`의 `_real_pids_by_age`가 `ps -o pid=,etimes=`를 부르고, macOS
+  `ps`는 `etimes`를 모른다(`ps: etimes: keyword not found`, 종료 코드 1). 그래서 pid 목록이 늘
+  비고 `excess`가 음수가 되어 kill 갈래에 한 번도 못 들어갔다. `test_watchdog.py`는
+  `pids_by_age`를 스텁으로 바꿔 끼워서 이 결함을 못 잡았다.
+- `shell-cap.sh`는 dira, proofer, stream, pofol에만 있고 stocky에는 없다. 감시자는 dira에만 있다.
+
+### 결정 - 워커 tick 락
+
+**cron이 부른 무인자 tick은 워커당 한 벌만 산다.** 새 큐 훅 `<루트>/tick-lock.sh`가 워커 `.sh`에서
+`watchdog.sh` 줄 바로 다음, `shell-cap.sh` 줄 바로 앞에서 source된다.
+
+| | |
+|---|---|
+| 대상 | 인자가 0개인 호출(`$# -eq 0`)만이다. cron 줄은 인자 없이 부른다. `tick <해시>`(지목 디스패치) - `list` - `unassign` - `reap` - `poll` - `preempt` - `dryrun`은 안 막는다. 사람과 GUI가 부르는 손을 묶지 않는다 |
+| 락 | `<루트>/workers/.tick-<워커>.lock/` 디렉터리를 `mkdir`로 잡고 그 안 `pid` 파일에 `$$`를 적는다. 워커 `.sh`의 bash 자신이다 |
+| 못 잡았을 때 | `pid` 파일의 pid가 `kill -0`으로 살아 있으면 로그 한 줄 없이 `exit 0`이다. 30초마다 한 줄씩 쌓이는 로그 자체가 부하다 |
+| 스테일 | pid가 죽었거나 `pid` 파일이 비었거나 락 나이가 `TICKET_MAXRUN`+600초(기본 6,000초)를 넘으면 걷고 한 번만 다시 잡는다. 다시 잡기도 실패하면 `exit 0`이다 |
+| 놓기 | 따로 안 놓는다. `tick.sh`가 자기 `trap ... EXIT`를 걸어 우리 trap을 덮기 때문에 trap에 기댈 수 없다. 프로세스가 끝나면 pid가 죽고 다음 tick이 걷는다 |
+| ps | 안 부른다. 과부하에서 `ps`가 먼저 실패한다(`SKIP ps 조회 실패`). `mkdir` - `cat` - `kill -0`은 fork가 거의 없다 |
+
+티켓을 문 셸은 세션이 끝날 때까지 락을 쥔다. 그동안 그 워커의 cron tick은 곧바로 나간다. 원래도
+`tick.sh`의 워커 락에서 `SKIP 이 워커가 아직 티켓을 물고 있다`로 나갈 몫이었고, 큐 전체의 스테일
+회수는 `reaper.sh`가 cron 전용 줄로 따로 돌며(§셸 상한에 걸린 tick에서도 스테일 회수는 돈다) 감시자는
+락이 없는 다른 워커의 tick에서 돈다. 워커 여섯이 전부 바빠도 reaper가 남는다.
+
+결과로 dira 큐의 정상 워커 셸은 워커당 락을 쥔 한 벌과 그 서브셸, 막 들어와 나가는 한 벌이다.
+`shell-cap.sh`는 그대로 둔다. 락이 깨지는 날의 두 번째 벽이다.
+
+### 결정 - G5가 실제로 걷는다
+
+1. **`_real_pids_by_age`가 macOS에서 값을 낸다.** `etimes` 대신 `etime`(`[[dd-]hh:]mm:ss`)을 읽어
+   초로 바꾼다. 새 의존성은 없다.
+2. **세션을 쥔 셸은 안 죽인다.** 오래된 것부터 죽이면 제일 먼저 죽는 것이 티켓을 문 셸이고, 그러면
+   2026-09-05처럼 엔진 세션이 고아가 된다. `recover`는 `ps -Ao pid=,ppid=`를 한 번 읽고, 열린
+   `.wip` 티켓 fm의 `pid:`(엔진 pid)에서 부모를 따라 올라간 조상 전부를 kill 대상에서 뺀다. 그
+   `ps`가 실패하면 G5 처방을 건너뛰고 `G5 건너뜀 ps 조회 실패`를 낸다. 모르면 안 죽인다.
+3. **임계는 그대로 `shell-limit`에서 읽는다**(§멎음의 목록). 워커 tick 락이 서면 정상 수가 임계에
+   한참 못 미치므로 임계를 따로 낮추지 않는다.
+4. **테스트가 진짜 `ps`를 한 번 부른다.** `test_watchdog.py`에 스텁 없이 `_real_pids_by_age`를
+   자기 자신의 스크립트 경로로 불러 pid 하나 이상과 0 이상의 초를 받는 케이스를 둔다. 이번 결함은
+   스텁만 있는 테스트가 못 잡았다.
+
+### 결정 - 다른 큐 넷에도 편다
+
+proofer - stocky - stream - pofol의 워커 `.sh`마다 `tick-lock.sh` 줄을 넣는다. stocky에는
+`shell-cap.sh`도 같이 넣는다. 파일은 dira 큐의 것을 복사하고 각 큐의 `<루트>`만 다르다. 이 큐들은
+git 밖이라 커밋이 없고, 넣은 줄의 `grep -c` 결과를 티켓 `## 결과`에 남긴다. 감시자를 다른 큐에
+세우는 일은 이 절의 범위 밖이다.
+
+GUI가 새 프로젝트를 등록할 때 만드는 워커 `.sh` 템플릿에는 지금 `shell-cap.sh` 줄도 없다. 이
+절은 템플릿을 안 건드리고 기존 큐 다섯만 고친다.
+
+### 엔진
+
+`tick.sh` - `tickets.py` - `push.sh` 0줄이다. 갈리는 파일은 큐 안의 `tick-lock.sh`(새) - 워커
+`.sh` - `watchdog_gates.py` - `test_watchdog.py`이고, 셋 다 큐 훅이라 엔진 승인 대상이 아니다.
+
+### 수용조건
+
+1. dira 큐의 워커 `.sh` 여섯에서 `grep -n 'tick-lock.sh'`가 각각 정확히 한 줄이고, 그 줄 번호가
+   `watchdog.sh` 줄보다 크고 `shell-cap.sh` 줄보다 작다.
+2. 픽스처 루트에서 워커 `.sh`를 인자 없이 백그라운드로 하나 띄워 `sleep 60`에 묶어 둔 채 같은
+   워커를 인자 없이 다시 부르면 두 번째 호출이 1초 안에 종료 코드 0으로 끝나고 `runner.log`에
+   새 줄이 0개다.
+3. 2의 상태에서 같은 워커를 `tick <해시>`나 `list`로 부르면 락에 안 막힌다.
+4. `workers/.tick-<워커>.lock/pid`에 죽은 pid를 적어 두고 워커를 인자 없이 부르면 락을 걷고
+   진행하며, `pid` 파일이 새 pid로 바뀐다.
+5. 5분 동안 dira 큐를 평소대로 돌리며 10초마다 `pgrep -f '[/]Users/hsol/Projects/dira/.dira/workers/w' | wc -l`을
+   재면 최댓값이 40 이하다(2026-09-28 139벌, 정상 10~20벌).
+6. `python3 -c 'import sys; sys.path.insert(0,".dira"); import watchdog_gates as g; print(g._real_pids_by_age("/bin/sleep"))'`를
+   `/bin/sleep 30 &`을 띄운 뒤 부르면 빈 목록이 아니다.
+7. 셸 수가 임계를 넘은 픽스처에서 `recover`가 `G5 처방` 줄을 내고, 열린 `.wip` fm `pid:`의 조상
+   셸은 kill 대상에 없다 - `test_watchdog.py`가 kill 스텁에 넘어온 pid로 판정한다.
+8. `ps` 스텁이 실패하면 `recover`가 `G5 건너뜀 ps 조회 실패`를 내고 kill 스텁이 0번 불린다.
+9. `python3 -m unittest .dira/test_watchdog.py`가 통과한다.
+10. proofer - stocky - stream - pofol의 워커 `.sh`마다 `tick-lock.sh` 줄이 정확히 한 줄이고,
+    stocky의 워커 `.sh`마다 `shell-cap.sh` 줄도 정확히 한 줄이다.
+11. `git log --oneline -- tick.sh tickets.py .dira/push.sh`에 이 회차 커밋이 0개다.
+
 ## 로드맵
 
 | # | 티켓 | persona | deps | 상태 |
@@ -61842,6 +61937,24 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 | P441-3 | QA - 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P441-1 | 발행 |
 
 **designer 0장.** 그릇만 바뀌고 안의 치수는 §비주얼 §79 그대로다.
+
+### P442. 워커 한 명에 cron tick은 한 벌만 돈다 (요구 `125cc2bd`, 왕복 0회)
+
+계약은 **§워커 한 명에 cron tick은 한 벌만 돈다 - 쌓인 셸은 감시자가 걷는다**가 정본이다. 갈리는
+파일은 큐 안의 `tick-lock.sh`(새) - 워커 `.sh` - `watchdog_gates.py` - `test_watchdog.py`와 다른
+큐 넷의 워커 `.sh`이고, 엔진 0줄 - 새 npm 0개다.
+
+**안 되물었다.** 상한값을 낮출지, 락으로 갈지, 감시자를 고칠지를 주도성 5로 PM이 정했다. 셋 중
+락과 감시자 수리를 고르고 상한값은 그대로 둔다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P442-1 | 큐 훅 - `tick-lock.sh`를 만들고 dira 워커 `.sh` 여섯에 넣는다 | developer | - | 발행 |
+| P442-2 | 감시자 - G5가 macOS에서 pid를 읽고 세션을 쥔 셸을 빼고 걷는다 | developer | - | 발행 |
+| P442-3 | 다른 큐 넷 - 워커 `.sh`에 `tick-lock.sh`를, stocky에 `shell-cap.sh`까지 넣는다 | developer | P442-1 | 발행 |
+| P442-4 | QA - 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P442-1, P442-2 | 발행 |
+
+**writer 0장.** 사람이 읽는 매뉴얼에 워커 셸 수를 다루는 장이 없다.
 
 ## 수용조건 (전체)
 
