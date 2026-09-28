@@ -1431,6 +1431,7 @@ export const ko: Record<string, string> = {
   "markdownWikilinks.noTarget": "대상 없음",
 
   "copyCommand.ariaLabel": "명령어 복사",
+  "markdown.copyCode.ariaLabel": "코드 복사",
 
   // 뒤에 바이트 수(소수 1자리)가 공백 없이 붙는다(`20MB를 넘습니다 (23.4MB) — ...`).
   "attachmentLimit.oversizePrefix": "20MB를 넘습니다 (",
@@ -4272,6 +4273,7 @@ export const en: Record<string, string> = {
   "markdownWikilinks.noTarget": "No target",
 
   "copyCommand.ariaLabel": "Copy the command",
+  "markdown.copyCode.ariaLabel": "Copy the code",
 
   // 뒤에 바이트 수(소수 1자리)가 공백 없이 붙는다(`Over 20MB (23.4MB) — ...`).
   "attachmentLimit.oversizePrefix": "Over 20MB (",

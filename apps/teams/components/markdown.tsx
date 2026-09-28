@@ -4,10 +4,12 @@
  *
  *  `rehype-raw`를 켜지 않는다 — raw HTML 무시가 `react-markdown` 기본값이고, 그게 새니타이저를
  *  안 들이는 근거다(§결정 기록). 각주·이미지는 원문 글자로 문단에 남는다. */
-import { Children } from "react";
-import { Square, SquareCheck } from "lucide-react";
+import { Children, useState } from "react";
+import { Check, Copy, Square, SquareCheck } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Button } from "@/components/ui/button";
+import { useT } from "@/components/language-provider";
 import { CODE_SPAN_CLASS, QueueRef, type QueueRefProps } from "@/components/queue-ref";
 import { closeEmphasis } from "@/lib/markdown-emphasis";
 import { softBreaks } from "@/lib/markdown-breaks";
@@ -15,6 +17,39 @@ import { refMarkers, type RefIndex } from "@/lib/markdown-refs";
 import { wikilinks, type Vault } from "@/lib/markdown-wikilinks";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+
+/** hast 노드에서 글자만 뽑는다(P443 §계약 3) — 문법 강조를 안 켠 트리라 보통 텍스트 노드
+ *  하나지만, 재귀로 두어 구조가 늘어도 안전하다. */
+function nodeText(node: unknown): string {
+  if (!node || typeof node !== "object") return "";
+  const n = node as { type?: string; value?: string; children?: unknown[] };
+  if (n.type === "text") return n.value ?? "";
+  if (Array.isArray(n.children)) return n.children.map(nodeText).join("");
+  return "";
+}
+
+/** P443 §계약 1-5. `CopyAnswer`(home-ui.tsx)·`CopyCommand`의 관용구 그대로 — 아이콘만
+ *  1.5초 `Check`, 토스트 없음. 래퍼(`group/codeblock`)가 `overflow-x-auto` 밖이라 가로
+ *  스크롤을 끝까지 밀어도 버튼은 블록 오른쪽 위에 머문다. */
+function CodeBlockCopyButton({ code }: { code: string }) {
+  const t = useT();
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label={t("markdown.copyCode.ariaLabel")}
+      className="absolute right-2 top-2 opacity-0 group-hover/codeblock:opacity-100 group-focus-within/codeblock:opacity-100"
+      onClick={async () => {
+        await navigator.clipboard.writeText(code);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+    >
+      {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
+    </Button>
+  );
+}
 
 /** `h4~h6`도 `h3`과 같은 값이다 — 단계를 더 만들지 않는다(이 큐의 본문에 4단계 중첩이 없다). */
 const H3 = "mt-4 mb-1 text-base font-medium";
@@ -92,12 +127,18 @@ const components: Components = {
   // `pre > code`의 배경·패딩만 여기서 끈다. react-markdown 10은 `inline` prop을 안 주므로
   // 코드 스팬과 펜스를 컴포넌트에서 가를 수 없다 — 값은 §10 표 그대로고 거는 자리만 부모다.
   // 높이 상한을 두지 않는다(§9의 `max-h-96`은 512px 컨테이너 안이라 필요했다. 본문은 페이지가 스크롤한다).
-  pre: (p) => (
-    <pre
-      {...drop(p)}
-      className="my-3 overflow-x-auto rounded-md bg-muted p-3 [&>code]:rounded-none [&>code]:bg-transparent [&>code]:p-0"
-    />
-  ),
+  pre: (p) => {
+    const code = nodeText(p.node?.children?.[0]).replace(/\n$/, "");
+    return (
+      <div className="group/codeblock relative my-3">
+        <pre
+          {...drop(p)}
+          className="overflow-x-auto rounded-md bg-muted p-3 [&>code]:rounded-none [&>code]:bg-transparent [&>code]:p-0"
+        />
+        <CodeBlockCopyButton code={code} />
+      </div>
+    );
+  },
   // 래퍼는 **필수다.** `Card`가 `overflow-hidden`이라 래퍼 없는 넓은 표는 스크롤이 아니라 잘려 사라진다.
   table: (p) => (
     <div className="my-3 overflow-x-auto">
