@@ -4,12 +4,11 @@
  *
  *  `rehype-raw`를 켜지 않는다 — raw HTML 무시가 `react-markdown` 기본값이고, 그게 새니타이저를
  *  안 들이는 근거다(§결정 기록). 각주·이미지는 원문 글자로 문단에 남는다. */
-import { Children, useState } from "react";
-import { Check, Copy, Square, SquareCheck } from "lucide-react";
+import { Children } from "react";
+import { Square, SquareCheck } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Button } from "@/components/ui/button";
-import { useT } from "@/components/language-provider";
+import { CodeBlockCopyButton } from "@/components/markdown-copy-button";
 import { CODE_SPAN_CLASS, QueueRef, type QueueRefProps } from "@/components/queue-ref";
 import { closeEmphasis } from "@/lib/markdown-emphasis";
 import { softBreaks } from "@/lib/markdown-breaks";
@@ -26,29 +25,6 @@ function nodeText(node: unknown): string {
   if (n.type === "text") return n.value ?? "";
   if (Array.isArray(n.children)) return n.children.map(nodeText).join("");
   return "";
-}
-
-/** P443 §계약 1-5. `CopyAnswer`(home-ui.tsx)·`CopyCommand`의 관용구 그대로 — 아이콘만
- *  1.5초 `Check`, 토스트 없음. 래퍼(`group/codeblock`)가 `overflow-x-auto` 밖이라 가로
- *  스크롤을 끝까지 밀어도 버튼은 블록 오른쪽 위에 머문다. */
-function CodeBlockCopyButton({ code }: { code: string }) {
-  const t = useT();
-  const [copied, setCopied] = useState(false);
-  return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label={t("markdown.copyCode.ariaLabel")}
-      className="absolute right-2 top-2 opacity-0 group-hover/codeblock:opacity-100 group-focus-within/codeblock:opacity-100"
-      onClick={async () => {
-        await navigator.clipboard.writeText(code);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      }}
-    >
-      {copied ? <Check aria-hidden /> : <Copy aria-hidden />}
-    </Button>
-  );
 }
 
 /** `h4~h6`도 `h3`과 같은 값이다 — 단계를 더 만들지 않는다(이 큐의 본문에 4단계 중첩이 없다). */
