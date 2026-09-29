@@ -62276,6 +62276,39 @@ PM이 정했다. 새 npm 0개, 새 색 토큰 0개다.
 
 **P447-2는 P447-1 뒤다.** 확인할 화면이 구현에서 나온다.
 
+### P448. result 뒤에 system 줄이 붙어도 밀린 작업 유예가 걸린다 (요구 `f7fc8239`, 왕복 0회)
+
+사람 요구: 답변 대기 카드를 열었더니 "알림이 오면 대기합니다"만 적혀 있고 사람이 할 일이 없다.
+P435가 막으려던 갈래가 그대로 새고 있다.
+
+#### 실측 - `is_result`가 마지막 한 줄만 본다
+
+stream 큐 `8b3c02c8`은 세 회차 모두 밀림(`moved to the background (ID: `)이 있는데 `FAIL` 줄에
+`reason=bg`가 없었고, 3회째에 `ASK awaiting=8068d1de`로 갔다. `NUDGE bg`도 한 번도 없다.
+2026-09-28 - 09-29에 dira - stream - stocky 큐의 `.wip` 남김 FAIL 중 로그에 밀림 문구가 있는
+것은 19건이고 `reason=bg`가 붙은 것은 1건(`97966513`)뿐이다. 19건 전부 마지막 `result` 뒤에
+`system` 줄이 2-56줄 붙어 있었다.
+
+`tick.sh` `is_result`는 구간의 **마지막 한 줄**이 `result`인지만 본다. 하네스가 `result`를 쓰자마자
+`task_notification` `stopped` - `background_tasks_changed` - `task_updated`를 이어 쓰면 폴링이
+`result`를 보기 전에 마지막 줄이 `system`으로 바뀐다. 감시 루프는 세션이 죽을 때까지 돌고
+`kill -0` 실패로 빠져나와 유예 판정(`bg_pending`)을 건너뛴다.
+
+#### 결정 - 끝에 붙은 `system` 줄은 건너뛰고 본다
+
+- `is_result`는 구간 끝에서 `system` 타입 줄을 건너뛴 뒤 처음 만나는 줄이 `result`이면 참이다.
+  `assistant` - `user` 줄이 `result` 뒤에 있으면 종전처럼 거짓이다.
+- 나머지 판정(`bg_pending` - `bg_wait_grow` - `bg_task_stopped` - `reason=bg` - `reclaim` 백오프)은
+  P435 그대로다. 새 fm 키 0 - 새 로그 낱말 0 - 의존성 0 - 기존 `test_*.py` 무수정 통과.
+- 요구 문장이 수정 자리를 지정한 것으로 보는 P435 §엔진 수정 승인과 같은 근거다.
+
+설치본 엔진(`~/Library/Application Support/dira/engine/`)은 다음 앱 릴리스에서 갈린다. 그 전까지
+stream 큐처럼 설치본을 쓰는 큐에서는 같은 카드가 또 생길 수 있다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P448-1 | 엔진 - `is_result`가 끝의 `system` 줄을 건너뛴다. 재현 테스트 포함 | developer | - | 발행 |
+
 ## 수용조건 (전체)
 
 개별 티켓의 `## Done when`이 계약이고, 아래는 제품 전체의 종료 조건이다.
