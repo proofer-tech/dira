@@ -1895,6 +1895,12 @@ function TabBar({
 }) {
   const t = useT();
   const locale = useLocale();
+  // §P451 결정 1 — 활성 탭이 바뀔 때마다(마운트 포함) 그 탭을 탭 줄 안으로 들인다. `nearest`라서
+  // 이미 보이는 탭이면 스크롤이 그대로다. 애니메이션 없음.
+  const activeTabRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    activeTabRef.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [activeTab]);
   if (tabs.length === 0) return null;
   const TAB_ICON = { chat: MessageSquare, terminal: SquareTerminal, file: File, browser: Globe } as const;
   const titleOf = (tab: Tab) =>
@@ -1926,7 +1932,12 @@ function TabBar({
             return (
               <ContextMenu key={tab.id}>
                 <ContextMenuTrigger render={<div />}>
-                  <TabsTrigger value={tab.id} nativeButton={false} render={<div />} className="max-w-40 flex-none gap-1.5">
+                  <TabsTrigger
+                    value={tab.id}
+                    nativeButton={false}
+                    render={<div ref={isActive ? activeTabRef : undefined} />}
+                    className="max-w-40 flex-none gap-1.5"
+                  >
                     <Icon aria-hidden className="size-3.5 shrink-0" />
                     {busy && (
                       <span
