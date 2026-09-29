@@ -1001,7 +1001,7 @@ export function AnswerThread({
                               `bg-muted` 블록 안에서 4.34가 되고 그건 §1이 실측으로 금지한 조합이다.
                               종전의 `border-l-2 border-border pl-3`은 지웠다 — 말풍선과 겹치면
                               답변 쪽만 세로선 + 상자 두 겹이 된다(§13) */}
-                          <Bubble variant="outline" align="end">
+                          <Bubble variant="secondary" align="end">
                             <BubbleContent>
                               {/* 답변 본문은 **사람이 입력칸에 친 글**이라 줄바꿈을 그린다(§10 면제) */}
                               <Markdown text={item.text} breaks="all" vault={vault} refs={refs} />

@@ -1060,7 +1060,7 @@ function ThreadRow({
             {item.heading || t("sessionStream.answer")}
             {item.hash && <span className="ml-2 font-mono">{item.hash}</span>}
           </MessageHeader>
-          <Bubble variant="outline" align="end">
+          <Bubble variant="secondary" align="end">
             <BubbleContent>
               {/* 답변은 사람이 친 글이라 줄바꿈을 그린다(§10 면제) */}
               <Markdown text={item.text} breaks="all" vault={vault} refs={refs} />
@@ -1858,7 +1858,7 @@ function StreamBubble({
       <Message align="end">
         <MessageContent>
           <MessageHeader>{header}</MessageHeader>
-          <Bubble variant="outline" align="end">
+          <Bubble variant="secondary" align="end">
             <BubbleContent>
               {body.trim() !== "" && <Markdown text={body} breaks="all" refs={refs} />}
               <AttachmentPreview project={project} paths={paths} />

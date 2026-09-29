@@ -1277,7 +1277,7 @@ export function HomeUI({
                                     **오른쪽 끝에** 떠서 음수 margin만큼 1px 넘쳤다. 안 보이는 라벨
                                     하나가 스레드 전체에 가로 스크롤바를 만들었다(1440×900 실측) */}
                                 <MessageHeader className="sr-only m-0">{t("home.questionLabel")}</MessageHeader>
-                                <Bubble variant="outline" align="end">
+                                <Bubble variant="secondary" align="end">
                                   <BubbleContent>
                                     {/* 이 자리에 오는 문자열은 **전부 입력칸에서 왔다** — 사람이
                                         친 줄바꿈을 그대로 그린다(§10 면제). 아래 에이전트 답의
@@ -1354,7 +1354,7 @@ export function HomeUI({
                         <Message align="end">
                           <MessageContent>
                             <MessageHeader className="sr-only m-0">{t("home.questionLabel")}</MessageHeader>
-                            <Bubble variant="outline" align="end">
+                            <Bubble variant="secondary" align="end">
                               <BubbleContent>
                                 {/* 첨부 안내 줄 대신 미리보기다(§8 §개정 · §비주얼 §27 §개정). */}
                                 {(() => {

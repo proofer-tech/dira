@@ -22,8 +22,10 @@ const bubbleVariants = cva(
       variant: {
         default:
           "*:data-[slot=bubble-content]:bg-primary *:data-[slot=bubble-content]:text-primary-foreground [&>[data-slot=bubble-content]:is(button,a):hover]:bg-primary/80",
+        // 채운 면 + 테두리 0 + 말풍선 안에서만 `--muted`·`--muted-foreground`·`--border` 재매핑.
+        // §비주얼 §13 §유저측 말풍선을 채운 면으로 다시 냈다(요구 `768ea690`)
         secondary:
-          "*:data-[slot=bubble-content]:bg-secondary *:data-[slot=bubble-content]:text-secondary-foreground [&>[data-slot=bubble-content]:is(button,a):hover]:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]",
+          "*:data-[slot=bubble-content]:bg-secondary *:data-[slot=bubble-content]:text-foreground data-[align=end]:*:data-[slot=bubble-content]:rounded-br-none *:data-[slot=bubble-content]:[--muted:var(--background)] *:data-[slot=bubble-content]:[--muted-foreground:var(--chart-3)] dark:*:data-[slot=bubble-content]:[--muted-foreground:var(--chart-1)] *:data-[slot=bubble-content]:[--border:var(--chart-1)] dark:*:data-[slot=bubble-content]:[--border:var(--input)] [&>[data-slot=bubble-content]:is(button,a):hover]:bg-[color-mix(in_oklch,var(--secondary),var(--foreground)_5%)]",
         muted:
           "*:data-[slot=bubble-content]:bg-muted [&>[data-slot=bubble-content]:is(button,a):hover]:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_5%)]",
         tinted:
@@ -31,7 +33,7 @@ const bubbleVariants = cva(
         // 테두리 `/65`(2.49 / 2.38) · 화자 쪽 아래 한 귀는 각 — 그릇(`Card`)과 잉크가 아니라
         // 꼴로 갈린다. §비주얼 §13 §유저측 말풍선을 다시 그렸다(요구 `8e6f6903`)
         outline:
-          "*:data-[slot=bubble-content]:border-chart-2/65 *:data-[slot=bubble-content]:bg-background data-[align=end]:*:data-[slot=bubble-content]:rounded-br-none [&>[data-slot=bubble-content]:is(button,a):hover]:bg-muted [&>[data-slot=bubble-content]:is(button,a):hover]:text-foreground dark:[&>[data-slot=bubble-content]:is(button,a):hover]:bg-input/30",
+          "*:data-[slot=bubble-content]:border-chart-2/65 *:data-[slot=bubble-content]:bg-background [&>[data-slot=bubble-content]:is(button,a):hover]:bg-muted [&>[data-slot=bubble-content]:is(button,a):hover]:text-foreground dark:[&>[data-slot=bubble-content]:is(button,a):hover]:bg-input/30",
         ghost:
           "border-none *:data-[slot=bubble-content]:rounded-none *:data-[slot=bubble-content]:bg-transparent *:data-[slot=bubble-content]:p-0 [&>[data-slot=bubble-content]:is(button,a):hover]:bg-muted [&>[data-slot=bubble-content]:is(button,a):hover]:text-foreground dark:[&>[data-slot=bubble-content]:is(button,a):hover]:bg-muted/50",
         destructive:
