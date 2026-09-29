@@ -431,6 +431,10 @@ export const ko: Record<string, string> = {
   // idle 워커 풀의 `sr-only` 접두어 — 앞에 공백 없이 라벨이 바로 붙으므로 **값 자체에 공백을 넣는다**
   // (원문 `<span className="sr-only"> 워커</span>`와 같은 바이트).
   "statusbar.idleSrOnlySuffix": " 워커",
+  // 다음 디스패치까지 남은 초(§1-6). idle 워커 1개 이상일 때만 이름들 뒤에 붙는다.
+  "statusbar.nextDispatch.prefix": "다음 디스패치",
+  "statusbar.nextDispatch.suffix": "초",
+  "statusbar.nextDispatch.title": "cron이 이 시각에 idle 워커를 깨웁니다. 디스패치할 티켓이 없으면 아무 일도 일어나지 않습니다.",
   "statusbar.rate.title": "최근 10분 · 이 프로젝트의 워커 세션",
   "statusbar.rate.suffix": "토큰/분",
   "statusbar.usage.suffix": "사용",
@@ -3128,6 +3132,9 @@ export const en: Record<string, string> = {
   "statusbar.idle.none": "None",
   // `idle` 라벨 뒤에 공백 없이 바로 붙는다 — **값 자체가 공백으로 연다**(`idle workers w3 w9`).
   "statusbar.idleSrOnlySuffix": " workers",
+  "statusbar.nextDispatch.prefix": "next dispatch",
+  "statusbar.nextDispatch.suffix": "s",
+  "statusbar.nextDispatch.title": "cron wakes an idle worker at this moment. Nothing happens if no ticket is dispatchable.",
   "statusbar.rate.title": "Last 10 minutes · worker sessions in this project",
   "statusbar.rate.suffix": "tokens/min",
   "statusbar.usage.suffix": "used",

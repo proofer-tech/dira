@@ -19,6 +19,7 @@ import {
   Unplug,
 } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
+import { NextDispatch } from "@/components/next-dispatch";
 import {
   ArchiveToggle,
   BrandMark,
@@ -121,6 +122,12 @@ export default async function ProjectLayout({
         // 것뿐이라 새 fs 읽기 0 · 서브프로세스 0이고, 보드 툴바에서 종전 워커 조회 1회가
         // 통째로 빠진다(§1-2 §비용). 빈 그룹은 안 담기므로 `groups.length > 0`이 곧 **워커 > 0**이다.
         groups: workerGroups(s.workers),
+        // §1-6 다음 디스패치까지 남은 초의 재료. idle 워커의 cron 주기만 추린다 — `status`가
+        // `idle`이면 `listWorkers`가 반드시 `cronPeriod`를 채웠다(inCron이라야 idle이다).
+        // 새 fs 읽기 0 — 위 `groups`와 같은 `s.workers` 순회다.
+        idlePeriods: s.workers
+          .filter((w) => w.status === "idle")
+          .flatMap((w) => (w.cronPeriod ? [w.cronPeriod] : [])),
       };
     }),
   );
@@ -403,6 +410,9 @@ export default async function ProjectLayout({
             <span className="truncate font-mono" title={idleNames}>
               {idleNames}
             </span>
+            {/* §1-6 다음 디스패치까지 남은 초 — 이름들 뒤 마지막 자식(§1-6 §값 §자리).
+                idle이 없으면 `idlePeriods`가 비어 `NextDispatch`가 아무것도 안 그린다. */}
+            <NextDispatch periods={current.idlePeriods} locale={locale} />
           </div>
         </footer>
       )}

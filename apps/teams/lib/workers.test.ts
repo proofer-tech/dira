@@ -36,6 +36,7 @@ const {
   copyContext,
   createWorker,
   cronLine,
+  cronPeriod,
   dispatchRound,
   lastDispatchSid,
   cronRegister,
@@ -1568,6 +1569,18 @@ test("cronRegister — 후행 개행이 없는 crontab에서도 줄이 이어 �
     `* * * * * "/tmp/w1.sh" >> "/tmp/cron.log" 2>&1`,
     `* * * * * sleep 30; "/tmp/w1.sh" >> "/tmp/cron.log" 2>&1`,
   ]);
+});
+
+test("cronPeriod — 짝줄(sleep 30) 있으면 30, 본 줄만 있으면 60, 미등록이면 null (§1-6 §값)", () => {
+  const registered = cronLine({ path: "/tmp/w1.sh" }); // GUI 등록 = 2줄, 짝줄 포함
+  assert.strictEqual(cronPeriod(registered, "/tmp/w1.sh"), 30);
+
+  // 손으로 등록한 워커는 본 줄만 있을 수 있다(실측 §0-21 `crontab -l` 2026-08-17).
+  const handRegistered = `* * * * * "/tmp/w2.sh" >> "/tmp/cron.log" 2>&1\n`;
+  assert.strictEqual(cronPeriod(handRegistered, "/tmp/w2.sh"), 60);
+
+  assert.strictEqual(cronPeriod(registered, "/tmp/w9.sh"), null); // 미등록
+  assert.strictEqual(cronPeriod("", "/tmp/w1.sh"), null); // 빈 crontab
 });
 
 test("watchdogHookSourceLine — 워커 훅 1줄, exit 0개(`; true`) (§디스패치 감시자 §개정)", () => {

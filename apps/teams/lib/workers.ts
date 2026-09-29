@@ -103,6 +103,9 @@ export type Worker = {
   dispatchGateStale: boolean;
   /** `TICKET_CWD` (셸 없이 읽은 절대경로). null = 줄이 없다 → 엔진 기본값은 루트의 부모다 */
   cwd: string | null;
+  /** cron 등록 주기 — §1-6 §값. `sleep 30; <경로>` 짝줄이 있으면 30, 본 줄만 있으면 60,
+   *  crontab에 이 경로가 없으면(`cron: false`와 같은 사실) null이다. */
+  cronPeriod: 30 | 60 | null;
   /** 작업 디렉터리 결함 (§4). **0개가 정상이고 그때 화면은 아무것도 늘지 않는다** */
   defects: WorkerDefect[];
   /** §4-19 결정 1·3 — 표준 자리(조건 a)를 §4-14 게이트(조건 b·c)가 지키고 있어 `missing-cwd`를
@@ -1704,6 +1707,8 @@ export async function listWorkers(
       dispatchGateSource: dispatchGateSourceRe.test(text),
       dispatchGateStale: gateStale,
       cwd: parsed.cwd,
+      // §1-6 §값 — idle 풀의 카운트다운 재료. `inCron`과 같은 `cron`(이미 nfc)·`full`을 쓴다.
+      cronPeriod: cronPeriod(cron, nfc(full)),
       defects: [], // 공유 판정이 목록 전체를 봐야 하므로 행을 다 만든 뒤에 채운다
     });
   }
@@ -1807,6 +1812,16 @@ export function cronLine(worker: Pick<Worker, "path">): string {
   const log = path.join(path.dirname(worker.path), "cron.log");
   const run = `${dq(worker.path)} >> ${dq(log)} 2>&1`;
   return `* * * * * ${run}\n* * * * * sleep 30; ${run}`;
+}
+
+/** 워커의 cron 등록 주기 (DESIGN.md §1-6 §값 — 다음 디스패치까지 남은 초의 재료).
+ *  `cronLine`이 GUI로 등록한 워커는 항상 30이다(짝줄 2개를 같이 넣는다) — 60은 손으로 본 줄만
+ *  넣은 워커에서만 나온다(실측 §0-21 `crontab -l` 2026-08-17). 이 경로가 든 줄이 하나도 없으면
+ *  null이다(`listWorkers`의 `inCron`과 같은 사실 — 미등록 워커는 §1-6 값 표 대상이 아니다). */
+export function cronPeriod(cronTextNfc: string, workerPathNfc: string): 30 | 60 | null {
+  const lines = cronTextNfc.split("\n").filter((l) => l.includes(workerPathNfc));
+  if (lines.length === 0) return null;
+  return lines.some((l) => /\bsleep 30\b/.test(l)) ? 30 : 60;
 }
 
 /** `grep -F`는 **바이트로** 비교한다. crontab 줄은 사람이 넣은 NFC인데 `readdir`가 준 경로는

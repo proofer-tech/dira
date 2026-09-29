@@ -29,6 +29,7 @@ function mkWorker(name: string, status: WorkerStatus): Worker {
     dispatchGateSource: true,
     dispatchGateStale: false,
     cwd: null,
+    cronPeriod: status === "idle" ? 30 : null,
     defects: [],
   };
 }
