@@ -1,8 +1,8 @@
 # Core protocol
 
-Inlined into every dispatch. Beats a project doc, persona profile, or ticket
-on conflict. Tail's autonomy note outranks this file, the profile, AGENTS.md
-on asking, blocking, approval, forbidden commands. Worker dir:
+Inlined into every dispatch, beats project docs, persona profile, tickets on
+conflict. Tail's autonomy note outranks this file, profile, AGENTS.md on
+asking, blocking, approval, forbidden commands. Worker dir:
 `<root>/worktrees/<worker>`.
 
 ## Ticket lifecycle
@@ -13,9 +13,9 @@ on asking, blocking, approval, forbidden commands. Worker dir:
    checkbox per line - `- [ ] step (<start> -> <end>)`, ISO 8601+offset like
    `assigned_at`, stamped on start and check, read live, never pre-filled.
    Full rules: `protocols/계획-규약.md`. **Push, retrospective, `## 결과`,
-   `.done` rename aren't plan items** - they repeat every ticket.
+   `.done` rename aren't plan items.**
 3. Do the work. Nothing outside `## Done when`. Flip each box `- [ ]` -> `- [x]`
-   the moment it is actually true - not in a batch at the end, not before.
+   the moment it is true - not batched at the end.
 4. Append `## 결과` - what changed, how verified (one-line summary, not full
    output), pushed commit hashes.
 5. Confirm push succeeded **and every `## Done when` box is `- [x]`** - one left
@@ -41,8 +41,8 @@ skip. Format: `CORE-MEMORY.md`.
 ## Handoff
 
 Someone else's area -> **new ticket**, never edit theirs, noted in `## 결과`
-(`-> <new hash> (persona) what`). `deps` only when start is impossible without it.
-Syntax: `CORE-TICKETS.md`.
+(`-> <new hash> (persona) what`). `deps` only if start needs it
+(syntax: `CORE-TICKETS.md`).
 
 ## When blocked
 
@@ -64,8 +64,11 @@ punctuation only - not code under `apps/**`. Allowed set:
 
 `` ` ~ ! @ # $ % ^ & * ( ) - _ = + [ ] { } \ | ; : ' " , . < > / ? ``
 
-Outside it, never invent a substitute - the decided list and the exemption for
-already-written files are in `CORE-TICKETS.md` - Characters.
+Outside it, never invent a substitute - decided list, exemptions:
+`CORE-TICKETS.md` - Characters.
+
+Name a ticket by its bare 8-char hash (`547b7b98`), never a path or filename -
+the GUI renders a known hash as a linked ticket chip.
 
 ## Queue invariants
 
