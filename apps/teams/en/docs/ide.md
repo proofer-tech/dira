@@ -297,6 +297,21 @@ Pick one and what sits under it fills in.
   the message is empty.
 - `Push` and `Pull`.
 
+In the message field, `Cmd+Enter` (`Ctrl+Enter` on Windows and Linux) does the same as pressing
+`Commit`. When the button cannot be pressed, the shortcut does nothing either.
+
+Press a button and its label changes to an in-progress label ending in `...`. That tells you the
+app took the press and `git` is running. Until it finishes, pressing the other buttons does
+nothing. Press a file row and that row dims while the word on its right changes to the same kind
+of in-progress label.
+
+When the label goes back, it is done. A commit, push, or pull that succeeds leaves one line under
+the buttons: `Committed`, `Pushed`, or `Pulled`. The line stays until you press another button or
+pick another working folder. If it fails, the reason shows up instead.
+
+The commit message field is cleared only when the commit succeeds. If it fails, what you wrote
+stays in the field, so read the reason, fix it, and press again.
+
 **The app does not re-read this surface on its own.** It reads the moment you open the surface,
 when you press `Refresh`, and right after a commit, a push, or a pull. Leave it open and walk
 away and no new `git` process starts. If a worker committed in the meantime, you have to press
