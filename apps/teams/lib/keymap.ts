@@ -55,6 +55,14 @@ export const DEFAULT_KEYMAP: KeyAction[] = [
   { id: "interject.send", combo: "Mod+Enter" },
 ];
 
+/** §11-19 결정 1·3 — 홈 좌측 표면 여섯을 고르는 고정 키(`⌘1`~`⌘6`). 액션 8개 밖이라
+ *  `DEFAULT_KEYMAP`에 없다 — §0-7 `Esc`와 같은 부류로, 요구가 키를 지목했고 여섯이 한 벌이라
+ *  사람이 못 바꾼다. 그래도 `validateBinding`은 이 여섯과 겹치는 지정을 거절해야 하므로 값은
+ *  여기 하나뿐이다. 표면 배열(`SURFACES`, `home-ui.tsx`)과 순서로 짝짓는 것은 호출자 몫이다 —
+ *  이 파일은 `Surface`를 모른다(`lib/tabs.ts`를 끌어오면 이 파일의 클라이언트 번들 계약이
+ *  깨질 이유는 없지만 굳이 엮을 이유도 없다, 위 머리 주석 §순수 함수). */
+export const SURFACE_COMBOS = ["Mod+1", "Mod+2", "Mod+3", "Mod+4", "Mod+5", "Mod+6"];
+
 export type Bindings = Record<ActionId, string>;
 
 export type Keymap = {
@@ -228,6 +236,9 @@ export function validateBinding(
   if (c.key === "Tab") return { reason: t(locale, "settings.keymap.reject.tab") };
   if (!c.mod && (c.key === "Enter" || c.key === "Space")) {
     return { reason: t(locale, "settings.keymap.reject.needsMod") };
+  }
+  if (SURFACE_COMBOS.includes(combo)) {
+    return { reason: t(locale, "settings.keymap.reject.surface") };
   }
   for (const a of DEFAULT_KEYMAP) {
     if (a.id !== actionId && bindings[a.id] === combo) {

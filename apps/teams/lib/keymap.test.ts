@@ -10,8 +10,16 @@ const LOCAL = mkdtempSync(path.join(tmpdir(), "fst-keymap-"));
 process.env.TICKET_LOCAL = LOCAL;
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
-const { DEFAULT_KEYMAP, actionName, comboOf, formatCombo, matchCombo, shouldFire, validateBinding } =
-  await import("./keymap.ts");
+const {
+  DEFAULT_KEYMAP,
+  SURFACE_COMBOS,
+  actionName,
+  comboOf,
+  formatCombo,
+  matchCombo,
+  shouldFire,
+  validateBinding,
+} = await import("./keymap.ts");
 // 파일 세 함수는 `registryPath()` 옆에 있다 — `keymap.ts`가 클라이언트 번들로 가기 때문이다
 // (그 파일 머리 주석). 여기서 같이 검증한다: 계약이 하나고 픽스처도 하나다.
 const { keymapPath, readKeymap, writeKeymap } = await import("./projects.ts");
@@ -248,4 +256,18 @@ test("validateBinding — 못 쓰는 키는 사유와 함께 거절한다", () =
   // Mod가 붙으면 둘 다 쓸 수 있다
   assert.strictEqual(validateBinding(BOUND, "board.new", "Mod+Space"), null);
   assert.strictEqual(validateBinding(BOUND, "interject.send", "Mod+Enter"), null);
+});
+
+// §11-19 결정 1·3 — 홈 표면 이동 여섯은 키설정 목록 밖의 고정 키다. 그래도 어떤 액션도 그
+// 여섯 조합을 가로챌 수 없어야 하므로 `validateBinding`이 항상 거절해야 한다.
+test("validateBinding — Mod+1~Mod+6은 항상 거절한다(§11-19 홈 표면 이동이 쓰는 키)", () => {
+  assert.strictEqual(SURFACE_COMBOS.length, 6);
+  for (const combo of SURFACE_COMBOS) {
+    const e = validateBinding(BOUND, "board.new", combo)!;
+    assert.match(e.reason, /홈 표면 이동/, combo);
+    assert.strictEqual(e.conflict, undefined, combo);
+    assert.strictEqual(validateBinding(BOUND, "board.new", combo, "en")!.reason, "This key switches home surfaces.", combo);
+  }
+  // formatCombo가 화면 표기를 낸다 — 툴팁이 이 값을 그대로 쓴다(§11-19 결정 3)
+  assert.deepStrictEqual(SURFACE_COMBOS.map(formatCombo), ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6"]);
 });

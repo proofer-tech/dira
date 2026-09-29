@@ -231,3 +231,34 @@ test("isBusyPath — busy가 그 줄의 path를 실은 { path }일 때만 참이
   assert.strictEqual(isBusyPath({ path: "a.ts" }, "a.ts"), true);
   assert.strictEqual(isBusyPath({ path: "a.ts" }, "b.ts"), false);
 });
+
+// §11-19 결정 1·2: `⌘1`~`⌘6`이 홈 좌측 표면을 고른다. 캡처 단계 + preventDefault·stopPropagation이
+// 없으면 터미널에 포커스가 있을 때 xterm이 먼저 받아 pty로 제어 문자가 샌다(결정 2).
+const surfaceKeyA = s.indexOf("useEffect(() => {\n    const onKey = (e: KeyboardEvent) => {");
+assert.ok(surfaceKeyA >= 0, "home-ui.tsx: 표면 이동 keydown 이펙트를 못 찾았다");
+const surfaceKeyB = s.indexOf("\n  });", surfaceKeyA);
+const surfaceKeyBody = s.slice(surfaceKeyA, surfaceKeyB);
+
+test("표면 이동 keydown 이펙트 — SURFACE_COMBOS와 matchCombo로 SURFACES 인덱스를 찾는다", () => {
+  assert.ok(surfaceKeyBody.includes("SURFACE_COMBOS.findIndex((combo) => matchCombo(e, combo));"), "SURFACE_COMBOS·matchCombo로 매칭하지 않는다 — 표기와 매칭이 하드코딩으로 갈리면 값이 둘로 산다");
+  assert.ok(surfaceKeyBody.includes("changeSurface(SURFACES[i].id);"), "찾은 인덱스로 changeSurface를 부르지 않는다");
+});
+
+test("표면 이동 keydown 이펙트 — preventDefault·stopPropagation을 캡처 단계에서 건다", () => {
+  assert.ok(surfaceKeyBody.includes("e.preventDefault();") && surfaceKeyBody.includes("e.stopPropagation();"), "브라우저·xterm 기본 동작을 안 막는다");
+  assert.ok(surfaceKeyBody.includes('window.addEventListener("keydown", onKey, { capture: true });'), "캡처 단계로 안 걸면 터미널(xterm)이 이벤트를 먼저 가져가 pty로 샌다(§11-19 결정 2)");
+  assert.ok(surfaceKeyBody.includes('window.removeEventListener("keydown", onKey, { capture: true });'), "해제도 같은 capture 옵션이어야 리스너가 실제로 떨어진다");
+});
+
+test("표면 이동 keydown 이펙트 — 글 쓰는 중 가드(isTyping)가 없다(화면을 안 떠나는 액션이라 §0-6 대상이 아니다)", () => {
+  assert.ok(!surfaceKeyBody.includes("isTyping"), "isTyping 가드를 걸면 프롬프트 칸에 쓰는 중 `⌘3`이 안 듣는다(§11-19 결정 2)");
+});
+
+const tooltipA = s.indexOf('{SURFACES.map(({ id, labelKey, icon: Icon }, i) => {');
+assert.ok(tooltipA >= 0, "home-ui.tsx: 표면 버튼 목록 렌더를 못 찾았다");
+const tooltipB = s.indexOf("})}", tooltipA);
+const tooltipBody = s.slice(tooltipA, tooltipB);
+
+test("표면 버튼 툴팁 — SURFACE_COMBOS[i]를 formatCombo로 그려 이름 옆에 붙인다", () => {
+  assert.ok(tooltipBody.includes("formatCombo(SURFACE_COMBOS[i])"), "툴팁이 키를 하드코딩 없이 formatCombo·SURFACE_COMBOS에서 내지 않는다(§0-6 — 표기를 하드코딩한 문자열은 남기지 않는다)");
+});

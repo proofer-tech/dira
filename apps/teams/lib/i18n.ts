@@ -156,6 +156,7 @@ export const ko: Record<string, string> = {
   "settings.keymap.reject.escape": "`Esc`는 닫기·취소에 쓰입니다.",
   "settings.keymap.reject.tab": "`Tab`은 초점 이동에 쓰입니다.",
   "settings.keymap.reject.needsMod": "`↵`·`Space`는 `⌘`과 같이 눌러야 합니다. 버튼을 누르는 키입니다.",
+  "settings.keymap.reject.surface": "홈 표면 이동이 쓰는 키입니다.",
   "settings.keymap.reject.conflictSuffix": "겹칩니다.",
   "settings.keymap.reject.unknownAction": "모르는 액션입니다:",
 
@@ -2904,6 +2905,7 @@ export const en: Record<string, string> = {
   "settings.keymap.reject.escape": "`Esc` closes and cancels.",
   "settings.keymap.reject.tab": "`Tab` moves focus.",
   "settings.keymap.reject.needsMod": "`↵` and `Space` need `⌘` with them. On their own they press buttons.",
+  "settings.keymap.reject.surface": "This key switches home surfaces.",
   // 앞에 상대 액션 이름이 붙어 문장이 된다(`Send already uses this key.`) — 한국어의
   // `<이름>과 겹칩니다.`와 같은 어순이라 접두 조각이 없다.
   "settings.keymap.reject.conflictSuffix": "already uses this key.",

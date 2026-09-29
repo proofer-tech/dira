@@ -195,7 +195,7 @@ import type {
   Turn,
   WorkerSession,
 } from "@/lib/home-session";
-import { formatCombo, matchCombo } from "@/lib/keymap";
+import { formatCombo, matchCombo, SURFACE_COMBOS } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
 import {
   activeTabKey,
@@ -979,6 +979,32 @@ export function HomeUI({
     const target = tabForSurface(home.tabs, s, home.current, activeTab);
     if (target !== activeTab) setActiveTab(target);
   };
+
+  /** `⌘1`~`⌘6`이 좌측 표면 여섯을 고른다(§11-19 결정 1). **`window`의 캡처 단계에서 받는다** —
+   *  터미널에 포커스가 있어도 들어야 해서다(결정 2). 윈도우·리눅스의 `Ctrl+2` 등은 그대로 두면
+   *  xterm이 먼저 잡아 pty로 제어 문자를 보낸다 — `preventDefault`+`stopPropagation`을 **캡처
+   *  단계에서** 걸면 이벤트가 xterm의 자기 리스너(타깃에 붙어 나중에 받는다)까지 안 내려가서
+   *  터미널 쪽 코드(`terminal-panel.tsx`)를 안 건드린다. `Ctrl+F`가 셸로 새지 않게 막는
+   *  `isShellBoundCtrlF`(§7)와 같은 근거, 다른 자리다.
+   *
+   *  **글 쓰는 중에도 듣는다.** 화면을 안 떠나는 액션이라(표면만 바뀌고 홈에 남는다, `changeSurface`
+   *  자체가 그 계약이다) `board.search`·`board.new`와 같은 부류다(§0-6 §언제 안 듣는가) — 그래서
+   *  가드 없이 `matchCombo`만 본다(그 함수가 `isComposing`은 이미 거른다).
+   *
+   *  **이 파일 안에서만 듣는다** — 다른 화면(보드 등)은 `HomeUI`가 안 뜨므로 리스너 자체가 없다
+   *  (결정 1 §듣는 자리는 홈 하나다). `SURFACE_COMBOS`(`lib/keymap.ts`)가 정본이고 `SURFACES`와
+   *  인덱스로 짝짓는다 — 값 하나가 둘로 안 갈린다(`validateBinding`도 같은 상수를 본다). */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const i = SURFACE_COMBOS.findIndex((combo) => matchCombo(e, combo));
+      if (i === -1) return;
+      e.preventDefault();
+      e.stopPropagation();
+      changeSurface(SURFACES[i].id);
+    };
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
+  });
 
   /** 우측 탭 줄에서 탭 하나를 고른다(§11 결정 1) — **표면을 가로지르는 그 한 줄**의 유일한
    *  전환 입구다. **`chat`만 서버 왕복이 남는다**(`switchHome`, 스레드까지 옮겨야 해서) — 나머지
@@ -2977,7 +3003,7 @@ function SidePanel({
           하나뿐이다 - 두 상태가 서로 다른 채널을 쓴다. */}
       <SidebarHeader className="h-12 justify-center gap-0 border-b px-4 py-2">
         <SidebarMenu aria-label={t("home.title")} className="flex-row gap-1">
-          {SURFACES.map(({ id, labelKey, icon: Icon }) => {
+          {SURFACES.map(({ id, labelKey, icon: Icon }, i) => {
             const isActive = id === surface;
             const label = t(labelKey);
             return (
@@ -2999,7 +3025,12 @@ function SidePanel({
                       </SidebarMenuButton>
                     }
                   />
-                  <TooltipContent side="bottom">{label}</TooltipContent>
+                  {/* §11-19 결정 3 — 표면 이름 옆에 제 키를 붙인다. `SURFACE_COMBOS[i]`가
+                      `SURFACES`와 같은 인덱스로 짝짓는 값이고 `formatCombo`가 화면 표기를
+                      낸다(§0-6 — 표기를 하드코딩하지 않는다) */}
+                  <TooltipContent side="bottom">
+                    {label} <kbd data-slot="kbd" className="border-background/30 px-1 font-mono text-[10px] text-background/80">{formatCombo(SURFACE_COMBOS[i])}</kbd>
+                  </TooltipContent>
                 </Tooltip>
               </SidebarMenuItem>
             );
