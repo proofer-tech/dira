@@ -684,6 +684,12 @@ and answers.
   surface row at the top of the panel, second icon from the left. How to make one and everything
   else about it is in [Schedules](/docs/schedules).
 - The answer flows in as the characters arrive. If it takes too long, cut it with `Stop`.
+- You can send the next message while an answer is still running. It waits under its bubble with
+  `Waiting for the answer`. If the answer is calling a tool, the message slips into the current
+  answer between tool calls. Otherwise it goes in as the next question once the answer ends. To put
+  it in right away, press `Interject now` to the right of that line. **The running answer is cut off
+  there.** What arrived so far stays on screen, and a new answer to your message starts at once. If
+  the message had already slipped in between tool calls, pressing it sends the same message again.
 - **It mostly reads, but it writes too.** It has five tools: `Read` · `Glob` · `Grep` · `Write` ·
   `Edit`. Where writing can reach is fixed, inside the queue. Persona profiles, protocols, worker
   scripts, the ontology, tickets. Everything else is blocked at the path. The worktrees where the
