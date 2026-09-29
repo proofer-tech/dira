@@ -165,9 +165,11 @@ is exactly one place an answer file is born — after the deadline passes and th
 
 An address written into a ticket body, a deploy URL printed in the progress record, an
 `http://localhost:3000` your terminal just spat out. Press a link like that inside the app window
-and the built-in browser opens it. Your Mac's default browser stays shut.
+and the built-in browser opens it. Your default browser stays shut.
 
-The press lands you on the `Browser` surface at home with a tab named `Link` already picked. A row
+The press lands you on the `Browser` surface at home with a tab named `Link` already picked. It
+does this wherever you pressed. Even when you are already home, pressing a link in the home chat
+or the home terminal leaves the surface you were on and moves to that tab. A row
 by the same name stands in the list on the left, alongside the rows workers and the home chat
 hold, and the hash beside it reads `c0ffee00`.
 
@@ -182,6 +184,13 @@ trimmed off.
 open in a web browser with no app at all, so they sit outside the product and skip the built-in
 browser. Links to screens inside the app, and anchors within a page, behave exactly as before.
 What gets caught is outside addresses.
+
+### Opening straight in your default browser
+
+To skip the built-in browser and open a link in the browser you normally use, hold a modifier
+key as you press it: `Cmd`+click on a Mac, `Ctrl`+click on Windows. This works for links in the
+app window and in the terminal alike. No `Link` tab appears, its address stays put, and the
+screen stays where it is. On a Mac, `Ctrl`+click brings up the right-click menu, so use `Cmd`.
 
 ### The address bar
 
