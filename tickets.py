@@ -924,7 +924,7 @@ def ask_context(fm, body, troot, handoff=False, block_fresh=True, answers=None):
         return out
     tr = transcript_of(fm)
     tail = transcript_tail(tr) if tr else ""
-    return out + "\n### 죽은 세션 마지막 기록\n\n{}\n".format(
+    return out + "\n### 세션 마지막 기록\n\n{}\n".format(
         _quote(_capped(tail, 1500) if tail else "트랜스크립트를 찾지 못했습니다"))
 
 
@@ -1011,8 +1011,9 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
     할당 필드(attempts·REAP_CLEAR)는 안 건드린다(아래).
 
     `## 블록`이 결정 11 형식의 물음을 담고 있으면(결정 13 (3)) 그 물음이 인용 밖에서 첫
-    문항이 되고, 고정 선택지는 `### 2.`로 밀린다. 그 갈래에서는 `default_answer`를 안 쓴다
-    (결정 13 (6)) -- 엔진은 세션이 적은 선택지 중 무엇이 기본인지 모른다.
+    문항이 되고, 고정 선택지는 `### 2.`로 밀린다. 그 갈래에서도 고정 문항(2번)에
+    `default_answer: 2.(a)`를 쓴다(결정 18 (1), 결정 13 (6)을 뒤집는다) -- 엔진은 세션이
+    적은 1번 선택지의 기본값은 모르지만 자기가 쓴 2번 문항의 기본은 안다.
     """
     a = uuid.uuid4().hex[:8]
     fm, lines, end = read_fm(path)
@@ -1023,7 +1024,7 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
                            answers=_answers_of(troot, lines, end))
     except Exception as e:                   # 자료 수집 실패가 답변 요청 자체를 막지 않는다
         ctx = ("" if handoff else
-               "\n### 죽은 세션 마지막 기록\n\n> 자료를 읽지 못했습니다: {}\n".format(e))
+               "\n### 세션 마지막 기록\n\n> 자료를 읽지 못했습니다: {}\n".format(e))
     # 사유는 경로마다 사실이 다르다. 블록은 세션이 실패한 게 아니라 벽을 보고 판정하고 멈춘 것이다.
     cause = ("사람이 강제 중단했습니다" if killed
              else "이어받기가 3회를 넘었습니다" if handoff
@@ -1039,6 +1040,7 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
         # 결정 13 (5) - 물음이 곧 카드 제목이라 가리킬 곳이 없다. 남는 것은 사유 한 줄이다.
         head = "{}. 엔진은 더 시도하지 않습니다.\n\n{}\n".format(cause, q)
         options = _ask_options(2)
+        default_answer = "2.(a)"  # 결정 18 (1) - 고정 문항(2번)만 기본값을 안다
     elif not (killed or handoff or blocked):
         # 결정 17 - 죽은 갈래(블록도 killed도 handoff도 아니다)는 `runner.log`가 이미 적어
         # 둔 사유로 문항이 갈린다. `dead_reason`의 "주입 실패"는 표의 여섯 벌에 없는 내부
@@ -1085,11 +1087,11 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
     if not killed:
         upd["attempts"] = "0"
         upd.update({k: "" for k in REAP_CLEAR})
-        if not q:
-            # 결정 12 (4) - 기본 골라 둔 답. killed는 방금 사람이 낸 판단이라 엔진이 다음을 모른다.
-            # 결정 17 (4) - 죽은 갈래는 사유가 기본값을 고른다(무종료 마감/한도/알 수 없음 1.(a),
-            # 요청 오류/기동 실패 1.(b), 상한 초과 1.(c)).
-            upd["default_answer"] = default_answer
+        # 결정 12 (4) - 기본 골라 둔 답. killed는 방금 사람이 낸 판단이라 엔진이 다음을 모른다.
+        # 결정 17 (4) - 죽은 갈래는 사유가 기본값을 고른다(무종료 마감/한도/알 수 없음 1.(a),
+        # 요청 오류/기동 실패 1.(b), 상한 초과 1.(c)). 결정 18 (1) - 세션 물음이 선 갈래도
+        # 고정 문항(2번)에 2.(a)를 쓴다(1번은 여전히 비운다).
+        upd["default_answer"] = default_answer
     set_fm_keys(path, upd)
     return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, cause)
 

@@ -68,12 +68,12 @@ try:
     assert "### 티켓 Goal" in a and "> 토큰 갱신을 고친다." in a, "A: Goal 인용 없음\n" + a
     assert "Done when" not in a.split("### 티켓 Goal")[1].split("###")[0], "A: 다음 절까지 먹었다\n" + a
     assert "### 티켓 블록" in a and "> 인증서가 없어서" in a, "A: 블록 인용 없음\n" + a
-    assert "### 죽은 세션 마지막 기록" in a, "A: 로그 절 없음\n" + a
+    assert "### 세션 마지막 기록" in a, "A: 로그 절 없음\n" + a
     assert "SSL_ERROR_SYSCALL" in a, "A: 로그 꼬리 인용 없음\n" + a
     # 결정 4(요구 361d973e) - runner.log가 아예 없어도 절은 붙고 "찾지 못했습니다"로 채운다
     assert "### 엔진 판정 이력" in a, "A: 판정 이력 절 없음\n" + a
     assert "runner.log에서 판정 이력을 찾지 못했습니다" in a, "A: 못 찾았다는 말이 없다\n" + a
-    assert a.index("### 엔진 판정 이력") < a.index("### 죽은 세션 마지막 기록"), \
+    assert a.index("### 엔진 판정 이력") < a.index("### 세션 마지막 기록"), \
         "A: 판정 이력이 로그 절보다 뒤에 떴다\n" + a
     assert "이거 해줘" not in a, "A: 마지막 레코드가 아니라 앞 레코드를 붙였다\n" + a
     # 결정 12 (1)(2)(4) - 문항 한 벌이 인용 앞에 뜨고 default_answer가 fm에 실린다.
@@ -129,7 +129,7 @@ try:
     T.ask_human(pf, "ffff6666", 0, "", blocked=True)
     f_ = open(pf, encoding="utf-8").read()
     assert "x" * 8000 in f_, "F: 8,000자 블록이 잘렸다\n" + f_[:200]
-    assert "(전문 " not in f_.split("### 티켓 블록")[1].split("### 죽은")[0], \
+    assert "(전문 " not in f_.split("### 티켓 블록")[1].split("### 세션 마지막 기록")[0], \
         "F: 상한이 없는 블록에 잘림 표시가 붙었다"
 
     # G) 결정 13 (3)(4)(5)(6) — 블록의 결정 11 형식 물음이 인용 밖 문항으로 승격된다
@@ -146,7 +146,8 @@ try:
     assert "### 1. 이 티켓을 어떻게 할까요" not in g, "G: 고정 벌이 여전히 1이다\n" + g
     assert "아래 인용한 `## 블록`에 적힌 결정을 답해주세요" not in g, "G: 옛 정형문이 남았다\n" + g
     fm_g = T.read_fm(pg)[0]
-    assert "default_answer" not in fm_g, "G: 세션 물음이 있는데 default_answer가 있다\n" + str(fm_g)
+    assert fm_g.get("default_answer") == "2.(a)", \
+        "G: 세션 물음이 선 갈래인데 고정 문항 기본값 2.(a)가 없다\n" + str(fm_g)
 
     # H) 요구 4f761c5a — 묵은 블록(fresh_block 거짓)은 문항이 안 승격되고 정형문·제목이 갈린다
     ph = mk(ws, "hhhh0001", [], body="## Goal\n작업.\n\n## 블록\n결정해주세요.\n\n"
