@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   activeEpicFrom,
+  bucketThreadByRounds,
   chatRows,
   chatTabTitle,
   dateTimeLabel,
@@ -403,6 +404,45 @@ test("mergeProgress — 원본을 통째로 들고 있다(뭉개지 않는다 �
   const rows = mergeProgress([e], [t]);
   assert.deepEqual(rows, [{ thread: t }, { event: e }]);
   assert.equal(rows[1].event, e); // 사본이 아니라 같은 객체다
+});
+
+/** 회차 카드(§2-3 개정 2, 요구 `2aa9bdf0`) — 스레드를 회차 시작 시각으로 쪼갠다. 길이는
+ *  `starts.length + 1`이고 끝칸(index `starts.length`)이 "마지막 회차 시작 이후 = 지금 화면"이다. */
+const headingsOf = (bucket: { heading: string }[]) => bucket.map((b) => b.heading);
+
+test("bucketThreadByRounds ① — 답변 birth가 회차 k 시작 이후·k+1 시작 이전이면 칸 k에 선다(카드 k·k+1 사이)", () => {
+  const starts = [1000, 2000, 3000]; // 회차 1·2·3 시작
+  const thread = [
+    q("질문 1"),
+    a("답변 1", 500), // 회차 1보다 이르다 — 칸 0(카드 1 앞)
+    q("질문 2"),
+    a("답변 2", 1500), // 회차 1·2 사이 — 칸 1(카드 1·2 사이)
+    q("질문 3"),
+    a("답변 3", 3500), // 회차 3 시작 이후 — 끝칸(지금 화면 몫)
+  ];
+  const buckets = bucketThreadByRounds(thread, starts);
+  assert.strictEqual(buckets.length, 4); // starts.length + 1
+  assert.deepEqual(headingsOf(buckets[0]), ["질문 1", "답변 1"]);
+  assert.deepEqual(headingsOf(buckets[1]), ["질문 2", "답변 2"]);
+  assert.deepEqual(headingsOf(buckets[2]), []); // 회차 2·3 사이엔 아무것도 없다
+  assert.deepEqual(headingsOf(buckets[3]), ["질문 3", "답변 3"]);
+});
+
+test("bucketThreadByRounds ② — 답 없는 꼬리 질문은 항상 끝칸이다(마지막 카드 밖 맨 끝)", () => {
+  const starts = [1000];
+  const thread = [q("질문 1"), a("답변 1", 500), q("답 없는 질문")];
+  const buckets = bucketThreadByRounds(thread, starts);
+  assert.strictEqual(buckets.length, 2);
+  assert.deepEqual(headingsOf(buckets[0]), ["질문 1", "답변 1"]);
+  assert.deepEqual(headingsOf(buckets[1]), ["답 없는 질문"]);
+});
+
+test("bucketThreadByRounds ③ — 회차가 하나뿐이면 칸이 둘이고, 그 회차 시작 이후 답변은 끝칸(지금 화면 몫)이다", () => {
+  const thread = [q("질문 1"), a("답변 1", 1500)]; // 회차 1(시작 1000) 시작 이후
+  const buckets = bucketThreadByRounds(thread, [1000]);
+  assert.strictEqual(buckets.length, 2);
+  assert.deepEqual(headingsOf(buckets[0]), []); // 카드 1 앞엔 아무것도 없다
+  assert.deepEqual(headingsOf(buckets[1]), ["질문 1", "답변 1"]);
 });
 
 /** 말풍선 사이 묶음 (DESIGN.md §2-6 ②, designer `f0202829`). `label`이 빈 사건이 말풍선이고

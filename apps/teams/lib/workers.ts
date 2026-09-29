@@ -1009,6 +1009,18 @@ export type PersonaRun = { hash: string; verb: string; dispatchAt: string; endAt
  *  한 번에 이 5.7MB 파일을 여러 번 연다(§2-14 (7) §성능 예산 "새 파일 읽기가 0회"). 페르소나
  *  페어링을 별도 파서로 새로 두지 않고 이 한 벌의 backward 루프에 얹은 이유도 같다 — 파일을
  *  두 번 훑지 않는다. */
+/** 회차 카드 한 장의 머리 재료(§2-3 개정 2, 요구 `2aa9bdf0`) — 해시 하나의 `DISPATCH` 줄
+ *  하나에 그 sid 안에서의 순번(`n`, `nthInitOffset`이 받는 값)과 종료 짝을 실었다. `endVerb`가
+ *  `null`이면 아직 안 닫힌 회차다(`진행 중`). */
+export type DispatchRoundLog = {
+  n: number; // 이 sid의 DISPATCH 줄들 중 몇 번째인가(1부터) — nthInitOffset(file, n)의 그 n
+  sid: string;
+  worker: string;
+  dispatchAtMs: number;
+  endVerb: string | null;
+  endAtMs: number | null;
+};
+
 export const lastLogByWorker = cache(
   async (
     workersDir: string,
@@ -1024,6 +1036,9 @@ export const lastLogByWorker = cache(
     // **sid별 `DISPATCH` 해시 순서(시간순, 해시 무관)**. 이 sid의 `DISPATCH` 줄들 중 어느 해시가
     // 몇 번째인지가 §2-3 개정의 "회차 번호 n"이다.
     dispatchesBySid: Record<string, string[]>;
+    // §2-3 개정 2 — 해시별 **회차 목록**(시간순, `DISPATCH` 줄 전부). 카드 한 장 = 이 배열의
+    // 항목 하나이고 index+1이 "회차 k"다.
+    dispatchRoundsByHash: Record<string, DispatchRoundLog[]>;
   }> => {
     const text = await readFile(path.join(workersDir, "runner.log"), "utf8").catch(() => "");
     const byWorker: Record<string, { recent: string[]; result: string | null }> = {};
@@ -1033,6 +1048,12 @@ export const lastLogByWorker = cache(
     // sid별 해시 순서를 **뒤에서부터** 쌓는다(이 루프가 backward라서다) — 반환 직전에 뒤집어
     // 시간순으로 되돌린다.
     const dispatchSeqBySidRev: Record<string, string[]> = {};
+    // 해시별 회차 목록도 같은 이유로 뒤에서부터 쌓는다 — `posFromEnd`는 그 sid 안에서 끝에서 몇
+    // 번째인지고, 전체 루프가 끝나 `dispatchesBySid`의 참길이를 알아야 진짜 순번(n)이 나온다.
+    const dispatchRoundsByHashRev: Record<
+      string,
+      { sid: string; posFromEnd: number; worker: string; at: string; endVerb: string | null; endAt: string | null }[]
+    > = {};
     // 해시별 "아직 안 닫힌" 종료 줄 — backward라 종료가 자기 DISPATCH보다 먼저 걸린다(재시도의
     // 안쪽 페어링이 우선이라 이미 걸려 있으면 안 덮는다 — 더 이른 종료는 그 앞의 DISPATCH 몫이다).
     const pendingEnd: Record<string, { verb: string; at: string }> = {};
@@ -1050,11 +1071,20 @@ export const lastLogByWorker = cache(
       if (verb === "DISPATCH" && tok) {
         dispatchByHash[tok] = (dispatchByHash[tok] ?? 0) + 1;
         const sid = /(?:^| )sid=(\S+)/.exec(lines[i])?.[1];
+        const pending = pendingEnd[tok]; // 회차 목록과 personaRuns 둘 다 이 짝을 쓴다
         if (sid) {
           if (!(tok in sidByHash)) sidByHash[tok] = sid; // backward라 첫 히트가 가장 최신이다
           (dispatchSeqBySidRev[sid] ??= []).push(tok);
+          const posFromEnd = dispatchSeqBySidRev[sid].length;
+          (dispatchRoundsByHashRev[tok] ??= []).push({
+            sid,
+            posFromEnd,
+            worker,
+            at,
+            endVerb: pending?.verb ?? null,
+            endAt: pending?.at ?? null,
+          });
         }
-        const pending = pendingEnd[tok];
         if (pending) {
           const persona = /(?:^| )persona=(\S+)/.exec(lines[i])?.[1];
           if (persona && persona !== "none") {
@@ -1068,9 +1098,34 @@ export const lastLogByWorker = cache(
     }
     const dispatchesBySid: Record<string, string[]> = {};
     for (const [sid, seq] of Object.entries(dispatchSeqBySidRev)) dispatchesBySid[sid] = seq.slice().reverse();
-    return { byWorker, dispatchByHash, personaRuns, logStart, sidByHash, dispatchesBySid };
+    // 로컬 시각 문자열 -> ms(`persona-activity.ts` `logTimeMs`와 같은 관용구 — 이 파일이 이미
+    // 여러 자리에서 `Date.parse(at.replace(" ", "T"))`를 쓴다, 새 헬퍼를 안 만든다).
+    const toMs = (s: string) => Date.parse(s.replace(" ", "T"));
+    const dispatchRoundsByHash: Record<string, DispatchRoundLog[]> = {};
+    for (const [tok, revList] of Object.entries(dispatchRoundsByHashRev)) {
+      dispatchRoundsByHash[tok] = revList
+        .map((r) => ({
+          n: (dispatchesBySid[r.sid]?.length ?? 0) - r.posFromEnd + 1,
+          sid: r.sid,
+          worker: r.worker,
+          dispatchAtMs: toMs(r.at),
+          endVerb: r.endVerb,
+          endAtMs: r.endAt ? toMs(r.endAt) : null,
+        }))
+        .reverse(); // backward로 쌓았으니 시간순으로 되돌린다
+    }
+    return { byWorker, dispatchByHash, personaRuns, logStart, sidByHash, dispatchesBySid, dispatchRoundsByHash };
   },
 );
+
+/** 이 해시의 **회차 목록**(§2-3 개정 2 표, 요구 `2aa9bdf0`) — `runner.log`의 `DISPATCH <해시>`
+ *  줄 전부를 시간순으로. 카드 UI가 그리는 것이 이 배열이고, index+1이 "회차 k"다. `n`(sid 안
+ *  순번)은 `nthInitOffset(file, n)`에 그대로 넘긴다. 길이 0-1이면 호출부(`SessionStream`)가
+ *  카드를 안 세운다(개정 표 "회차가 1개 이하면"). */
+export async function dispatchRoundsForHash(root: string, hash: string): Promise<DispatchRoundLog[]> {
+  const { dispatchRoundsByHash } = await lastLogByWorker(path.join(root, "workers"));
+  return dispatchRoundsByHash[hash] ?? [];
+}
 
 /** fm `session_id`가 비었을 때(회수된 티켓)의 폴백 — `runner.log`에서 이 해시의 마지막 `DISPATCH`
  *  줄의 `sid=`(§2-3 개정, 요구 `22fd4fda`). 로그에도 없으면 `null` — 정말로 디스패치된 적이 없거나

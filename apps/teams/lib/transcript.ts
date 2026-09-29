@@ -193,12 +193,16 @@ export async function nthInitOffset(file: string, n: number): Promise<number> {
  *    그 줄을 처음부터 다시 읽는다. 잘린 줄을 파싱해 건너뛰면 그 사건이 영구히 사라진다.
  *  - `offset`이 파일 크기보다 크면 `0`부터 다시 읽는다(있을 수 없는 상태지만 무한 빈 응답보다 낫다).
  *  - `grok`이면 줄마다 `grokRecord`를 한 번 지난다. **위 두 계약이 그 경로에서도 그대로다** —
- *    깨진 꼬리 줄은 여전히 버려지고(offset이 되돌아온다), 접히지 않는 종류는 건너뛴다. */
+ *    깨진 꼬리 줄은 여전히 버려지고(offset이 되돌아온다), 접히지 않는 종류는 건너뛴다.
+ *  - **`end`(§2-3 개정 2, 요구 `2aa9bdf0`)는 선택이다.** 없으면(폴링) 종전대로 파일 끝까지.
+ *    있으면(옛 회차 카드 한 번 읽기) 그 바이트에서 읽기를 멈춘다 — 다음 회차의 `init` 오프셋을
+ *    넘기면 그 회차 사건이 섞인다(개정 표 "카드 사이에 다음 회차 사건이 안 섞인다"). */
 export async function tailEvents(
   file: string,
   offset: number,
   grok = false,
   locale: Locale = DEFAULT_LOCALE,
+  end?: number,
 ): Promise<{ events: StreamEvent[]; offset: number }> {
   let fh;
   try {
@@ -207,7 +211,8 @@ export async function tailEvents(
     return { events: [], offset }; // 아직 없는 트랜스크립트 = 빈 상태
   }
   try {
-    const { size } = await fh.stat();
+    const { size: fileSize } = await fh.stat();
+    const size = end !== undefined && end >= 0 && end <= fileSize ? end : fileSize;
     const start = offset >= 0 && offset <= size ? offset : 0;
     if (start === size) return { events: [], offset: start };
 

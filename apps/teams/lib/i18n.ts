@@ -492,6 +492,12 @@ export const ko: Record<string, string> = {
   "progress.segment.assign": "배정",
   "progress.segment.wrapup": "마무리",
 
+  // 회차 카드(§2-3 개정 2, 요구 `2aa9bdf0`) — 머리 줄의 `회차 <k>` 접두, 종료 짝이 없을 때, 옛
+  // 회차를 펼치는 동안.
+  "progress.round.label": "회차",
+  "progress.round.running": "진행 중",
+  "progress.round.loading": "읽는 중",
+
   // 오류인 결과 줄 표식(§비주얼 §60 ⑧) — `결과`·`서브`·`n줄`은 무수정이라 키로 안 올린다.
   "progress.stream.error": "오류",
 
@@ -3173,6 +3179,10 @@ export const en: Record<string, string> = {
 
   "progress.segment.assign": "Assignment",
   "progress.segment.wrapup": "Wrap-up",
+
+  "progress.round.label": "Round",
+  "progress.round.running": "In progress",
+  "progress.round.loading": "Loading",
 
   "progress.stream.error": "Error",
 

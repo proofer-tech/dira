@@ -28,8 +28,8 @@ import { parseFrontmatterHead } from "@/lib/markdown-frontmatter-rows";
 import { mayHaveRefs, type RefIndex } from "@/lib/markdown-refs";
 import { isHash, openInApp, parseAssignment, resolveWithin, type OpenResult } from "@/lib/paths";
 import { dispatchPollingNow, extendPollingUntil } from "@/lib/polling-control";
-import { findStream, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
-import { lastDispatchSid } from "@/lib/workers";
+import { findStream, nthInitOffset, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
+import { dispatchRoundsForHash, lastDispatchSid } from "@/lib/workers";
 import {
   awaitingOf,
   isAwaiting,
@@ -131,15 +131,42 @@ const NO_REFS: RefIndex = { tickets: {}, epics: {} };
  *
  *  `live`(= 티켓이 `.wip`)는 **클라이언트가 폴링을 멈출 근거다.** 티켓이 사라졌거나 조회가 실패해도
  *  `live: false`로 물러난다 — 못 찾는 티켓을 2초마다 다시 물을 이유가 없다. 빈 상태(트랜스크립트
- *  없음)도 에러가 아니라 빈 사건 배열이다(§9 "에러로 그리지 않는다"). */
+ *  없음)도 에러가 아니라 빈 사건 배열이다(§9 "에러로 그리지 않는다").
+ *
+ *  **`round`(§2-3 개정 2, 요구 `2aa9bdf0`)는 선택이다.** 없으면 종전 그대로(지금 `session_id`의
+ *  마지막 회차, 2초 폴링). 있으면 **그 회차 카드 전용 한 번 읽기**다 — 대상은 클라이언트의
+ *  `session_id`가 아니라 `dispatchRoundsForHash`가 주는 **그 회차 자신의 sid**이고(회차 카드는
+ *  회수된 세션도 가리킬 수 있다), 구간은 `[n번째 init, n+1번째 init)`으로 캡한다(다음 회차 사건이
+ *  안 섞인다 — 개정 표). grok은 `init`이 없어 파일 전체가 그 회차다(개정 표 "grok은 물러난다").
+ *  회차를 못 찾거나(로테이션으로 빠졌다) 트랜스크립트가 없으면 빈 사건 — 카드가 `트랜스크립트
+ *  없음`으로 그린다(§9 빈 상태 문구 그대로, 새 문구 0). `live: false`다 — 이 응답 뒤로 다시
+ *  안 부른다(카드가 한 번만 읽는다). */
 export async function tailSession(
   projectId: string,
   stem: string,
   offset: number,
+  round?: number,
 ): Promise<StreamChunk> {
   // 클라이언트가 준 숫자다. `tailEvents`가 파일 크기로 다시 자르지만 NaN·Infinity는 그 비교를
   // 통과해 `Buffer.alloc`까지 간다 — 여기서 정수 아닌 것을 0으로 되돌린다.
   const at = Number.isSafeInteger(offset) && offset >= 0 ? offset : 0;
+  if (round !== undefined) {
+    try {
+      const t = await target(projectId, stem);
+      const rounds = await dispatchRoundsForHash(t.root, t.stem);
+      const r = rounds[round - 1];
+      if (!r) return { events: [], offset: at, live: false, inbox: false, done: false, refs: NO_REFS };
+      const s = await findStream(r.sid);
+      if (!s) return { events: [], offset: at, live: false, inbox: false, done: false, refs: NO_REFS };
+      // grok은 init 레코드가 없다 — 그 회차의 구간은 파일 전체다(§2-3 개정 표의 물러남 그대로).
+      const start = s.grok || r.n === 1 ? 0 : await nthInitOffset(s.file, r.n);
+      const end = s.grok ? undefined : await nthInitOffset(s.file, r.n + 1);
+      const chunk = await tailEvents(s.file, start, s.grok, await readLanguage(), end);
+      return { ...chunk, live: false, inbox: false, done: false, refs: NO_REFS };
+    } catch {
+      return { events: [], offset: at, live: false, inbox: false, done: false, refs: NO_REFS };
+    }
+  }
   try {
     const t = await target(projectId, stem);
     const live = t.state === "wip";

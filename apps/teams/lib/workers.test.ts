@@ -97,6 +97,7 @@ const {
   unarchivedFailures,
   unarchivedResumes,
   archivedRows,
+  dispatchRoundsForHash,
 } = await import("./workers.ts");
 
 const SFX = { inProgress: ".wip", done: ".done" };
@@ -521,6 +522,37 @@ test("§2-3 개정 — 재활용 세션에서는 자기 회차만 흘린다: 해
   const off2 = await nthInitOffset(file, round2);
   const b = await tailEvents(file, off2);
   assert.deepEqual(b.events.map((e) => e.body), ["b157aee4 본문"]); // 443dd1fa의 사건이 하나도 안 온다
+});
+
+test("dispatchRoundsForHash — 이 해시의 회차 목록을 시간순으로 낸다, sid 재사용이어도 각자 자기 n을 받는다 (§2-3 개정 2, 요구 2aa9bdf0)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  writeFileSync(
+    path.join(root, "workers", "runner.log"),
+    [
+      // 회차 1 — sid=x의 1번째 DISPATCH, DONE으로 닫힌다
+      "2026-08-01 00:00:00 [w1] DISPATCH aaaa1111 kind=work persona=dev sid=x log=x.log prio=3",
+      "2026-08-01 00:10:00 [w1] DONE aaaa1111 sid=x",
+      // 다른 해시가 같은 sid를 하나 더 문다 — aaaa1111의 회차 2는 이 줄 다음이라 sid 안 순번이 3이다
+      "2026-08-01 00:11:00 [w1] DISPATCH bbbb2222 kind=work persona=dev sid=x log=x.log prio=3",
+      "2026-08-01 00:12:00 [w1] FAIL bbbb2222 sid=x",
+      // 회차 2 — 같은 sid=x, 아직 안 닫혔다(진행 중)
+      "2026-08-01 00:13:00 [w1] DISPATCH aaaa1111 kind=work persona=dev sid=x log=x.log prio=3",
+      "",
+    ].join("\n"),
+  );
+
+  const rounds = await dispatchRoundsForHash(root, "aaaa1111");
+  assert.strictEqual(rounds.length, 2);
+  assert.strictEqual(rounds[0].n, 1); // sid x의 1번째 DISPATCH
+  assert.strictEqual(rounds[0].worker, "w1");
+  assert.strictEqual(rounds[0].endVerb, "DONE");
+  assert.strictEqual(rounds[0].endAtMs, Date.parse("2026-08-01T00:10:00"));
+  assert.strictEqual(rounds[1].n, 3); // 같은 sid의 3번째 DISPATCH(bbbb2222가 2번째를 썼다)
+  assert.strictEqual(rounds[1].endVerb, null); // 안 닫혔다 — 진행 중
+  assert.strictEqual(rounds[1].endAtMs, null);
+  assert.ok(rounds[0].dispatchAtMs < rounds[1].dispatchAtMs); // 시간순
+
+  assert.deepStrictEqual(await dispatchRoundsForHash(root, "zzzz9999"), []); // 로그에 없다
 });
 
 test("주석 처리된 할당문은 설정이 아니다 (worker.sh.example이 통째로 주석이다)", async () => {

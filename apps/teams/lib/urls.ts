@@ -473,6 +473,49 @@ export function mergeProgress<E extends { ts?: string }, T extends { role: strin
   return out;
 }
 
+/** 회차 카드 한 장의 머리(§2-3 개정 2, 요구 `2aa9bdf0`) — `lib/workers.ts` `DispatchRoundLog`의
+ *  화면판이다. 이 파일은 `node:*`를 못 타서 그 타입을 직접 import하지 않는다(`mergeProgress`
+ *  머리말과 같은 이유) — `page.tsx`가 서버에서 짝 맞춰 내려준다. `k`는 1부터, 이 해시의
+ *  회차 순번이다(배열 index+1과 같다 — 호출부가 따로 계산하지 않는다). */
+export type RoundHeader = {
+  k: number;
+  worker: string;
+  dispatchAtMs: number;
+  endVerb: string | null;
+  endAtMs: number | null;
+};
+
+/** 스레드를 회차 경계로 쪼갠다(§2-3 개정 2 "질문-답변은 카드 사이에 선다") — 질문 n + 답변 n
+ *  쌍은 **답변 `birth`가 속한 틈**에 선다: 회차 k 시작 이후 - 회차 k+1 시작 이전이면 카드 k와
+ *  카드 k+1 사이, 첫 회차보다 이르면 카드 1 앞이다. 돌려주는 배열의 길이는 `starts.length + 1`
+ *  이고 **마지막 칸**(index `starts.length`)이 "마지막 회차 시작 이후" — 그 칸은 카드로 안
+ *  그린다, 지금 화면(`mergeProgress`가 스트림과 다시 합치는 자리)이 그대로 받는다.
+ *
+ *  덩어리 규칙은 `mergeProgress`와 같다(답변이 닫고, 답 없는 꼬리는 맨 끝 칸) — 시각만 사건이
+ *  아니라 회차 시작이 축이다. 질문에 시각을 안 지어내는 것도 같은 이유다(짝인 답변이 대신한다). */
+export function bucketThreadByRounds<T extends { role: string; birth?: number }>(
+  thread: T[],
+  starts: number[], // dispatchAtMs, 오름차순, 회차 1부터
+): T[][] {
+  const chunks: { at: number; items: T[] }[] = [];
+  let pending: T[] = [];
+  for (const item of thread) {
+    pending.push(item);
+    if (item.role === "answer") {
+      chunks.push({ at: item.birth ?? 0, items: pending });
+      pending = [];
+    }
+  }
+  if (pending.length) chunks.push({ at: Infinity, items: pending }); // 답 없는 꼬리 질문 = 맨 끝 칸
+  const buckets: T[][] = Array.from({ length: starts.length + 1 }, () => []);
+  for (const c of chunks) {
+    let idx = 0;
+    while (idx < starts.length && c.at >= starts[idx]) idx++;
+    buckets[idx].push(...c.items);
+  }
+  return buckets;
+}
+
 /** `mergeProgress`가 짠 한 줄기를 **말풍선과 그 사이 묶음**으로 (§2-6 ②, designer `f0202829`).
  *  경계는 말풍선이다 — 스레드 항목과 `isBubble`이 참인 사건. 그 사이(상자 시작·끝 포함)의 연속
  *  사건이 접힌 한 버킷이 된다. **0건이면 버킷을 안 만든다**(빈 묶음 줄은 소음이다) — `n`이

@@ -78,8 +78,15 @@ import {
 } from "@/lib/projects";
 import { findStream, nthInitOffset, sessionIdOf } from "@/lib/transcript";
 import { ticketCostChunk } from "@/lib/usage";
-import { dateTimeLabel, decodeHash, engineCan, formatRemaining } from "@/lib/urls";
-import { dispatchRound, holderEngine, lastDispatchSid, listWorkers, reassignCount } from "@/lib/workers";
+import { dateTimeLabel, decodeHash, engineCan, formatRemaining, type RoundHeader } from "@/lib/urls";
+import {
+  dispatchRound,
+  dispatchRoundsForHash,
+  holderEngine,
+  lastDispatchSid,
+  listWorkers,
+  reassignCount,
+} from "@/lib/workers";
 
 // 큐는 GUI 밖에서(cron·세션이) 바뀐다. 프리렌더하면 빌드 시점 내용이 굳는다.
 export const dynamic = "force-dynamic";
@@ -219,6 +226,17 @@ export default async function TicketDetail({
     const round = await dispatchRound(project.root, ticket.stem, sessionId);
     if (round >= 2) startOffset = await nthInitOffset(transcript.file, round);
   }
+  // 회차 카드(§2-3 개정 2, 요구 `2aa9bdf0`) — 이 해시의 `DISPATCH` 줄 전부, 시간순. 1개 이하면
+  // `SessionStream`이 카드를 안 세운다(개정 표) — 여기서는 그냥 넘긴다, 갈림길은 그 컴포넌트
+  // 하나가 진다(호출부 둘로 안 흩어진다). `lastLogByWorker`가 이미 위 `dispatchRound`·
+  // `holderEngine`으로 이 요청 안에서 읽혔다(`cache()`) — 파일을 두 번 안 연다.
+  const rounds: RoundHeader[] = (await dispatchRoundsForHash(project.root, ticket.stem)).map((r, i) => ({
+    k: i + 1,
+    worker: r.worker,
+    dispatchAtMs: r.dispatchAtMs,
+    endVerb: r.endVerb,
+    endAtMs: r.endAtMs,
+  }));
   // 갈림길이 하나 늘었다: **이 티켓을 물고 있는 워커의 엔진**(§4-3 · §비주얼 §23 ⑤). 그 엔진에
   // 없는 기능이 있으면 화면이 그걸 알려 준다 — 진입점을 지우지 않는다. 완료 티켓은 아무도 안 물고
   // 있어 `null`이고, 그때는 종전 빈 상태 그대로다(추측해서 문구를 고르지 않는다).
@@ -318,6 +336,8 @@ export default async function TicketDetail({
             stream={!!transcript}
             // 재활용 세션의 회차 구간 시작(§2-3 개정, 요구 `22fd4fda`) — 회차 1이면 0.
             startOffset={startOffset}
+            // 회차 카드(§2-3 개정 2, 요구 `2aa9bdf0`) — 1개 이하면 컴포넌트가 카드를 안 세운다.
+            rounds={rounds}
             awaiting={awaiting}
             answerFile={awaiting ? `${awaitingOf(ticket)}${config.done}.md` : undefined}
             vault={vault}

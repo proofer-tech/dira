@@ -35,10 +35,12 @@ test("계획 꼬리 문구가 없다 — `기록 n건`을 두 번 세는 줄이 
 test("계획 손잡이가 `ml-auto`를 받는다 — 꼬리가 죽으며 옮겨 놓인 그 자리(§59 ③-1)", () => {
   // 배치 개정(§비주얼 §59 ⑦-1, 요구 `1c01c2d6`)으로 `SegmentBlock`(`배정`·`마무리`)이 계획과
   // 같은 손잡이 문자열을 그대로 재사용해 자리가 하나 는다 — 새 문자열이 아니다(계약이 이미
-  // "문자열도 그대로다"로 넘긴 값).
+  // "문자열도 그대로다"로 넘긴 값). §2-3 개정 2(요구 `2aa9bdf0`)의 `RoundCard`(회차 카드)가
+  // 같은 그릇 관용구를 한 번 더 재사용해 셋째 자리가 는다 — 말풍선만 테두리를 갖는다는 §29 ①
+  // 그릇 축을 지키려고 진짜 `<Card>` 대신 이 `<details>` 손잡이를 그대로 썼다.
   assert.equal(
     (s.match(/ml-auto size-4 shrink-0 text-muted-foreground/g) ?? []).length,
-    2,
+    3,
     "ChevronRight 손잡이가 ml-auto를 안 든다",
   );
 });
@@ -232,5 +234,35 @@ test("계획 절이 없는 티켓에는 칩이 안 뜬다 — `plans.length > 0`
     s,
     /\{t\("progress\.stream\.groupByPlan"\)\}/,
     "단계로 묶기 칩이 사전 키를 안 쓴다",
+  );
+});
+
+// 회차 카드(§2-3 개정 2, 요구 `2aa9bdf0`) — `rounds.length >= 2`일 때만 카드를 세우고, 그 이하면
+// 상자 안이 종전 `listContent` 그대로다(개정 표 "회차가 1개 이하면 카드를 안 세운다"). 이 파일도
+// 클라이언트 컴포넌트를 못 마운트해서(위 머리말) 소스 검사로 고정한다.
+test("회차 카드 — `rounds.length >= 2`가 유일한 문지기고, 아니면 상자가 종전 listContent 그대로다", () => {
+  assert.match(s, /const carded = rounds\.length >= 2;/, "회차 카드 문지기 조건이 바뀌었다");
+  assert.match(
+    s,
+    /\{carded\s*\?[\s\S]{0,2000}?:\s*listContent\}/,
+    "carded가 거짓일 때 상자가 종전 listContent로 안 물러난다",
+  );
+});
+
+test("회차 카드 — 마지막 회차만 기본으로 펼치고, 앞 회차 몸통은 RoundBody가 회차 번호로 한 번만 읽는다", () => {
+  assert.match(
+    s,
+    /defaultOpen=\{i === rounds\.length - 1\}/,
+    "마지막 회차만 펼치는 조건이 바뀌었다",
+  );
+  assert.match(
+    s,
+    /<RoundBody[\s\S]{0,200}?k=\{r\.k\}/,
+    "앞 회차 카드가 RoundBody에 회차 번호(k)를 안 넘긴다",
+  );
+  assert.match(
+    s,
+    /tailSession\(project, stem, 0, k\)/,
+    "RoundBody가 tailSession을 회차 인자로 한 번만 부르는 자리가 없다",
   );
 });

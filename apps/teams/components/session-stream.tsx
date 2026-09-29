@@ -22,7 +22,7 @@
  *  `engineCan("interject", …)`(`lib/urls.ts`. codex는 둘 다 안 되고 grok은 앞만 된다).
  *  없는 쪽은 상자 자리에 `<EmptyState>`, 폼 자리에 비활성 + 사유 한 줄이다.
  *  **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTrackedRouter } from "@/lib/route-pending";
 import {
   ArrowDown,
@@ -88,6 +88,8 @@ import type { InterjectReason } from "@/lib/interject";
 import type { OptionGroup, PlanItem, PlanProgress, ThreadItem } from "@/lib/queue";
 import type { StreamEvent } from "@/lib/transcript";
 import {
+  bucketThreadByRounds,
+  dateTimeLabel,
   engineCan,
   expandable,
   formatElapsed,
@@ -103,6 +105,7 @@ import {
   type ProgressFilterKind,
   progressMarkerText,
   relativeElapsed,
+  type RoundHeader,
   toolChipCounts,
   type InterjectMode,
 } from "@/lib/urls";
@@ -166,6 +169,7 @@ export function SessionStream({
   variant,
   rev,
   startOffset = 0,
+  rounds = [],
 }: {
   project: string;
   stem: string;
@@ -229,6 +233,10 @@ export function SessionStream({
    *  `dispatchRound`·`nthInitOffset`으로 미리 계산해 내려준다. 기본값 0은 종전 그대로다
    *  (회차 1 · 세션이 안 붙은 자리 · 이 prop을 안 넘기는 워커 다이얼로그). */
   startOffset?: number;
+  /** 회차 목록(§2-3 개정 2, 요구 `2aa9bdf0`) — 서버가 `dispatchRoundsForHash`로 내려준다. 길이가
+   *  2 미만이면 카드를 안 세운다(개정 표 "회차가 1개 이하면") — 이 prop을 안 넘기는 워커
+   *  다이얼로그는 기본값 `[]`이라 그 화면과 클래스 0 차이다. */
+  rounds?: RoundHeader[];
 }) {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   // 폴링이 실어 오는 새 표식 값을 누적한다(§9 §클라이언트가 폴링하는 자리) — vault와 달리
@@ -386,8 +394,17 @@ export function SessionStream({
   const visibleEvents =
     variant === "worker" ? events.filter((e) => matchesStreamFilter(e, kindFilter, query)) : events;
 
+  // 회차 카드(§2-3 개정 2, 요구 `2aa9bdf0`) — 2장 미만이면 이 절 전체가 종전 화면과 클래스 0
+  // 차이다(개정 표 "회차가 1개 이하면 카드를 안 세운다"). `carded`가 거짓인 동안 아래 `liveThread`는
+  // `thread` 그 자체라 `merged`도 종전 그대로다.
+  const carded = rounds.length >= 2;
+  // 스레드를 회차 경계로 쪼갠다 — 마지막 칸(끝 index)만 지금 이 컴포넌트가 폴링하는 "살아있는"
+  // 몫이다. 앞 칸들은 카드 사이 틈에 그대로 선다(아래 JSX) — 옛 회차의 Q&A는 파일을 다시 안
+  // 읽는다, 이미 `thread` prop 안에 있다(§2-3 개정 2 "카드 사이에 선다").
+  const threadBuckets = carded ? bucketThreadByRounds(thread, rounds.map((r) => r.dispatchAtMs)) : null;
+  const liveThread = threadBuckets ? threadBuckets[threadBuckets.length - 1] : thread;
   // 시간순 한 줄기(§2-3 ②) — 순서 규칙은 `lib/urls.ts`의 순수 함수가 들고 있고 테스트가 고정한다.
-  const merged = mergeProgress(visibleEvents, thread);
+  const merged = mergeProgress(visibleEvents, liveThread);
   // 말풍선인가는 `label === ""` 하나로 판정한다(assistant `text` · 참견 · 첫 아닌 사용자 프롬프트가
   // 전부 빈 label). `groupProgress`가 그 줄기를 말풍선(경계)과 그 사이 묶음으로 가른다(§2-6 ②).
   const isBubble = (e: StreamEvent) => e.label === "";
@@ -752,7 +769,55 @@ export function SessionStream({
                 stream ? "h-[32rem]" : "max-h-[32rem]",
               )}
             >
-              {listContent}
+              {/* 회차 카드(§2-3 개정 2, 요구 `2aa9bdf0`) — 상자 하나는 그대로고(위 `className`
+                  무수정), 안이 회차 단위로 갈린다. `carded`가 거짓이면(회차 1개 이하) 종전
+                  `listContent` 그대로라 클래스 0 차이다. // ponytail: 마지막 카드 안에 계획
+                  아코디언(`PlanBlock`)이 있으면 그 `sticky -top-2`가 이 카드 summary의 같은
+                  top과 겹칠 수 있다 — 회차 카드 + 진행중 계획이 겹치는 드문 조합, 신고되면
+                  카드 summary의 top을 늘린다. */}
+              {carded
+                ? rounds.map((r, i) => (
+                    <Fragment key={`round${r.k}`}>
+                      {threadBuckets![i].length > 0 && (
+                        <ProgressItems
+                          project={project}
+                          items={groupProgress(
+                            threadBuckets![i].map((th) => ({ thread: th })),
+                            isBubble,
+                          )}
+                          threadKey={threadKey}
+                          onToggle={onToggle}
+                          vault={vault}
+                          refs={liveRefs}
+                        />
+                      )}
+                      <RoundCard
+                        k={r.k}
+                        worker={r.worker}
+                        dispatchAtMs={r.dispatchAtMs}
+                        endVerb={r.endVerb}
+                        endAtMs={r.endAtMs}
+                        defaultOpen={i === rounds.length - 1}
+                        now={now}
+                        onToggle={onToggle}
+                      >
+                        {i === rounds.length - 1 ? (
+                          listContent
+                        ) : (
+                          <RoundBody
+                            project={project}
+                            stem={stem}
+                            k={r.k}
+                            threadKey={threadKey}
+                            onToggle={onToggle}
+                            vault={vault}
+                            refs={liveRefs}
+                          />
+                        )}
+                      </RoundCard>
+                    </Fragment>
+                  ))
+                : listContent}
             </div>
           );
         })()}
@@ -861,6 +926,127 @@ function ProgressItems({
         );
       })}
     </>
+  );
+}
+
+/** 회차 카드 한 장(§2-3 개정 2, 요구 `2aa9bdf0`) — 그릇은 `PlanBlock`/`SegmentBlock`과 같은
+ *  `<details>` + sticky summary 관용구를 재사용한다(카드가 새 그릇 문법을 안 늘린다). 진짜
+ *  `<Card>`(네 변 테두리)는 안 쓴다 — §29 ①의 그릇 축이 "테두리는 말풍선만" 하나로 이미 닫혀
+ *  있어서, 넷째 테두리 그릇을 더하면 그 축이 깨진다. 주도성 5 판단(티켓 `autonomy` 펜스).
+ *
+ *  **자식은 `opened`가 참일 때만 마운트한다** — 닫힌 `<details>`도 DOM엔 자식이 있어서
+ *  `open={false}`만으로는 "첫 렌더에서 앞 회차 구간을 안 읽는다"(개정 표)가 안 지켜진다. 처음
+ *  열리는 순간(`onToggle`) `opened`가 한 번 참이 되고 그 뒤로는 접어도 다시 안 닫는다 —
+ *  `RoundBody`의 fetch가 두 번 안 돈다(닫았다 여는 것은 흔하고, 이미 읽은 걸 또 읽을 이유가 없다). */
+function RoundCard({
+  k,
+  worker,
+  dispatchAtMs,
+  endVerb,
+  endAtMs,
+  defaultOpen,
+  now,
+  onToggle,
+  children,
+}: {
+  k: number;
+  worker: string;
+  dispatchAtMs: number;
+  endVerb: string | null;
+  endAtMs: number | null;
+  defaultOpen: boolean;
+  now: number;
+  onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
+  children: React.ReactNode;
+}) {
+  const t = useT();
+  const [opened, setOpened] = useState(defaultOpen);
+  const endText = endVerb ? `${endVerb} ${dateTimeLabel(endAtMs ?? dispatchAtMs, now)}` : t("progress.round.running");
+  return (
+    <details
+      open={defaultOpen || undefined}
+      onToggle={(e) => {
+        onToggle(e);
+        if (e.currentTarget.open) setOpened(true);
+      }}
+      className={cn(PLAN_BLOCK, "open:[&>summary>svg:last-child]:rotate-90")}
+    >
+      <summary
+        className={cn(
+          LINE,
+          "sticky -top-2 z-20 flex items-center gap-2 cursor-pointer list-none bg-background card-tint [&::-webkit-details-marker]:hidden",
+        )}
+      >
+        <span className="shrink-0 text-sm font-medium text-foreground">
+          {t("progress.round.label")} {k}
+        </span>
+        <span className="min-w-0 truncate text-xs text-muted-foreground">
+          {worker} - {dateTimeLabel(dispatchAtMs, now)} - {endText}
+        </span>
+        <ChevronRight aria-hidden className="ml-auto size-4 shrink-0 text-muted-foreground" />
+      </summary>
+      {opened ? children : null}
+    </details>
+  );
+}
+
+/** 옛 회차 카드의 몸통(§2-3 개정 2) — 펼칠 때 **한 번만** `tailSession(project, stem, 0, k)`를
+ *  부른다. 폴링이 없다(개정 표 "앞 회차는 펼칠 때 구간을 한 번 읽고 끝이다") — 마지막 회차
+ *  카드만 2초 폴링(위 poll effect)을 그대로 쓴다. **스레드는 안 섞는다** — 이 회차의 질문-답변은
+ *  이미 카드 **밖** 틈에 그려졌다(`bucketThreadByRounds`, §2-3 개정 2 "카드 사이에 선다") —
+ *  여기는 사건만이다. 서버가 빈 배열을 주면(sid를 못 찾았다 - 로테이션으로 빠졌다 - grok 파일이
+ *  없다) `ticketDetail.noTranscript`를 **한 줄로**(§9 빈 상태 문구 그대로, 개정 표 "머리 +
+ *  트랜스크립트 없음 한 줄") — `<EmptyState>` 그릇(테두리 + py-10)은 카드 안에서 너무 무거워
+ *  안 쓴다. */
+function RoundBody({
+  project,
+  stem,
+  k,
+  threadKey,
+  onToggle,
+  vault,
+  refs,
+}: {
+  project: string;
+  stem: string;
+  k: number;
+  threadKey: Map<ThreadItem, string>;
+  onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
+  vault?: Vault;
+  refs?: RefIndex;
+}) {
+  const t = useT();
+  const [state, setState] = useState<{ status: "loading" | "empty" | "loaded"; events: StreamEvent[] }>({
+    status: "loading",
+    events: [],
+  });
+  useEffect(() => {
+    let stop = false;
+    void tailSession(project, stem, 0, k).then((r) => {
+      if (!stop) setState({ status: r.events.length ? "loaded" : "empty", events: r.events });
+    });
+    return () => {
+      stop = true;
+    };
+  }, [project, stem, k]);
+  if (state.status === "loading") {
+    return <p className={cn(LINE, "text-xs text-muted-foreground")}>{t("progress.round.loading")}</p>;
+  }
+  if (state.status === "empty") {
+    return <p className={cn(LINE, "text-xs text-muted-foreground")}>{t("ticketDetail.noTranscript")}</p>;
+  }
+  return (
+    <ProgressItems
+      project={project}
+      items={groupProgress(
+        state.events.map((e) => ({ event: e })),
+        (e) => e.label === "",
+      )}
+      threadKey={threadKey}
+      onToggle={onToggle}
+      vault={vault}
+      refs={refs}
+    />
   );
 }
 

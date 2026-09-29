@@ -175,6 +175,30 @@ test("nthInitOffset — n번째 system init 레코드의 바이트 오프셋. n�
   assert.deepEqual(empty.events, []);
 });
 
+test("tailEvents — end로 구간을 캡한다: [start, end) 밖의 다음 회차 사건이 안 섞인다 (§2-3 개정 2, 요구 2aa9bdf0)", async () => {
+  const f = path.join(tmp, "round-card.jsonl");
+  const init1 = rec({ type: "system", subtype: "init" });
+  const body1 = assistant([{ type: "text", text: "1회차" }]);
+  const result = rec({ type: "result" });
+  const init2 = rec({ type: "system", subtype: "init" });
+  const body2 = assistant([{ type: "text", text: "2회차" }]);
+  writeFileSync(f, init1 + body1 + result + init2 + body2);
+  const off2 = Buffer.byteLength(init1 + body1 + result);
+
+  // end 없이 회차 1을 읽으면(종전 그대로) 회차 2 사건까지 다 온다 — 폴링이 계속 흐르는 자리다.
+  const noEnd = await tailEvents(f, 0);
+  assert.deepEqual(noEnd.events.map((e) => e.body), ["1회차", "2회차"]);
+
+  // 회차 1 카드는 end=off2로 캡한다 — 회차 2의 "2회차" 사건이 안 섞인다.
+  const capped = await tailEvents(f, 0, false, undefined, off2);
+  assert.deepEqual(capped.events.map((e) => e.body), ["1회차"]);
+
+  // 회차 2는 off2부터 파일 끝까지(카드 표 "없으면 파일 끝") — end가 파일 크기를 넘으면 무시된다.
+  const end2 = Buffer.byteLength(init1 + body1 + result + init2 + body2);
+  const round2 = await tailEvents(f, off2, false, undefined, end2 + 999);
+  assert.deepEqual(round2.events.map((e) => e.body), ["2회차"]);
+});
+
 test("nthInitOffset — 파일이 없으면 0 (부르는 쪽이 이미 findStream으로 있음을 확인했다)", async () => {
   assert.equal(await nthInitOffset(path.join(tmp, "없는파일.jsonl"), 2), 0);
 });
