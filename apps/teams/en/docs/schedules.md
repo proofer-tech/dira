@@ -20,7 +20,10 @@ all, because the first screen is onboarding. Ask anything once and the panel app
 then on it stays.
 
 1. Press `New schedule` to the right of the heading on that lower half. A dialog opens.
-2. Pick `Repeat`. It opens on `Once`, and the rest are `Daily`, `Weekly`, `Monthly` and `cron`.
+2. Pick `Repeat`. The dialog opens with `cron` selected, and the cron field under it is empty,
+   showing only the grey hint `0 9 * * 1`. Unless you mean to write the five fields yourself, open
+   the select and switch to `Once`, `Daily`, `Weekly` or `Monthly`. Close the dialog and open it
+   again, and it is back on `cron`.
 3. Fill in `Time`. The shape of this field changes with the option you picked (see the table
    below). It opens empty, so you have to put a value in.
 4. Write what you want done in `Prompt`. It is the same sentence you would type asking at home.
@@ -45,8 +48,7 @@ lower line is the next scheduled time.
   no `last day of the month` value.
 - Times are read in this computer's time zone. There is no field for picking a zone.
 - **No cron string appears in the first four.** Nobody picking Monday at 9 has to write
-  `0 9 * * 1` by hand. The screen builds it. If you want to write one yourself, the fifth option
-  is that field.
+  `0 9 * * 1` by hand. Switch `Repeat` to `Weekly` and the screen builds it.
 - There is no `every 30 minutes` or `every 3 hours` wording. You write those in the `cron` field
   as well. Every 30 minutes is `*/30 * * * *`.
 - **There is nowhere to edit one.** The two operations are making and deleting. To change the
