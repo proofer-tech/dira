@@ -62470,6 +62470,7 @@ stream 큐처럼 설치본을 쓰는 큐에서는 같은 카드가 또 생길 �
 - [ ] 수정키 없이 누르면 종전대로 내장 브라우저로 열린다.
 - [ ] `git diff --stat master`에 `desktop/main.ts` - `tick.sh` - `tickets.py` - `browse.sh` - `browser.sh` - `package.json`이 없다.
 - [ ] `pnpm --dir apps/teams exec tsc --noEmit`과 `pnpm --dir apps/teams test`가 통과한다.
+
 ### P450. 소스 컨트롤이 기다리는 동안을 보여 준다 (요구 `3b6190f6`, 왕복 0회)
 
 스펙은 §11-18. 첫 로드 스켈레톤 - 누른 버튼의 진행 라벨 - 성공 한 줄 - 실패 때 메시지 보존 -
