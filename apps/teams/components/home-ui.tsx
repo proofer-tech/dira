@@ -3361,7 +3361,7 @@ function ScheduleCreateDialog({
   const t = useT();
   const locale = useLocale();
   const [open, setOpen] = useState(false);
-  const [kind, setKind] = useState<ScheduleKind>("once");
+  const [kind, setKind] = useState<ScheduleKind>("cron");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [weekday, setWeekday] = useState("1");
@@ -3375,7 +3375,7 @@ function ScheduleCreateDialog({
   // 열 때도 닫을 때도 초기화한다(`epic-sidebar-create.tsx`와 같은 값) — 취소 · `Esc` ·
   // 바깥 클릭 다 이 길이다(§62 (5) §닫으면 — "세 칸을 초기값으로 되돌린다").
   const reset = () => {
-    setKind("once");
+    setKind("cron");
     setDate("");
     setTime("");
     setWeekday("1");
