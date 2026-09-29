@@ -981,10 +981,15 @@ function EngineCell({
       </code>
       {/* 자리는 엔진 이름 바로 다음 · `·` 사슬 밖(§26 §활성 계정 슬롯) — 머리에 들고 절이 아니다.
           잉크가 `--muted-foreground`인 것은 이 라벨이 소비량의 주어가 아니기 때문이다
-          (§0-8 §개정 ③ — "이 라벨은 소비량의 주어가 아니다"). 활성 항목이 0개면 이 슬롯만 빠진다 */}
+          (§0-8 §개정 ③ — "이 라벨은 소비량의 주어가 아니다"). 활성 항목이 0개면 이 슬롯만 빠진다.
+          `hidden sm:inline` — 넷째 단계(29e1e11c). 나머지 셋(`lg` 속도 · `md` 리셋 · `sm` 게이지)을
+          다 거치고도 이메일 라벨(email 길이) + idle 풀 조합에서 390폭이 넘친다 - 실측
+          `footer.scrollWidth=443` - `dispatchSpan.right=442.9`. §1-6 §자르기는 "이 수는 안
+          잘린다"를 하드 불변으로 못 박았으니 자를 차례가 이 라벨로 온다(엔진 이름 뒤 §38 순서상
+          가장 먼저 빠지는 값 - 소비량의 주어가 아니라는 이유가 여기서도 선다) */}
       {accountLabel && (
         <span
-          className="max-w-32 shrink-0 truncate text-xs text-muted-foreground"
+          className="hidden max-w-32 shrink-0 truncate text-xs text-muted-foreground sm:inline"
           title={accountLabel}
         >
           {activeLabel && <span className="sr-only">{activeLabel} </span>}
