@@ -3,6 +3,7 @@ import { join } from "node:path";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { createHighlighter } from "shiki";
+import { Check, Copy } from "lucide-react";
 
 import "./fonts.css";
 import "./manual.css";
@@ -111,9 +112,12 @@ async function Doc({
             }}
           />
           <span className="lang">{lang}</span>
-          {/* ⑦① 기본 테마의 이 버튼은 탭 정거장인데 포커스에서도 안 보였다. CSS가 고친다. */}
+          {/* ⑦① 기본 테마의 이 버튼은 탭 정거장인데 포커스에서도 안 보였다. CSS가 고친다.
+              아이콘 둘 다 굽고 `.copied` 클래스가 어느 쪽을 보일지 CSS로 고른다(`.appearance`
+              sun/moon과 같은 관용구, `shell.tsx` `Behaviors`가 클래스를 토글). */}
           <button type="button" className="copy" aria-label={t(locale, "manualShell.copyCodeAriaLabel")}>
-            {t(locale, "manualShell.copyLabel")}
+            <Copy className="i-copy" aria-hidden />
+            <Check className="i-check" aria-hidden />
           </button>
         </div>
       );

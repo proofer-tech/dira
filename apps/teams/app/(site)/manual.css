@@ -496,17 +496,35 @@ body {
   position: absolute;
   top: 12px;
   right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 40px;
   height: 40px;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
   color: var(--muted-fg);
-  font-family: inherit;
-  font-size: 12px;
   cursor: pointer;
   opacity: 0;
   transition: opacity 150ms ease-out;
+}
+.copy svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.copy .i-check,
+.copy.copied .i-copy {
+  display: none;
+}
+.copy.copied .i-check {
+  display: block;
 }
 /* `:focus-visible`가 아니라 `:focus`다 — 크롬은 프로그램이 준 포커스(`.focus()`)를
    `:focus-visible`로 안 쳐서, 그 선택자로는 정거장이 도로 안 보이는 창이 남는다. */

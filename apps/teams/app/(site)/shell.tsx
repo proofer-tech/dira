@@ -88,7 +88,6 @@ export function MenuToggle() {
 
 /** 그리는 것이 없다. 위임 클릭(복사)과 아웃라인 현재 항목 둘만 건다. */
 export function Behaviors() {
-  const t = useT();
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
@@ -99,8 +98,8 @@ export function Behaviors() {
       const pre = btn.parentElement?.querySelector("pre");
       if (!pre) return;
       navigator.clipboard.writeText(pre.textContent ?? "").then(() => {
-        btn.textContent = t("manualShell.copiedLabel");
-        setTimeout(() => (btn.textContent = t("manualShell.copyLabel")), 1500);
+        btn.classList.add("copied");
+        setTimeout(() => btn.classList.remove("copied"), 1500);
       });
     };
     document.addEventListener("click", onClick);
@@ -128,6 +127,6 @@ export function Behaviors() {
       document.removeEventListener("click", onClick);
       io.disconnect();
     };
-  }, [t]);
+  }, []);
   return null;
 }
