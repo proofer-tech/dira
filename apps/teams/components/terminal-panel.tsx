@@ -22,6 +22,7 @@ import { readPtyStream } from "@/lib/pty-stream";
 import { FindBarChrome } from "@/components/find-bar";
 import { isShellBoundCtrlF, resultLabel, searchDecorations } from "@/lib/terminal-search";
 import { openLink } from "@/components/browser-panel";
+import { dispatchLinkClick } from "@/lib/link-click";
 import { useTrackedRouter } from "@/lib/route-pending";
 import { findTerminalLinks } from "@/lib/terminal-links";
 
@@ -78,7 +79,8 @@ export function TerminalPanel({
 
     // §11-15 결정 3. `@xterm/addon-web-links`를 안 붙인다 — 새 의존성 0개가 이 층의 규칙이고
     // 누른 뒤에 하는 일이 우리 `openLink`라 addon의 기본 동작을 어차피 덮는다. 정규식만
-    // 순수 함수(`findTerminalLinks`)로 빼서 코어 `registerLinkProvider`에 물린다.
+    // 순수 함수(`findTerminalLinks`)로 빼서 코어 `registerLinkProvider`에 물린다. Cmd·Ctrl
+    // 클릭 분기(§P449 결정 2)는 `link-interceptor.tsx`와 같은 `dispatchLinkClick`을 쓴다.
     const linkDisposable = term.registerLinkProvider({
       provideLinks(bufferLineNumber, callback) {
         const line = term.buffer.active.getLine(bufferLineNumber - 1);
@@ -89,9 +91,16 @@ export function TerminalPanel({
             end: { x: m.start + m.text.length, y: bufferLineNumber },
           },
           text: m.text,
-          activate: () => {
-            const { locale, push } = linkCtxRef.current;
-            void openLink(projectId, m.text, locale, push);
+          activate: (event) => {
+            dispatchLinkClick(
+              event,
+              m.text,
+              () => {
+                const { locale, push } = linkCtxRef.current;
+                void openLink(projectId, m.text, locale, push);
+              },
+              (url, target, features) => window.open(url, target, features),
+            );
           },
         }));
         callback(links.length ? links : undefined);

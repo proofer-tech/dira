@@ -12,11 +12,16 @@
  *
  *  `app/(app)/layout.tsx`에 한 번 뜬다 — `<FeedbackDialog/>` · `<DesktopFindBar/>`와 같은
  *  자리(화면 하나마다 걸지 않고 셸에 한 벌)다. 랜딩 · 문서(`app/(site)`)는 별도 레이아웃이라
- *  이 컴포넌트가 아예 안 실린다(결정 3 §랜딩과 문서는 대상이 아니다). */
+ *  이 컴포넌트가 아예 안 실린다(결정 3 §랜딩과 문서는 대상이 아니다).
+ *
+ *  **Cmd·Ctrl을 누른 채 클릭하면 내장 브라우저를 건너뛴다**(§P449 결정 2) — 판정과 실행은
+ *  `lib/link-click.ts`의 `dispatchLinkClick`이 지고, 터미널 링크(`terminal-panel.tsx`)도
+ *  같은 함수를 쓴다. */
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { openLink } from "@/components/browser-panel";
 import { useLocale } from "@/components/language-provider";
+import { dispatchLinkClick } from "@/lib/link-click";
 import { useTrackedRouter } from "@/lib/route-pending";
 import { projectIdFromPath } from "@/lib/urls";
 
@@ -42,7 +47,12 @@ export function LinkInterceptor() {
       if (url.protocol !== "http:" && url.protocol !== "https:") return;
       if (url.origin === window.location.origin) return;
       e.preventDefault();
-      void openLink(projectId, url.href, locale, router.push);
+      dispatchLinkClick(
+        e,
+        url.href,
+        () => void openLink(projectId, url.href, locale, router.push),
+        (href, target, features) => window.open(href, target, features),
+      );
     };
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
