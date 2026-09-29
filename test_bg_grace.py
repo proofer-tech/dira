@@ -351,3 +351,59 @@ with Case(eng11, grace=20) as c:
     assert "reason=bg" not in fail_line, \
         "밀림 문구가 둘 다 없었는데 FAIL 줄에 reason=bg가 붙었다: {!r}".format(fail_line)
 print("PASS 11 - 두 밀림 문구가 다 없으면 FAIL 줄이 종전과 같다(수용조건 3)")
+
+# 12 - P448 - result 바로 뒤에 system 줄(task_notification stopped)이 붙어도 is_result가
+# 이번 구간을 여전히 잡아야 한다. 고치기 전에는 tail -n 1이 system 줄만 보고 거짓을 내서
+# 이 구간의 감시 루프가 안 끝나고, bg_pending·유예도 전혀 안 걸려 NUDGE도 reason=bg도 안
+# 났다(§죽은 세션 마지막 기록의 실측). BODY_SYSTEM_AFTER_RESULT는 result 직후 stopped를
+# 찍고 더는 안 자란다 - 밀린 문구(BG_LINE)가 있으므로 유예가 걸리고, stopped를 봤으니
+# bg_wait_grow가 곧장 2를 내(P435 결정 1 §2) NUDGE가 뜬 뒤에도 안 자라 종전 종료로 간다.
+BODY_SYSTEM_AFTER_RESULT = """\
+{sys_line}
+sleep 60\
+"""
+eng12 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE,
+                       body=BODY_SYSTEM_AFTER_RESULT.format(sys_line=STOPPED_LINE))
+with Case(eng12, grace=3) as c:
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+        "result 뒤에 system 줄이 붙었는데 is_result가 구간을 못 잡아 주입조차 안 났다(P448)\n" + c.log()
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 20), \
+        "result 뒤 system 줄 때문에 주입 뒤 종전 종료까지 안 났다(P448)\n" + c.log()
+    assert "reason=bg" in c.log(), \
+        "result 뒤 system 줄이 있었는데 FAIL 줄에 reason=bg가 없다(P448)\n" + c.log()
+print("PASS 12 - result 바로 뒤 system 줄이 붙어도 is_result가 구간을 놓치지 않아 NUDGE·reason=bg가 그대로 난다(P448)")
+
+# 13 - is_result 자체 단위 검증. tick.sh 본문에서 함수만 그대로 뽑아 돌린다(새 코드 복제가
+# 아니라 실물을 검증한다) - 구간 끝에서 system 줄을 건너뛴 뒤 처음 만나는 줄이 result면 참,
+# assistant면 거짓이다(P448).
+IS_RESULT_SRC = subprocess.check_output(
+    ["sed", "-n", "/^is_result() {/,/^}/p", TICK]).decode("utf-8")
+assert IS_RESULT_SRC.strip().startswith("is_result() {"), \
+    "tick.sh에서 is_result 함수 본문을 못 뽑았다"
+
+
+def _is_result(jsonl_lines):
+    body = "\n".join(jsonl_lines)
+    fd, path = tempfile.mkstemp(suffix=".jsonl")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(body + ("\n" if body else ""))
+        rc = subprocess.run(["bash", "-c", IS_RESULT_SRC + '\nis_result "$1" 0\n', "_", path]).returncode
+        return rc == 0
+    finally:
+        os.unlink(path)
+
+
+RESULT13 = '{"type":"result","subtype":"success","is_error":false,"session_id":"s","result":"ok"}'
+SYSTEM13 = '{"type":"system","subtype":"task_notification","status":"stopped"}'
+ASSISTANT13 = '{"type":"assistant","message":{"content":[{"type":"text","text":"x"}]}}'
+
+assert _is_result([RESULT13, SYSTEM13]), \
+    "result 뒤 system 줄 하나가 있는데 is_result가 거짓이다(P448)"
+assert _is_result([RESULT13, SYSTEM13, SYSTEM13]), \
+    "system 줄이 여럿 뒤따라도 is_result가 참이어야 한다(P448)"
+assert not _is_result([RESULT13, ASSISTANT13]), \
+    "result 뒤에 assistant 줄이 있는데 is_result가 참이다"
+assert not _is_result([ASSISTANT13]), \
+    "assistant 줄뿐인데 is_result가 참이다"
+print("PASS 13 - is_result가 구간 끝의 system 줄을 건너뛰고 판정하고, assistant 줄이면 거짓이다(P448)")

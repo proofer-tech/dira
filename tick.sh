@@ -1557,7 +1557,21 @@ POLL=5; [ -n "$INBOX" ] && POLL=1
 # 있다) 그러면 남의 티켓을 중간에 잘라낸다. grep은 문지기고 판정은 파싱이다.
 is_result() {
   local line
-  line=$(tail -n +"$(( $2 + 1 ))" "$1" 2>/dev/null | tail -n 1)
+  # 구간 끝에서 type:system 줄만 건너뛰고, 처음 만나는 줄을 본다(P448).
+  line=$(tail -n +"$(( $2 + 1 ))" "$1" 2>/dev/null | python3 -c '
+import json,sys
+lines = [l.rstrip("\n") for l in sys.stdin if l.strip()]
+for ln in reversed(lines):
+    try:
+        o = json.loads(ln)
+    except Exception:
+        print(ln)
+        break
+    if isinstance(o, dict) and o.get("type") == "system":
+        continue
+    print(ln)
+    break
+')
   [ -n "$line" ] || return 1
   printf '%s' "$line" | grep -q '"type":"result"' || return 1
   printf '%s' "$line" | python3 -c \
