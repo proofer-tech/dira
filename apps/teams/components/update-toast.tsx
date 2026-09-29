@@ -6,9 +6,10 @@
  *  main -> 렌더러는 `window` 이벤트 `dira:update`(`event.detail`이 progress/downloaded/message/
  *  confirm 넷 중 하나), 렌더러 -> main은 `window.dira.updateAction(action)`이다(T7).
  *
- *  **브라우저에서는 아무것도 안 그린다** - `window.dira`가 없으면 `null`이다(N3와 같은 판정,
- *  `path-picker.tsx`의 `useIsDesktop`). `<FeedbackDialog>`-`<DesktopFindBar>`가 여는 `dira:feedback`-
- *  `dira:find` 관용구 그대로다.
+ *  **`<Toaster/>`는 데스크톱-웹 모두 마운트한다**(`b12f9033`) - 이 레포에서 `sonner`의
+ *  `<Toaster/>`가 뜨는 자리가 여기 하나뿐이라, 웹(`browser-panel.tsx`의 링크 상한-실패 토스트)도
+ *  같은 트레이를 쓴다. **사라지지 않는 업데이트 상자(①②⑤)만 데스크톱 전용** - `window.dira`가
+ *  없으면 그 상태 훅들이 전부 조용히 멈춘다(N3와 같은 판정, `path-picker.tsx`의 `useIsDesktop`).
  *
  *  **사라지지 않는 상자는 상태가 이 컴포넌트에 있다**(①②⑤). `toast.custom`이 매번 새 엘리먼트를
  *  받으므로 상자 안의 상태(노트 펼침 - 노트 본문)를 토스트 쪽에 두지 않는다 - 여기 `useState`가
@@ -20,7 +21,6 @@ import { Toaster, toast } from "sonner";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/components/language-provider";
-import { useIsDesktop } from "@/components/path-picker";
 
 type UpdateDetail =
   | { kind: "progress"; percent: number }
@@ -137,8 +137,6 @@ function StickyBody({
 
 export function UpdateToast() {
   const t = useT();
-  // N3와 같은 판정(`path-picker.tsx`) - 서버 스냅숏은 항상 `false`라 SSR에서 `window`를 안 만진다.
-  const desktop = useIsDesktop();
   const [view, setView] = useState<"progress" | "downloaded" | "confirm" | null>(null);
   const [percent, setPercent] = useState(0);
   const [notes, setNotes] = useState<string | null | undefined>(undefined);
@@ -219,8 +217,6 @@ export function UpdateToast() {
       { id: STICKY_ID, duration: Infinity },
     );
   }, [view, percent, notes, notesOpen, t]);
-
-  if (!desktop) return null;
 
   return (
     <>
