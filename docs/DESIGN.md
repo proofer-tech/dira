@@ -3371,6 +3371,44 @@ git log --name-only --oneline -5 -- templates/
 # -> templates/protocols/AGENTS.md와 templates/personas/*/PROFILE.md가 목록에 있다
 ```
 
+### 결정 18 - 티켓은 해시 8자만 적는다. 경로-파일명으로 가리키지 않는다 (요구 `a447ce3c`, 왕복 0회)
+
+**요구가 온 경로.** 사람이 홈 대화 화면을 캡처해서 올렸다. 그 대화에서 세션은 새로 만든
+요구 티켓을 `.dira/tickets/547b7b98.md`라는 경로로 보고했다. 사람은 해시만 적으면 화면이
+알아서 티켓으로 그려 준다는 사실을 세션이 몰라서 이렇게 쓴 것 같다고 진단했다.
+
+**진단이 맞다.** 산문 속 해시를 표식으로 그리는 기능은 §9(요구 `cadd5e04`)가 이미 만들었다
+(`apps/teams/lib/markdown-refs.ts`의 `splitRefs`). 그런데 세션이 받는 프롬프트에는 그 사실이
+한 줄도 없다. 워커 세션이 받는 코어 `CORE.md`에도 없고, 홈 대화가 받는 `home-session.ts`의
+지시문에도 없다. 홈 지시문은 오히려 새 요구 티켓의 파일 형식을 길게 보여 주고 있어서, 세션이
+그 파일 경로를 그대로 보고하게 된다.
+
+#### 판정 셋
+
+1. **문장 한 줄을 두 자리에 넣는다.** 한 자리는 워커 세션이 받는 코어 `CORE.md`
+   §Characters이고, 다른 한 자리는 홈 대화 지시문(`apps/teams/lib/home-session.ts`)의 새 요구
+   티켓 절이다. 두 자리 모두 사람이 읽는 글 전부에 걸린다(티켓 본문, `## 결과`, `## 블록`, 대화
+   답변). 계약 문장은 영문이다(결정 7의 코어 언어).
+   > Name a ticket by its bare 8-char hash (`547b7b98`), never a path or filename - the GUI
+   > renders a known hash as a linked ticket chip.
+   홈 지시문에는 같은 뜻을 한국어로 넣는다. 예시는 한 쌍이다: `.dira/tickets/547b7b98.md` 대신
+   `547b7b98`로 쓴다.
+2. **코어 예산은 3,500 B 그대로다**(결정 7, 결정 9-2). 지금 3,470 B라서 더하는 만큼 다른 자리를
+   의미 보존으로 줄인다. 임계값-명령-금지는 그대로 두고 경위-일화만 줄인다.
+3. **화면은 고치지 않는다.** 경로 속 해시도 경계 규칙상 표식이 되지만, 사람이 원하는 것은
+   경로를 치우는 것이다. 표식 규칙을 넓히면 세션은 계속 경로를 쓴다.
+
+#### 검증
+
+```
+# (1) 코어에 문장이 있고 예산 안이다
+grep -c 'bare 8-char hash' protocols/CORE.md     # -> 1
+wc -c < protocols/CORE.md                         # -> 3500 이하
+
+# (2) 홈 지시문에 같은 뜻의 문장과 예시 쌍이 있다
+grep -c '547b7b98' apps/teams/lib/home-session.ts # -> 1 이상
+```
+
 ## 스펙 - 화면별
 
 `/p/<project>/` 아래 화면들은 전부 그 프로젝트만 본다. 등록 안 된 `<project>`는 404 + 프로젝트 목록 링크.
