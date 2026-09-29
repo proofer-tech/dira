@@ -52,6 +52,11 @@ export function toCdpInputCommand(body: unknown): CdpInputCommand | null {
  *  한다. */
 export const LINK_SLOT_HASH = "c0ffee00";
 
+/** `openLink`가 홈 화면이 이미 떠 있을 때 쏘는 창 알림 이름(DESIGN.md §P449 결정 1) - 저장소를
+ *  다시 안 읽는 마운트 상태라 `HomeUI`가 이 이름의 `CustomEvent`를 듣고 탭 목록을 반영한 뒤
+ *  활성 탭 · 표면을 링크 슬롯으로 옮긴다. */
+export const LINK_TAB_EVENT = "dira:link-tab";
+
 export type CdpNavigateCommand = { url: string };
 
 /** POST 본문 -> `navigate` 요청. `type`이 `"navigate"`이고 `url`이 문자열일 때만 값을 낸다 -

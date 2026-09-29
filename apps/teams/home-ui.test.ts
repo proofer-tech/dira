@@ -151,3 +151,26 @@ test("apply()도 갈아탄 대화의 pendingInterject로 echo 씨앗을 다시 �
   assert.ok(applyBody.includes("setEcho(c.pendingInterject);"), "apply()가 echo를 무조건 null로 걷는다 - 그 대화가 붙들고 있던 참견을 놓친다");
   assert.ok(applyBody.includes("setEchoIsInterject(c.pendingInterject !== null);"), "apply()가 echoIsInterject를 안 맞춘다 - 기다리는 줄 조건이 어긋난다");
 });
+
+// 티켓 40f4318f(§P449 결정 1): 링크를 열면 홈이 이미 떠 있어도 c0ffee00 탭이 활성이 되고
+// 표면이 browser로 바뀐다. openLink가 쏘는 LINK_TAB_EVENT를 이 창이 직접 듣는다.
+const linkTabA = s.indexOf("useEffect(() => {\n    const onLinkTab = (e: Event) => {");
+assert.ok(linkTabA >= 0, "home-ui.tsx: LINK_TAB_EVENT 이펙트를 못 찾았다");
+const linkTabB = s.indexOf("}, [project]);", linkTabA);
+const linkTabBody = s.slice(linkTabA, linkTabB);
+
+test("LINK_TAB_EVENT 이펙트 — 다른 프로젝트에서 뜬 알림은 무시한다", () => {
+  assert.ok(linkTabBody.includes("if (detail.projectId !== project) return;"), "projectId 가드가 없다 — 다른 프로젝트 탭에서 뜬 알림에도 이 창이 반응해 버린다");
+});
+
+test("LINK_TAB_EVENT 이펙트 — apply로 탭 목록을 먼저 반영한 뒤에만 활성 탭·표면을 옮긴다", () => {
+  const applyIdx = linkTabBody.indexOf("apply(detail.chunk);");
+  const activeIdx = linkTabBody.indexOf("setActiveTab(LINK_SLOT_HASH);");
+  const surfaceIdx = linkTabBody.indexOf('setSurface("browser");');
+  assert.ok(applyIdx >= 0 && activeIdx > applyIdx && surfaceIdx > activeIdx, "순서가 apply - setActiveTab - setSurface가 아니다 — 거꾸로면 탭 이월 이펙트가 아직 옛 목록을 보고 되돌린다(§P449 결정 1 §순서가 거꾸로면)");
+});
+
+test("LINK_TAB_EVENT 이펙트 — window 리스너를 등록·해제한다", () => {
+  assert.ok(linkTabBody.includes("window.addEventListener(LINK_TAB_EVENT, onLinkTab);"), "리스너 등록이 없다");
+  assert.ok(linkTabBody.includes("window.removeEventListener(LINK_TAB_EVENT, onLinkTab);"), "리스너 해제가 없다 — 언마운트 뒤에도 남으면 닫힌 창을 향해 상태를 갱신한다");
+});

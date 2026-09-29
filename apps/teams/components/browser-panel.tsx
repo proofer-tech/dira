@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useLocale, useT } from "@/components/language-provider";
-import { LINK_SLOT_HASH, normalizeAddressInput, readCdpFrameStream } from "@/lib/cdp-relay";
+import { LINK_SLOT_HASH, LINK_TAB_EVENT, normalizeAddressInput, readCdpFrameStream } from "@/lib/cdp-relay";
 import { keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,7 @@ import {
   type BrowserPoolRow,
 } from "@/app/(app)/p/[project]/home/actions";
 import { linkCapToastMessage, linkErrorToastMessage, wrap, type Locale } from "@/lib/i18n";
+import type { HomeChunk } from "@/lib/home-session";
 
 function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
   fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
@@ -51,14 +52,23 @@ export function browserOwnerLabel(row: BrowserPoolRow, t: (key: string) => strin
   return null;
 }
 
-/** 앱 안 링크를 링크 슬롯(`c0ffee00`)에서 연다(§11-15 결정 1 · 4, §P438 결정 2) — P430-3의
- *  클릭 리스너·터미널 링크 제공자·피드백 링크가 부를 이름 하나다. 서버 액션(`openLinkAction`)이
- *  상한을 재고, 막혔으면 토스트 한 줄로 알린다(결정 4 §알리는 자리는 토스트 한 줄이다). 셸이
- *  그 밖의 이유로 실패했을 때도 말없이 끝내지 않고 같은 자리에 원인 문구가 실린 토스트를
- *  띄운다(§P438 결정 2). 셸이 실제로 열렸을 때만(`ok: true`) 홈의 `c0ffee00` 탭으로 옮긴다 —
- *  `TicketBrowserSection`의 `openInHomeTab`과 같은 두 줄(`writeStoredActiveTab` 다음
- *  `navigate`)이다. 막혔거나 셸이 실패했으면 지금 화면에 그대로 머문다 — 보여 줄 것이 없는
- *  탭으로 옮길 이유가 없다. */
+/** 링크 클릭 하나가 `openLink` 안에서 쏘는 창 알림의 짐(§P449 결정 1) - `HomeUI`가 이 모양으로
+ *  받아 `projectId`가 자기 것일 때만 `chunk`를 반영한다. */
+export type LinkTabEventDetail = { projectId: string; chunk: HomeChunk };
+
+/** 앱 안 링크를 링크 슬롯(`c0ffee00`)에서 연다(§11-15 결정 1 · 4, §P438 결정 2, §P449 결정 1) —
+ *  P430-3의 클릭 리스너·터미널 링크 제공자·피드백 링크가 부를 이름 하나다. 서버 액션
+ *  (`openLinkAction`)이 상한을 재고, 막혔으면 토스트 한 줄로 알린다(결정 4 §알리는 자리는 토스트
+ *  한 줄이다). 셸이 그 밖의 이유로 실패했을 때도 말없이 끝내지 않고 같은 자리에 원인 문구가
+ *  실린 토스트를 띄운다(§P438 결정 2). 셸이 실제로 열렸을 때만(`ok: true`) 이어간다 — 막혔거나
+ *  실패했으면 지금 화면에 그대로 머문다(보여 줄 것이 없는 탭으로 옮길 이유가 없다).
+ *
+ *  **탭을 먼저 등록한다**(§P449 결정 1) — `TicketBrowserSection`의 `openInHomeTab`과 같은
+ *  순서(등록 - 저장 - 이동)로 `openBrowserTabAction`을 불러 `home-sessions.json`에 `c0ffee00`이
+ *  없어도 생기게 한다(이미 있으면 그대로 둔다). **홈이 이미 떠 있으면 같은 경로로 `navigate`해도
+ *  다시 마운트되지 않아 저장소를 안 읽는다** — 그래서 등록 결과(`HomeChunk`)를 실어 창
+ *  `CustomEvent`(`LINK_TAB_EVENT`)를 하나 쏜다. 마운트된 `HomeUI`만 듣고, 다른 화면에서 누른
+ *  경우는 아무도 안 들어 `navigate`가 종전대로 홈을 새로 마운트해 저장된 값을 읽게 한다. */
 export async function openLink(
   projectId: string,
   url: string,
@@ -71,7 +81,9 @@ export async function openLink(
     else toast(linkErrorToastMessage(locale, result.output));
     return;
   }
+  const chunk = await openBrowserTabAction(projectId, LINK_SLOT_HASH);
   writeStoredActiveTab(projectId, LINK_SLOT_HASH);
+  window.dispatchEvent(new CustomEvent<LinkTabEventDetail>(LINK_TAB_EVENT, { detail: { projectId, chunk } }));
   navigate(`/p/${projectId}`);
 }
 

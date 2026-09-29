@@ -102,7 +102,7 @@ import {
   useAttachments,
 } from "@/components/attachment-field";
 import { AttachmentPreview } from "@/components/attachment-preview";
-import { BrowserMirror, browserOwnerLabel, openLink } from "@/components/browser-panel";
+import { BrowserMirror, browserOwnerLabel, openLink, type LinkTabEventDetail } from "@/components/browser-panel";
 import { CopyCommand } from "@/components/copy-command";
 import { EmptyState } from "@/components/empty-state";
 import { ExplorerPane, ExplorerTree, useExplorerOpen } from "@/components/explorer-ui";
@@ -206,7 +206,7 @@ import {
   writeStoredActiveTab,
   type Surface,
 } from "@/lib/tabs";
-import { LINK_SLOT_HASH } from "@/lib/cdp-relay";
+import { LINK_SLOT_HASH, LINK_TAB_EVENT } from "@/lib/cdp-relay";
 import { useTrackedRouter } from "@/lib/route-pending";
 import {
   chatRows,
@@ -857,6 +857,24 @@ export function HomeUI({
     setEchoIsInterject(c.pendingInterject !== null);
     setPendingSchedule(null); // 실제 세션으로 갈아탔다 — 회차 0건 스케줄 화면은 이 자리가 아니다
   };
+
+  /** **홈이 이미 떠 있는 동안 링크를 열면 이 창이 직접 옮긴다**(§P449 결정 1) — `openLink`가 탭을
+   *  등록한 뒤 쏘는 `LINK_TAB_EVENT`를 듣는다. `projectId`가 이 창의 것이 아니면 무시한다(다른
+   *  프로젝트 탭에서 뜬 알림). **탭 목록을 먼저 반영하고**(`apply`) 그 다음에 활성 탭을 링크
+   *  슬롯으로, 표면을 `browser`로 옮긴다 — 순서가 거꾸로면 아래 탭 이월 이펙트가 아직 옛
+   *  `home.tabs`를 보고 목록에 없는 탭이라며 다른 탭으로 되돌린다(결정 1 §순서가 거꾸로면). */
+  useEffect(() => {
+    const onLinkTab = (e: Event) => {
+      const detail = (e as CustomEvent<LinkTabEventDetail>).detail;
+      if (detail.projectId !== project) return;
+      apply(detail.chunk);
+      setActiveTab(LINK_SLOT_HASH);
+      setSurface("browser");
+    };
+    window.addEventListener(LINK_TAB_EVENT, onLinkTab);
+    return () => window.removeEventListener(LINK_TAB_EVENT, onLinkTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply·setActiveTab·setSurface는 매 렌더 새로 만들어지지만 안의 setState 호출은 전부 React가 보장하는 안정된 함수라 재구독 없이도 최신 상태를 그대로 갈아 끼운다(위 탭 이월 이펙트와 같은 근거)
+  }, [project]);
 
   /** **마운트 뒤에만 `sessionStorage`를 읽는다**(§11-10 결정 2) — `activeTab`·`surface`의
    *  초기값은 서버와 맞추느라 항상 `null`·`"session"`으로 굳어 있다(위 상태 선언 주석). 서버는
