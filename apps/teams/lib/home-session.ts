@@ -799,6 +799,8 @@ export function renderSnapshot({
     "",
     `- 티켓 전부: \`${path.join(project.root, "tickets")}/\` — 파일명이 곧 상태다`,
     `- 새 요구사항 티켓 해시(이번 턴 한 번 · 8-hex · 큐에 없는 값): \`${newTicketHash}\``,
+    "  답변에서 이 티켓을 가리킬 때는 해시 8자만 적는다. 화면이 알려진 해시를 티켓 표식으로" +
+      " 그린다 - 경로나 파일명은 적지 않는다. 예: `.dira/tickets/547b7b98.md` 대신 `547b7b98`.",
     `- 프로토콜: \`${config.protocols}/\``,
     `- 페르소나: \`${config.personas}/\``,
     `- 제품 스펙(단일 출처): \`${path.join(path.dirname(project.root), "docs/DESIGN.md")}\``,
