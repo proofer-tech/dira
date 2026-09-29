@@ -115,13 +115,23 @@ test("제출 버튼 낱말이 도는 동안에도 `보내기`다 — `starting`�
   assert.ok(s.includes("aria-disabled={empty || readOnly || pendingSchedule !== null || starting}"), "aria-disabled 셋째 문이 starting(자기 요청 in-flight)이 아니다");
 });
 
+// §7-7 결정 6이 결정 5의 문구·조건·자리를 그대로 두고 `참견하기` 버튼만 같은 그릇에 얹었다 —
+// 그래서 아래는 더 이상 한 줄짜리 리터럴이 아니라 그 그릇(waitingFooterBody) 안을 본다.
+const waitingFooterA = s.indexOf("{echoIsInterject && running && (");
+assert.ok(waitingFooterA >= 0, "home-ui.tsx: 기다리는 줄 그릇을 못 찾았다");
+const waitingFooterB = s.indexOf("\n                            )}", waitingFooterA);
+const waitingFooterBody = s.slice(waitingFooterA, waitingFooterB);
+
 test("기다리는 줄 — echoIsInterject && running일 때만 뜨고, 답 항목이 붙거나 중지되면(running이 거짓) 걷힌다", () => {
   assert.ok(s.includes("setEchoIsInterject(true);"), "interject()가 echoIsInterject를 안 세운다");
   assert.ok(s.includes("setEchoIsInterject(false);"), "run()이 echoIsInterject를 안 내린다 — 첫 질문의 echo가 참견으로 오인된다");
-  assert.ok(
-    s.includes('{echoIsInterject && running && <MessageFooter>{t("home.waitingTurn")}</MessageFooter>}'),
-    "기다리는 줄 조건이 echoIsInterject && running 하나가 아니다",
-  );
+  assert.ok(waitingFooterBody.startsWith('{echoIsInterject && running && (\n                              <MessageFooter'), "기다리는 줄 조건이 echoIsInterject && running 하나가 아니다(§7-7 결정 5 무수정)");
+  assert.ok(waitingFooterBody.includes('{t("home.waitingTurn")}'), "결정 5의 문구(home.waitingTurn)가 이 그릇 안에 없다");
+});
+
+test("참견하기 버튼 — 기다리는 줄과 같은 그릇 안, 같은 조건에서만 뜬다(§7-7 결정 6)", () => {
+  assert.ok(waitingFooterBody.includes('<Button variant="ghost" size="xs" onClick={interjectNow}>'), "버튼이 중지와 같은 xs · ghost가 아니거나 interjectNow를 안 부른다");
+  assert.ok(waitingFooterBody.includes('{t("home.interjectNow")}'), "버튼 낱말이 home.interjectNow가 아니다");
 });
 
 test("run()이 echoIsInterject를 false로 세우는 자리가 anyRunning만 참인 경우와 안 갈린다", () => {
@@ -261,4 +271,33 @@ const tooltipBody = s.slice(tooltipA, tooltipB);
 
 test("표면 버튼 툴팁 — SURFACE_COMBOS[i]를 formatCombo로 그려 이름 옆에 붙인다", () => {
   assert.ok(tooltipBody.includes("formatCombo(SURFACE_COMBOS[i])"), "툴팁이 키를 하드코딩 없이 formatCombo·SURFACE_COMBOS에서 내지 않는다(§0-6 — 표기를 하드코딩한 문자열은 남기지 않는다)");
+});
+
+// §7-7 결정 6: `참견하기`는 이미 있는 두 부품(`stop`·`run`)의 합이다. 곧장 `run`을 안 부르는
+// 것은 자식이 아직 안 죽었으면 그 글이 죽어가는 stdin으로 조용히 삼켜지기 때문이다(startAsk의
+// `existing` 갈래) — 그래서 poll 효과가 `stopped`를 보는 그 왕복까지 미룬다(아래 두 번째 test).
+const interjectNowA = s.indexOf("const interjectNow = () => {");
+const interjectNowB = s.indexOf("\n  };", interjectNowA);
+assert.ok(interjectNowA >= 0 && interjectNowB > interjectNowA, "home-ui.tsx: interjectNow 구간을 못 찾았다");
+const interjectNowBody = s.slice(interjectNowA, interjectNowB);
+
+test("interjectNow — echo가 없거나 참견이 아니거나 안 도는 중이면 아무 일도 안 한다", () => {
+  assert.ok(interjectNowBody.includes("if (!echo || !echoIsInterject || !running) return;"), "세 문이 다 있어야 한다 — 답이 없거나 보통 질문이거나 이미 끝난 대화에서 눌려도 안전해야 한다");
+});
+
+test("interjectNow — echo를 interjectResume.current에 옮긴 뒤 stop()을 부른다(곧장 run이 아니다)", () => {
+  assert.ok(interjectNowBody.includes("interjectResume.current = echo;"), "붙드는 자리(interjectResume)로 echo를 옮기지 않는다 — stopAsk가 서버의 pendingInterject를 지우므로 화면이 먼저 붙들어야 한다");
+  assert.ok(interjectNowBody.includes("void stop();"), "stop()을 안 부르면 도는 답이 안 끊긴다");
+  assert.ok(!interjectNowBody.includes("run("), "이 함수 안에서 곧장 run을 부르면 죽어가는 자식의 stdin으로 새 질문이 삼켜질 수 있다(§계약)");
+});
+
+const stoppedResumeA = s.indexOf("if (r.stopped && interjectResume.current !== null) {");
+assert.ok(stoppedResumeA >= 0, "home-ui.tsx: poll 효과의 stopped 이어잇기 구간을 못 찾았다");
+const stoppedResumeB = s.indexOf("\n        }", stoppedResumeA);
+const stoppedResumeBody = s.slice(stoppedResumeA, stoppedResumeB);
+
+test("poll 효과 — r.stopped일 때만 interjectResume을 비우고 run(resumeText)를 부른다", () => {
+  assert.ok(stoppedResumeBody.includes("const resumeText = interjectResume.current;"), "비우기 전에 값을 먼저 떠야 한다 — 순서를 바꾸면 null을 run에 넘긴다");
+  assert.ok(stoppedResumeBody.includes("interjectResume.current = null;"), "다음 정지에 같은 글을 또 이어붙이면 안 된다 — 한 번 쓰면 비운다");
+  assert.ok(stoppedResumeBody.includes("void run(resumeText);"), "비운 값이 아니라 뜬 사본(resumeText)으로 불러야 한다");
 });

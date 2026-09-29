@@ -2103,6 +2103,8 @@ export const ko: Record<string, string> = {
   // 앞엣것은 참견 모드의 placeholder이고, 뒤엣것은 참견 말풍선 아래 꼬리표 한 줄이다.
   "home.interjectPlaceholder": "도는 답에 말 걸기",
   "home.waitingTurn": "답을 기다리는 중",
+  // §7-7 결정 6 — 대기 줄 오른쪽 버튼. 누르면 도는 답을 끊고 붙들고 있던 참견 글로 곧장 잇는다.
+  "home.interjectNow": "참견하기",
   "home.answer.retry": "다시 답하기",
   "home.answer.copy": "복사",
 
@@ -4457,6 +4459,9 @@ export const en: Record<string, string> = {
   // 활동 표식(`Answering`·`Thinking`)이 아니라 이 말풍선의 꼬리표다. 이 턴에 닿든 다음 턴이
   // 되든 사람이 기다리는 것은 답이라 두 갈래에서 다 참이다(§7-7 결정 5).
   "home.waitingTurn": "Waiting for the answer",
+  // §7-7 결정 6 — the button beside the waiting line. Stops the running turn and sends the
+  // held interject text right away.
+  "home.interjectNow": "Interject now",
   "home.answer.retry": "Answer again",
   "home.answer.copy": "Copy",
 

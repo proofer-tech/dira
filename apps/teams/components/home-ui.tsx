@@ -466,6 +466,11 @@ export function HomeUI({
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
+  // **`참견하기`가 붙드는 글**(§7-7 결정 6). 누른 순간의 `echo`를 여기 옮겨 두는 이유는
+  // `stopAsk`가 서버의 `pendingInterject`를 지우기 때문이다 — 화면이 먼저 붙든 사본을 아래
+  // poll 효과가 `stopped`를 보는 그 왕복에서 새 질문으로 잇는다(`run`). 렌더에 안 쓰므로
+  // 상태가 아니다.
+  const interjectResume = useRef<string | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   // **`⌘F`가 훑을 자리 하나**(§7 §무엇을 훑나 · §비주얼 §30) — 스레드 뷰포트다. 좌측 패널 ·
   // 입력칸 · 셸 헤더가 이 밖이라 *무엇을 안 훑나*가 이 ref 하나로 참이 된다. 대화 0건(온보딩)
@@ -591,6 +596,14 @@ export function HomeUI({
         if (r.turns.length > 0) {
           setEcho(null);
           pendingEcho = null;
+        }
+        // **`참견하기`가 끊은 답을 여기서 잇는다**(§7-7 결정 6). `r.stopped`는 실행층이
+        // `runs` 항목을 이미 지운(`dropRun`) 그 왕복에만 참이라, 뒤이어 부르는 `run`이 죽어가는
+        // 자식과 안 부딪힌다(§계약 — `startAsk`가 `existing`을 못 찾아 새 항목을 연다).
+        if (r.stopped && interjectResume.current !== null) {
+          const resumeText = interjectResume.current;
+          interjectResume.current = null;
+          void run(resumeText);
         }
         if (r.failed) {
           setFail(r.failed);
@@ -819,6 +832,17 @@ export function HomeUI({
     if (stopping) return;
     setStopping(true);
     await stopHome(project);
+  };
+
+  /** `참견하기`(§7-7 결정 6) — 이미 있는 두 부품의 합이다: `stop`(`SIGTERM`)으로 도는 턴을
+   *  끊고, 붙들고 있던 참견 글을 같은 대화의 새 질문으로 곧장 잇는다. 여기서 곧장 `run`을 안
+   *  부르는 것은 자식이 실제로 죽기 전이면 그 글이 죽어가는 stdin으로 조용히 삼켜지기
+   *  때문이다 — 그래서 `echo`를 `interjectResume`에 옮겨 두고, 실행층이 `runs` 항목을 지운
+   *  그 왕복(poll 효과의 `r.stopped`)에서 대신 잇는다. */
+  const interjectNow = () => {
+    if (!echo || !echoIsInterject || !running) return;
+    interjectResume.current = echo;
+    void stop();
   };
 
   /** **대화 하나를 통째로 갈아 끼운다.** `새 대화`와 전환이 여기서 같은 일이 된다 — 둘 다 서버가
@@ -1418,8 +1442,19 @@ export function HomeUI({
                             {/* §비주얼 §기다리는 창 — 참견 말풍선 10px 아래(`MessageContent`의
                                 `gap-2.5`, 새 값이 아니다). 조건은 이 echo가 참견에서 왔고 그
                                 대화가 아직 도는 중일 때만 — 답 항목이 뜨거나(echo가 내려간다)
-                                `중지`로 죽으면(`running`이 거짓이 된다) 같이 걷힌다. */}
-                            {echoIsInterject && running && <MessageFooter>{t("home.waitingTurn")}</MessageFooter>}
+                                `중지`로 죽으면(`running`이 거짓이 된다) 같이 걷힌다.
+                                **`참견하기`(§7-7 결정 6)는 같은 줄의 오른쪽이다** — `justify-end`가
+                                `align="end"` 그릇에서 이미 걸린다(`MessageFooter`). 크기는 `중지`와
+                                같은 `xs`이되 `ghost`다(테두리로 잇댈 글자가 이 줄에 없다 — `CopyAnswer`와
+                                같은 근거). */}
+                            {echoIsInterject && running && (
+                              <MessageFooter className="gap-2">
+                                {t("home.waitingTurn")}
+                                <Button variant="ghost" size="xs" onClick={interjectNow}>
+                                  {t("home.interjectNow")}
+                                </Button>
+                              </MessageFooter>
+                            )}
                           </MessageContent>
                         </Message>
                       </MessageScrollerItem>
