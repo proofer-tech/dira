@@ -2466,10 +2466,17 @@ function TerminalSurface({
     onReconnect(tab.id);
   };
 
+  if (tabs.length === 0) {
+    // 몸통 패딩 그릇 안 세로 가운데(§P454 결정 1) — 탭이 있을 때는 터미널이 그릇 전체를 채워서
+    // 패딩이 없지만, 0개일 때만 탐색기와 같은 `pl-8 pr-6 pb-6 pt-2`를 두른다.
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center pl-8 pr-6 pb-6 pt-2">
+        <EmptyState text={t("home.surface.terminal.empty")} />
+      </div>
+    );
+  }
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {tabs.length === 0 && <EmptyState text={t("home.surface.terminal.empty")} />}
-
       <div className="min-h-0 flex-1">
         {tabs.map((tab) =>
           !disconnected.has(tab.id) ? (
@@ -2693,9 +2700,17 @@ function BrowserSurface({
   focusAddressToken: number;
 }) {
   const t = useT();
+  if (tabs.length === 0) {
+    // 몸통 패딩 그릇 안 세로 가운데(§P454 결정 1) — 탭이 있을 때는 브라우저 미러가 그릇 전체를
+    // 채워서 패딩이 없지만, 0개일 때만 탐색기와 같은 `pl-8 pr-6 pb-6 pt-2`를 두른다.
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center pl-8 pr-6 pb-6 pt-2">
+        <EmptyState text={t("home.surface.browser.empty")} />
+      </div>
+    );
+  }
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {tabs.length === 0 && <EmptyState text={t("home.surface.browser.empty")} />}
       <div className="min-h-0 flex-1">
         {tabs.map((tab) => {
           const row = browserRows.find((r) => r.hash === tab.id);

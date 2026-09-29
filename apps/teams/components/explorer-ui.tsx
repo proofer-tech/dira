@@ -588,7 +588,15 @@ export function ExplorerPane({
   onClose: (relPath: string) => void;
 }) {
   const t = useT();
-  if (tabs.length === 0) return <EmptyState text={t("explorer.noFileOpen")} />;
+  if (tabs.length === 0) {
+    // 몸통 패딩 그릇 안 세로 가운데(§P454 결정 1) — 탭이 있을 때 쓰는 `pl-8 pr-6 pb-6 pt-2`와
+    // 같은 그릇이라 사이드바 변 - 탭 줄에서 같은 간격이 난다.
+    return (
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center pl-8 pr-6 pb-6 pt-2">
+        <EmptyState text={t("explorer.noFileOpen")} />
+      </div>
+    );
+  }
   return (
     // `pl-8 pr-6 pb-6 pt-2`(§비주얼 §78) — 셸 `main`의 종전 좌우-아래 패딩과 탭 줄의 규칙선
     // 아래 여백이 여기로 옮겨 왔다. 픽셀은 그대로다.
