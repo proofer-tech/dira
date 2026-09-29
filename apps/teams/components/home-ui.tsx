@@ -180,6 +180,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
 } from "@/components/ui/sidebar";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1981,12 +1982,24 @@ function scmWordLabel(t: (key: string) => string, f: StatusFile): { text: string
 /** 소스 컨트롤 파일 한 줄(§11-3 결정 2 · §비주얼 §72 ④) — 누르면 스테이지 - 해제가 토글된다.
  *  **아이콘 0개** — 낱말이 이미 텍스트로 뜬다. 경로는 `font-mono break-all`(§3 경로 계열),
  *  `지움`은 그 경로에 `line-through`가 더 붙는다(그 줄을 눌러도 열 파일이 없다는 신호). */
-function ScmFileRow({ file, title, onClick }: { file: StatusFile; title: string; onClick: () => void }) {
+function ScmFileRow({
+  file,
+  title,
+  onClick,
+  moving,
+}: {
+  file: StatusFile;
+  title: string;
+  onClick: () => void;
+  /** 이 줄을 옮기는 git 명령이 도는 동안(§11-18 결정 2) — 상태 낱말이 `옮기는 중...`으로 가고
+   *  줄 전체가 흐려진다. 겹쳐 누르기는 `busy`가 이미 막는다(같은 절 결정 2 겹쳐 누르기 계약). */
+  moving: boolean;
+}) {
   const t = useT();
-  const label = scmWordLabel(t, file);
+  const label = moving ? { text: t("home.scm.word.moving"), mono: false } : scmWordLabel(t, file);
   return (
     <SidebarMenuItem>
-      <SidebarMenuButton className={ROW} title={title} onClick={onClick}>
+      <SidebarMenuButton className={cn(ROW, moving && "opacity-50")} title={title} onClick={onClick}>
         <span
           className={cn(
             "min-w-0 grow truncate break-all font-mono text-sm",
@@ -2000,6 +2013,32 @@ function ScmFileRow({ file, title, onClick }: { file: StatusFile; title: string;
         </span>
       </SidebarMenuButton>
     </SidebarMenuItem>
+  );
+}
+
+/** 소스 컨트롤 도는 것을 아는 값(§11-18 결정 2) — 겹쳐 누르기를 막는 계약은 종전 `busy` 불리언과
+ *  같다: 무엇이든 값이 있으면 다른 액션은 안 먹힌다. 파일 한 줄만 `{ path }`로 어느 줄인지 싣는다. */
+type ScmBusy = "refresh" | "push" | "pull" | "commit" | "stageAll" | "upstream" | { path: string } | null;
+
+function isBusyPath(busy: ScmBusy, path: string): boolean {
+  return typeof busy === "object" && busy !== null && busy.path === path;
+}
+
+/** 체크아웃을 갈거나 처음 열 때, status가 오기 전까지 그 자리를 채우는 스켈레톤(§11-18 결정 1) —
+ *  버튼 두 개 - 파일 줄 셋. 브랜치 줄은 호출부가 각자의 헤더 자리에서 따로 그린다. */
+function ScmSkeletonRows() {
+  return (
+    <>
+      <div className="flex gap-2 px-2">
+        <Skeleton className="h-7 flex-1" />
+        <Skeleton className="h-7 flex-1" />
+      </div>
+      <div className="flex flex-col gap-1 px-2">
+        <Skeleton className="h-5 w-full" />
+        <Skeleton className="h-5 w-full" />
+        <Skeleton className="h-5 w-full" />
+      </div>
+    </>
   );
 }
 
@@ -2020,9 +2059,12 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   const [status, setStatus] = useState<GitStatus | null>(null);
   const [remotes, setRemotes] = useState<string[]>([]);
   const [failed, setFailed] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<ScmBusy>(null);
   const [message, setMessage] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
+  // 커밋 - push - pull이 막 끝난 자리에만 뜨는 한 줄(§11-18 결정 3) — 다음 액션을 누르거나
+  // 체크아웃을 갈면 지운다. `actionError`와 배타적이라 항상 둘 중 하나만 쥔다.
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   // pull만 §0-25의 A/S를 지난다(결정 7-8) — 오류 카드를 먼저 그리고 그 위에서 A/S가 도는 순서를
   // 이 훅이 쥔다. `pullError`가 곧 그 카드의 내용이고 `fixing`이 뜨는 동안 카드는 안 사라진다.
   const { error: pullError, fixing, setError: setPullError, run: runSelfHealRetry } = useSelfHealRetry();
@@ -2053,47 +2095,63 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [project]);
 
+  // 같은 체크아웃의 재조회라 종전 값을 둔 채 갈아 끼운다(§11-18 결정 1) — `status`를 안 비운다.
   const refresh = async () => {
+    if (busy) return;
+    setSuccessMsg(null);
+    setBusy("refresh");
     const list = await scmCheckouts(project);
     setCheckouts(list);
     const id = selected && list.some((c) => c.id === selected) ? selected : (list.find((c) => c.isRoot)?.id ?? list[0]?.id ?? null);
     setSelected(id);
     if (id) await loadStatus(id);
     else setStatus(null);
+    setBusy(null);
   };
 
+  // 다른 체크아웃을 고르면 앞 status를 즉시 비운다(§11-18 결정 1) — 그 자리가 스켈레톤으로 간다.
   const pick = (id: string) => {
     setSelected(id);
     setActionError(null);
+    setSuccessMsg(null);
     setPullError(null);
     setMessage("");
+    setStatus(null);
     void loadStatus(id);
   };
 
   // 스테이지 - 해제 - 전부 스테이지 - 업스트림 넷이 같은 모양이다: 서버가 최신 status를 그대로
   // 돌려주므로 화면은 그 값 하나로 갈아 끼운다(폴링 응답과 같은 왕복 한 벌). `busy`는 겹쳐 누르는
   // 클릭을 막는다 — git 프로세스 둘이 같은 인덱스를 동시에 건드리는 자리를 안 만든다.
-  const run = (fn: () => Promise<GitStatus | null>) => {
+  const run = (fn: () => Promise<GitStatus | null>, kind: ScmBusy) => {
     if (!selected || busy) return;
     setActionError(null);
-    setBusy(true);
+    setSuccessMsg(null);
+    setBusy(kind);
     void fn()
       .then((next) => next && setStatus(next))
-      .finally(() => setBusy(false));
+      .finally(() => setBusy(null));
   };
 
-  // 커밋 - push - pull 셋이 같은 모양이다: `status`를 실행 직후 값으로 갈고 `error`를 그대로
-  // 낸다(§11-3 결정 4 — "실패 사유가 그대로 뜬다"). `NO_PUSH_SH`만 화면 낱말로 옮긴다.
-  const runResult = (fn: () => Promise<ScmResult>) => {
+  // 커밋 - push 둘이 같은 모양이다: `status`를 실행 직후 값으로 갈고 `error`를 그대로 낸다
+  // (§11-3 결정 4 — "실패 사유가 그대로 뜬다"). `NO_PUSH_SH`만 화면 낱말로 옮긴다. 성공하면
+  // `successKey` 한 줄이 뜬다(§11-18 결정 3) — 실패하면 안 뜨고 `onSuccess`도 안 돈다.
+  const runResult = (fn: () => Promise<ScmResult>, kind: ScmBusy, successKey: string, onSuccess?: () => void) => {
     if (!selected || busy) return;
     setActionError(null);
-    setBusy(true);
+    setSuccessMsg(null);
+    setBusy(kind);
     void fn()
       .then((r) => {
         if (r.status) setStatus(r.status);
-        if (r.error) setActionError(r.error === "EMPTY_MESSAGE" ? t("home.scm.commitEmpty") : r.error);
+        if (r.error) {
+          setActionError(r.error === "EMPTY_MESSAGE" ? t("home.scm.commitEmpty") : r.error);
+        } else {
+          setSuccessMsg(t(successKey));
+          onSuccess?.();
+        }
       })
-      .finally(() => setBusy(false));
+      .finally(() => setBusy(null));
   };
 
   // pull만 따로 둔다 - 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 A/S가 한 번 돈다(결정 7-8).
@@ -2103,7 +2161,8 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
     if (!selected || busy) return;
     const checkoutId = selected;
     setActionError(null);
-    setBusy(true);
+    setSuccessMsg(null);
+    setBusy("pull");
     void runSelfHealRetry(
       () => scmPull(project, checkoutId),
       (r) => r.error,
@@ -2111,11 +2170,36 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
     )
       .then((r) => {
         if (r.status) setStatus(r.status);
+        if (!r.error) setSuccessMsg(t("home.scm.pulled"));
       })
-      .finally(() => setBusy(false));
+      .finally(() => setBusy(null));
   };
 
-  if (!checkouts) return null;
+  // 메시지 칸의 `Cmd/Ctrl+Enter`가 커밋 버튼과 같다(§11-18 결정 3). 메시지는 성공했을 때만 비운다
+  // — 실패하면 적은 글이 그대로 남는다.
+  const commit = () => {
+    if (busy || !status || status.staged.length === 0 || !message.trim() || !selected) return;
+    runResult(() => scmCommit(project, selected, message), "commit", "home.scm.committed", () => setMessage(""));
+  };
+
+  if (!checkouts) {
+    return (
+      <>
+        <SidebarGroup className="p-0">
+          <SidebarGroupLabel className="h-6 text-muted-foreground" render={<label htmlFor="scm-checkout" />}>
+            {t("home.scm.checkout")}
+          </SidebarGroupLabel>
+          <Skeleton className="h-7 w-full" />
+        </SidebarGroup>
+        <SidebarGroup className="gap-2 p-0">
+          <div className="px-2">
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <ScmSkeletonRows />
+        </SidebarGroup>
+      </>
+    );
+  }
   const root = checkouts.filter((c) => c.isRoot);
   const worktrees = checkouts.filter((c) => !c.isRoot);
   const selectedCheckout = checkouts.find((c) => c.id === selected) ?? null;
@@ -2162,13 +2246,25 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
       {selected && (
         <SidebarGroup className="gap-2 p-0">
           <div className="flex items-center justify-between gap-2 px-2">
-            <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{status?.branch}</span>
-            <Button variant="ghost" size="xs" className="shrink-0" onClick={() => void refresh()}>
-              {t("home.scm.refresh")}
+            {status ? (
+              <span className="min-w-0 truncate font-mono text-xs text-muted-foreground">{status.branch}</span>
+            ) : failed ? (
+              <span className="min-w-0 truncate font-mono text-xs text-muted-foreground" />
+            ) : (
+              <Skeleton className="h-4 w-24" />
+            )}
+            <Button
+              variant="ghost"
+              size="xs"
+              className="shrink-0"
+              aria-disabled={busy !== null || undefined}
+              onClick={() => void refresh()}
+            >
+              {busy === "refresh" ? t("home.scm.refreshing") : t("home.scm.refresh")}
             </Button>
           </div>
           {failed && <p className="px-2 text-xs text-destructive">{t("home.scm.loadFailed")}</p>}
-          {status && (
+          {status ? (
             <>
               <div className="flex items-center gap-3 px-2 text-xs text-muted-foreground">
                 <span>
@@ -2198,10 +2294,10 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                     variant="outline"
                     size="xs"
                     className="flex-1"
-                    aria-disabled={busy || undefined}
-                    onClick={() => runResult(() => scmPush(project, selected))}
+                    aria-disabled={busy !== null || undefined}
+                    onClick={() => runResult(() => scmPush(project, selected), "push", "home.scm.pushed")}
                   >
-                    {t("home.scm.push")}
+                    {busy === "push" ? t("home.scm.pushing") : t("home.scm.push")}
                   </Button>
                 ) : (
                   <p className="flex-1 self-center text-xs text-muted-foreground">{t("home.scm.noPushSh")}</p>
@@ -2210,16 +2306,20 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   variant="outline"
                   size="xs"
                   className="flex-1"
-                  aria-disabled={busy || undefined}
+                  aria-disabled={busy !== null || undefined}
                   onClick={runPull}
                 >
-                  {t("home.scm.pull")}
+                  {busy === "pull" ? t("home.scm.pulling") : t("home.scm.pull")}
                 </Button>
               </div>
+              {!pullError && !actionError && successMsg && (
+                <p className="px-2 text-xs text-muted-foreground">{successMsg}</p>
+              )}
               <div className="px-2">
                 <Select
                   value={status.upstream ?? ""}
-                  onValueChange={(branch) => branch && run(() => scmSetUpstream(project, selected!, branch))}
+                  onValueChange={(branch) => branch && run(() => scmSetUpstream(project, selected!, branch), "upstream")}
+                  disabled={busy !== null}
                 >
                   <SelectTrigger size="sm" className="w-full">
                     <SelectValue placeholder={t("home.scm.noUpstream")} />
@@ -2238,13 +2338,13 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   variant="outline"
                   size="xs"
                   className="w-full"
-                  aria-disabled={busy || status.unstaged.length === 0 || undefined}
+                  aria-disabled={busy !== null || status.unstaged.length === 0 || undefined}
                   onClick={() => {
-                    if (status.unstaged.length === 0) return;
-                    run(() => scmStageAll(project, selected));
+                    if (busy || status.unstaged.length === 0) return;
+                    run(() => scmStageAll(project, selected), "stageAll");
                   }}
                 >
-                  {t("home.scm.stageAll")}
+                  {busy === "stageAll" ? t("home.scm.stagingAll") : t("home.scm.stageAll")}
                 </Button>
               </div>
               <SidebarGroup className="p-0">
@@ -2258,7 +2358,8 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                       key={`s-${f.path}`}
                       file={f}
                       title={t("home.scm.unstageTitle")}
-                      onClick={() => run(() => scmUnstage(project, selected, f.path))}
+                      onClick={() => run(() => scmUnstage(project, selected, f.path), { path: f.path })}
+                      moving={isBusyPath(busy, f.path)}
                     />
                   ))}
                 </SidebarMenu>
@@ -2274,15 +2375,25 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                       key={`u-${f.path}`}
                       file={f}
                       title={t("home.scm.stageTitle")}
-                      onClick={() => run(() => scmStage(project, selected, f.path))}
+                      onClick={() => run(() => scmStage(project, selected, f.path), { path: f.path })}
+                      moving={isBusyPath(busy, f.path)}
                     />
                   ))}
                 </SidebarMenu>
               </SidebarGroup>
+              {status.staged.length === 0 && status.unstaged.length === 0 && (
+                <p className="px-2 text-xs text-muted-foreground">{t("home.scm.noChanges")}</p>
+              )}
               <div className="flex flex-col gap-2 px-2">
                 <Textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                      e.preventDefault();
+                      commit();
+                    }
+                  }}
                   placeholder={t("home.scm.commitPlaceholder")}
                   className="min-h-16 text-xs"
                 />
@@ -2290,17 +2401,15 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   variant="default"
                   size="xs"
                   className="w-full"
-                  aria-disabled={busy || status.staged.length === 0 || !message.trim() || undefined}
-                  onClick={() => {
-                    if (busy || status.staged.length === 0 || !message.trim()) return;
-                    runResult(() => scmCommit(project, selected, message));
-                    setMessage("");
-                  }}
+                  aria-disabled={busy !== null || status.staged.length === 0 || !message.trim() || undefined}
+                  onClick={commit}
                 >
-                  {t("home.scm.commit")}
+                  {busy === "commit" ? t("home.scm.committing") : t("home.scm.commit")}
                 </Button>
               </div>
             </>
+          ) : (
+            !failed && <ScmSkeletonRows />
           )}
         </SidebarGroup>
       )}

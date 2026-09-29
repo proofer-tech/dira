@@ -174,3 +174,60 @@ test("LINK_TAB_EVENT 이펙트 — window 리스너를 등록·해제한다", ()
   assert.ok(linkTabBody.includes("window.addEventListener(LINK_TAB_EVENT, onLinkTab);"), "리스너 등록이 없다");
   assert.ok(linkTabBody.includes("window.removeEventListener(LINK_TAB_EVENT, onLinkTab);"), "리스너 해제가 없다 — 언마운트 뒤에도 남으면 닫힌 창을 향해 상태를 갱신한다");
 });
+
+// §11-18 결정 1: 다른 체크아웃을 고르면 앞 status를 즉시 비워야 스켈레톤이 뜬다(§11-18 §실측
+// 표 2행) - `다시 읽기`(refresh)는 반대로 종전 값을 두고 갈아 끼운다(§실측 표 3행).
+const pickA = s.indexOf("const pick = (id: string) => {");
+const pickB = s.indexOf("\n  };", pickA);
+assert.ok(pickA >= 0 && pickB > pickA, "home-ui.tsx: pick 구간을 못 찾았다");
+const pickBody = s.slice(pickA, pickB);
+
+const refreshA = s.indexOf("const refresh = async () => {");
+const refreshB = s.indexOf("\n  };", refreshA);
+assert.ok(refreshA >= 0 && refreshB > refreshA, "home-ui.tsx: refresh 구간을 못 찾았다");
+const refreshBody = s.slice(refreshA, refreshB);
+
+test("pick() — 체크아웃을 갈면 setStatus(null)로 앞 status를 비운다(§11-18 결정 1) — 그래야 브랜치 줄 아래가 스켈레톤으로 간다", () => {
+  assert.ok(pickBody.includes("setStatus(null);"), "pick()이 status를 안 비운다 - 앞 체크아웃의 브랜치·파일 줄이 그대로 남는다");
+});
+
+test("refresh() — 재조회 시작 전에 status를 안 비운다(§11-18 결정 1 3항) — 같은 체크아웃 재조회는 스켈레톤 없이 종전 값을 두고 갈아 끼운다", () => {
+  // 유일한 예외는 갈 곳이 아예 없어진 뒤(`else setStatus(null)`)다 - 이건 스켈레톤이 아니라
+  // 빈 상태로 가는 게 맞다. 문제는 fetch 전에 미리 비우는 것이라, `await scmCheckouts` 앞에는
+  // setStatus(null)이 없어야 한다.
+  const beforeFetch = refreshBody.slice(0, refreshBody.indexOf("await scmCheckouts"));
+  assert.ok(!beforeFetch.includes("setStatus(null)"), "refresh()가 fetch 전에 status를 비우면 `다시 읽기`를 누를 때마다 스켈레톤이 깜빡인다");
+});
+
+// §11-18 결정 3: 커밋 메시지 칸은 성공했을 때만 비운다 - 실패하면 적은 글이 남는다(수용조건 6).
+const commitA = s.indexOf("const commit = () => {");
+const commitB = s.indexOf("\n  };", commitA);
+assert.ok(commitA >= 0 && commitB > commitA, "home-ui.tsx: commit 구간을 못 찾았다");
+const commitBody = s.slice(commitA, commitB);
+
+test("commit() — setMessage(\"\")가 runResult의 onSuccess로만 들어간다 — 실패해도 무조건 지우던 종전 버그가 없다", () => {
+  assert.ok(
+    commitBody.includes('() => setMessage("")'),
+    "commit()이 성공 콜백 자리에서 메시지를 안 비운다",
+  );
+  const unconditionalClear = /\n\s*setMessage\(""\);\s*\n/.test(commitBody);
+  assert.ok(!unconditionalClear, "commit()이 결과와 무관하게 setMessage(\"\")를 부른다 - 실패해도 적은 글이 사라진다(§11-18 결정 3 위반)");
+});
+
+// §11-18 결정 2: 파일 한 줄이 도는 동안만 그 줄이 흐려지고 옮기는 중... 라벨을 든다 - 다른 줄은
+// 안 흔들린다. isBusyPath가 그 판정을 쥔다.
+const isBusyPathA = s.indexOf("function isBusyPath(");
+const isBusyPathB = s.indexOf("\n}", isBusyPathA) + 2;
+assert.ok(isBusyPathA >= 0, "home-ui.tsx: isBusyPath를 못 찾았다");
+// 타입 주석을 지운 몸통만 돌린다 - `new Function`은 순수 JS라 TS 타입 표기(`: ScmBusy` 등)를 못 삼킨다.
+const isBusyPathJs = s
+  .slice(isBusyPathA, isBusyPathB)
+  .replace("function isBusyPath(busy: ScmBusy, path: string): boolean {", "function isBusyPath(busy, path) {");
+const isBusyPath = new Function(`${isBusyPathJs}\nreturn isBusyPath;`)();
+
+test("isBusyPath — busy가 그 줄의 path를 실은 { path }일 때만 참이다", () => {
+  assert.strictEqual(isBusyPath(null, "a.ts"), false);
+  assert.strictEqual(isBusyPath("push", "a.ts"), false);
+  assert.strictEqual(isBusyPath({ path: "a.ts" }, "a.ts"), true);
+  assert.strictEqual(isBusyPath({ path: "a.ts" }, "b.ts"), false);
+});
