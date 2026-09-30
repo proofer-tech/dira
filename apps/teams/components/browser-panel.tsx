@@ -198,7 +198,12 @@ export function BrowserMirror({
       {(ownerName || unlocked) && (
         <div className="flex items-center justify-between border-b bg-muted/50 px-3 py-1.5">
           <span className="flex items-center gap-1.5 text-xs font-medium">
-            {busy && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-muted-foreground" />}
+            {busy && (
+              <span
+                aria-hidden
+                className="size-1.5 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
+              />
+            )}
             {ownerName && <span>{inUseLabel(locale, ownerName, t)}</span>}
             {unlocked && <span>{t("browser.wrap.unlocked")}</span>}
           </span>

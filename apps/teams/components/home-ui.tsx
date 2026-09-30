@@ -2003,7 +2003,7 @@ function TabBar({
                     {busy && (
                       <span
                         aria-hidden
-                        className="size-1.5 shrink-0 rounded-full bg-muted-foreground"
+                        className="size-1.5 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
                       />
                     )}
                     <Tooltip>
@@ -2871,7 +2871,12 @@ function BrowserLeftPanel({
                   aria-current={row.hash === activeTab ? "true" : undefined}
                   onClick={() => void open(row.hash)}
                 >
-                  {row.busy && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-muted-foreground" />}
+                  {row.busy && (
+                    <span
+                      aria-hidden
+                      className="size-1.5 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
+                    />
+                  )}
                   <span className="min-w-0 grow truncate text-sm">
                     {name && <span className="mr-1">{name}</span>}
                     <span className="font-mono text-muted-foreground">{row.hash}</span>
