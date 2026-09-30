@@ -480,6 +480,45 @@ Stream lines and question-and-answer bubbles sit in one box in time order. That 
 is called `Progress record`. This place answers one question. What has happened to this ticket so
 far.
 
+### A ticket that ran more than once gets one card per round
+
+Some tickets do not finish in one go. A session gets stuck, posts a question, gets its answer and is
+assigned again, or a session dies and another worker takes over. Each time the ticket is assigned to
+a worker, one more round starts, and the box stacks one card per round from the top in time order.
+Three cards means the ticket ran three times.
+
+The head line of a card starts with its number, like `Round 1`, followed by the worker that held
+that round, the time it started, and how it ended. The ending is the engine's own word (`DONE` and
+the like), and a round still running reads `In progress`.
+
+**Only the last round is unfolded.** Earlier rounds show just their head. To see where a round
+stopped, press its head. Only the events of that round unfold, with no tool calls from later rounds
+mixed in. The last card is also the only place where events attach live. A round that left no
+record shows a single `No transcript` line under its head.
+
+A question and its answer sit **between cards**. If the first round got stuck and posted a
+question, a person answered it, and the second round started with that answer, the round trip sits
+between the first and the second card. The time the answer was written decides which gap it falls
+into. An interject a person sent while a round was running stays inside that round's card. A
+question with no answer yet and the input field are at the very bottom, outside the last card.
+
+**A ticket that ran only once has no cards.** Most tickets are like that, and for them the screen is
+exactly as described below. If old records were cleaned up and early rounds are gone, only the
+remaining rounds get cards, and the numbering starts from what remains.
+
+**The steps a session wrote down (explained below) are split across the cards by round too.** A
+finished step is in the card of the round that finished it. To look again at a step finished in
+round 1, press the head of the `Round 1` card to unfold it. The last card does not show that step.
+A step started in round 1 and finished in round 2 sits in the round 2 card.
+
+| Step | Card it sits in |
+|---|---|
+| Finished or abandoned | The card of the round that finished (or abandoned) it. With no end time, the card of the round that started it |
+| Running now | The card of the round that started it |
+| Not started yet | The last card |
+
+Inside a card, steps keep the order the session wrote them in.
+
 Open a running ticket and the box is divided into steps. Before it starts work, the session
 holding the ticket writes down for itself what it will do and in what order. It is not a list a
 person hands over. Each line it writes becomes one step in the box, and unfolding that line shows
