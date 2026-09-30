@@ -725,6 +725,7 @@ poll_step() {
         done
         ;;
       "ASK "*) log "$PLAN" ;;
+      "POLL "*"상한 초과"*) log "$PLAN" ;;
       *) log "WARN POLL 알 수 없는 pollplan 출력: $p_hash: $PLAN" ;;
     esac
     rm -rf "$LOCKP"

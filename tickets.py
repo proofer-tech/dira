@@ -1126,6 +1126,49 @@ def ask_human_polling(path, why, log_tail):
     return "ASK {} awaiting={} - {}, 답변 요청으로 전환".format(h, a, why)
 
 
+def autonomy_level(local=None):
+    """`$LOCAL/autonomy.json`의 `level`을 읽는다 - 흡수 판정은 `tick.sh` 주도성 주입과 같다
+    (파일 없음 - 깨진 JSON - 객체 아님 - 정수 아님 - 1~5 밖 다섯 경우 전부 4)."""
+    local = local or os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
+    try:
+        with open(os.path.join(local, "autonomy.json"), encoding="utf-8") as f:
+            o = json.load(f)
+        v = o.get("level") if isinstance(o, dict) else None
+        if isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 5:
+            return v
+    except Exception:
+        pass
+    return 4
+
+
+# §폴링 상한 결정 2 - 4와 5는 사람에게 안 묻고 조건과 무관하게 디스패치 후보로 돌린다. 다음
+# 세션에게 주는 지시는 결정 2가 정한 문구 그대로다(재폴링 금지 - 지금 상태에서 진행 - 사람만
+# 가진 것이 없으면 블록).
+_POLL_EXPIRE_NEXT_LINE = ("엔진이 조건과 무관하게 디스패치했습니다. 같은 조건으로 `poll`을 "
+                          "다시 걸지 말고 지금 상태에서 진행하세요. 사람만 가진 것이 없어 "
+                          "못 하면 `## 블록`입니다.")
+
+
+def poll_expire_dispatch(path, why, log_tail, level):
+    """폴링 상한 초과를 주도성 4·5에서 디스패치 후보로 돌린다(§폴링 상한 결정 1·2).
+
+    지우는 것은 `ask_human_polling`과 같은 하나 - `polling`뿐이다(`polling_until` -
+    `polled_at`은 이력). `awaiting:`도 `deps:`도 안 건드린다 - `## 질문`이 아닌 `## 폴링
+    만료 n` 절이라 GUI가 답변 대기로 안 읽는다.
+    """
+    fm, lines, end = read_fm(path)
+    h = ticket_hash(path, fm)
+    n = sum(1 for l in lines[end:] if re.match(r"^##\s*폴링 만료", l)) + 1
+    tail = "\n### 마지막 폴링 출력\n\n{}\n".format(
+        _quote(_capped(log_tail, 1500)) if log_tail.strip() else _quote("(출력 없음)"))
+    body = "\n## 폴링 만료 {}\n\n{}. 주도성 {}/5라 엔진이 사람에게 묻지 않습니다.\n\n{}{}".format(
+        n, why, level, _POLL_EXPIRE_NEXT_LINE, tail)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(body)
+    set_fm_keys(path, {"polling": ""})
+    return "POLL {} 상한 초과 - 주도성 {}, 조건 없이 디스패치 후보로 돌린다".format(h, level)
+
+
 def fresh_block(path):
     """본문의 마지막 `##` 절이 `블록`인지 -- 세션이 벽을 보고 "이건 사람이 푼다"고 판정했다는
     신선 판정(DESIGN.md 결정 7). 묵은 블록 뒤에는 ask_human이 붙인 `## 질문 n`이 반드시 오므로
@@ -1690,7 +1733,11 @@ def main():
                     tail = f.read()
             except OSError:
                 tail = ""
-            print(ask_human_polling(path, "`polling_until` 상한을 지났습니다", tail))
+            level = autonomy_level()
+            if level >= 4:
+                print(poll_expire_dispatch(path, "`polling_until` 상한을 지났습니다", tail, level))
+            else:
+                print(ask_human_polling(path, "`polling_until` 상한을 지났습니다", tail))
             return
         script = (fm.get("polling") or "").strip().strip("\"'")
         interval, clamp = 0, ""

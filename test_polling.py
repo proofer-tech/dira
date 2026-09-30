@@ -3,6 +3,8 @@
 아니다(`4be14983`). 진짜 claude를 부르지 않는다 - argv 기반 즉시 성공 가짜 엔진 하나로
 DISPATCH 여부만 본다. 실패하면 assert로 죽는다."""
 import os
+import re
+import glob
 import sys
 import time
 import shutil
@@ -54,6 +56,14 @@ def mk(troot, h, fm_lines, body="## 목표\n테스트\n", suffix=""):
     with open(p, "w", encoding="utf-8") as f:
         f.write("---\nticket: {}\n{}\n---\n\n{}".format(h, "\n".join(fm_lines), body))
     return p
+
+
+def findpath(root, h):
+    """해시로 현재 파일 경로를 찾는다 - 디스패치 후보로 풀리면 같은 tick 안에서 `.wip`이
+    붙어(4번 케이스와 같은 흐름) 열 때 쓴 고정 경로가 사라질 수 있다."""
+    matches = glob.glob(os.path.join(root, "tickets", h + "*.md"))
+    assert matches, "해시 {}의 티켓 파일을 못 찾았다".format(h)
+    return matches[0]
 
 
 def count(path):
@@ -187,8 +197,10 @@ try:
     assert "눌렸다" in e6.runner_log(), "6: 눌린 사실 로그가 없다\n" + e6.runner_log()
     passed += 1
 
-    # ---- 7. polling_until이 지난 뒤 tick 한 번 -> 답변 대기 + 마지막 폴링 출력 인용 -------
+    # ---- 7. polling_until이 지난 뒤 tick 한 번(주도성 3) -> 답변 대기 + 마지막 폴링 출력 인용
+    # (주도성 4·5의 새 갈래는 12~14, 기본 흡수값 4가 여기서 쓰이면 안 되므로 3을 못 박는다) --
     e7 = newenv("expire")
+    mkfile(os.path.join(e7.local, "autonomy.json"), '{"level": 3}\n')
     h7 = "ffff0007"
     p7 = mk(e7.root, h7, ["polling: cond.sh", "polling_until: " + iso(-10)])
     mkfile(os.path.join(e7.root, "polls", "지난-출력.log"), "", 0o644)  # 안 씀(경로 확인용 아님)
@@ -318,7 +330,71 @@ try:
 
     passed += 1
 
-    print("PASS {}/11".format(passed))
+    # ---- 12. 주도성 5 - 상한 초과가 안 묻고 `## 폴링 만료 1`로 디스패치 후보로 돌아간다 ----
+    e12 = newenv("autonomy5")
+    mkfile(os.path.join(e12.local, "autonomy.json"), '{"level": 5}\n')
+    h12 = "kkkk0012"
+    p12 = mk(e12.root, h12, ["polling: cond.sh", "polling_until: " + iso(-10)])
+    logf12 = os.path.join(e12.root, "polls", h12 + ".log")
+    mkfile(logf12, "아직 조건 미도달\n", 0o644)
+    r = e12.run("tick")
+    assert r.returncode == 0, "12: tick 실패\n" + r.stderr
+    fm12, lines12, end12 = T.read_fm(findpath(e12.root, h12))
+    assert not (fm12.get("awaiting") or "").strip(), "12: awaiting이 걸렸다"
+    assert not fm12["polling"].strip(), "12: polling이 안 지워졌다"
+    assert not T.deps_of(lines12, end12), "12: deps가 생겼다"
+    body12 = "\n".join(lines12[end12:])
+    heads12 = [l for l in lines12[end12:] if re.match(r"^##\s", l)]
+    assert heads12 and heads12[-1].strip() == "## 폴링 만료 1", "12: 마지막 절이 폴링 만료 1이 아니다\n" + body12
+    assert body12.count("## 질문") == 0, "12: 질문 절이 생겼다\n" + body12
+    assert "아직 조건 미도달" in body12, "12: 마지막 폴링 출력 인용이 없다\n" + body12
+    assert "상한 초과 - 주도성 5" in e12.runner_log(), "12: 로그에 상한 초과 줄이 없다\n" + e12.runner_log()
+    assert "알 수 없는 pollplan 출력" not in e12.runner_log(), "12: 알 수 없는 출력 경고가 떴다\n" + e12.runner_log()
+    passed += 1
+
+    # ---- 13. 주도성 4도 12와 같다 --------------------------------------------------------
+    e13 = newenv("autonomy4")
+    mkfile(os.path.join(e13.local, "autonomy.json"), '{"level": 4}\n')
+    h13 = "kkkk0013"
+    p13 = mk(e13.root, h13, ["polling: cond.sh", "polling_until: " + iso(-10)])
+    r = e13.run("tick")
+    assert r.returncode == 0, "13: tick 실패\n" + r.stderr
+    fm13, lines13, end13 = T.read_fm(findpath(e13.root, h13))
+    assert not (fm13.get("awaiting") or "").strip(), "13: awaiting이 걸렸다"
+    body13 = "\n".join(lines13[end13:])
+    heads13 = [l for l in lines13[end13:] if re.match(r"^##\s", l)]
+    assert heads13 and heads13[-1].strip() == "## 폴링 만료 1", "13: 마지막 절이 폴링 만료 1이 아니다\n" + body13
+    passed += 1
+
+    # ---- 14. autonomy.json 없음도 4로 흡수돼 12·13과 같다 --------------------------------
+    e14 = newenv("autonomy-none")
+    h14 = "kkkk0014"
+    p14 = mk(e14.root, h14, ["polling: cond.sh", "polling_until: " + iso(-10)])
+    r = e14.run("tick")
+    assert r.returncode == 0, "14: tick 실패\n" + r.stderr
+    fm14, lines14, end14 = T.read_fm(findpath(e14.root, h14))
+    assert not (fm14.get("awaiting") or "").strip(), "14: awaiting이 걸렸다"
+    heads14 = [l for l in lines14[end14:] if re.match(r"^##\s", l)]
+    assert heads14 and heads14[-1].strip() == "## 폴링 만료 1", "14: 마지막 절이 폴링 만료 1이 아니다"
+    passed += 1
+
+    # ---- 15. 주도성 3은 지금처럼 `## 질문 1` + awaiting + deps append다 -----------------
+    e15 = newenv("autonomy3")
+    mkfile(os.path.join(e15.local, "autonomy.json"), '{"level": 3}\n')
+    h15 = "kkkk0015"
+    p15 = mk(e15.root, h15, ["polling: cond.sh", "polling_until: " + iso(-10)])
+    r = e15.run("tick")
+    assert r.returncode == 0, "15: tick 실패\n" + r.stderr
+    fm15, lines15, end15 = T.read_fm(p15)
+    awaiting15 = fm15["awaiting"].strip()
+    assert len(awaiting15) == 8, "15: awaiting 미기록 " + repr(fm15.get("awaiting"))
+    assert awaiting15 in T.deps_of(lines15, end15), "15: deps에 안 걸렸다"
+    body15 = "\n".join(lines15[end15:])
+    assert "## 질문 1" in body15, "15: 질문 절이 없다\n" + body15
+    assert "## 폴링 만료" not in body15, "15: 폴링 만료 절이 생겼다\n" + body15
+    passed += 1
+
+    print("PASS {}/15".format(passed))
 finally:
     for e in envs:
         e.cleanup()
