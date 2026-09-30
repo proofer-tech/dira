@@ -88,6 +88,7 @@ import type { InterjectReason } from "@/lib/interject";
 import type { OptionGroup, PlanItem, PlanProgress, ThreadItem } from "@/lib/queue";
 import type { StreamEvent } from "@/lib/transcript";
 import {
+  bucketPlansByRounds,
   bucketThreadByRounds,
   dateTimeLabel,
   engineCan,
@@ -102,7 +103,9 @@ import {
   NO_QUESTION_SECTION_NOTICE,
   pairTool,
   planBlocks,
+  type ProgressBlock,
   type ProgressFilterKind,
+  type ProgressItem,
   progressMarkerText,
   relativeElapsed,
   type RoundHeader,
@@ -441,22 +444,27 @@ export function SessionStream({
   // 스레드 항목은 `ts`가 없으므로 `windowEvents`가 **앞 사건의 시각을 물려받는** 그 규칙
   // (§2-3 ②)을 그대로 타고 계획 창에 든다 — 여기서 새로 시각을 지어내지 않는다.
   const timedMerged = merged.map((it) => ({ it, ts: it.event?.ts }));
+  // 계획 항목을 회차로 나눈다(§2-3 개정 3) — 마지막(지금 도는) 카드만 자기 회차 몫을 받는다.
+  // `carded`가 거짓이면(카드 1장 이하) `planBuckets`가 없고 `cardPlans`는 `plans` 그대로라
+  // 개정 전과 클래스 0 차이다.
+  const planBuckets = carded ? bucketPlansByRounds(plans, rounds.map((r) => r.dispatchAtMs)) : null;
+  const cardPlans = planBuckets ? planBuckets[planBuckets.length - 1].map((i) => plans[i]) : plans;
   // §비주얼 §59 ⑦ — 계획이 있으면 상자 안이 계획 블록 단위로 갈린다. 계획이 없으면(§2-11④
   // "계획 절이 없는 티켓") 상자 하나가 곧 "계획 밖" 블록 하나다 — 그 갈래에서 아래가 그리는 것은
   // `groupProgress(merged, isBubble)`을 그대로 도는 개정 전 화면과 클래스 0 차이다.
   // 워커 다이얼로그의 `단계로 묶기`(§2-15 ⑯)를 끄면 계획이 있어도 이 둘째 갈래로 간다 — 새 렌더
   // 갈래가 아니라 계획 절이 없는 티켓이 이미 타는 그 자리다. `isPlanEdgeSegment`의 `hasPlans`도
   // 이 값을 받는다 — 꺼진 채로는 `배정`·`마무리` 접는 그릇도 안 뜬다(단계 절이 없는 화면 그대로).
-  const grouping = plans.length > 0 && (variant !== "worker" || groupByPlan);
+  const grouping = cardPlans.length > 0 && (variant !== "worker" || groupByPlan);
   const blocks = grouping
-    ? planBlocks(plans, timedMerged, now)
+    ? planBlocks(cardPlans, timedMerged, now)
     : [{ kind: "outside" as const, events: timedMerged }];
   // 진행중 모양이 둘 이상이면 파일 순서상 마지막 하나만 진짜다(§2-11④) — 앞의 것들은 완료처럼
   // 그린다(닫힌 아코디언, `기록 n건`). 안 그러면 열린 아코디언이 둘 이상이 되어 "열린 것이
   // 진행중 하나뿐"이라는 계약(§비주얼 §59 ⑧ 수용조건 6)이 깨진다. `windowEvents`(안에서
   // `planBlocks`가 부른다)가 창을 배분할 때 쓰는 판정과 같은 한 줄이다.
-  const lastDoing = plans.reduce((last, p, i) => (p.state === "doing" ? i : last), -1);
-  const effectivePlans = plans.map((p, i) =>
+  const lastDoing = cardPlans.reduce((last, p, i) => (p.state === "doing" ? i : last), -1);
+  const effectivePlans = cardPlans.map((p, i) =>
     p.state === "doing" && i !== lastDoing ? { ...p, state: "done" as const } : p,
   );
 
@@ -654,60 +662,20 @@ export function SessionStream({
                 // 검색·필터가 전부 걸러냈다(§2-15 ⑥·⑨) — 칩 줄·머리는 위에서 이미 그렸고 안 갈린다.
                 <p className={cn(LINE, "text-xs text-muted-foreground")}>{t("progress.stream.noMatch")}</p>
               ) : (
-                blocks.map((block, bi) =>
-                block.kind === "outside" ? (
-                  // §2-11⑨ 결정2 — 계획 목록이 있는 상자에서 맨 앞·맨 뒤 `outside`만 `배정`·
-                  // `마무리` 칸이다. 사이 틈(§59 ⑦)은 표식 없이 종전대로 흐른다.
-                  isPlanEdgeSegment(bi, blocks.length, grouping) ? (
-                    <SegmentBlock
-                      key={`o${bi}`}
-                      project={project}
-                      label={t(bi === 0 ? "progress.segment.assign" : "progress.segment.wrapup")}
-                      items={groupProgress(
-                        block.events.map((w) => w.it),
-                        isBubble,
-                      )}
-                      onToggle={onToggle}
-                      threadKey={threadKey}
-                      vault={vault}
-                      refs={liveRefs}
-                      forceOpen={searching}
-                      ctx={workerCtx}
-                    />
-                  ) : (
-                    <ProgressItems
-                      key={`o${bi}`}
-                      project={project}
-                      items={groupProgress(
-                        block.events.map((w) => w.it),
-                        isBubble,
-                      )}
-                      threadKey={threadKey}
-                      onToggle={onToggle}
-                      vault={vault}
-                      refs={liveRefs}
-                      forceOpen={searching}
-                      ctx={workerCtx}
-                    />
-                  )
-                ) : (
-                  <PlanBlock
-                    key={`p${block.index}`}
-                    project={project}
-                    plan={effectivePlans[block.index]}
-                    items={groupProgress(
-                      block.events.map((w) => w.it),
-                      isBubble,
-                    )}
-                    onToggle={onToggle}
-                    threadKey={threadKey}
-                    vault={vault}
-                    refs={liveRefs}
-                    forceOpen={searching}
-                    ctx={workerCtx}
-                  />
-                ),
-              ))}
+                <BlockList
+                  blocks={blocks}
+                  grouping={grouping}
+                  effectivePlans={effectivePlans}
+                  project={project}
+                  threadKey={threadKey}
+                  onToggle={onToggle}
+                  vault={vault}
+                  refs={liveRefs}
+                  forceOpen={searching}
+                  ctx={workerCtx}
+                  isBubble={isBubble}
+                />
+              )}
               {/* 진행 표식(§18 ④) — **자리가 한 갈래다**(개정 요구 `c1312f3d`): 계획이 있든 없든
                   상자 안 맨 아래다. 진행중 계획 아코디언을 접어도 안 숨는다 — `<details>` 밖에
                   뜬다. 마지막 사건 다음 줄이 올 자리를 지킨다. **말풍선 아래로 안 내려간다**:
@@ -812,6 +780,8 @@ export function SessionStream({
                             onToggle={onToggle}
                             vault={vault}
                             refs={liveRefs}
+                            plans={planBuckets![i].map((idx) => plans[idx])}
+                            now={now}
                           />
                         )}
                       </RoundCard>
@@ -997,7 +967,10 @@ function RoundCard({
  *  여기는 사건만이다. 서버가 빈 배열을 주면(sid를 못 찾았다 - 로테이션으로 빠졌다 - grok 파일이
  *  없다) `ticketDetail.noTranscript`를 **한 줄로**(§9 빈 상태 문구 그대로, 개정 표 "머리 +
  *  트랜스크립트 없음 한 줄") — `<EmptyState>` 그릇(테두리 + py-10)은 카드 안에서 너무 무거워
- *  안 쓴다. */
+ *  안 쓴다.
+ *
+ *  `plans`는 이 회차 몫만(§2-3 개정 3, `bucketPlansByRounds`가 이미 골라 넘긴다) — 비어 있으면
+ *  이 카드는 종전 `RoundBody` 화면(계획 없는 `ProgressItems` 한 벌) 그대로다. */
 function RoundBody({
   project,
   stem,
@@ -1006,6 +979,8 @@ function RoundBody({
   onToggle,
   vault,
   refs,
+  plans,
+  now,
 }: {
   project: string;
   stem: string;
@@ -1014,6 +989,8 @@ function RoundBody({
   onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
   vault?: Vault;
   refs?: RefIndex;
+  plans: PlanItem[];
+  now: number;
 }) {
   const t = useT();
   const [state, setState] = useState<{ status: "loading" | "empty" | "loaded"; events: StreamEvent[] }>({
@@ -1035,18 +1012,116 @@ function RoundBody({
   if (state.status === "empty") {
     return <p className={cn(LINE, "text-xs text-muted-foreground")}>{t("ticketDetail.noTranscript")}</p>;
   }
+  const isBubble = (e: StreamEvent) => e.label === "";
+  const grouping = plans.length > 0;
+  const timed = state.events.map((e) => ({ it: { event: e } as ProgressItem<StreamEvent, ThreadItem>, ts: e.ts }));
+  const blocks = grouping ? planBlocks(plans, timed, now) : [{ kind: "outside" as const, events: timed }];
+  const lastDoing = plans.reduce((last, p, i) => (p.state === "doing" ? i : last), -1);
+  const effectivePlans = plans.map((p, i) =>
+    p.state === "doing" && i !== lastDoing ? { ...p, state: "done" as const } : p,
+  );
   return (
-    <ProgressItems
+    <BlockList
+      blocks={blocks}
+      grouping={grouping}
+      effectivePlans={effectivePlans}
       project={project}
-      items={groupProgress(
-        state.events.map((e) => ({ event: e })),
-        (e) => e.label === "",
-      )}
       threadKey={threadKey}
       onToggle={onToggle}
       vault={vault}
       refs={refs}
+      isBubble={isBubble}
     />
+  );
+}
+
+/** 회차 카드 안의 블록 목록 — 티켓 상세(마지막 카드 = `listContent`)와 옛 회차 카드(`RoundBody`)가
+ *  같은 렌더를 쓴다(§2-3 개정 3, 계획 항목이 회차로 갈려도 그리는 방식은 하나다). `blocks`는
+ *  `planBlocks`(계획이 있다) 아니면 `[{kind:"outside", events: timedMerged}]`(계획이 없다) —
+ *  호출부가 이미 그 갈림을 정하고 `grouping`으로 같이 넘긴다(`isPlanEdgeSegment`가 그 값을 본다). */
+function BlockList({
+  blocks,
+  grouping,
+  effectivePlans,
+  project,
+  threadKey,
+  onToggle,
+  vault,
+  refs,
+  forceOpen,
+  ctx,
+  isBubble,
+}: {
+  blocks: ProgressBlock<{ it: ProgressItem<StreamEvent, ThreadItem>; ts?: string }>[];
+  grouping: boolean;
+  effectivePlans: PlanItem[];
+  project: string;
+  threadKey: Map<ThreadItem, string>;
+  onToggle: (e: React.SyntheticEvent<HTMLDetailsElement>) => void;
+  vault?: Vault;
+  refs?: RefIndex;
+  forceOpen?: boolean;
+  ctx?: WorkerRowCtx;
+  isBubble: (e: StreamEvent) => boolean;
+}) {
+  const t = useT();
+  return (
+    <>
+      {blocks.map((block, bi) =>
+        block.kind === "outside" ? (
+          // §2-11⑨ 결정2 — 계획 목록이 있는 상자에서 맨 앞·맨 뒤 `outside`만 `배정`·
+          // `마무리` 칸이다. 사이 틈(§59 ⑦)은 표식 없이 종전대로 흐른다.
+          isPlanEdgeSegment(bi, blocks.length, grouping) ? (
+            <SegmentBlock
+              key={`o${bi}`}
+              project={project}
+              label={t(bi === 0 ? "progress.segment.assign" : "progress.segment.wrapup")}
+              items={groupProgress(
+                block.events.map((w) => w.it),
+                isBubble,
+              )}
+              onToggle={onToggle}
+              threadKey={threadKey}
+              vault={vault}
+              refs={refs}
+              forceOpen={forceOpen}
+              ctx={ctx}
+            />
+          ) : (
+            <ProgressItems
+              key={`o${bi}`}
+              project={project}
+              items={groupProgress(
+                block.events.map((w) => w.it),
+                isBubble,
+              )}
+              threadKey={threadKey}
+              onToggle={onToggle}
+              vault={vault}
+              refs={refs}
+              forceOpen={forceOpen}
+              ctx={ctx}
+            />
+          )
+        ) : (
+          <PlanBlock
+            key={`p${block.index}`}
+            project={project}
+            plan={effectivePlans[block.index]}
+            items={groupProgress(
+              block.events.map((w) => w.it),
+              isBubble,
+            )}
+            onToggle={onToggle}
+            threadKey={threadKey}
+            vault={vault}
+            refs={refs}
+            forceOpen={forceOpen}
+            ctx={ctx}
+          />
+        ),
+      )}
+    </>
   );
 }
 

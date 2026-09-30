@@ -206,7 +206,7 @@ test("단계로 묶기 켜짐이 기본값이다 — 그 상태에서 계획 블
   );
   assert.match(
     s,
-    /const grouping = plans\.length > 0 && \(variant !== "worker" \|\| groupByPlan\);/,
+    /const grouping = cardPlans\.length > 0 && \(variant !== "worker" \|\| groupByPlan\);/,
     "grouping 판정이 없다 — 켜짐 상태에서 계획 블록으로 갈리는 근거가 없다",
   );
 });
@@ -214,7 +214,7 @@ test("단계로 묶기 켜짐이 기본값이다 — 그 상태에서 계획 블
 test("끄면 `outside` 블록 하나로 간다 — 단계 제목 · `배정` - `마무리` 칸이 안 뜬다(S24)", () => {
   assert.match(
     s,
-    /const blocks = grouping\s*\n\s*\? planBlocks\(plans, timedMerged, now\)\s*\n\s*: \[\{ kind: "outside" as const, events: timedMerged \}\];/,
+    /const blocks = grouping\s*\n\s*\? planBlocks\(cardPlans, timedMerged, now\)\s*\n\s*: \[\{ kind: "outside" as const, events: timedMerged \}\];/,
     "blocks가 groupByPlan을 안 본다 — 꺼도 계획 아코디언 그대로다",
   );
   assert.match(

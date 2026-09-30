@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   activeEpicFrom,
+  bucketPlansByRounds,
   bucketThreadByRounds,
   chatRows,
   chatTabTitle,
@@ -443,6 +444,39 @@ test("bucketThreadByRounds ③ — 회차가 하나뿐이면 칸이 둘이고, �
   assert.strictEqual(buckets.length, 2);
   assert.deepEqual(headingsOf(buckets[0]), []); // 카드 1 앞엔 아무것도 없다
   assert.deepEqual(headingsOf(buckets[1]), ["질문 1", "답변 1"]);
+});
+
+/** 계획 항목을 회차로 나눈다(§2-3 개정 3). 칸 수는 `starts.length`(회차마다 하나) — 스레드와
+ *  달리 "회차 밖 지금" 칸이 없다. `plan()`은 위 §2-11④ 테스트가 이미 정의한 헬퍼다. */
+const bIdx = (buckets: number[][], plans: { text: string }[]) =>
+  buckets.map((b) => b.map((i) => plans[i].text));
+
+test("bucketPlansByRounds ① — 끝 시각이 찍힌 완료 항목은 끝 시각이 든 회차에 선다", () => {
+  const starts = [1000, 2000, 3000]; // 회차 1·2·3 시작
+  const plans = [plan("a", "done", "500", "1500")]; // 회차 1(1000)~2(2000) 사이에 끝났다 = 회차 1
+  const buckets = bucketPlansByRounds(plans, starts);
+  assert.deepEqual(bIdx(buckets, plans), [["a"], [], []]);
+});
+
+test("bucketPlansByRounds ② — 시작만 있는 항목(진행중, 또는 끝 시각 없는 완료-취소)은 시작 시각이 든 회차에 선다", () => {
+  const starts = [1000, 2000];
+  const plans = [plan("doing", "doing", "1500"), plan("done-no-end", "done", "2500", null)];
+  const buckets = bucketPlansByRounds(plans, starts);
+  assert.deepEqual(bIdx(buckets, plans), [["doing"], ["done-no-end"]]);
+});
+
+test("bucketPlansByRounds ③ — 시각이 하나도 없는 항목(미착수)은 마지막 회차에 선다", () => {
+  const starts = [1000, 2000, 3000];
+  const plans = [plan("todo", "todo", null)];
+  const buckets = bucketPlansByRounds(plans, starts);
+  assert.deepEqual(bIdx(buckets, plans), [[], [], ["todo"]]);
+});
+
+test("bucketPlansByRounds ④ — 첫 회차 시작보다 이른 시각은 회차 1(index 0)이다", () => {
+  const starts = [1000, 2000];
+  const plans = [plan("early", "done", "100", "500")];
+  const buckets = bucketPlansByRounds(plans, starts);
+  assert.deepEqual(bIdx(buckets, plans), [["early"], []]);
 });
 
 /** 말풍선 사이 묶음 (DESIGN.md §2-6 ②, designer `f0202829`). `label`이 빈 사건이 말풍선이고

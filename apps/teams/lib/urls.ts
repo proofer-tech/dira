@@ -516,6 +516,37 @@ export function bucketThreadByRounds<T extends { role: string; birth?: number }>
   return buckets;
 }
 
+/** 계획 항목을 회차 경계로 쪼갠다(§2-3 개정 3) — `bucketThreadByRounds`와 달리 칸이
+ *  `starts.length`개다(회차마다 하나, 회차 밖 "지금" 칸이 없다): 계획은 항상 어느 회차엔가 속한
+ *  티켓 본문의 줄이지, 스레드처럼 회차 사이 틈에 뜨는 것이 아니다.
+ *
+ *  항목이 속한 시각은 상태에 따라 갈린다(§2-3 개정 3 "항목이 속한 회차" 표) — **끝 시각이
+ *  있으면 끝 시각**(완료·취소가 그 회차에서 "끝난" 사실을 잰다), 없으면 **시작 시각**(진행중,
+ *  또는 끝 시각을 안 적은 완료·취소), **시각이 하나도 없으면 마지막 회차**(미착수 항목이 여기로
+ *  간다 — 아직 어느 회차의 것도 아니므로 지금 도는 카드가 받는다).
+ *
+ *  시각이 있는 항목의 회차 판정은 `bucketThreadByRounds`와 같은 경계 규칙이다: 회차 `k` 시작
+ *  이상 - `k+1` 시작 미만이면 회차 `k`, 첫 회차보다 이르면 회차 1(index 0). 돌려주는 배열은
+ *  `plans` 안의 **원래 index**라 호출부가 `plans[idx]`로 항목을 그대로 되찾는다(필터링으로
+ *  index를 다시 매기지 않는다 — `planBlocks`의 `block.index`가 이 배열 각 칸 안에서 다시
+ *  0부터 매겨지므로 호출부는 칸 하나를 통째로 새 `plans` 인자로 넘기고 그 안에서만 index를 쓴다). */
+export function bucketPlansByRounds(plans: PlanItem[], starts: number[]): number[][] {
+  const buckets: number[][] = Array.from({ length: starts.length }, () => []);
+  const lastIdx = starts.length - 1;
+  plans.forEach((p, i) => {
+    const raw = p.end && (p.state === "done" || p.state === "cancelled") ? p.end : p.start;
+    const t = raw ? Date.parse(raw) : NaN;
+    if (Number.isNaN(t)) {
+      buckets[lastIdx].push(i);
+      return;
+    }
+    let idx = 0;
+    while (idx < starts.length && t >= starts[idx]) idx++;
+    buckets[Math.max(0, idx - 1)].push(i);
+  });
+  return buckets;
+}
+
 /** `mergeProgress`가 짠 한 줄기를 **말풍선과 그 사이 묶음**으로 (§2-6 ②, designer `f0202829`).
  *  경계는 말풍선이다 — 스레드 항목과 `isBubble`이 참인 사건. 그 사이(상자 시작·끝 포함)의 연속
  *  사건이 접힌 한 버킷이 된다. **0건이면 버킷을 안 만든다**(빈 묶음 줄은 소음이다) — `n`이
