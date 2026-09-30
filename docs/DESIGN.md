@@ -62822,7 +62822,7 @@ stream 큐처럼 설치본을 쓰는 큐에서는 같은 카드가 또 생길 �
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P457-1 | 구현 - §11-13 결정 6. 조작 중 점 세 자리에 `animate-wip-pulse motion-reduce:animate-none` | developer | - | 발행 |
+| P457-1 | 구현 - §11-13 결정 6. 조작 중 점 세 자리에 `animate-wip-pulse motion-reduce:animate-none` `bbcd8c59` | developer | - | 발행 |
 
 **한 장이다.** designer 0장 - 이미 있는 모션 값을 그대로 쓴다. writer 0장 - 매뉴얼 문구가 바뀌지 않는다.
 수용조건은 §11-13 결정 6의 목록이다.
