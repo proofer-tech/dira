@@ -23,6 +23,7 @@ import { siteLocale } from "./request-locale";
 // 둘로 갈려서(§한 코드베이스 §부딪히는 것 ①) 한쪽만 적으면 나머지 트리에 파비콘이 없다.
 export const metadata: Metadata = {
   icons: { icon: { url: "/icon.svg", type: "image/svg+xml" } },
+  verification: { other: { "naver-site-verification": "1cde0e7ab31bcbdac8fc4c95e17aeff209428b6a" } },
 };
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
