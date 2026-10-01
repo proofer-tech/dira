@@ -60,3 +60,27 @@ test("구독 해제 뒤에는 알림이 안 온다", () => {
   s.setPending(token, true);
   assert.strictEqual(calls, 0);
 });
+
+// §11-20 결정 2 — `openLink`처럼 컴포넌트 밖 함수가 쓰는 훅 아닌 입구. 프라미스가 끝나면
+// 성공·실패 어느 쪽이든 신호가 꺼진다.
+test("trackPending - 성공한 프라미스가 끝나면 신호가 꺼진다", async () => {
+  const s = createPendingSet();
+  let resolve: (v: number) => void;
+  const p = new Promise<number>((r) => (resolve = r));
+  const tracked = s.trackPending(p);
+  assert.strictEqual(s.getSnapshot(), true, "프라미스가 도는 동안은 켜져 있어야 한다");
+  resolve!(1);
+  await tracked;
+  assert.strictEqual(s.getSnapshot(), false);
+});
+
+test("trackPending - 실패한 프라미스가 끝나도 신호가 꺼진다", async () => {
+  const s = createPendingSet();
+  let reject: (e: Error) => void;
+  const p = new Promise<number>((_r, j) => (reject = j));
+  const tracked = s.trackPending(p);
+  assert.strictEqual(s.getSnapshot(), true);
+  reject!(new Error("실패"));
+  await assert.rejects(tracked);
+  assert.strictEqual(s.getSnapshot(), false);
+});

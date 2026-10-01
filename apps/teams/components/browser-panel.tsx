@@ -15,7 +15,7 @@ import { LINK_SLOT_HASH, LINK_TAB_EVENT, normalizeAddressInput, readCdpFrameStre
 import { keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useTrackedRouter } from "@/lib/route-pending";
+import { trackPending, useLinkPendingReporter, useTrackedRouter } from "@/lib/route-pending";
 import { writeStoredActiveTab } from "@/lib/tabs";
 import {
   openBrowserTabAction,
@@ -68,23 +68,31 @@ export type LinkTabEventDetail = { projectId: string; chunk: HomeChunk };
  *  없어도 생기게 한다(이미 있으면 그대로 둔다). **홈이 이미 떠 있으면 같은 경로로 `navigate`해도
  *  다시 마운트되지 않아 저장소를 안 읽는다** — 그래서 등록 결과(`HomeChunk`)를 실어 창
  *  `CustomEvent`(`LINK_TAB_EVENT`)를 하나 쏜다. 마운트된 `HomeUI`만 듣고, 다른 화면에서 누른
- *  경우는 아무도 안 들어 `navigate`가 종전대로 홈을 새로 마운트해 저장된 값을 읽게 한다. */
+ *  경우는 아무도 안 들어 `navigate`가 종전대로 홈을 새로 마운트해 저장된 값을 읽게 한다.
+ *
+ *  **시작부터 끝까지 셸 표식을 켠다**(§11-20 결정 2) — `trackPending`은 훅이 아니라서 이
+ *  컴포넌트 밖 함수에서도 부를 수 있다. 넘긴 프라미스가 끝나면(막혀서 토스트로 물러날 때도)
+ *  신호가 꺼진다. */
 export async function openLink(
   projectId: string,
   url: string,
   locale: Locale,
   navigate: (path: string) => void,
 ): Promise<void> {
-  const result = await openLinkAction(projectId, url);
-  if (!result.ok) {
-    if (result.reason === "cap") toast(linkCapToastMessage(locale, result.used, result.limit));
-    else toast(linkErrorToastMessage(locale, result.output));
-    return;
-  }
-  const chunk = await openBrowserTabAction(projectId, LINK_SLOT_HASH);
-  writeStoredActiveTab(projectId, LINK_SLOT_HASH);
-  window.dispatchEvent(new CustomEvent<LinkTabEventDetail>(LINK_TAB_EVENT, { detail: { projectId, chunk } }));
-  navigate(`/p/${projectId}`);
+  return trackPending(
+    (async () => {
+      const result = await openLinkAction(projectId, url);
+      if (!result.ok) {
+        if (result.reason === "cap") toast(linkCapToastMessage(locale, result.used, result.limit));
+        else toast(linkErrorToastMessage(locale, result.output));
+        return;
+      }
+      const chunk = await openBrowserTabAction(projectId, LINK_SLOT_HASH);
+      writeStoredActiveTab(projectId, LINK_SLOT_HASH);
+      window.dispatchEvent(new CustomEvent<LinkTabEventDetail>(LINK_TAB_EVENT, { detail: { projectId, chunk } }));
+      navigate(`/p/${projectId}`);
+    })(),
+  );
 }
 
 /** 이름 끝 글자의 받침 여부로 주격 조사(이/가)를 고른다. 로마자·숫자·빈 문자열은 받침이 없는
@@ -137,9 +145,23 @@ export function BrowserMirror({
   const [unlocked, setUnlocked] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
   const [addressInput, setAddressInput] = useState("");
+  // §11-20 결정 2 — 엔터에서 켜지고 다음 `event: url`에서 꺼진다. 그 사건이 안 오면(릴레이
+  // 실패 — 같은 주소라 무시됨) 10초 상한이 대신 끈다.
+  const [navigating, setNavigating] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const addressInputRef = useRef<HTMLInputElement>(null);
+  const navigateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // §11-20 결정 2 — 기다리는 자리 (나)·(다)를 셸 표식 한 값에 싣는다(`BrowserPreview`에는
+  // 이 호출이 없다 — 보는 자리라 사람이 누른 이동이 없다, 결정 2 마지막 줄).
+  useLinkPendingReporter(!lost && (frame === null || navigating));
+
+  useEffect(() => {
+    return () => {
+      if (navigateTimeoutRef.current) clearTimeout(navigateTimeoutRef.current);
+    };
+  }, []);
 
   // §11-17 결정 1 — `새 브라우저`를 누른 뒤 주소표시줄로 포커스를 옮긴다. 토큰이 없는(구버전
   // 호출자) 마운트에서는 안 돈다 — `undefined`에서 시작해 한 번도 안 바뀐다.
@@ -163,6 +185,11 @@ export function BrowserMirror({
         (u) => {
           setAddress(u);
           setAddressInput(u);
+          setNavigating(false);
+          if (navigateTimeoutRef.current) {
+            clearTimeout(navigateTimeoutRef.current);
+            navigateTimeoutRef.current = null;
+          }
         },
       );
       if (outcome === "disconnected") setLost(true);
@@ -227,6 +254,9 @@ export function BrowserMirror({
               const target = normalizeAddressInput(addressInput);
               setAddressInput(target);
               postNavigate(url, target);
+              setNavigating(true);
+              if (navigateTimeoutRef.current) clearTimeout(navigateTimeoutRef.current);
+              navigateTimeoutRef.current = setTimeout(() => setNavigating(false), 10_000);
             }}
             className="h-6 flex-1 text-xs"
           />

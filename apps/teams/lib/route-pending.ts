@@ -61,6 +61,13 @@ export function useLinkPendingReporter(pending: boolean) {
   }, [token, pending]);
 }
 
+/** 훅이 아닌 입구(§11-20 결정 2) - `openLink`처럼 컴포넌트 밖 함수가 셸에 대기 신호를 내고
+ *  싶을 때 쓴다. 넘긴 프라미스가 끝날 때까지(성공·실패 둘 다) 신호를 켜 둔다 - 순수 로직은
+ *  `route-pending-set.ts`의 `trackPending`이다(`route-pending.test.ts`가 거기서 직접 돈다). */
+export function trackPending<T>(promise: Promise<T>): Promise<T> {
+  return routePending.trackPending(promise);
+}
+
 /** `router.push`/`replace` 갈래(결정 2) - 부르는 쪽이 `useRouter()` 대신 이걸 쓰면 그 호출만
  *  `startTransition`에 실려 셸에 신호를 낸다. 같은 컴포넌트의 다른 상태(발행 중 - 등록 해제
  *  중 같은 변경 갈래 표시)는 안 건든다 - 이 훅이 여는 것은 그 이후의 이동 한 호출뿐이다. */
