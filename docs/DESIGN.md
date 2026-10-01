@@ -5834,13 +5834,32 @@ dira가 싣는 몫은 지금도 그 크기다. 첫 턴 60k의 나머지는 사�
       - `812a2442` `## 결과`: 결정 1 이후 끝난 production 세션 다섯 개 - w3/d856103c 42,683 - w3/5589d5b5
       30,637 - w2/6c36aa2f 42,430 - w5/0d624956 42,693 - w3/350f3977(이 티켓) 42,028. 다섯 개 전부
       45,000 이하라 통과. 40,000 기준으로 실패였던 `6bae3248`을 뒤집는다.
-- [ ] 그 세션의 트랜스크립트에 `superpowers` - `ponytail` SessionStart 본문이 없고, 도구 목록에 `mcp__designagent` - `mcp__google-tasks`가 없다.
+- [x] 그 세션의 트랜스크립트에 `superpowers` - `ponytail` SessionStart 본문이 없고, 도구 목록에 `mcp__designagent` - `mcp__google-tasks`가 없다.
+      - `72a2c2dc` `## 결과`: 트랜스크립트(`d856103c`) 전체 스캔 - `superpowers` 0건, `ponytail`
+      0건, `mcp__designagent` 0건, `mcp__google-tasks` 0건. 표본 1개(결정 1 이후 완료된 유일한
+      production 세션)뿐이라 반례 미발견이라는 뜻이지 다섯 개를 다 본 것은 아니다.
 - [ ] `pm` 페르소나 세션에서 `skills.md`에 적힌 `noslop-write`를 Skill로 부르면 본문이 실린다. 적히지 않은 `gke-basics`는 스킬 목록에 없다.
-- [ ] `DIRA_INHERIT_USER_CONFIG=1`로 띄운 세션은 첫 턴이 결정 1 이전과 같은 크기(48,000 토큰 이상)다.
-- [ ] `grep -l '<고친 파일>' test_*.py`로 고른 엔진 테스트가 통과하고, 덧붙는 인자 둘을 판정하는 테스트가 하나 있다.
-- [ ] `wc -c docs/DESIGN.md`가 1,000,000 이하다.
-- [ ] 옮기기 전 `DESIGN.md`에 있던 8자리 해시 인용 전부가 `grep -rl <해시> docs/`로 한 파일 이상에서 찾힌다.
-- [ ] `git diff --stat`에서 `docs/` 아래 줄 수 합이 삭제와 추가로 거의 같다(차이 200줄 이하, 목록 줄과 머리말만).
+      - **실패** - `430a41e7` `## 결과`: 임시 큐 실제 디스패치로 `Skill({"skill": "noslop-write"})`를
+      불렀더니 `Unknown skill: noslop-write`(디스크엔 파일이 있다). 원인은 `tick.sh`에
+      `--plugin-dir`-`.claude/skills` 주입 코드가 없어 `--setting-sources`가 끊은 사용자 스킬
+      소스를 대신할 길이 없는 것. `gke-basics`가 목록에 없는 쪽은 결과적으로 참이지만 문장
+      전체가 요구하는 "부를 수 있다"가 깨져 이 줄은 실패. 후속 작업 -> `d6a0fea9`(developer,
+      `.wip`, 엔진 수정 범위라 사람 승인 대기 중, 질문 1 미답).
+- [x] `DIRA_INHERIT_USER_CONFIG=1`로 띄운 세션은 첫 턴이 결정 1 이전과 같은 크기(48,000 토큰 이상)다.
+      - `bf65cba3` `## 결과`: 첫 턴 합계 58,213(≥ 48,000) - 트랜스크립트에 `setting-sources` -
+      `strict-mcp-config` 문자열 0건이라 손잡이가 실제로 두 플래그를 뺐다. 통과.
+- [x] `grep -l '<고친 파일>' test_*.py`로 고른 엔진 테스트가 통과하고, 덧붙는 인자 둘을 판정하는 테스트가 하나 있다.
+      - `1db5ae5b` `## 결과`: `grep -l tick.sh test_*.py` 39개 전량 통과(1차 240초 상한에서 부하로
+      3개 거짓 타임아웃, 단독 400초 재실행으로 전부 통과 확인). `test_setting_sources.py`가
+      `--setting-sources`-`--strict-mcp-config` 두 인자를 판정한다.
+- [x] `wc -c docs/DESIGN.md`가 1,000,000 이하다.
+      - `0e8f6e32` `## 결과`: 737,182 B ≤ 1,000,000. 통과.
+- [x] 옮기기 전 `DESIGN.md`에 있던 8자리 해시 인용 전부가 `grep -rl <해시> docs/`로 한 파일 이상에서 찾힌다.
+      - `5b3dd99b` `## 결과`: 옮기기 전 해시 집합 2,662개 - 지금 `docs/` 해시 집합 2,662개 -
+      차집합 0개. 통과.
+- [x] `git diff --stat`에서 `docs/` 아래 줄 수 합이 삭제와 추가로 거의 같다(차이 200줄 이하, 목록 줄과 머리말만).
+      - `313c02f6` `## 결과`: `9 files changed, 97504 insertions(+), 97495 deletions(-)`, 차이
+      9줄 ≤ 200. 통과.
 
 ## 로드맵
 ### P166 - 셋째 엔진 `grok` (요구 `390f788b`)
@@ -8458,7 +8477,7 @@ designer 0장 - 새 시각 요소가 없다. writer 몫(매뉴얼에 셸 표식 
 |---|---|---|---|---|
 | P461-1 | 엔진 - `tick.sh`가 `--setting-sources project,local --strict-mcp-config`를 덧붙이고 페르소나 스킬만 싣는다 `f443f23f` | developer | - | 발행 |
 | P461-2 | 스펙 - `DESIGN.md`의 닫힌 절을 `docs/design/`으로 옮긴다 `eed80b4f` | pm | - | 발행 |
-| P461-3 | QA - §다이어트 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 `0f71b67a` | qa | P461-1, P461-2 | 발행 |
+| P461-3 | QA - §다이어트 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 `0f71b67a` | qa | P461-1, P461-2 | 완료 - 8줄 중 7줄 통과, 1줄(skills.md 스킬 호출) 실패 -> `d6a0fea9`(사람 승인 대기) |
 | P461-4 | 엔진 - 첫 턴 40,000 초과 원인 조사 `6668554e` | developer | - | 원인 특정(CLAUDE.md 자동 탐색) -> 결정 4로 상한 45,000 |
 | P461-5 | 스펙 - 상한 판단 `ab05745c` | pm | - | 완료 - 결정 4 |
 | P461-6 | QA - 수용조건 1줄을 45,000 기준으로 다시 판정한다 `812a2442` | qa | - | 완료 - 통과(다섯 개 전부 45,000 이하) |
