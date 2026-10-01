@@ -736,7 +736,7 @@ EOF
 [ "$CMD" = "tick" ] && poll_step
 
 # 참견 입구(FIFO)와 최초 프롬프트 파일. 스트리밍 입력 엔진일 때만 실제 경로가 들어간다.
-INBOX=""; PRIMEF=""
+INBOX=""; PRIMEF=""; PLUGDIR=""
 # 선정·claim 임계구역 잠금(§5-4). 트랩보다 먼저 선언한다 - 잠금을 잡기 전에 종료하는 경로가
 # 여럿이고(선정 잠금 획득 실패 등) set -u에서 미정의 변수를 트랩이 읽으면 그 자리에서 죽는다.
 SLOCK=""
@@ -763,7 +763,7 @@ if [ "$CMD" = "tick" ]; then
   fi
   printf %s "$$" > "$LOCK/pid"
   # 빈 값이면 rm -f ""가 되고 아무 일도 안 한다 -- 어떻게 죽든 FIFO가 남지 않게 여기 한 번만 건다.
-  trap 'rm -rf "$LOCK" "$SLOCK"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}" "${INBOX:+$INBOX.human}"' EXIT
+  trap 'rm -rf "$LOCK" "$SLOCK" "$PLUGDIR"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}" "${INBOX:+$INBOX.human}"' EXIT
 fi
 
 # 엔진 쿨다운 게이트·claude 인증 게이트는 여기 없다 - 페르소나가 엔진을 정하므로 어느
@@ -1230,6 +1230,31 @@ elif [ -r "$PROFILE" ]; then
 $(cat "$SKILLS")
 ===== 스킬 끝 =====
 "
+    # P461-skill-plugindir: --setting-sources project,local(§979)이 ~/.claude/skills를
+    # 끊어서, skills.md에 적힌 이름이 텍스트로만 보이고 Skill 도구로는 "Unknown skill"이던
+    # 결함(d6a0fea9, TC 430a41e7)의 수정. skills.md의 `- \`이름\`` 줄마다 실제
+    # ~/.claude/skills/<이름>/SKILL.md가 있으면 세션 전용 plugin-dir(.claude-plugin/plugin.json
+    # + skills/<이름> 심링크)을 만들어 등록한다 - 디스크 실측으로 확인(claude --plugin-dir는
+    # 평범한 스킬 디렉터리 심링크만으로는 안 먹고, 이 매니페스트 구조가 있어야 Skill 도구가 찾는다).
+    # (gstack) 꼬리표 스킬은 로컬 디렉터리가 없어 자연히 걸러진다 - 따로 안 가린다.
+    SKILLHOME="${TICKET_SKILLS_HOME:-$HOME/.claude/skills}"
+    PLUGDIR="$LOCAL/run/skillplugin-$SID"
+    PLUGN=0
+    while IFS= read -r _sn; do
+      case "$_sn" in *[!A-Za-z0-9_-]*|"") continue ;; esac
+      [ -r "$SKILLHOME/$_sn/SKILL.md" ] || continue
+      [ "$PLUGN" -eq 0 ] && { mkdir -p "$PLUGDIR/.claude-plugin" "$PLUGDIR/skills" || break
+        printf '{"name":"%s-skills","version":"0.0.1","description":"persona skills.md sidecar"}\n' \
+          "$TPERSONA" > "$PLUGDIR/.claude-plugin/plugin.json"; }
+      ln -sf "$SKILLHOME/$_sn" "$PLUGDIR/skills/$_sn" && PLUGN=$((PLUGN + 1))
+    done <<SKILLNAMES
+$(sed -n 's/^- `\([^`]*\)`.*/\1/p' "$SKILLS")
+SKILLNAMES
+    if [ "$PLUGN" -gt 0 ]; then
+      TICKET_ENGINE+=(--plugin-dir "$PLUGDIR")
+    else
+      PLUGDIR=""
+    fi
   fi
   # 메모리 사이드카(같은 디렉터리 memory/*.md)는 스킬 블록 뒤에 붙는다. 여기는 엔진을 안 가린다 -
   # 메모리는 이 큐에서 알아낸 사실이라 codex에도 참이다. 없는 것이 정상이라 WARN 없다.
@@ -1429,6 +1454,9 @@ if [ "$CMD" = "dryrun" ]; then
   echo "경로: $TPATH"
   echo "엔진: ${TICKET_ENGINE[*]}"
   echo "프롬프트: $PROMPT"
+  # dryrun은 미리보기라 claim도 세션도 안 한다 - skill plugin-dir(파일시스템 실체)도 미리보기
+  # 끝에서 지운다. 안 지우면 dryrun을 반복 호출할 때마다 $LOCAL/run 아래 고아 디렉터리가 쌓인다.
+  [ -n "$PLUGDIR" ] && rm -rf "$PLUGDIR"
   exit 0
 fi
 
@@ -2072,6 +2100,7 @@ fi
 wait "$CPID"; RC=$?
 kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
 [ -n "$INBOX" ] && rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}" "$INBOX.human"
+[ -n "$PLUGDIR" ] && rm -rf "$PLUGDIR"
 OUT=$(cat "$OUTF" 2>/dev/null); rm -f "$OUTF"
 printf '%s\n' "$OUT" >> "$LOGF"
 
