@@ -5830,7 +5830,10 @@ dira가 싣는 몫은 지금도 그 크기다. 첫 턴 60k의 나머지는 사�
 
 ### 수용조건
 
-- [ ] 결정 1을 반영한 뒤 production 워크트리(`.dira/worktrees/w*`)에서 처음 끝난 워커 세션 다섯 개에서, 트랜스크립트 첫 assistant 턴의 `cache_read_input_tokens + cache_creation_input_tokens + input_tokens`가 각각 45,000 이하다(결정 4).
+- [x] 결정 1을 반영한 뒤 production 워크트리(`.dira/worktrees/w*`)에서 처음 끝난 워커 세션 다섯 개에서, 트랜스크립트 첫 assistant 턴의 `cache_read_input_tokens + cache_creation_input_tokens + input_tokens`가 각각 45,000 이하다(결정 4).
+      - `812a2442` `## 결과`: 결정 1 이후 끝난 production 세션 다섯 개 - w3/d856103c 42,683 - w3/5589d5b5
+      30,637 - w2/6c36aa2f 42,430 - w5/0d624956 42,693 - w3/350f3977(이 티켓) 42,028. 다섯 개 전부
+      45,000 이하라 통과. 40,000 기준으로 실패였던 `6bae3248`을 뒤집는다.
 - [ ] 그 세션의 트랜스크립트에 `superpowers` - `ponytail` SessionStart 본문이 없고, 도구 목록에 `mcp__designagent` - `mcp__google-tasks`가 없다.
 - [ ] `pm` 페르소나 세션에서 `skills.md`에 적힌 `noslop-write`를 Skill로 부르면 본문이 실린다. 적히지 않은 `gke-basics`는 스킬 목록에 없다.
 - [ ] `DIRA_INHERIT_USER_CONFIG=1`로 띄운 세션은 첫 턴이 결정 1 이전과 같은 크기(48,000 토큰 이상)다.
@@ -8458,7 +8461,7 @@ designer 0장 - 새 시각 요소가 없다. writer 몫(매뉴얼에 셸 표식 
 | P461-3 | QA - §다이어트 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 `0f71b67a` | qa | P461-1, P461-2 | 발행 |
 | P461-4 | 엔진 - 첫 턴 40,000 초과 원인 조사 `6668554e` | developer | - | 원인 특정(CLAUDE.md 자동 탐색) -> 결정 4로 상한 45,000 |
 | P461-5 | 스펙 - 상한 판단 `ab05745c` | pm | - | 완료 - 결정 4 |
-| P461-6 | QA - 수용조건 1줄을 45,000 기준으로 다시 판정한다 `812a2442` | qa | - | 발행 |
+| P461-6 | QA - 수용조건 1줄을 45,000 기준으로 다시 판정한다 `812a2442` | qa | - | 완료 - 통과(다섯 개 전부 45,000 이하) |
 | P461-7 | 메모리 - `archive-manager/memory/` 150,491 B를 150,000 B 아래로 줄인다 `31264c22` | archive-manager | - | 발행 |
 
 designer 0장, writer 0장 - 화면과 매뉴얼이 다루는 조작이 안 바뀐다.
