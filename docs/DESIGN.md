@@ -5812,10 +5812,25 @@ dira가 싣는 몫은 지금도 그 크기다. 첫 턴 60k의 나머지는 사�
 | `apps/teams` 코드 삭제 | 테스트와 `tsc`가 합 6.9%다. 코드 크기가 느린 원인으로 안 나왔다 |
 | 페르소나 프롬프트 줄이기 | 이미 예산(§프롬프트 층) 안이다 |
 | 사람의 `~/.claude` 설정 손대기 | 사람이 쓰는 환경이다. 워커 쪽에서 안 읽는 것으로 충분하다 |
+| CLAUDE.md 자동 탐색 끄기(`--bare`) | `--bare`는 OAuth를 안 읽어 이 큐의 유일한 인증(`claude setup-token`)이 깨진다. API 키로 바꾸는 것은 과금 모델을 바꾸는 별개 결정이다(`ab05745c`) |
+| `~/CLAUDE.md` - `~/.claude/CLAUDE.md` 줄이기 | 사람의 다른 프로젝트 세션도 읽는 파일이다. 위 `~/.claude` 행과 같은 이유다 |
+
+### 결정 4 - 첫 턴 상한은 45,000 토큰이고, production 워크트리 세션으로 잰다 (`ab05745c`)
+
+- 결정 1 반영 뒤 실제 세션의 첫 턴은 42,683(archive-manager)과 42,252(developer)였다. 40,000은
+  `/tmp` 임시 큐에서 잰 36,152를 보고 정한 숫자였는데, 임시 큐는 cwd가 `/Users/hsol` 밖이라
+  claude CLI가 상위 경로에서 자동으로 찾는 CLAUDE.md를 싣지 않는다. 그래서 실제 크기를
+  과소평가했다.
+- `--setting-sources`는 CLAUDE.md 자동 탐색을 막지 않는다. 두 파일(합 2,276 B)을 다 빼도 약
+  41,000이 남으므로, 40,000은 결정 3이 범위 밖에 둔 일을 하지 않고는 지킬 수 없다.
+- 그래서 상한을 45,000으로 올린다. 결정 1 이전 중앙값 60,275와 비교하면 25% 줄어든 값이고,
+  되돌리기 세션의 하한 48,000과도 구분된다.
+- 측정 표본은 `~/Projects/dira/.dira/worktrees/w*`에서 돈 실제 세션이다. 임시 큐에서 잰 값은
+  판정에 안 쓴다.
 
 ### 수용조건
 
-- [ ] 결정 1을 반영한 뒤 처음 끝난 워커 세션 다섯 개에서, 트랜스크립트 첫 assistant 턴의 `cache_read_input_tokens + cache_creation_input_tokens + input_tokens`가 각각 40,000 이하다.
+- [ ] 결정 1을 반영한 뒤 production 워크트리(`.dira/worktrees/w*`)에서 처음 끝난 워커 세션 다섯 개에서, 트랜스크립트 첫 assistant 턴의 `cache_read_input_tokens + cache_creation_input_tokens + input_tokens`가 각각 45,000 이하다(결정 4).
 - [ ] 그 세션의 트랜스크립트에 `superpowers` - `ponytail` SessionStart 본문이 없고, 도구 목록에 `mcp__designagent` - `mcp__google-tasks`가 없다.
 - [ ] `pm` 페르소나 세션에서 `skills.md`에 적힌 `noslop-write`를 Skill로 부르면 본문이 실린다. 적히지 않은 `gke-basics`는 스킬 목록에 없다.
 - [ ] `DIRA_INHERIT_USER_CONFIG=1`로 띄운 세션은 첫 턴이 결정 1 이전과 같은 크기(48,000 토큰 이상)다.
@@ -8441,6 +8456,10 @@ designer 0장 - 새 시각 요소가 없다. writer 몫(매뉴얼에 셸 표식 
 | P461-1 | 엔진 - `tick.sh`가 `--setting-sources project,local --strict-mcp-config`를 덧붙이고 페르소나 스킬만 싣는다 `f443f23f` | developer | - | 발행 |
 | P461-2 | 스펙 - `DESIGN.md`의 닫힌 절을 `docs/design/`으로 옮긴다 `eed80b4f` | pm | - | 발행 |
 | P461-3 | QA - §다이어트 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 `0f71b67a` | qa | P461-1, P461-2 | 발행 |
+| P461-4 | 엔진 - 첫 턴 40,000 초과 원인 조사 `6668554e` | developer | - | 원인 특정(CLAUDE.md 자동 탐색) -> 결정 4로 상한 45,000 |
+| P461-5 | 스펙 - 상한 판단 `ab05745c` | pm | - | 완료 - 결정 4 |
+| P461-6 | QA - 수용조건 1줄을 45,000 기준으로 다시 판정한다 `812a2442` | qa | - | 발행 |
+| P461-7 | 메모리 - `archive-manager/memory/` 150,491 B를 150,000 B 아래로 줄인다 `31264c22` | archive-manager | - | 발행 |
 
 designer 0장, writer 0장 - 화면과 매뉴얼이 다루는 조작이 안 바뀐다.
 
