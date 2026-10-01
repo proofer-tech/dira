@@ -971,6 +971,15 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff c_squad
   ENGINE_NAME="${ENGSUF:-$ENGBN}"
   CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME${TICKET_SLOT:+-$TICKET_SLOT}"
 
+  # P461-1: claude 세션은 기본적으로 사람의 ~/.claude 설정(스킬·플러그인·훅·MCP)을 안 물려받는다.
+  # 그래야 페르소나 skills.md에 없는 스킬·MCP가 첫 턴 컨텍스트에 안 실린다(DESIGN.md §다이어트).
+  # 워커 TICKET_ENGINE 대입이든 personas/<이름>/engine 대입이든 이 분기 전에 이미 끝나 있으므로
+  # 둘 다 가리지 않고 걸린다. DIRA_INHERIT_USER_CONFIG=1이면 옛날처럼 사람 설정을 그대로 쓴다
+  # (로컬에서 사람 스킬을 빌려써야 하는 디버깅 등).
+  if [ "$ENGINE_NAME" = "claude" ] && [ "${DIRA_INHERIT_USER_CONFIG:-}" != "1" ]; then
+    TICKET_ENGINE+=(--setting-sources project,local --strict-mcp-config)
+  fi
+
   # 어느 엔진인지가 후보에 달렸으므로 ENGINE_NAME·claude 인증·쿨다운도 후보 확정 뒤에 판정한다
   # (dryrun은 미리보기라 건너뛴다 - 종전에도 이 게이트는 CMD=tick 전용이었다). 디스패치 불가면
   # 페르소나 상한과 같은 자리에서 skip-and-continue다(같은 로그 낱말 SKIP) - 이 엔진을 못
