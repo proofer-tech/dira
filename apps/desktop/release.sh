@@ -67,15 +67,43 @@ git commit -q -m "release v$ver" package.json || exit 1
 # 이름의 태그를 새로 만든다 — 로컬 태그와 원격 태그가 다른 객체가 된다(실측 2026-08-01).
 git tag -a "v$ver" -m "release v$ver" || exit 1
 
-# 4. **한 번만 굽는다.** 두 번 구우면 두 번째 electron-builder가 `sign-dmg.sh`의 서명·스테이플을
-# 덮어서, 올라가는 `.dmg`는 sign-dmg가 막으려던 상태 그대로다 — 받는 맥의 첫 더블클릭이
-# Gatekeeper에 막히고 올린 사람은 모른다 (§릴리스 R4-5). 그래서 publish는 electron-builder가
-# 아니라 gh가 한다. `build.publish`는 그대로다 — latest-mac.yml을 굽는 것이 그 설정이다.
-# 그 「gh가 한다」를 코드로 적는 것이 `dist`의 `--publish never`다. 빼면 CI에서는 조용하지만
-# (push 트리거라 `GITHUB_REF`가 태그가 아니다) 사람 맥에서는 electron-builder가 자기 몫의
-# **draft 릴리스**를 따로 만들어 올린다 — 아래 `gh release create`가 만드는 published 옆에
-# 같은 버전 draft가 하나 더 남는다.
-pnpm run dist || exit 1
+# 4. **성공할 때까지 최대 두 번만 굽는다.** 세 번 이상은 안 굽는다 — electron-builder가
+# `sign-dmg.sh`의 서명·스테이플을 두 번째 실행에서 덮으면, 올라가는 `.dmg`는 sign-dmg가
+# 막으려던 상태 그대로다 — 받는 맥의 첫 더블클릭이 Gatekeeper에 막히고 올린 사람은 모른다
+# (§릴리스 R4-5). 그래서 publish는 electron-builder가 아니라 gh가 한다. `build.publish`는
+# 그대로다 — latest-mac.yml을 굽는 것이 그 설정이다. 그 「gh가 한다」를 코드로 적는 것이
+# `dist`의 `--publish never`다. 빼면 CI에서는 조용하지만(push 트리거라 `GITHUB_REF`가
+# 태그가 아니다) 사람 맥에서는 electron-builder가 자기 몫의 **draft 릴리스**를 따로 만들어
+# 올린다 — 아래 `gh release create`가 만드는 published 옆에 같은 버전 draft가 하나 더 남는다.
+#
+# Apple 공증(notarytool)이 이 안에서 돈다. 실패 둘을 로그로 확정했다(티켓 dc21c21e) —
+# 「Response code 500」은 Apple 쪽 일시 오류라 다시 구우면 풀릴 수 있고(실측 2026-09-24
+# 36026041973), 「A required agreement is missing or has expired」는 Apple Developer
+# 라이선스 동의가 만료·누락된 계정 상태라 재시도로는 절대 안 풀린다(실측 2026-10-01
+# 36918923548) — 사람이 https://developer.apple.com/account 에서 동의해야 다음 회차가
+# 성공한다. 그래서 그 문구가 보이면 바로 멈추고, 그 외의 실패만 한 번 더 굽는다.
+dist_log=$(mktemp)
+dist_tries=0
+dist_max=2
+dist_ok=""
+while [ "$dist_tries" -lt "$dist_max" ]; do
+  dist_tries=$((dist_tries + 1))
+  if pnpm run dist >"$dist_log" 2>&1; then
+    dist_ok=1
+    break
+  fi
+  cat "$dist_log"
+  if grep -q "A required agreement is missing or has expired" "$dist_log"; then
+    echo "공증 실패 — Apple Developer 라이선스 동의가 만료·누락됐다. 사람이 https://developer.apple.com/account 에서 동의해야 풀린다(재시도로는 안 풀린다)." >&2
+    rm -f "$dist_log"
+    exit 1
+  fi
+  if [ "$dist_tries" -lt "$dist_max" ]; then
+    echo "pnpm run dist 실패 — 공증 쪽 일시 오류로 보고 한 번 더 굽는다 ($dist_tries/$dist_max)." >&2
+  fi
+done
+rm -f "$dist_log"
+[ -n "$dist_ok" ] || { echo "pnpm run dist가 ${dist_max}번 다 실패했다 — 위 로그가 원인이다." >&2; exit 1; }
 
 # 올리기 전에 세 자산이 실제로 있는지 본다. 특히 latest-mac.yml이 빠지면 자동 업데이트는
 # 에러가 아니라 **아무 일도 안 일어남**으로 죽는다(R1 첫 줄). 없는 채로 올리는 대신 멈춘다.
