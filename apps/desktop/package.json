@@ -57,6 +57,10 @@
         "to": "engine/tickets.py"
       },
       {
+        "from": "../../agy-gui.sh",
+        "to": "engine/agy-gui.sh"
+      },
+      {
         "from": "../../templates",
         "to": "engine/templates"
       },

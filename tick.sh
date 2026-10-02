@@ -978,6 +978,17 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff c_squad
   ENGINE_NAME="${ENGSUF:-$ENGBN}"
   CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME${TICKET_SLOT:+-$TICKET_SLOT}"
 
+  # P460-1: Background launchd 세션(cron 워커)은 로그인 키체인을 못 봐서 agy CLI가 대화형
+  # OAuth로 빠진다(docs/design/요구-절.md §다른 사용자도 agy CLI만 깔려 있으면... 결정 1).
+  # dira-agy 엔진이고 사람 셸(Aqua)이 아닐 때만 같은 디렉터리의 agy-gui.sh로 감싼다. ENGBN은
+  # 위 PATH 폴백 전의 원래 basename이라 폴백으로 "agy"(bare)가 되어도 식별이 안 흔들린다.
+  # 이미 첫 칸이 agy-gui.sh면(GUI가 만드는 argv가 agy-probe처럼 이미 감싸 둔 경우) 다시 안 싼다.
+  if [ "$ENGBN" = "dira-agy" ] && [ "${TICKET_ENGINE[0]}" != "$CODE/agy-gui.sh" ]; then
+    if [ "$(launchctl managername 2>/dev/null)" != "Aqua" ]; then
+      TICKET_ENGINE=("$CODE/agy-gui.sh" "${TICKET_ENGINE[@]}")
+    fi
+  fi
+
   # P461-1: claude 세션은 기본적으로 사람의 ~/.claude 설정(스킬·플러그인·훅·MCP)을 안 물려받는다.
   # 그래야 페르소나 skills.md에 없는 스킬·MCP가 첫 턴 컨텍스트에 안 실린다(DESIGN.md §다이어트).
   # 워커 TICKET_ENGINE 대입이든 personas/<이름>/engine 대입이든 이 분기 전에 이미 끝나 있으므로
@@ -1454,6 +1465,7 @@ for arg in "${TICKET_ENGINE[@]}"; do
   arg="${arg//\{prompt\}/$PROMPT}"
   ENGINE+=("${arg//\{sid\}/$SID}")
 done
+log "엔진: ${TICKET_ENGINE[*]}"
 
 if [ "$CMD" = "dryrun" ]; then
   echo "워커: $TICKET_NAME (루트 $TICKET_ROOT, cwd $TICKET_CWD)"
