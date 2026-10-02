@@ -66,7 +66,10 @@ case "$1" in
   bootout)
     [ -n "${FAKE_BOOTOUT_LOG:-}" ] && echo "$2" >> "$FAKE_BOOTOUT_LOG"
     exit 0 ;;
-  bootstrap|list) exit 0 ;;
+  bootstrap)
+    [ "${FAKE_BOOTSTRAP_FAIL:-0}" = "1" ] && exit 1
+    exit 0 ;;
+  list) exit 0 ;;
   *) exit 1 ;;
 esac
 """
@@ -213,6 +216,20 @@ try:
     assert elapsed < 1.0, "1초 안에 안 끝났다: {:.2f}s".format(elapsed)
 
     print("OK - agy-gui.sh가 GUI 세션 없음을 1초 안에 75로 낸다")
+
+    # --- ⑥-2 agy-gui.sh 단독: launchctl bootstrap 실패 -> 1초 안에 75 + stderr 메시지 ---
+    env = dict(os.environ, PATH=os.path.join(home, ".local", "bin") + os.pathsep + os.environ["PATH"],
+               FAKE_MANAGERNAME="Aqua", FAKE_GUI_OK="1", FAKE_BOOTSTRAP_FAIL="1")
+    t0 = time.monotonic()
+    r = subprocess.run([AGY_GUI, "true"], input="", capture_output=True, text=True,
+                       env=env, timeout=10)
+    elapsed = time.monotonic() - t0
+    assert r.returncode == 75, "bootstrap 실패인데 종료 코드가 75가 아니다: {}\n{}".format(
+        r.returncode, r.stderr)
+    assert "bootstrap" in r.stderr, "stderr에 bootstrap 실패 사유가 없다: " + r.stderr
+    assert elapsed < 1.0, "1초 안에 안 끝났다(상한 없이 멈춤 재현): {:.2f}s".format(elapsed)
+
+    print("OK - agy-gui.sh가 launchctl bootstrap 실패를 1초 안에 75로 낸다")
 
     # --- ⑦ reap_dead_agy_gui(P460-2): 죽은 pid 라벨만 bootout 한 번, 산 pid 라벨은 0번 ---
     alive_pid = os.getpid()  # 이 테스트 프로세스 자신 - tick 서브프로세스가 끝나도 살아 있다

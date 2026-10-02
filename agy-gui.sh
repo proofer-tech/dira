@@ -69,7 +69,10 @@ $PARGS  </array>
 </plist>
 PLISTEOF
 
-launchctl bootstrap "gui/$UIDN" "$PLIST" >/dev/null 2>&1
+if ! launchctl bootstrap "gui/$UIDN" "$PLIST" >/dev/null 2>&1; then
+  echo "agy-gui: launchctl bootstrap 실패 - 잡을 못 띄웠다" >&2
+  exit 75
+fi
 
 # rc 파일이 생길 때까지 기다린다 - 상한은 없다(agy 작업 자체가 분 단위로 걸릴 수 있다).
 while [ ! -f "$RCF" ]; do
