@@ -86,6 +86,9 @@ try:
     os.chmod(dira_agy, os.stat(dira_agy).st_mode | stat.S_IEXEC)
     dira_claude = mkfile(os.path.join(tmp, "bin", "claude"), STUB_ENGINE)
     os.chmod(dira_claude, os.stat(dira_claude).st_mode | stat.S_IEXEC)
+    # 실행 불가 dira-agy(PATH 폴백 재현용) - basename은 같은 dira-agy지만 실행 비트가 없어
+    # tick.sh가 "${ENGSUF:-agy}"로 bare agy에 돌아간다(§27 계약 3 폴백).
+    dira_agy_noexec = mkfile(os.path.join(tmp, "bin2", "dira-agy"), STUB_ENGINE, 0o644)
 
     def queue():
         if os.path.isdir(tickets):
@@ -131,7 +134,17 @@ try:
     line = dryrun(dira_claude, "Background")
     assert "agy-gui.sh" not in line, "claude 엔진인데 감쌌다: " + line
 
-    print("OK - tick.sh Background 감싸기 판정 네 경우 통과")
+    # --- ⑤ Background + dira-agy(실행 불가, PATH 폴백으로 bare agy가 됨) -> 그래도 감싼다 ---
+    # ENGBN은 폴백 전 원래 basename(dira-agy)을 기억해 두는 값이라, 폴백으로 첫 칸이 bare
+    # "agy"로 바뀌어도 감싸기 판정이 안 흔들려야 한다(재디스패치 복구 3이 고친 실버그).
+    line = dryrun(dira_agy_noexec, "Background")
+    parts = line.split()
+    assert os.path.basename(parts[0]) == "agy-gui.sh", \
+        "PATH 폴백(bare agy)인데 안 감쌌다: " + line
+    assert parts[1] == "agy", \
+        "폴백 뒤 원래 엔진 자리가 bare agy가 아니다: " + line
+
+    print("OK - tick.sh Background 감싸기 판정 다섯 경우 통과")
 
     # --- ⑤ agy-gui.sh 단독: GUI 세션 없음 -> 1초 안에 75 + stderr 메시지 ---
     env = dict(os.environ, PATH=os.path.join(home, ".local", "bin") + os.pathsep + os.environ["PATH"],
