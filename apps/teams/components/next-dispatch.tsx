@@ -12,9 +12,15 @@ import { secondsLeft } from "@/lib/next-dispatch";
 export function NextDispatch({ periods, locale }: { periods: readonly (30 | 60)[]; locale: Locale }) {
   const key = periods.join(",");
   const [left, setLeft] = useState(() => secondsLeft(periods));
+  // `periods`가 갈리면(= `key`가 갈리면) 렌더 중에 바로 잰다 — 이펙트 안에서 동기 `setState`를
+  // 하면 추가 렌더가 끼어든다(React 공식 패턴: "prop이 바뀌면 렌더 중에 state를 조정한다").
+  const [prevKey, setPrevKey] = useState(key);
+  if (key !== prevKey) {
+    setPrevKey(key);
+    setLeft(secondsLeft(periods));
+  }
 
   useEffect(() => {
-    setLeft(secondsLeft(periods));
     const timer = setInterval(() => setLeft(secondsLeft(periods)), 1000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `key`가 `periods`의 값을 대표한다(배열 참조는 매 렌더 갈린다)

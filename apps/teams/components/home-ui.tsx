@@ -489,6 +489,31 @@ export function HomeUI({
   // 키설정에 9번째 줄을 만들지 않는다(§0-6의 액션 8개는 그 화면의 계약이다).
   const sendCombo = useKeymap().bindings["interject.send"];
 
+  /** 질문 하나를 띄운다. **입력칸과 `다시 답하기`가 같은 경로다**(§24 — 후자가 하는 일이
+   *  "옛 질문을 입력칸에 넣고 보내는 것"과 같다). 갈리는 것은 칸을 비우느냐뿐이라 그쪽은 밖에 둔다.
+   *  아래 폴링 효과가 §7 §천장이 없다 ③에서 이 함수를 참조하므로 그 효과보다 앞에 둔다. */
+  const run = async (question: string, paths: string[] = []) => {
+    setStarting(true);
+    setFail(null);
+    setStopping(false); // 앞 답을 중지한 뒤라도 이번 답의 `중지`는 눌린 적이 없다
+    setPartial("");
+    setActivity(null);
+    // **보내는 순간 사람 말풍선을 만든다**(§7 §천장이 없다 ③) — 정본은 여전히 트랜스크립트다,
+    // 첫 폴링이 그 줄을 데려오면 위 poll 효과가 이 값을 내린다.
+    setEcho(question);
+    setEchoIsInterject(false);
+    // `다시 답하기`는 첨부 없이 부른다(§24 — 그 버튼이 다시 보내는 것은 **옛 질문 한 줄**이고,
+    // 그 글에 첨부 경로가 필요했으면 이미 그 안에 적혀 있다).
+    const r = await askHome(project, question, paths, locale);
+    setStarting(false);
+    if (r) {
+      setFail(r);
+      setEcho(null); // 실패 — 말풍선을 걷는다. 글은 아래 `send()`가 입력칸으로 돌려준다
+    } else setRunning(true); // 폴링 효과가 붙는다
+    input.current?.focus();
+    return r;
+  };
+
   // **답이 도는 동안만 돈다**(§7 — 홈은 5초 폴링을 하지 않는다. 큐를 따라가는 화면이 아니다).
   // 끝나는 근거는 **`running`이 아니라 `done`**이다(§7 §폴링은 서버가 잊어도 안 끊긴다 —
   // 요구 `116b3c37`). 판정은 서버 한 줄에 있고(`pollDone`) 여기는 그 값을 읽을 뿐이다:
@@ -769,30 +794,6 @@ export function HomeUI({
   // 고정된다) 도는 중이면 다시 못 고른다. 회차 0건 스케줄을 보는 동안도 잠긴다: 그 값은 이
   // 셀렉트가 아니라 스케줄을 만들 때 정해진 것이다.
   const personaLocked = pendingSchedule !== null || turns.length > 0 || busy;
-
-  /** 질문 하나를 띄운다. **입력칸과 `다시 답하기`가 같은 경로다**(§24 — 후자가 하는 일이
-   *  "옛 질문을 입력칸에 넣고 보내는 것"과 같다). 갈리는 것은 칸을 비우느냐뿐이라 그쪽은 밖에 둔다. */
-  const run = async (question: string, paths: string[] = []) => {
-    setStarting(true);
-    setFail(null);
-    setStopping(false); // 앞 답을 중지한 뒤라도 이번 답의 `중지`는 눌린 적이 없다
-    setPartial("");
-    setActivity(null);
-    // **보내는 순간 사람 말풍선을 만든다**(§7 §천장이 없다 ③) — 정본은 여전히 트랜스크립트다,
-    // 첫 폴링이 그 줄을 데려오면 위 poll 효과가 이 값을 내린다.
-    setEcho(question);
-    setEchoIsInterject(false);
-    // `다시 답하기`는 첨부 없이 부른다(§24 — 그 버튼이 다시 보내는 것은 **옛 질문 한 줄**이고,
-    // 그 글에 첨부 경로가 필요했으면 이미 그 안에 적혀 있다).
-    const r = await askHome(project, question, paths, locale);
-    setStarting(false);
-    if (r) {
-      setFail(r);
-      setEcho(null); // 실패 — 말풍선을 걷는다. 글은 아래 `send()`가 입력칸으로 돌려준다
-    } else setRunning(true); // 폴링 효과가 붙는다
-    input.current?.focus();
-    return r;
-  };
 
   /** 참견(§7 §도는 답에 말을 건다) — **자리는 스레드의 새 항목**(질문의 낙관 에코와 같은 자리,
    *  §화면이 두 번째 result를 그리는 법). `echo`를 그대로 재사용한다: 첫 턴이 `turns`로 실리는
