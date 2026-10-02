@@ -19,7 +19,8 @@
 #   drift    - 받는 트리 reflog에서 이 체크아웃 안에서 직접 만들어진 세션 커밋(`Ticket:` 있고
 #              `Exception:` 없는 것)을 한 줄씩 낸다(DESIGN.md §워커는 언제나 자기 워크트리에서
 #              일한다 §개정 2). 락을 안 쥔다 - classify와 같은 성질의 조회다.
-#   ship <해시> "<제목>" ["<본문>"] - 커밋(뺄 것 없으면 건너뜀) -> 위 (없음) 경로 -> 거부되면
+#   ship <해시> "<제목>" ["<본문>"] - 커밋(뺄 것 없으면 건너뜀) -> `.dira-verify-changed.sh`가
+#              실행 파일로 있으면 부름(비0이면 push 전에 중단) -> 위 (없음) 경로 -> 거부되면
 #              rebase <통합 브랜치> 후 1회만 재시도. DESIGN.md §마무리 의례를 헬퍼가 감싼다.
 #   discard  - 받는 트리 추적 파일 전부를 다시 판정하고, 전부 잔해일 때만 버린다(DESIGN.md
 #              §전부 잔해일 때만 버튼 하나가 뜬다 결정 4). 하나라도 사람 편집이면 아무것도 안
@@ -138,6 +139,18 @@ EOF
   done
   git -C "$_recv" restore --staged --worktree -- "${trash[@]}"
   echo "push.sh: 잔해 버림 - ${trash[*]}" >&2
+}
+
+# 프로젝트별 push 전 검사 훅(티켓 6ee58f81) - 엔진은 프로젝트를 모르므로(README.md §프로젝트
+# 무관) 세션이 도는 워크트리 루트에 실행 파일 `.dira-verify-changed.sh`가 있을 때만 부른다 -
+# pnpm이든 다른 린터든 무엇을 어떻게 거르는지는 훅의 몫이고 이 파일은 안다. 이번 ship이 밀어
+# 올릴 커밋들이 `_branch`에서 갈라진 뒤 바꾼 경로를 한 줄에 하나씩 표준입력으로 넘긴다. 훅이
+# 없으면(프로젝트가 안 썼으면) 종전과 다르게 안 돈다. 0이 아니면 push를 막지만 이미 만든 로컬
+# 커밋은 그대로 둔다 - 재시도는 세션 몫이다.
+run_verify_changed_hook() {
+  local hook="./.dira-verify-changed.sh"
+  [ -x "$hook" ] || return 0
+  git diff --name-only "${_branch}...HEAD" | "$hook"
 }
 
 # 세션 드리프트 - 통합 체크아웃에서 통합 브랜치로 직접 들어간 세션 커밋(DESIGN.md §워커는 언제나
@@ -290,6 +303,7 @@ do_ship() {
       git commit -q -m "$title" -m "Ticket: $hash" || exit $?
     fi
   fi
+  run_verify_changed_hook || exit 1
   push_once
   rc=$?
   if [ "$rc" -ne 0 ]; then
