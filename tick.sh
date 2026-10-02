@@ -111,7 +111,7 @@ FIXED_ENGINE="$BIN_DIR/dira"
 refresh_fixed_engine() {
   # §27 계약 2: 카탈로그 넷을 각각 굽는다 - claude만 이름이 dira, 나머지는 dira-<엔진>
   # (§24 계약 3 접미사 판정과 대응). PATH에 없는 엔진은 조용히 건너뛴다(WARN 없음).
-  local pair cmd bin src real tmp
+  local pair cmd bin src real stamp tmp
   mkdir -p "$BIN_DIR" 2>/dev/null || return 1
   for pair in claude:dira codex:dira-codex grok:dira-grok agy:dira-agy; do
     cmd="${pair%%:*}"
@@ -123,14 +123,21 @@ refresh_fixed_engine() {
     # `$bin.src`에 적어 두고 문자열로 대조한다(`readlink -f`는 BSD에 없어 python3로 낸다).
     real="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$src" 2>/dev/null)"
     [ -n "$real" ] || continue
-    [ -e "$bin" ] && [ "$(cat "$bin.src" 2>/dev/null)" = "$real" ] && continue
+    # 경로만으로는 agy처럼 같은 자리를 덮어써 업데이트하는 엔진을 못 잡는다 - 경로가 그대로라
+    # 옛 복사본에 영영 머문다(1.1.19 vs 1.2.14 실측). mtime·크기를 `$bin.stamp`에 따로 적는다.
+    # `$bin.src` 형식을 안 바꾸는 것은 같은 BIN_DIR을 굽는 설치본 엔진(옛 tick.sh)과 번갈아
+    # 덮어쓰며 매 tick 다시 굽는 일을 막기 위해서다 - 옛 엔진은 `.stamp`를 모른다.
+    stamp="$(stat -f '%m %z' "$real" 2>/dev/null)"
+    [ -e "$bin" ] && [ "$(cat "$bin.src" 2>/dev/null)" = "$real" ] \
+      && [ "$(cat "$bin.stamp" 2>/dev/null)" = "$stamp" ] && continue
     tmp="$bin.tmp.$$"
     # 별도 inode로 굽는다 - 하드링크는 tccd가 원본 inode의 이름을 그대로 아이덴티티로 적어
     # TCC 항목이 안 모인다(§계약 3 판정 실측). APFS 클론(`cp -c`)이 서면 디스크를 안 물고,
     # 안 서면(다른 볼륨·비-APFS) 보통 복사로 떨어진다. 임시 이름에 만든 뒤 mv로 원자 교체 -
     # 여러 워커가 동시에 tick을 돌아도 실행 파일이 반쪽으로 보이는 창이 없다.
     if cp -c "$src" "$tmp" 2>/dev/null || cp "$src" "$tmp" 2>/dev/null; then
-      mv -f "$tmp" "$bin" && printf '%s' "$real" > "$bin.src" 2>/dev/null
+      mv -f "$tmp" "$bin" && printf '%s' "$real" > "$bin.src" 2>/dev/null \
+        && printf '%s' "$stamp" > "$bin.stamp" 2>/dev/null
     else
       rm -f "$tmp"
     fi
