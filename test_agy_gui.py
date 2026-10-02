@@ -1,16 +1,21 @@
 #!/usr/bin/env python3
-"""P460-1 - agy-gui.sh 중계와 tick.sh의 Background 세션 감싸기 자체검증
-(docs/design/요구-절.md §다른 사용자도 agy CLI만 깔려 있으면 워커에서 agy가 돈다,
-요구 `1a839f60`, 티켓 `3f749924`).
+"""P460-1·P460-2 - agy-gui.sh 중계, tick.sh의 Background 세션 감싸기, 죽은 워커가 남긴
+agy-gui 잡 걷기 자체검증(docs/design/요구-절.md §다른 사용자도 agy CLI만 깔려 있으면
+워커에서 agy가 돈다, 요구 `1a839f60`, 티켓 `3f749924`·`f627ab3a`).
 
-두 갈래를 잰다:
+세 갈래를 잰다:
 
 ① tick.sh의 감싸기 판정(결정 1) - `launchctl managername` 스텁으로 Background/Aqua를
-   재현하고, dryrun이 찍는 `엔진:` 줄(runner.log)로 네 경우를 가린다: Background+dira-agy는
+   재현하고, dryrun이 찍는 `엔진:` 줄(runner.log)로 다섯 경우를 가린다: Background+dira-agy는
    감싸고, Aqua+dira-agy는 안 감싸고, 이미 감싼 argv는 두 번 안 감싸고, Background라도
-   dira-agy가 아닌 엔진(claude)은 안 감싼다.
+   dira-agy가 아닌 엔진(claude)은 안 감싸고, dira-agy가 실행 불가라 PATH 폴백으로 bare
+   `agy`가 돼도(§27 계약 3) 여전히 감싼다.
 ② agy-gui.sh 단독 실행(결정 2) - `launchctl print gui/<uid>`가 실패하는 픽스처에서
    1초 안에 종료 코드 75와 stderr `GUI 세션 없음`을 낸다.
+③ tick.sh의 `reap_dead_agy_gui`(P460-2, 결정 2 둘째 항목) - `launchctl print gui/<uid>`가
+   agy-gui 잡 둘(라벨에 박힌 pid가 산 것 하나·죽은 것 하나)을 돌려주는 픽스처에서, 죽은
+   pid 라벨만 `bootout` 한 번 걸고 그 짝 작업 디렉터리를 지우며, 산 pid 라벨은 그대로 둔다.
+   `launchctl print`가 실패하는 픽스처에서는 WARN 없이 tick이 그대로 디스패치를 끝낸다.
 
 tick.sh는 자기 PATH를 `$HOME/.local/bin`부터 다시 세우므로(파일 상단) `$HOME`을 픽스처로
 돌려 가짜 `launchctl`을 심는다(test_unassign_pid_recover.py와 같은 수법). 진짜 launchctl -
@@ -40,14 +45,45 @@ FAKE_LAUNCHCTL = """\
 #!/bin/bash
 case "$1" in
   managername) echo "$FAKE_MANAGERNAME" ;;
-  print) [ "$FAKE_GUI_OK" = "1" ] && exit 0 || exit 1 ;;
-  bootstrap|bootout|list) exit 0 ;;
+  print)
+    [ "${FAKE_PRINT_FAIL:-0}" = "1" ] && exit 1
+    case "$2" in
+      */*/*)
+        # 결정 2(P460-2) 단독 잡 조회 - gui/<uid>/<라벨> 형태. 워크디렉터리만 되돌려준다.
+        label="${2##*/}"
+        wd=$(awk -F'\t' -v l="$label" '$1==l{print $2}' "${FAKE_WORKDIR_MAP:-/dev/null}" 2>/dev/null)
+        [ -n "$wd" ] && printf '\\tpath = %s/job.plist\\n' "$wd"
+        exit 0 ;;
+      *)
+        # 세션 조회(gui/<uid>) - agy-gui.sh의 GUI 세션 유무 검사와 reap_dead_agy_gui의
+        # 잡 목록 조회가 같은 형태를 공유한다.
+        [ "$FAKE_GUI_OK" = "1" ] || exit 1
+        printf '\\tservices = {\\n'
+        [ -n "${FAKE_SERVICES_FILE:-}" ] && cat "$FAKE_SERVICES_FILE" 2>/dev/null
+        printf '\\t}\\n'
+        exit 0 ;;
+    esac ;;
+  bootout)
+    [ -n "${FAKE_BOOTOUT_LOG:-}" ] && echo "$2" >> "$FAKE_BOOTOUT_LOG"
+    exit 0 ;;
+  bootstrap|list) exit 0 ;;
   *) exit 1 ;;
 esac
 """
 
 STUB_ENGINE = """\
 #!/bin/bash
+exit 0
+"""
+
+# tick(dryrun이 아닌 실제 CMD=tick) 테스트용 - 디스패치된 티켓을 바로 닫는다
+# (test_dispatch_cleanup.py의 같은 수법). reap_dead_agy_gui는 이 엔진이 뜨기 전에 이미 돌아
+# 있으므로 엔진 쪽에서 흉내낼 것이 없다.
+ENGINE_RESULT = """\
+#!/bin/bash
+wip=$(ls "{tickets}"/*.wip.md 2>/dev/null | head -1)
+[ -n "$wip" ] && mv "$wip" "${{wip%.wip.md}}.done.md"
+echo '{{"is_error":false,"type":"result","session_id":"sess-x","subtype":"success"}}'
 exit 0
 """
 
@@ -89,6 +125,8 @@ try:
     # 실행 불가 dira-agy(PATH 폴백 재현용) - basename은 같은 dira-agy지만 실행 비트가 없어
     # tick.sh가 "${ENGSUF:-agy}"로 bare agy에 돌아간다(§27 계약 3 폴백).
     dira_agy_noexec = mkfile(os.path.join(tmp, "bin2", "dira-agy"), STUB_ENGINE, 0o644)
+    engine_result = mkfile(os.path.join(tmp, "bin", "engine-result.sh"),
+                            ENGINE_RESULT.format(tickets=tickets), 0o755)
 
     def queue():
         if os.path.isdir(tickets):
@@ -111,6 +149,23 @@ try:
         lines = runlog_engine_lines(root)
         assert lines, "runner.log에 엔진: 줄이 없다\n" + r.stdout + r.stderr
         return lines[-1]
+
+    def tick_once(engine_path, extra_env):
+        queue()
+        if os.path.exists(runlog):
+            os.remove(runlog)
+        w1 = mkfile(os.path.join(root, "workers", "w1.sh"),
+                    WORKER.format(tmp=tmp, tick=TICK, engine=engine_path), 0o755)
+        env = dict(os.environ, TICKET_LOCAL=local, HOME=home, **extra_env)
+        return subprocess.run([w1, "tick"], capture_output=True, text=True,
+                               env=env, timeout=60)
+
+    def runner_log_text():
+        try:
+            with open(runlog, encoding="utf-8") as f:
+                return f.read()
+        except OSError:
+            return ""
 
     # --- ① Background + dira-agy -> 감싼다 ---
     line = dryrun(dira_agy, "Background")
@@ -146,7 +201,7 @@ try:
 
     print("OK - tick.sh Background 감싸기 판정 다섯 경우 통과")
 
-    # --- ⑤ agy-gui.sh 단독: GUI 세션 없음 -> 1초 안에 75 + stderr 메시지 ---
+    # --- ⑥ agy-gui.sh 단독: GUI 세션 없음 -> 1초 안에 75 + stderr 메시지 ---
     env = dict(os.environ, PATH=os.path.join(home, ".local", "bin") + os.pathsep + os.environ["PATH"],
                FAKE_MANAGERNAME="Aqua", FAKE_GUI_OK="0")
     t0 = time.monotonic()
@@ -158,6 +213,60 @@ try:
     assert elapsed < 1.0, "1초 안에 안 끝났다: {:.2f}s".format(elapsed)
 
     print("OK - agy-gui.sh가 GUI 세션 없음을 1초 안에 75로 낸다")
+
+    # --- ⑦ reap_dead_agy_gui(P460-2): 죽은 pid 라벨만 bootout 한 번, 산 pid 라벨은 0번 ---
+    alive_pid = os.getpid()  # 이 테스트 프로세스 자신 - tick 서브프로세스가 끝나도 살아 있다
+    dead_proc = subprocess.Popen(["true"])
+    dead_proc.wait()
+    dead_pid = dead_proc.pid  # wait() 뒤라 이미 거둬졌다 - kill -0이 실패하는 죽은 pid
+
+    label_alive = "tech.proofer.dira.agy-gui.{}.1111".format(alive_pid)
+    label_dead = "tech.proofer.dira.agy-gui.{}.2222".format(dead_pid)
+
+    workdir_alive = tempfile.mkdtemp(prefix="agy-gui-alive-")
+    workdir_dead = tempfile.mkdtemp(prefix="agy-gui-dead-")
+    mkfile(os.path.join(workdir_alive, "marker"), "x\n")
+    mkfile(os.path.join(workdir_dead, "marker"), "x\n")
+
+    services_file = mkfile(os.path.join(tmp, "services.tsv"),
+                            "\t\t0\t-\t{}\n\t\t0\t-\t{}\n".format(label_alive, label_dead))
+    workdir_map = mkfile(os.path.join(tmp, "workdir-map.tsv"),
+                          "{}\t{}\n{}\t{}\n".format(label_alive, workdir_alive,
+                                                     label_dead, workdir_dead))
+    bootout_log = os.path.join(tmp, "bootout.log")
+
+    r = tick_once(engine_result, dict(
+        FAKE_MANAGERNAME="Aqua", FAKE_GUI_OK="1",
+        FAKE_SERVICES_FILE=services_file, FAKE_WORKDIR_MAP=workdir_map,
+        FAKE_BOOTOUT_LOG=bootout_log))
+    assert r.returncode == 0, "tick rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
+
+    boot_lines = []
+    if os.path.exists(bootout_log):
+        with open(bootout_log, encoding="utf-8") as f:
+            boot_lines = f.read().splitlines()
+    dead_boots = [ln for ln in boot_lines if label_dead in ln]
+    alive_boots = [ln for ln in boot_lines if label_alive in ln]
+    assert len(dead_boots) == 1, "죽은 pid 라벨을 정확히 한 번 bootout해야 한다: " + repr(boot_lines)
+    assert len(alive_boots) == 0, "산 pid 라벨인데 bootout했다: " + repr(boot_lines)
+    assert not os.path.isdir(workdir_dead), "죽은 라벨의 작업 디렉터리가 안 지워졌다: " + workdir_dead
+    assert os.path.isdir(workdir_alive), "산 라벨의 작업 디렉터리를 잘못 지웠다: " + workdir_alive
+    assert label_dead in runner_log_text(), "runner.log에 걷은 라벨 NOTE가 없다"
+
+    shutil.rmtree(workdir_alive, ignore_errors=True)
+
+    print("OK - reap_dead_agy_gui가 죽은 pid 라벨만 걷는다")
+
+    # --- ⑧ launchctl print 실패 -> WARN 없이 tick이 그대로 디스패치를 끝낸다 ---
+    r = tick_once(engine_result, dict(
+        FAKE_MANAGERNAME="Aqua", FAKE_GUI_OK="1", FAKE_PRINT_FAIL="1"))
+    assert r.returncode == 0, "tick rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
+    combined = r.stdout + r.stderr + runner_log_text()
+    assert "WARN" not in combined, "launchctl 실패인데 WARN이 찍혔다: " + combined
+    done = [f for f in os.listdir(tickets) if f.endswith(".done.md")]
+    assert done, "launchctl 실패인데 티켓 디스패치 자체가 막혔다: " + repr(os.listdir(tickets))
+
+    print("OK - launchctl print 실패에도 WARN 없이 디스패치가 끝난다")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
     shutil.rmtree(home, ignore_errors=True)

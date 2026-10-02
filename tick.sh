@@ -694,6 +694,39 @@ if [ "$CMD" = "tick" ]; then
   true
 fi
 
+# --- P460-2: 죽은 워커가 남긴 agy-gui 잡을 걷는다 ---
+# P460-1(agy-gui.sh)의 trap은 정상 종료에서만 돈다 - 워커가 SIGKILL로 죽으면 일회용
+# LaunchAgent(`tech.proofer.dira.agy-gui.<pid>.<난수>`, 짝 디렉터리 `/tmp/agy-gui.<난수>`)가
+# `--print-timeout` 상한까지 남는다. 라벨에 박힌 <pid>는 agy-gui.sh 자기 자신(그 중계
+# 프로세스)의 pid라 워커 죽음과 생사가 같이 간다 - `launchctl print`가 돌려주는 그 잡의
+# 실행 pid(bash run.sh)가 아니라 라벨 문자열에서 뽑은 pid로 산 사람을 가린다.
+# launchctl이 없거나 실패하면(이 호스트가 macOS가 아니거나 권한 문제) WARN 없이 그냥 건너뛴다
+# - reap과 같은 이유로 디스패치를 막지 않는다.
+reap_dead_agy_gui() {
+  local pfx="tech.proofer.dira.agy-gui." uidn svc label rest pid workdir
+  command -v launchctl >/dev/null 2>&1 || return 0
+  uidn="$(id -u)" || return 0
+  svc="$(launchctl print "gui/$uidn" 2>/dev/null)" || return 0
+  printf '%s\n' "$svc" | awk '
+    /services = \{/ { insvc=1; next }
+    insvc && /^\t\}/ { insvc=0 }
+    insvc && NF>=2 { print $NF }
+  ' | while IFS= read -r label; do
+    case "$label" in "$pfx"*) ;; *) continue ;; esac
+    rest="${label#"$pfx"}"
+    pid="${rest%%.*}"
+    case "$pid" in ''|*[!0-9]*) continue ;; esac
+    kill -0 "$pid" 2>/dev/null && continue   # 산 pid 라벨은 0번 bootout - 그대로 둔다
+    workdir="$(launchctl print "gui/$uidn/$label" 2>/dev/null \
+      | sed -n 's#^[[:space:]]*path = \(.*\)/job\.plist$#\1#p' | head -1)"
+    launchctl bootout "gui/$uidn/$label" >/dev/null 2>&1
+    [ -n "$workdir" ] && rm -rf "$workdir" 2>/dev/null
+    log "NOTE agy-gui 잡 걷음 label=$label pid=$pid(사망) workdir=${workdir:-?}"
+  done
+  return 0
+}
+[ "$CMD" = "tick" ] && reap_dead_agy_gui
+
 # --- §폴링 대기 결정 3·5·6 — 폴링 단계: reap 다음, `select` 앞이고, 이 워커가 바빠서 아래
 # 워커 락에 걸려 SKIP하는 자리보다도 앞이다 - 대기는 워커 슬롯과 무관한 큐 전체의 상태라서다.
 # 새 cron 줄 0개, 새 프로세스 0개 - 이미 깨어난 이 tick에 얹는다. 대기 티켓이 0건이면 파일
