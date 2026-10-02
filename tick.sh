@@ -1498,7 +1498,7 @@ for arg in "${TICKET_ENGINE[@]}"; do
   arg="${arg//\{prompt\}/$PROMPT}"
   ENGINE+=("${arg//\{sid\}/$SID}")
 done
-log "엔진: ${TICKET_ENGINE[*]}"
+log "NOTE 엔진: ${TICKET_ENGINE[*]}"
 
 if [ "$CMD" = "dryrun" ]; then
   echo "워커: $TICKET_NAME (루트 $TICKET_ROOT, cwd $TICKET_CWD)"
