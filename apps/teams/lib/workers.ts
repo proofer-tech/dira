@@ -766,8 +766,18 @@ export const ENGINES: readonly {
   {
     id: "codex",
     flag: "-m",
-    // `codex debug models`의 `visibility: "list"` 5종 중 숨김(`codex-auto-review`)을 뺀 넷.
-    models: [NO_MODEL, "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4-mini"],
+    // `codex debug models`(codex-cli 0.160.0, 2026-10-05 실측)의 `visibility: "list"` 8종 전부.
+    models: [
+      NO_MODEL,
+      "gpt-6.1-sol",
+      "gpt-6-astra",
+      "gpt-6-sol",
+      "gpt-6-luna",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "gpt-5.5",
+    ],
     // 뒤 두 플래그는 장식이 아니다(실측 — 티켓 §결과):
     // `-s danger-full-access` 없으면 기본 샌드박스가 read-only라 **자기 워크트리에도 못 쓴다**.
     // `workspace-write`로도 부족하다 — `.dira`가 워크트리 밖(큐)을 가리켜 티켓 rename이 막힌다.
