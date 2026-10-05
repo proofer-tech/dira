@@ -21,6 +21,8 @@ import {
   createPersonaAction,
   createSquadAction,
   deletePersonaAction,
+  hidePersonaAction,
+  unhidePersonaAction,
   deletePersonaMemoryAction,
   deleteSquadAction,
   installSkillAction,
@@ -1028,7 +1030,7 @@ export function PersonasPane({
 
 // ── 휴지통 (DESIGN.md P464) ──────────────────────────────────────────────────
 
-export type TrashRow = { kind: "persona" | "squad"; name: string; at: number; entry: string };
+export type TrashRow = { kind: "persona" | "squad" | "hidden"; name: string; at: number; entry: string };
 
 /** 휴지통 칸 - 줄마다 종류 - 이름 - 지운 시각 - 되살리기 - 영구 삭제. 서버가 준 순서(최근 우선) 그대로다.
  *  동작 뒤에는 `router.refresh()`로 서버 목록을 다시 읽는다(왼쪽 목록과 `휴지통 n`이 같이 갈린다). */
@@ -1060,7 +1062,11 @@ function TrashPane({ projectId, trash, nowMs }: { projectId: string; trash: Tras
         {trash.map((e) => (
           <li key={`${e.kind}/${e.entry}`} className="flex flex-wrap items-center gap-3 p-3">
             <Badge variant="outline">
-              {e.kind === "persona" ? t("persona.trash.kindPersona") : t("persona.trash.kindSquad")}
+              {e.kind === "persona"
+                ? t("persona.trash.kindPersona")
+                : e.kind === "hidden"
+                  ? t("persona.trash.kindHidden")
+                  : t("persona.trash.kindSquad")}
             </Badge>
             <span className="min-w-0 grow truncate font-mono text-sm" title={e.name}>
               {e.name}
@@ -1072,11 +1078,17 @@ function TrashPane({ projectId, trash, nowMs }: { projectId: string; trash: Tras
               variant="outline"
               size="sm"
               disabled={pending}
-              onClick={() => run(() => restoreTrashAction(projectId, e.kind, e.entry))}
+              onClick={() =>
+                run(() =>
+                  e.kind === "hidden"
+                    ? unhidePersonaAction(projectId, e.name)
+                    : restoreTrashAction(projectId, e.kind, e.entry),
+                )
+              }
             >
-              {t("persona.trash.restore")}
+              {e.kind === "hidden" ? t("persona.trash.unhide") : t("persona.trash.restore")}
             </Button>
-            <AlertDialog>
+            {e.kind !== "hidden" && <AlertDialog>
               <AlertDialogTrigger
                 render={
                   <Button variant="ghost" size="sm" disabled={pending}>
@@ -1104,7 +1116,7 @@ function TrashPane({ projectId, trash, nowMs }: { projectId: string; trash: Tras
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
-            </AlertDialog>
+            </AlertDialog>}
           </li>
         ))}
       </ul>
@@ -1495,18 +1507,21 @@ function PersonaDetail({
         {row.market.update && (
           <UpdateBadge projectId={projectId} kind="persona" name={row.name} update={row.market.update} />
         )}
-        {edit.saved !== null && (
-          <span className="ml-auto flex shrink-0 items-center gap-1 self-center">
-            <DeployButton projectId={projectId} kind="persona" name={row.name} />
-            <OpenInAppButton action={() => openPersonaProfileAction(projectId, row.name)} />
-            <DeleteButton
-              projectId={projectId}
-              row={row}
-              onDeleted={onDeleted}
-              onError={(message) => setHeadError({ title: t("persona.action.deleteFailedTitle"), message })}
-            />
-          </span>
-        )}
+        <span className="ml-auto flex shrink-0 items-center gap-1 self-center">
+          {edit.saved !== null && (
+            <>
+              <DeployButton projectId={projectId} kind="persona" name={row.name} />
+              <OpenInAppButton action={() => openPersonaProfileAction(projectId, row.name)} />
+            </>
+          )}
+          <DeleteButton
+            projectId={projectId}
+            row={row}
+            hide={edit.saved === null}
+            onDeleted={onDeleted}
+            onError={(message) => setHeadError({ title: t("persona.action.deleteFailedTitle"), message })}
+          />
+        </span>
       </div>
 
       {/* 머리 2행 — 메타(§비주얼 §66 ③): `도는 세션 n / 상한 m` · 마지막 활동 · 스쿼드.
@@ -3715,11 +3730,14 @@ function OpenInAppButton({ action }: { action: () => Promise<{ ok: boolean; mess
 function DeleteButton({
   projectId,
   row,
+  hide,
   onDeleted,
   onError,
 }: {
   projectId: string;
   row: PersonaRow;
+  /** 프로필이 없는 줄 - 지울 파일이 없어서 숨기기 액션을 부른다(P465) */
+  hide: boolean;
   onDeleted: () => void;
   onError: (message: string) => void;
 }) {
@@ -3739,13 +3757,19 @@ function DeleteButton({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {t("persona.delete.titlePrefix")} {row.name}
+            {hide ? t("persona.hide.titlePrefix") : t("persona.delete.titlePrefix")} {row.name}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            <span className="font-mono text-xs break-all">
-              {row.file.replace(/\/PROFILE\.md$/, "")}
-            </span>{" "}
-            {t("persona.delete.bodyAfterPath")}
+            {hide ? (
+              t("persona.hide.body")
+            ) : (
+              <>
+                <span className="font-mono text-xs break-all">
+                  {row.file.replace(/\/PROFILE\.md$/, "")}
+                </span>{" "}
+                {t("persona.delete.bodyAfterPath")}
+              </>
+            )}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {/* 티켓은 지우지 않는다 — 남은 티켓은 페르소나 없이 디스패치된다(tick.sh 188행) */}
@@ -3774,13 +3798,13 @@ function DeleteButton({
             disabled={pending}
             onClick={() =>
               start(async () => {
-                const r = await deletePersonaAction(projectId, row.name);
+                const r = await (hide ? hidePersonaAction : deletePersonaAction)(projectId, row.name);
                 if (r.ok) onDeleted();
                 else onError(r.message ?? t("persona.action.deleteFailedMessage"));
               })
             }
           >
-            {t("persona.action.delete")}
+            {hide ? t("persona.hide.confirm") : t("persona.action.delete")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
