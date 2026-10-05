@@ -256,8 +256,23 @@ person, delete the `squad:` line.
 
 ## Deleting a squad
 
-That is `Delete` at the head of the right column. The `squads/<name>` folder is deleted and it
-cannot be undone.
+That is `Delete` at the head of the right column, and a confirmation opens. It says the squad
+`will be moved to the trash. You can restore it from the trash.` Confirm it and the whole
+`squads/<name>/` folder moves to `squads/.trash/<name>@<time deleted>/`. The time is written
+down to the second, like `20261005-194812`, and `members` and `rules` are inside, untouched.
+The trash does not empty itself.
+
+**You restore it from the `Trash n` row at the bottom of the list on the left.** With the trash
+empty that row does not appear. Press it and the right column lists deleted personas and squads,
+most recent first. On a row whose kind is `Squad`, press `Restore` and the folder goes back to
+where it was, with the same members and leader as before. If a squad with that name already
+exists, you get `A squad with that name already exists` and nothing changes. It does not
+overwrite the one that is there. To bring the old one back, delete the current one first and
+press it again.
+
+`Delete forever` on the same row goes through one more confirmation and then removes that entry
+from the disk. Deleting forever cannot be undone. Personas and squads share the trash screen, so
+for the full walk-through see the `Deleting a persona` section of [Personas](/docs/personas).
 
 The `squad:` value on tickets carrying that squad stays as it is. It is not deleted along with
 it. The next time that ticket is dispatched, one warning line is added as in the third row of

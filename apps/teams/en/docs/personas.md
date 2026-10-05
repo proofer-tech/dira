@@ -500,6 +500,47 @@ If you want to edit by hand, open the file directly at `personas/<name>/memory/`
 The screen does not block that path. Still, this section is a place sessions fill. Put the
 sentences you write yourself in the profile.
 
+## Deleting a persona - it goes to the trash
+
+Press `Delete` on the top line of the right column and a confirmation opens. It says the
+persona's directory `will be moved to the trash. You can restore it from the trash.` If tickets
+carry this persona, their count shows there too. Press `Delete` in the confirmation and the
+persona leaves the list on the left.
+
+**A deleted persona is only moved, directory and all.** `personas/<name>/` in the queue moves to
+`<name>@<time deleted>/` under `personas/.trash/`. The time is written down to the second, like
+`20261005-194812`. `PROFILE.md`, `skills.md`, the `memory/` that retrospectives built up, the
+cap and the engine setting are all inside, untouched. Delete the same name twice and the times
+differ, so the entries never collide. The trash does not empty itself. An entry stays until you
+press `Delete forever`.
+
+Two things do not change when you delete. The `persona:` value on tickets stays as it is. Those
+tickets are treated as in the first section, a name with no profile: the engine leaves one
+`WARN` line and dispatches without a persona. The color of the dot is not erased from the record
+either. Restore it and it comes back in the same color.
+
+### Restoring
+
+When the trash holds at least one entry, a row with a count such as `Trash 2` appears at the
+bottom of the list on the left. With the trash empty that row does not appear. Press it and the
+right column becomes the trash list, most recently deleted first. Each row has the kind
+(`Persona` or `Squad`), the name, the time deleted, and two buttons.
+
+Press `Restore` and the directory goes back to where it was, and the persona shows in the list
+on the left again. The files inside are the same as before you deleted it. Its memory rides
+again too.
+
+**If the name is taken, restoring is refused.** If you made a new persona with the same name
+after deleting, you get `A persona with that name already exists` and nothing changes. It does
+not overwrite the one that is there, so both stay as they are. To bring the old one back, delete
+the current one first so it goes to the trash, then press `Restore` on the old entry again.
+
+### Deleting forever
+
+Press `Delete forever` and one more confirmation opens. Confirm it and that entry's directory is
+removed from the disk. This one cannot be undone. The memory goes with it, so if there is a
+sentence worth keeping, take the file out of `personas/.trash/<entry>/memory/` before you do.
+
 ## How the prompt is assembled - where the profile rides
 
 When one ticket is dispatched, a prompt is assembled once. The order goes like this.
