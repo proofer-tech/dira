@@ -8524,53 +8524,6 @@ designer 0장 - 새 시각 요소가 없다. writer 몫(매뉴얼에 셸 표식 
 
 designer 0장, writer 0장 - 화면과 매뉴얼이 다루는 조작이 안 바뀐다.
 
-### P463. codex 워커가 실제로 티켓을 끝낸다 (요구 `8a4c4fe9`, 왕복 0회)
-
-사람 요구: dira가 codex로 잘 동작하는지 테스트하고 문제가 있으면 고친다. 2026-10-05에 임시 큐(원격 없음)에서
-GUI가 만드는 codex argv 그대로 `tick.sh`를 돌려 실측했다(`codex-cli 0.160.0`, ChatGPT 계정 로그인).
-
-**결함 1 - 고정 경로 복사본이 도구를 하나도 못 쓴다.** `refresh_fixed_engine`은 codex 실행 파일 하나만
-`~/.config/dira/bin/dira-codex`로 복사한다. 그런데 codex 0.160은 자기 실행 파일과 **같은 디렉터리의**
-`codex-code-mode-host`를 띄워 셸 명령을 실행한다(원본 자리
-`~/.codex/packages/standalone/releases/<버전>/bin/`에 두 파일이 같이 있다). 복사본 옆에는 그 파일이 없으므로
-로그에 `failed to spawn code-mode host /Users/<사람>/.config/dira/bin/codex-code-mode-host`가 찍히고, 세션은
-티켓조차 읽지 못한 채 ok로 끝나며, 엔진은 `FAIL 세션이 ok로 끝났는데 .wip을 남겼다`를 남긴다. 같은 티켓을
-원본 경로(`~/.local/bin/codex`)로 돌리면 계획 기록 - 파일 작성 - 커밋 - `## 블록`까지 정상으로 돌았다.
-따라서 결함은 복사 한 자리뿐이고, 참견 경로-pid 기록-완료 판정은 손댈 것이 없다.
-
-- **결정 1.** 고정 경로를 구울 때 codex는 원본 실행 파일과 같은 디렉터리에 있는 `codex-code-mode-host`를
-  `$BIN_DIR/codex-code-mode-host`로 함께 굽는다. 신선도 판정(`.src` 실체 경로 + `.stamp` mtime-크기)도
-  본체와 같은 방식으로 따로 적는다 - codex가 업데이트되면 둘이 같이 갈려야 한다. 원본 옆에 그 파일이
-  없으면(옛 codex) 조용히 건너뛴다.
-- **결정 2.** 심링크로 대신하지 않는다 - 고정 경로를 복사로 만든 이유(TCC 항목을 절대경로 하나로 모은다)가
-  동반 파일에도 똑같이 적용된다.
-
-**결함 2 - GUI 모델 목록이 낡았다.** `apps/teams/lib/workers.ts`의 codex `models`가 `gpt-5.6-terra` -
-`gpt-5.6-luna` - `gpt-5.5` - `gpt-5.4-mini`다. 오늘 `codex debug models`의 `visibility: "list"`는
-`gpt-6.1-sol` - `gpt-6-astra` - `gpt-6-sol` - `gpt-6-luna` - `gpt-5.6-sol` - `gpt-5.6-terra` - `gpt-5.6-luna` -
-`gpt-5.5` 여덟 개이고, `-m gpt-5.4-mini`는 `400 The 'gpt-5.4-mini' model is not supported when using Codex
-with a ChatGPT account`로 첫 턴에서 죽는다.
-
-- **결정 3.** 목록을 그 여덟 개로 바꾼다(맨 앞 `NO_MODEL`은 그대로). 주석의 근거 문장도 같은 날짜의
-  실측으로 고친다.
-
-| ID | 무엇 | 페르소나 | deps | 상태 |
-|---|---|---|---|---|
-| P463-1 | 엔진 - 결정 1-2. `refresh_fixed_engine`이 `codex-code-mode-host`를 함께 굽는다 `63296ac0` | developer | - | 발행 |
-| P463-2 | GUI - 결정 3. codex 모델 목록을 오늘 `codex debug models`의 여덟 개로 바꾼다 `5eb46dbb` | developer | - | 발행 |
-| P463-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 `0f433d63` | qa | P463-1 | 발행 |
-
-designer 0장, writer 0장 - 화면 모양과 매뉴얼이 다루는 조작이 안 바뀐다. 엔진 수정(P463-1)은 사람 승인 대상이지만
-이번 요구가 "문제가 있으면 고쳐 달라"였고 주도성 5로 디스패치되어 승인으로 읽었다.
-
-#### 수용조건
-
-- [ ] 엔진 tick이 한 번 돈 뒤 `ls ~/.config/dira/bin/codex-code-mode-host`가 파일을 보여 주고, `cmp`로 원본 자리의 같은 파일과 같다.
-- [ ] 원격 없는 임시 큐에 "파일 하나를 만든다" 티켓을 두고 GUI codex argv(`dira-codex exec --json -s danger-full-access --skip-git-repo-check "{prompt}"`)로 워커를 한 번 돌리면, 그 로그에 `failed to spawn code-mode host`가 없고 작업 디렉터리에 그 파일이 생긴다.
-- [ ] 같은 실행의 `runner.log`에 `FAIL ... .wip을 남겼다`가 없다(`DONE`이다).
-- [ ] `apps/teams/lib/workers.ts`의 codex `models`가 `NO_MODEL` 다음에 위 여덟 개를 그 순서로 갖고, `gpt-5.4-mini`가 없다.
-- [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과한다.
-
 ## 수용조건 (전체)
 
 개별 티켓의 `## Done when`이 계약이고, 아래는 제품 전체의 종료 조건이다.
