@@ -8489,10 +8489,10 @@ hard-delete다. `lib/projects.ts`의 `deletePersona`-`deleteSquad`가 `personas/
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P464-1 | 서버 - `deletePersona`-`deleteSquad`가 `.trash/`로 옮기고, 휴지통 목록 - 되살리기 - 영구 삭제 함수와 서버 액션을 단다 + 확인 다이얼로그 문구(ko-en) + 테스트 | developer | - | 발행 |
-| P464-2 | 화면 - §5 왼쪽 `휴지통 n` 줄과 오른쪽 휴지통 칸(되살리기 - 영구 삭제) | developer | P464-1 | 발행 |
-| P464-3 | 문서 - 매뉴얼 `personas.md` - `squads.md`(ko-en)가 지우면 휴지통으로 간다는 것과 되살리는 법을 알려 준다 | writer | P464-2 | 발행 |
-| P464-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P464-2 | 발행 |
+| P464-1 | 서버 - `deletePersona`-`deleteSquad`가 `.trash/`로 옮기고, 휴지통 목록 - 되살리기 - 영구 삭제 함수와 서버 액션을 단다 + 확인 다이얼로그 문구(ko-en) + 테스트 | developer | - | 발행 `0b316192` |
+| P464-2 | 화면 - §5 왼쪽 `휴지통 n` 줄과 오른쪽 휴지통 칸(되살리기 - 영구 삭제) | developer | P464-1 | 발행 `eab16852` |
+| P464-3 | 문서 - 매뉴얼 `personas.md` - `squads.md`(ko-en)가 지우면 휴지통으로 간다는 것과 되살리는 법을 알려 준다 | writer | P464-2 | 발행 `4e887974` |
+| P464-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P464-2 | 발행 `e3f46199` |
 
 `deps`가 P464-1에 걸린 이유는 화면이 부를 서버 액션이 그 티켓에서 생기기 때문이다. 매뉴얼과 QA는
 화면이 있어야 확인할 대상이 생긴다. 에픽을 안 연다.
