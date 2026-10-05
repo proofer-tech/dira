@@ -281,7 +281,10 @@ export default async function Personas({
           initial={persona?.map(decodeHash).join("/") ?? null}
           rows={rows}
           squads={squads}
-          trash={trashList.map((e) => ({ kind: e.kind, name: e.name, at: e.deletedAt.getTime(), entry: e.entry }))}
+          // ponytail: `hidden`(P465)은 화면이 아직 못 그린다 - P465-2가 TrashPane에 줄을 달 때 이 거름을 뺀다
+          trash={trashList.flatMap((e) =>
+            e.kind === "hidden" ? [] : [{ kind: e.kind, name: e.name, at: e.deletedAt.getTime(), entry: e.entry }],
+          )}
           colors={project.personaColors ?? {}}
           installed={installed}
           configDir={claudeConfigDir()}

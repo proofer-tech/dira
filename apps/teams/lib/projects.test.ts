@@ -14,6 +14,8 @@ const {
   createPersona,
   createSquad,
   deletePersona,
+  hidePersona,
+  unhidePersona,
   listTrash,
   listTrashAll,
   purgeFromTrash,
@@ -1185,4 +1187,47 @@ test("휴지통 - 영구 삭제는 항목 하나만, .trash 밖은 거절한다 
   symlinkSync(secret, path.join(pdir, ".trash", "evil@20200101-000000"));
   await assert.rejects(() => purgeFromTrash(pdir, "evil@20200101-000000"), /기준 디렉터리 밖이다/);
   assert.strictEqual(existsSync(path.join(secret, "x")), true);
+});
+
+test("숨기기 - .hidden 한 줄, 재숨김은 시각만, 프로필 있으면 거절, 디렉터리 안 만든다 (P465)", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const pdir = path.join(root, "personas");
+  mkdirSync(path.join(pdir, "real"), { recursive: true });
+  writeFileSync(path.join(pdir, "real", "PROFILE.md"), "# real\n");
+  await hidePersona(pdir, "ghost");
+  await hidePersona(pdir, "other");
+  await hidePersona(pdir, "ghost");
+  const lines = readFileSync(path.join(pdir, ".hidden"), "utf8").trim().split("\n");
+  assert.strictEqual(lines.filter((l) => l.startsWith("ghost ")).length, 1);
+  assert.ok(lines.every((l) => /^[A-Za-z0-9_-]+ \d{8}-\d{6}$/.test(l)));
+  assert.strictEqual(existsSync(path.join(pdir, "ghost")), false);
+  await assert.rejects(() => hidePersona(pdir, "real"), /프로필이 있는 이름/);
+  await assert.rejects(() => hidePersona(pdir, "../x"));
+  await unhidePersona(pdir, "ghost");
+  assert.deepStrictEqual(readFileSync(path.join(pdir, ".hidden"), "utf8").trim().split("\n").map((l) => l.split(" ")[0]), ["other"]);
+});
+
+test("숨김 조건 - 열린 티켓이 있거나 프로필이 생기면 다시 뜬다, 휴지통에 hidden으로 합쳐진다 (P465)", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const pdir = path.join(root, "personas");
+  const sdir = squadsDir({ root });
+  mkdirSync(pdir, { recursive: true });
+  const tk = (state: string) => ({ persona: "ghost", state }) as never;
+  await hidePersona(pdir, "ghost");
+  const names = async (tickets: never[]) => (await listPersonas(pdir, tickets)).map((p) => p.name);
+  assert.deepStrictEqual(await names([tk("done")]), []);
+  assert.deepStrictEqual(await names([tk("done"), tk("wip")]), ["ghost"]);
+  assert.deepStrictEqual(await names([tk("open")]), ["ghost"]);
+  await createPersona(pdir, "ghost");
+  assert.deepStrictEqual(await names([tk("done")]), ["ghost"]);
+  rmSync(path.join(pdir, "ghost"), { recursive: true });
+
+  await createSquad(sdir, "fe");
+  await deleteSquad(sdir, "fe");
+  const all = await listTrashAll(pdir, sdir);
+  assert.ok(all.some((e) => e.kind === "hidden" && e.name === "ghost" && e.deletedAt instanceof Date));
+  assert.deepStrictEqual(
+    all.map((e) => e.deletedAt.getTime()),
+    all.map((e) => e.deletedAt.getTime()).sort((a, b) => b - a),
+  );
 });

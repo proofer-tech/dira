@@ -16,6 +16,8 @@ import {
   deletePersona,
   deleteSquad,
   getProject,
+  hidePersona,
+  unhidePersona,
   listTrashAll,
   purgeFromTrash,
   restoreFromTrash,
@@ -394,13 +396,34 @@ export async function deletePersonaAction(projectId: string, name: string): Prom
   }
 }
 
+/** 프로필 없는 이름을 목록에서 숨긴다(P465). 프로필이 있으면 `hidePersona`가 거절한다. */
+export async function hidePersonaAction(projectId: string, name: string): Promise<PersonaResult> {
+  try {
+    await hidePersona(await personasDir(projectId), name);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function unhidePersonaAction(projectId: string, name: string): Promise<PersonaResult> {
+  try {
+    await unhidePersona(await personasDir(projectId), name);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 /** 휴지통 목록(DESIGN.md P464) — 페르소나와 스쿼드를 합쳐 최근 것이 앞이다. */
 export async function listTrashAction(projectId: string): Promise<TrashEntry[]> {
   return listTrashAll(await personasDir(projectId), await squadsDirFor(projectId));
 }
 
 async function trashBase(projectId: string, kind: TrashKind): Promise<string> {
-  return kind === "persona" ? personasDir(projectId) : squadsDirFor(projectId);
+  return kind !== "squad" ? personasDir(projectId) : squadsDirFor(projectId);
 }
 
 /** 되살리기 - 같은 이름이 이미 있으면 실패하고 아무것도 안 건드린다. */

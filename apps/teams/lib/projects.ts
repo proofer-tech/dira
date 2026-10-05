@@ -947,10 +947,55 @@ export async function personaNames(dir: string, tickets: Ticket[] = []): Promise
   return [...names].sort();
 }
 
+// ── 숨김 목록 (DESIGN.md P465) ──────────────────────────────────────────────
+// `<personas>/.hidden`: 줄 하나가 `<이름> <YYYYMMDD-HHMMSS>`. 점 파일이라 엔진과 `NAME_RE` 스캔에 안 걸린다.
+
+const HIDDEN_LINE_RE = /^([A-Za-z0-9_-]+) (\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/;
+const hiddenPath = (dir: string) => path.join(expandHome(dir), ".hidden");
+
+/** 숨긴 이름 → 숨긴 시각. 파일이 없거나 형식 밖 줄은 없는 것으로 친다. */
+export async function readHidden(dir: string): Promise<Map<string, Date>> {
+  const out = new Map<string, Date>();
+  const raw = await readFile(hiddenPath(dir), "utf8").catch(() => "");
+  for (const line of raw.split("\n")) {
+    const m = HIDDEN_LINE_RE.exec(line);
+    if (!m) continue;
+    const [y, mo, d, h, mi, s] = m.slice(2).map(Number);
+    out.set(m[1], new Date(y, mo - 1, d, h, mi, s));
+  }
+  return out;
+}
+
+async function writeHidden(dir: string, hidden: Map<string, Date>): Promise<void> {
+  const body = [...hidden].map(([n, at]) => `${n} ${trashStamp(at)}\n`).join("");
+  await writeFile(hiddenPath(dir), body, "utf8");
+}
+
+/** 프로필 없는 이름을 숨긴다. 같은 이름은 한 줄 - 다시 숨기면 시각만 바뀐다. 디렉터리는 안 만든다.
+ *  ponytail: 읽고 전체를 다시 쓴다(동시 숨기기 경합은 마지막이 이김). 줄이 수백 개가 되면 append. */
+export async function hidePersona(dir: string, name: string): Promise<void> {
+  if (!NAME_RE.test(name)) throw new Error(`${t(DEFAULT_LOCALE, "projects.notAPersonaNamePrefix")} ${name}`);
+  await mkdir(expandHome(dir), { recursive: true });
+  const file = await profilePath(dir, name);
+  if (await stat(file).then(() => true, () => false)) throw new Error(t(DEFAULT_LOCALE, "persona.hide.hasProfile"));
+  const hidden = await readHidden(dir);
+  hidden.delete(name);
+  hidden.set(name, new Date());
+  await writeHidden(dir, hidden);
+}
+
+/** 다시 보이기 - 그 줄 하나만 지운다. 없는 이름이면 아무것도 안 한다. */
+export async function unhidePersona(dir: string, name: string): Promise<void> {
+  const hidden = await readHidden(dir);
+  if (hidden.delete(name)) await writeHidden(dir, hidden);
+}
+
 /** 위 이름들 + 각각의 `PROFILE.md`·참조 수. **파일을 이름 수만큼 읽는다** — 목록 행처럼 이름만
- *  필요한 화면은 `personaNames`를 부른다(§0 표 · §성능 예산). */
+ *  필요한 화면은 `personaNames`를 부른다(§0 표 · §성능 예산). 숨김 조건 셋(기록 있음 · 프로필 없음 ·
+ *  열린 참조 티켓 0장)이 모두 참인 이름은 뺀다(P465). */
 export async function listPersonas(dir: string, tickets: Ticket[] = []): Promise<Persona[]> {
-  return Promise.all(
+  const hidden = await readHidden(dir);
+  const all = await Promise.all(
     (await personaNames(dir, tickets)).map(async (name) => {
       const file = path.join(dir, name, "PROFILE.md");
       const refs = tickets.filter((t) => t.persona === name);
@@ -966,6 +1011,7 @@ export async function listPersonas(dir: string, tickets: Ticket[] = []): Promise
       };
     }),
   );
+  return all.filter((p) => !(hidden.has(p.name) && p.body === null && p.refs.open + p.refs.wip === 0));
 }
 
 /** 저장. 없으면 만든다 — 목록에 "프로필 없음"으로 뜬 이름을 그 자리에서 채우게 하려고
@@ -996,7 +1042,8 @@ export async function deletePersona(dir: string, name: string): Promise<void> {
 // ── 휴지통 (DESIGN.md P464) ─────────────────────────────────────────────────
 // `<기준>/.trash/<이름>@<YYYYMMDD-HHMMSS>/`. `.trash`는 `NAME_RE`를 못 지나 목록과 엔진이 건너뛴다.
 
-export type TrashKind = "persona" | "squad";
+/** `hidden`은 휴지통 디렉터리 항목이 아니라 `.hidden` 줄이다(P465) - `entry`는 이름 그대로고 복구는 `unhidePersona`. */
+export type TrashKind = "persona" | "squad" | "hidden";
 export type TrashEntry = {
   kind: TrashKind;
   name: string;
@@ -1042,7 +1089,13 @@ export async function listTrash(dir: string, kind: TrashKind): Promise<TrashEntr
 
 /** 페르소나와 스쿼드 휴지통을 합쳐 최근 것이 앞이다. */
 export async function listTrashAll(personasDir: string, squadsDirPath: string): Promise<TrashEntry[]> {
-  const all = [...(await listTrash(personasDir, "persona")), ...(await listTrash(squadsDirPath, "squad"))];
+  const hidden: TrashEntry[] = [...(await readHidden(personasDir))].map(([name, deletedAt]) => ({
+    kind: "hidden",
+    name,
+    deletedAt,
+    entry: name,
+  }));
+  const all = [...(await listTrash(personasDir, "persona")), ...(await listTrash(squadsDirPath, "squad")), ...hidden];
   return all.sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
 }
 
