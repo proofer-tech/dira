@@ -8455,6 +8455,43 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P463. codex 워커가 명령 실행 도구를 쓴다 (요구 `8a4c4fe9`, 왕복 0회)
+
+사람 요구: codex로 잘 동작하는지 시험하고 문제가 있으면 고친다. 임시 큐에서 GUI가 만드는 codex
+argv 그대로 티켓 한 장을 디스패치했더니(2026-10-05, `codex-cli 0.160.0`) 세션이 도구를 하나도
+못 쓰고 `.wip`을 남겼다. 로그에는 `failed to spawn code-mode host
+~/.config/dira/bin/codex-code-mode-host: No such file or directory`가 찍혔다.
+
+원인은 고정 경로 굽기(`tick.sh` `refresh_fixed_engine`, 엔진 수정 스물일곱 번째 계약 2)다. 이
+함수는 codex 실행 파일 한 개만 `~/.config/dira/bin/dira-codex`로 복사한다. 그런데 0.160의
+standalone 설치본은 `releases/<버전>/` 아래에 `codex-package.json` - `bin/codex` -
+`bin/codex-code-mode-host` - `codex-resources/` - `codex-path/`를 두고, 실행 파일 옆의 형제
+파일을 찾는다. 복사본 옆에는 형제가 없으니 명령 실행이 통째로 막힌다.
+
+같은 임시 큐에서 패키지 디렉터리를 통째로 복제(`cp -cR`)하고 `dira-codex`를 그 안의
+`bin/codex`로 가는 심링크로 두자, 세션이 티켓을 읽고 파일을 쓰고 티켓 본문을 고쳤다(에러 0줄).
+심링크를 써도 커널이 푸는 실경로는 복제본 안의 고정 경로라 TCC 계약(§계약 3 판정 - 버전 경로가
+안 뜬다)과 어긋나지 않는다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P463-1 | 엔진 - `refresh_fixed_engine`이 codex 패키지 레이아웃을 보존해 굽는다 `076bfa77` | developer | - | 발행 |
+| P463-2 | GUI - `workers.ts` codex 모델 목록을 `codex debug models` 실측으로 갱신한다 `07141b7d` | developer | - | 발행 |
+| P463-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 `5c0b5486` | qa | P463-1 | 발행 |
+
+designer 0장, writer 0장 - 화면과 매뉴얼이 다루는 조작이 안 바뀐다. 에픽을 안 연다. 앱 설치본
+엔진에 반영되는 시점은 다음 릴리스다 - 이 블록은 레포 `tick.sh`까지만 다룬다.
+
+#### 수용조건
+
+- [ ] codex standalone 설치본(`codex-package.json`이 실행 파일의 부모의 부모에 있다)이 PATH에 있는 머신에서 tick을 한 번 돌리면, `~/.config/dira/bin/dira-codex`가 가리키는 실행 파일 옆에 `codex-code-mode-host`가 있고, 그 부모 디렉터리에 `codex-package.json` - `codex-resources/` - `codex-path/`가 있다.
+- [ ] `~/.config/dira/bin/dira-codex exec --json -s danger-full-access --skip-git-repo-check "echo ok 를 실행하고 결과를 알려줘" </dev/null`의 출력과 stderr에 `code-mode host` 문자열이 0줄이고, `command_execution` 항목이 1개 이상 나온다.
+- [ ] 원격이 있는 임시 레포와 임시 큐에서 codex 워커(GUI의 codex argv 그대로)로 `hello.txt`를 만드는 티켓 한 장을 디스패치하면, `runner.log`에 `DONE`이 찍히고 티켓이 `.done.md`가 된다.
+- [ ] 실행 중인 `dira-codex` 세션의 `lsof -a -p <pid> -d txt`가 `~/.config/dira/bin/` 아래 경로를 내고, `~/.codex/packages/standalone/releases/` 경로를 내지 않는다.
+- [ ] 패키지 레이아웃이 없는 엔진(claude - grok - agy, npm식 단일 파일 codex)은 종전처럼 단일 파일로 굽는다 - 엔진 테스트가 두 경우를 다 다룬다.
+- [ ] codex 버전이 바뀌면(실체 경로나 `.stamp`가 달라지면) 다음 tick이 패키지를 다시 굽고, 옛 복제본이 쌓이지 않는다.
+- [ ] `apps/teams/lib/workers.ts`의 codex 모델 목록이 `codex debug models`의 `visibility: list` 이름과 같다(`NO_MODEL` 제외).
+
 ### P462. 내장 브라우저가 주소로 가는 동안 셸의 이동 표식이 켜진다 (요구 `65c6d2b7`, 왕복 0회)
 
 처음에 P460으로 섰다가, `docs/design/로드맵.md`의 agy 블록(요구 `1a839f60`)이 같은 번호를 쓰고 있어 P462로 바꿨다(`2ee6f177`). 티켓 `2839f152` - `db02f09f`와 그 아카이브에 남은 `P460`은 이 블록을 가리킨다.
