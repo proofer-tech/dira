@@ -524,7 +524,8 @@ either. Restore it and it comes back in the same color.
 When the trash holds at least one entry, a row with a count such as `Trash 2` appears at the
 bottom of the list on the left. With the trash empty that row does not appear. Press it and the
 right column becomes the trash list, most recently deleted first. Each row has the kind
-(`Persona` or `Squad`), the name, the time deleted, and two buttons.
+(`Persona` or `Squad`), the name, the time deleted, and two buttons. A row whose kind is
+`Hidden name` has one button; the section on rows with no profile below covers it.
 
 Press `Restore` and the directory goes back to where it was, and the persona shows in the list
 on the left again. The files inside are the same as before you deleted it. Its memory rides
@@ -540,6 +541,43 @@ the current one first so it goes to the trash, then press `Restore` on the old e
 Press `Delete forever` and one more confirmation opens. Confirm it and that entry's directory is
 removed from the disk. This one cannot be undone. The memory goes with it, so if there is a
 sentence worth keeping, take the file out of `personas/.trash/<entry>/memory/` before you do.
+
+## Rows with no profile - hidden instead of deleted
+
+The list on the left also shows names that have no directory under `personas/`. Some ticket wrote
+that name in `persona:`, and the row stays even after that ticket is `.done`. A typo, a name used
+once, the name of a persona you deleted in the section above: they all linger like this, with a
+`No profile` badge.
+
+Pick such a row and the top line of the right column still has `Delete`. There is no file to
+delete, though, so it does something else. Press it and a `Hide persona - <name>` confirmation
+opens. It says `This name has no profile, so there is no file to delete. It will be hidden from
+the list, and you can show it again from the trash.` The count of tickets carrying the name shows
+in the same sentence the delete confirmation uses. Press `Hide` and the row leaves the list on the
+left.
+
+**Hiding changes one file.** One line, `<name> <time hidden>`, is added to `personas/.hidden` in
+the queue. The time looks like a trash entry's, `20261005-194812`. Ticket files are not touched,
+so the `persona:` value stays as it is, and no new directory appears under `personas/`.
+
+### Showing it again
+
+Hidden names count toward `Trash n`. In the trash list the row's kind is `Hidden name` and the
+time column holds the time it was hidden. There is only one button, `Show again`. With no
+directory to remove, there is no `Delete forever`. Press `Show again` and the line is removed
+from `.hidden`, and the row comes back to the list on the left with its `No profile` badge.
+
+### When a hidden row comes back by itself
+
+**An open ticket with the same name brings the hidden row back.** An open ticket is one that is
+not `.done` yet: waiting or in progress. The session that picks it up starts without a profile,
+as the first section describes, and hiding should not cover that warning. The line in `.hidden`
+stays, so once that ticket is `.done` the row hides again. The `Hidden name` row stays in the
+trash the whole time. To drop the record as well, press `Show again` there.
+
+Making a profile with the same name also brings the row back. The name no longer lacks a
+profile, so it shows as an ordinary row whether hidden or not. The `.hidden` line still sits in
+the trash then too; press `Show again` to clear it.
 
 ## How the prompt is assembled - where the profile rides
 
