@@ -111,7 +111,7 @@ FIXED_ENGINE="$BIN_DIR/dira"
 refresh_fixed_engine() {
   # §27 계약 2: 카탈로그 넷을 각각 굽는다 - claude만 이름이 dira, 나머지는 dira-<엔진>
   # (§24 계약 3 접미사 판정과 대응). PATH에 없는 엔진은 조용히 건너뛴다(WARN 없음).
-  local pair cmd bin src real stamp tmp
+  local pair cmd bin src real stamp tmp pkg cur old
   mkdir -p "$BIN_DIR" 2>/dev/null || return 1
   for pair in claude:dira codex:dira-codex grok:dira-grok agy:dira-agy; do
     cmd="${pair%%:*}"
@@ -128,16 +128,44 @@ refresh_fixed_engine() {
     # `$bin.src` 형식을 안 바꾸는 것은 같은 BIN_DIR을 굽는 설치본 엔진(옛 tick.sh)과 번갈아
     # 덮어쓰며 매 tick 다시 굽는 일을 막기 위해서다 - 옛 엔진은 `.stamp`를 모른다.
     stamp="$(stat -f '%m %z' "$real" 2>/dev/null)"
+    pkg="$(dirname "$(dirname "$real")")"
+    [ "$cmd" = codex ] && [ -f "$pkg/codex-package.json" ] || pkg=
+    # 패키지 설치본인데 고정 경로가 아직 단일 파일 복사본(P463 이전 굽기)이면 신선해도 다시 굽는다.
     [ -e "$bin" ] && [ "$(cat "$bin.src" 2>/dev/null)" = "$real" ] \
-      && [ "$(cat "$bin.stamp" 2>/dev/null)" = "$stamp" ] && continue
+      && [ "$(cat "$bin.stamp" 2>/dev/null)" = "$stamp" ] \
+      && { [ -z "$pkg" ] || [ -L "$bin" ]; } && continue
     tmp="$bin.tmp.$$"
     # 별도 inode로 굽는다 - 하드링크는 tccd가 원본 inode의 이름을 그대로 아이덴티티로 적어
     # TCC 항목이 안 모인다(§계약 3 판정 실측). APFS 클론(`cp -c`)이 서면 디스크를 안 물고,
     # 안 서면(다른 볼륨·비-APFS) 보통 복사로 떨어진다. 임시 이름에 만든 뒤 mv로 원자 교체 -
     # 여러 워커가 동시에 tick을 돌아도 실행 파일이 반쪽으로 보이는 창이 없다.
+    # P463-1: codex standalone 설치본은 실행 파일 옆에서 형제(`codex-code-mode-host`)를 찾는다.
+    # 실체의 부모의 부모에 `codex-package.json`이 있으면 패키지 디렉터리 전체를 BIN_DIR 아래로
+    # 복제하고, 고정 경로는 복제본의 bin/codex로 가는 상대 심링크로 둔다 - 커널이 푸는 실경로가
+    # 복제본 안이라 TCC 항목은 여전히 고정 경로 아래 하나다. 디렉터리는 덮어쓸 수 없어서 굽는
+    # 때마다 새 이름(`.pkg.<pid>`)에 만들고 심링크만 원자 교체한 뒤, 가리키지 않는 옛 복제본을 치운다.
+    # ponytail: 옛 복제본을 쓰는 세션이 아직 돌면 그 세션의 도구 호출이 깨진다. 필요해지면 유예 후 삭제.
+    if [ -n "$pkg" ]; then
+      if cp -cR "$pkg" "$bin.tmp.$$" 2>/dev/null || cp -R "$pkg" "$bin.tmp.$$" 2>/dev/null; then
+        mv "$bin.tmp.$$" "$bin.pkg.$$" \
+          && ln -s "$(basename "$bin").pkg.$$/bin/$(basename "$real")" "$bin.tmp.$$" \
+          && python3 -c 'import os,sys;os.replace(sys.argv[1],sys.argv[2])' "$bin.tmp.$$" "$bin" \
+          && printf '%s' "$real" > "$bin.src" 2>/dev/null \
+          && printf '%s' "$stamp" > "$bin.stamp" 2>/dev/null
+        cur="$(readlink "$bin" 2>/dev/null | cut -d/ -f1)"
+        for old in "$bin".pkg.*; do
+          [ -d "$old" ] && [ "$(basename "$old")" != "$cur" ] && rm -rf "$old"
+        done
+      else
+        rm -rf "$bin.tmp.$$"
+      fi
+      continue
+    fi
     if cp -c "$src" "$tmp" 2>/dev/null || cp "$src" "$tmp" 2>/dev/null; then
-      mv -f "$tmp" "$bin" && printf '%s' "$real" > "$bin.src" 2>/dev/null \
-        && printf '%s' "$stamp" > "$bin.stamp" 2>/dev/null
+      python3 -c 'import os,sys;os.replace(sys.argv[1],sys.argv[2])' "$tmp" "$bin" \
+        && printf '%s' "$real" > "$bin.src" 2>/dev/null \
+        && printf '%s' "$stamp" > "$bin.stamp" 2>/dev/null \
+        && rm -rf "$bin".pkg.* 2>/dev/null
     else
       rm -f "$tmp"
     fi
