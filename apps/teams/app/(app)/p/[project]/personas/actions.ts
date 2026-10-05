@@ -16,6 +16,11 @@ import {
   deletePersona,
   deleteSquad,
   getProject,
+  listTrashAll,
+  purgeFromTrash,
+  restoreFromTrash,
+  type TrashEntry,
+  type TrashKind,
   personaFilePath,
   personaNames,
   resolveConfig,
@@ -382,6 +387,45 @@ export async function deletePersonaMemoryAction(
 export async function deletePersonaAction(projectId: string, name: string): Promise<PersonaResult> {
   try {
     await deletePersona(await personasDir(projectId), name);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 휴지통 목록(DESIGN.md P464) — 페르소나와 스쿼드를 합쳐 최근 것이 앞이다. */
+export async function listTrashAction(projectId: string): Promise<TrashEntry[]> {
+  return listTrashAll(await personasDir(projectId), await squadsDirFor(projectId));
+}
+
+async function trashBase(projectId: string, kind: TrashKind): Promise<string> {
+  return kind === "persona" ? personasDir(projectId) : squadsDirFor(projectId);
+}
+
+/** 되살리기 - 같은 이름이 이미 있으면 실패하고 아무것도 안 건드린다. */
+export async function restoreTrashAction(
+  projectId: string,
+  kind: TrashKind,
+  entry: string,
+): Promise<PersonaResult> {
+  try {
+    await restoreFromTrash(await trashBase(projectId, kind), kind, entry);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** 영구 삭제 - 휴지통 항목 하나만. 항목 이름 검증과 `.trash/` 접두 검사는 `purgeFromTrash`가 한다. */
+export async function purgeTrashAction(
+  projectId: string,
+  kind: TrashKind,
+  entry: string,
+): Promise<PersonaResult> {
+  try {
+    await purgeFromTrash(await trashBase(projectId, kind), entry);
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true };
   } catch (e) {

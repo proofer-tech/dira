@@ -2,7 +2,7 @@
  *
  *  GUI는 큐 하나에 붙어 있는 게 아니라 사용자가 등록한 큐들을 전환하며 본다. 레지스트리는
  *  머신 로컬 JSON 한 파일이고, 큐 위치·접미사·페르소나 디렉터리는 전부 프로젝트에서 받아온다. */
-import { mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
 import { cache } from "react";
@@ -987,10 +987,85 @@ export async function createPersona(dir: string, name: string): Promise<string> 
   return file;
 }
 
-/** 디렉터리째 지운다(안의 다른 파일도 같이) — 화면이 확인 다이얼로그에서 그 사실을 알린다. */
+/** 휴지통으로 옮긴다(DESIGN.md P464) — 안의 파일(메모리 포함)이 `rename` 한 번으로 통째로 간다. */
 export async function deletePersona(dir: string, name: string): Promise<void> {
   const file = await profilePath(dir, name);
-  await rm(path.dirname(file), { recursive: true, force: true });
+  await moveToTrash(dir, name, path.dirname(file));
+}
+
+// ── 휴지통 (DESIGN.md P464) ─────────────────────────────────────────────────
+// `<기준>/.trash/<이름>@<YYYYMMDD-HHMMSS>/`. `.trash`는 `NAME_RE`를 못 지나 목록과 엔진이 건너뛴다.
+
+export type TrashKind = "persona" | "squad";
+export type TrashEntry = {
+  kind: TrashKind;
+  name: string;
+  /** 지운 시각(로컬 시각을 읽은 값) */
+  deletedAt: Date;
+  /** `.trash/` 안의 항목 디렉터리 이름(`<이름>@<시각>[-n]`) */
+  entry: string;
+};
+
+const TRASH_ENTRY_RE = /^([A-Za-z0-9_-]+)@(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(?:-\d+)?$/;
+
+function trashStamp(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+async function moveToTrash(baseDir: string, name: string, src: string): Promise<void> {
+  const base = await realpath(expandHome(baseDir));
+  const trash = path.join(base, ".trash");
+  await mkdir(trash, { recursive: true });
+  const stem = `${name}@${trashStamp(new Date())}`;
+  // ponytail: 같은 초 충돌은 -2부터 순차 탐색. rename은 대상이 빈 디렉터리면 덮으므로 존재를 먼저 본다
+  for (let n = 1; ; n++) {
+    const dest = path.join(trash, n === 1 ? stem : `${stem}-${n}`);
+    if (await stat(dest).then(() => true, () => false)) continue;
+    await rename(src, dest);
+    return;
+  }
+}
+
+export async function listTrash(dir: string, kind: TrashKind): Promise<TrashEntry[]> {
+  const ents = await readdir(path.join(expandHome(dir), ".trash"), { withFileTypes: true }).catch(() => []);
+  const out: TrashEntry[] = [];
+  for (const e of ents) {
+    const m = e.isDirectory() ? TRASH_ENTRY_RE.exec(e.name) : null;
+    if (!m) continue;
+    const [y, mo, d, h, mi, s] = m.slice(2).map(Number);
+    out.push({ kind, name: m[1], deletedAt: new Date(y, mo - 1, d, h, mi, s), entry: e.name });
+  }
+  // 최근 것이 앞. 같은 초는 항목 이름 역순(-2가 뒤에 지워진 것)
+  return out.sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime() || (a.entry < b.entry ? 1 : -1));
+}
+
+/** 페르소나와 스쿼드 휴지통을 합쳐 최근 것이 앞이다. */
+export async function listTrashAll(personasDir: string, squadsDirPath: string): Promise<TrashEntry[]> {
+  const all = [...(await listTrash(personasDir, "persona")), ...(await listTrash(squadsDirPath, "squad"))];
+  return all.sort((a, b) => b.deletedAt.getTime() - a.deletedAt.getTime());
+}
+
+/** 항목 이름은 `TRASH_ENTRY_RE`를 지나야 하고, 경로는 `.trash/` 안이어야 한다(심링크 포함). */
+async function trashEntryPath(dir: string, entry: string): Promise<{ full: string; name: string }> {
+  const m = TRASH_ENTRY_RE.exec(entry);
+  if (!m) throw new Error(`${t(DEFAULT_LOCALE, "persona.trash.badEntryPrefix")} ${entry}`);
+  const full = await resolveWithin(path.join(expandHome(dir), ".trash"), entry);
+  return { full, name: m[1] };
+}
+
+export async function restoreFromTrash(dir: string, kind: TrashKind, entry: string): Promise<void> {
+  const { full, name } = await trashEntryPath(dir, entry);
+  const dest = await resolveWithin(dir, name);
+  if (await stat(dest).then(() => true, () => false)) {
+    throw new Error(t(DEFAULT_LOCALE, kind === "persona" ? "persona.trash.personaExists" : "persona.trash.squadExists"));
+  }
+  await rename(full, dest);
+}
+
+export async function purgeFromTrash(dir: string, entry: string): Promise<void> {
+  const { full } = await trashEntryPath(dir, entry);
+  await rm(full, { recursive: true, force: true });
 }
 
 // ── 스쿼드 (DESIGN.md §5-5) ─────────────────────────────────────────────────
@@ -1119,8 +1194,8 @@ export async function saveSquadRules(dir: string, name: string, rules: string): 
   await writeFile(file, rules, "utf8");
 }
 
-/** 디렉터리째 지운다 — `deletePersona`와 같다. */
+/** 휴지통으로 옮긴다 — `deletePersona`와 같다. */
 export async function deleteSquad(dir: string, name: string): Promise<void> {
   const file = await squadMembersPath(dir, name);
-  await rm(path.dirname(file), { recursive: true, force: true });
+  await moveToTrash(dir, name, path.dirname(file));
 }

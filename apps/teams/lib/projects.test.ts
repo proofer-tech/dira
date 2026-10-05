@@ -14,6 +14,10 @@ const {
   createPersona,
   createSquad,
   deletePersona,
+  listTrash,
+  listTrashAll,
+  purgeFromTrash,
+  restoreFromTrash,
   deleteSquad,
   getProject,
   isMultiTokenAllowed,
@@ -1091,4 +1095,94 @@ test("readSummary — ⑨ 백오프 창이 열린 티켓만 나열에 든다 (P3
 
   const gone = await readSummary({ root: path.join(root, "없는디렉터리") });
   assert.deepStrictEqual(gone.backoff, []); // 판정 불가 = 배너·배지가 없다(§0-2와 같은 규칙)
+});
+
+test("휴지통 - 지우기는 .trash로 rename, 같은 초 충돌은 -2, 목록은 최근 우선 (P464)", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const pdir = path.join(root, "personas");
+  const sdir = squadsDir({ root });
+  mkdirSync(path.join(pdir, "qa", "memory"), { recursive: true });
+  writeFileSync(path.join(pdir, "qa", "PROFILE.md"), "# qa\n");
+  writeFileSync(path.join(pdir, "qa", "skills.md"), "- a\n");
+  writeFileSync(path.join(pdir, "qa", "memory", "m.md"), "메모\n");
+  await deletePersona(pdir, "qa");
+  assert.strictEqual(existsSync(path.join(pdir, "qa")), false);
+  const [p1] = await listTrash(pdir, "persona");
+  const at = path.join(pdir, ".trash", p1.entry);
+  assert.match(p1.entry, /^qa@\d{8}-\d{6}$/);
+  assert.strictEqual(readFileSync(path.join(at, "PROFILE.md"), "utf8"), "# qa\n");
+  assert.strictEqual(readFileSync(path.join(at, "skills.md"), "utf8"), "- a\n");
+  assert.strictEqual(readFileSync(path.join(at, "memory", "m.md"), "utf8"), "메모\n");
+
+  // 같은 이름을 같은 초에 두 번 - 항목 이름이 다르다(루프가 1초 안에 끝나지 않으면 접미가 없을 수 있어 여러 번 돈다)
+  const entries = new Set<string>();
+  for (let i = 0; i < 4; i++) {
+    await createSquad(sdir, "fe");
+    await deleteSquad(sdir, "fe");
+  }
+  for (const e of await listTrash(sdir, "squad")) entries.add(e.entry);
+  assert.strictEqual(entries.size, 4);
+  assert.ok([...entries].some((e) => /-2$/.test(e)) || new Set([...entries].map((e) => e.slice(0, -2))).size > 1);
+
+  const all = await listTrashAll(pdir, sdir);
+  assert.strictEqual(all.length, 5);
+  assert.deepStrictEqual(
+    all.map((e) => e.deletedAt.getTime()),
+    all.map((e) => e.deletedAt.getTime()).sort((a, b) => b - a),
+  );
+  assert.ok(all.some((e) => e.kind === "persona" && e.name === "qa"));
+  assert.ok(all.every((e) => e.deletedAt instanceof Date && !Number.isNaN(e.deletedAt.getTime())));
+});
+
+test("휴지통 - 되살리기는 같은 이름이 있으면 실패하고 둘 다 그대로다 (P464)", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const pdir = path.join(root, "personas");
+  await createPersona(pdir, "qa");
+  await deletePersona(pdir, "qa");
+  await createPersona(pdir, "qa");
+  writeFileSync(path.join(pdir, "qa", "PROFILE.md"), "새것\n");
+  const [item] = await listTrash(pdir, "persona");
+  await assert.rejects(() => restoreFromTrash(pdir, "persona", item.entry), /같은 이름의 페르소나가 이미 있습니다/);
+  assert.strictEqual(readFileSync(path.join(pdir, "qa", "PROFILE.md"), "utf8"), "새것\n");
+  assert.strictEqual(existsSync(path.join(pdir, ".trash", item.entry, "PROFILE.md")), true);
+  // 이름을 비우면 원래 이름으로 돌아온다
+  await deletePersona(pdir, "qa");
+  const items = await listTrash(pdir, "persona");
+  assert.strictEqual(items.length, 2);
+  await restoreFromTrash(pdir, "persona", items[0].entry);
+  assert.strictEqual(existsSync(path.join(pdir, "qa", "PROFILE.md")), true);
+  assert.strictEqual((await listTrash(pdir, "persona")).length, 1);
+  const squads = squadsDir({ root });
+  await createSquad(squads, "fe");
+  await deleteSquad(squads, "fe");
+  await createSquad(squads, "fe");
+  const [sq] = await listTrash(squads, "squad");
+  await assert.rejects(() => restoreFromTrash(squads, "squad", sq.entry), /같은 이름의 스쿼드가 이미 있습니다/);
+});
+
+test("휴지통 - 영구 삭제는 항목 하나만, .trash 밖은 거절한다 (P464)", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const pdir = path.join(root, "personas");
+  await createPersona(pdir, "a");
+  await createPersona(pdir, "b");
+  await deletePersona(pdir, "a");
+  await deletePersona(pdir, "b");
+  const items = await listTrash(pdir, "persona");
+  const a = items.find((e) => e.name === "a")!;
+  await purgeFromTrash(pdir, a.entry);
+  assert.strictEqual(existsSync(path.join(pdir, ".trash", a.entry)), false);
+  assert.strictEqual((await listTrash(pdir, "persona")).length, 1);
+  // 경로 탈출 - 살아 있는 페르소나와 상위 경로는 안 지운다
+  await createPersona(pdir, "live");
+  for (const bad of ["../live", "..", "a/../../live", "/etc", "live", "live@x"]) {
+    await assert.rejects(() => purgeFromTrash(pdir, bad), /휴지통 항목 이름이 아닙니다/);
+  }
+  assert.strictEqual(existsSync(path.join(pdir, "live", "PROFILE.md")), true);
+  // 심링크 항목이 밖을 가리키면 거절
+  const secret = mkdtempSync(path.join(tmpdir(), "fst-secret-"));
+  roots.push(secret);
+  writeFileSync(path.join(secret, "x"), "남의 파일\n");
+  symlinkSync(secret, path.join(pdir, ".trash", "evil@20200101-000000"));
+  await assert.rejects(() => purgeFromTrash(pdir, "evil@20200101-000000"), /기준 디렉터리 밖이다/);
+  assert.strictEqual(existsSync(path.join(secret, "x")), true);
 });

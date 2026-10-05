@@ -703,7 +703,7 @@ test("204be4da — 스쿼드 삭제 확인 다이얼로그(제목 · 본문)가 
   const body = `squads/myteam ${t("ko", "persona.squadDelete.bodyMiddle")} squad: ${t("ko", "persona.squadDelete.bodyAfter")}`;
   assert.strictEqual(
     body,
-    "squads/myteam 디렉터리를 지웁니다. 되돌릴 수 없습니다. 이 스쿼드를 참조하는 티켓의 squad: 값은 그대로 남습니다.",
+    "squads/myteam 휴지통으로 옮깁니다. 휴지통에서 되살릴 수 있습니다. 이 스쿼드를 참조하는 티켓의 squad: 값은 그대로 남습니다.",
   );
 });
 
@@ -729,7 +729,7 @@ test("204be4da — 페르소나 삭제 확인 다이얼로그(제목 · 본문 �
   assert.strictEqual(`${t("ko", "persona.delete.titlePrefix")} dev`, "페르소나 삭제 — dev");
   assert.strictEqual(
     `personas/dev ${t("ko", "persona.delete.bodyAfterPath")}`,
-    "personas/dev 디렉터리를 안의 파일까지 지웁니다. 되돌릴 수 없습니다.",
+    "personas/dev 휴지통으로 옮깁니다. 휴지통에서 되살릴 수 있습니다.",
   );
   const refsTitle = `${t("ko", "persona.delete.refsWarnPrefix")} 3${t("ko", "persona.delete.refsWarnSuffix")}${` ${t("ko", "persona.delete.refsWipPrefix")} 1${t("ko", "persona.delete.refsWipSuffix")}`}`;
   assert.strictEqual(refsTitle, "이 페르소나를 참조하는 티켓이 3건 있습니다 (진행중 1건)");
@@ -823,7 +823,7 @@ test("b5d9735d - 스쿼드 삭제 · 엔진 덮어쓰기 확인 다이얼로그�
   assert.strictEqual(`${t(l, "persona.squadDelete.titlePrefix")} myteam`, "Delete squad — myteam");
   assert.strictEqual(
     `squads/myteam ${t(l, "persona.squadDelete.bodyMiddle")} squad: ${t(l, "persona.squadDelete.bodyAfter")}`,
-    "squads/myteam will be deleted, directory and all. This can't be undone. On tickets that point at this squad, the squad: value stays as it is.",
+    "squads/myteam will be moved to the trash. You can restore it from the trash. On tickets that point at this squad, the squad: value stays as it is.",
   );
   assert.strictEqual(
     `${t(l, "persona.engine.overwriteTitlePrefix")} dev`,
@@ -845,7 +845,7 @@ test("b5d9735d - 메모리 · 페르소나 삭제 확인 다이얼로그가 영�
   assert.strictEqual(`${t(l, "persona.delete.titlePrefix")} dev`, "Delete persona — dev");
   assert.strictEqual(
     `personas/dev ${t(l, "persona.delete.bodyAfterPath")}`,
-    "personas/dev will be deleted, files and all. This can't be undone.",
+    "personas/dev will be moved to the trash. You can restore it from the trash.",
   );
   // 한국어는 수가 앞에 뜨고(`티켓이 3건 있습니다`) 영어는 뒤에 뜬다 - 조각 넷의 자리는 같다
   const refsTitle = `${t(l, "persona.delete.refsWarnPrefix")} 3${t(l, "persona.delete.refsWarnSuffix")}${` ${t(l, "persona.delete.refsWipPrefix")} 1${t(l, "persona.delete.refsWipSuffix")}`}`;

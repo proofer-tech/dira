@@ -966,6 +966,9 @@ export const ko: Record<string, string> = {
   // memory `i18n 서버 문자열은 로케일이 없다`) - `t("ko", ...)`로 고정해 부른다.
   "persona.error.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
   "persona.error.squadNameTakenPrefix": "이미 있는 스쿼드 이름입니다:",
+  "persona.trash.badEntryPrefix": "휴지통 항목 이름이 아닙니다:",
+  "persona.trash.personaExists": "같은 이름의 페르소나가 이미 있습니다",
+  "persona.trash.squadExists": "같은 이름의 스쿼드가 이미 있습니다",
   "persona.error.personaNameTakenPrefix": "이미 있는 페르소나 이름입니다:",
   "persona.skill.fileCountMismatchPrefix": "파일과 경로의 수가 안 맞습니다:",
   "persona.skill.installFailedTitle": "스킬을 설치하지 못했습니다",
@@ -1127,7 +1130,7 @@ export const ko: Record<string, string> = {
   "persona.squad.announceLeader": "리더입니다",
   "persona.squadDelete.titlePrefix": "스쿼드 삭제 —",
   "persona.squadDelete.bodyMiddle":
-    "디렉터리를 지웁니다. 되돌릴 수 없습니다. 이 스쿼드를 참조하는 티켓의",
+    "휴지통으로 옮깁니다. 휴지통에서 되살릴 수 있습니다. 이 스쿼드를 참조하는 티켓의",
   "persona.squadDelete.bodyAfter": "값은 그대로 남습니다.",
   "persona.policy.heading": "디스패치 정책",
   "persona.policy.nextTicketHint": "다음 티켓 선정부터 적용됩니다.",
@@ -1196,7 +1199,7 @@ export const ko: Record<string, string> = {
   "persona.skill.addressAriaLabel": "스킬 주소",
   "persona.skill.installAction": "설치",
   "persona.delete.titlePrefix": "페르소나 삭제 —",
-  "persona.delete.bodyAfterPath": "디렉터리를 안의 파일까지 지웁니다. 되돌릴 수 없습니다.",
+  "persona.delete.bodyAfterPath": "휴지통으로 옮깁니다. 휴지통에서 되살릴 수 있습니다.",
   "persona.delete.refsWarnPrefix": "이 페르소나를 참조하는 티켓이",
   "persona.delete.refsWarnSuffix": "건 있습니다",
   "persona.delete.refsWipPrefix": "(진행중",
@@ -3443,6 +3446,9 @@ export const en: Record<string, string> = {
   // 지금은 화면에 한국어로 뜨지만 사전은 타고 있다 - 벽이 걷히는 날 이 줄들이 그대로 뜬다.
   "persona.error.unknownProjectPrefix": "Not a registered project:",
   "persona.error.squadNameTakenPrefix": "That squad name is taken:",
+  "persona.trash.badEntryPrefix": "Not a trash entry name:",
+  "persona.trash.personaExists": "A persona with that name already exists",
+  "persona.trash.squadExists": "A squad with that name already exists",
   "persona.error.personaNameTakenPrefix": "That persona name is taken:",
   "persona.skill.fileCountMismatchPrefix": "Files and paths don't match in count:",
   "persona.skill.installFailedTitle": "Couldn't install the skill",
@@ -3588,7 +3594,7 @@ export const en: Record<string, string> = {
   "persona.squad.announceLeader": "is leader",
   "persona.squadDelete.titlePrefix": "Delete squad —",
   "persona.squadDelete.bodyMiddle":
-    "will be deleted, directory and all. This can't be undone. On tickets that point at this squad, the",
+    "will be moved to the trash. You can restore it from the trash. On tickets that point at this squad, the",
   "persona.squadDelete.bodyAfter": "value stays as it is.",
   "persona.policy.heading": "Dispatch policy",
   "persona.policy.nextTicketHint": "This takes effect from the next ticket picked.",
@@ -3662,7 +3668,7 @@ export const en: Record<string, string> = {
   "persona.skill.addressAriaLabel": "Skill address",
   "persona.skill.installAction": "Install",
   "persona.delete.titlePrefix": "Delete persona —",
-  "persona.delete.bodyAfterPath": "will be deleted, files and all. This can't be undone.",
+  "persona.delete.bodyAfterPath": "will be moved to the trash. You can restore it from the trash.",
   // 한국어는 수가 앞에 뜨고(`티켓이 3건`) 영어는 뒤에 뜬다 - 조각의 몫이 갈릴 뿐 자리는 같다.
   "persona.delete.refsWarnPrefix": "This persona is referenced by",
   "persona.delete.refsWarnSuffix": " tickets",
