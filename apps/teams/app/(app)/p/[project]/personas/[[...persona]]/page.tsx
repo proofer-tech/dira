@@ -33,6 +33,7 @@ import {
   getProject,
   listPersonas,
   listSquads,
+  listTrashAll,
   readLanguage,
   resolveConfig,
   squadsDir,
@@ -103,11 +104,12 @@ export default async function Personas({
   // `holding`은 이 힌트에 안 쓰이므로 티켓을 안 넘긴다(listWorkers 기본값 그대로).
   // 스쿼드(§5-5)는 같은 렌더에 실린다 — 페르소나 목록과 같은 왕복이어야 "프로필 없는 멤버"
   // 표식이 그 자리에서 바로 갈린다(스쿼드 후보 수와 무관하게 이 화면 렌더 한 번에 한다).
-  const [personas, installed, workers, squadList] = await Promise.all([
+  const [personas, installed, workers, squadList, trashList] = await Promise.all([
     listPersonas(config.personas, tickets),
     listInstalledSkills(),
     listWorkers(project.root),
     listSquads(squadsDir(project)),
+    listTrashAll(config.personas, squadsDir(project)),
   ]);
   const squads = await Promise.all(
     squadList.map(async (s) => ({
@@ -263,7 +265,7 @@ export default async function Personas({
         </Alert>
       )}
 
-      {personas.length === 0 && squads.length === 0 ? (
+      {personas.length === 0 && squads.length === 0 && trashList.length === 0 ? (
         // 둘 다 0개면 2단을 안 그린다(§5, §비주얼 §61 (8)) — 페르소나 0 + 스쿼드 n>0에서
         // 걷으면 방금 만든 스쿼드가 화면에서 사라지고 지울 길이 없어진다(이름이 한
         // 이름공간이라 그 이름의 페르소나도 못 만든다)
@@ -279,6 +281,7 @@ export default async function Personas({
           initial={persona?.map(decodeHash).join("/") ?? null}
           rows={rows}
           squads={squads}
+          trash={trashList.map((e) => ({ kind: e.kind, name: e.name, at: e.deletedAt.getTime(), entry: e.entry }))}
           colors={project.personaColors ?? {}}
           installed={installed}
           configDir={claudeConfigDir()}

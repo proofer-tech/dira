@@ -7,6 +7,7 @@
  *  쓰므로 쪼개면 자리가 갈린다. */
 import { memo, type ReactNode, useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Check,
   ChevronDown,
@@ -24,6 +25,8 @@ import {
   deleteSquadAction,
   installSkillAction,
   openPersonaProfileAction,
+  purgeTrashAction,
+  restoreTrashAction,
   savePersonaAction,
   savePersonaEngineAction,
   savePersonaLimitAction,
@@ -536,6 +539,7 @@ export function PersonasPane({
   initial,
   rows,
   squads,
+  trash,
   colors,
   installed: initialInstalled,
   configDir,
@@ -555,6 +559,8 @@ export function PersonasPane({
   /** 스쿼드 그룹(§5-5) — 0개면 그 그룹을 안 그린다. 페르소나와 이름공간을 공유하므로 선택은
    *  여전히 세그먼트 하나다 */
   squads: SquadRow[];
+  /** 휴지통 항목(P464) - 서버가 최근 순으로 준다. `at`은 지운 시각 epoch ms */
+  trash: TrashRow[];
   /** 레지스트리의 팔레트 키 맵. 없거나 팔레트 밖이면 빈 점이다(§12) */
   colors: Record<string, string>;
   /** 이 머신에 설치된 스킬(§5-1). 페르소나 수와 무관하게 서버가 한 번 읽어 내렸다 */
@@ -583,6 +589,9 @@ export function PersonasPane({
   const t = useT();
   const locale = useLocale();
   const [selected, setSelected] = useState<string | null>(initial);
+  // 휴지통 칸(P464) - 선택(URL)과 별개의 화면 상태다. 줄을 고르면 꺼진다. 둘 다 0개인데 휴지통만
+  // 있으면(빈 상태 화면을 우회한 경우) 처음부터 켠다.
+  const [showTrash, setShowTrash] = useState(rows.length === 0 && squads.length === 0);
   const [edits, setEdits] = useState<Record<string, PersonaEdit>>({});
   const [squadEdits, setSquadEdits] = useState<Record<string, SquadEdit>>({});
   // import(§5-1 §import)가 이 머신에 스킬을 하나 깔면 후보 목록이 는다 — 서버가 준 초기값이
@@ -644,6 +653,7 @@ export function PersonasPane({
   /** 선택을 바꾸는 유일한 자리 — 상태와 주소를 같이 옮긴다. `router.push`가 아닌 것이 계약이다
    *  (서버 왕복이 없어 편집 중 textarea가 안 죽는다 — 위 절 머리). */
   const select = (name: string | null) => {
+    setShowTrash(false);
     setSelected(name);
     expandForSelection(name);
     const seg = name === null ? "" : `/${encodeURIComponent(name)}`;
@@ -938,11 +948,34 @@ export function PersonasPane({
               </SidebarMenu>
             </SidebarGroup>
           )}
+
+          {trash.length > 0 && (
+            <SidebarGroup className="p-0">
+              <SidebarMenu aria-label={t("persona.trash.row")} className="gap-0.5">
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    type="button"
+                    className="cursor-pointer"
+                    isActive={showTrash}
+                    aria-current={showTrash ? "true" : undefined}
+                    onClick={() => setShowTrash(true)}
+                  >
+                    <Trash2 aria-hidden className="size-4" />
+                    <span className="text-sm">
+                      {t("persona.trash.row")} {trash.length}
+                    </span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroup>
+          )}
         </SidebarContent>
       </Sidebar>
 
       <div className="min-w-0 grow @container">
-        {currentSquad !== undefined ? (
+        {showTrash && trash.length > 0 ? (
+          <TrashPane projectId={projectId} trash={trash} nowMs={nowMs} />
+        ) : currentSquad !== undefined ? (
           <SquadDetail
             key={currentSquad.name}
             projectId={projectId}
@@ -990,6 +1023,92 @@ export function PersonasPane({
         )}
       </div>
     </SidebarProvider>
+  );
+}
+
+// ── 휴지통 (DESIGN.md P464) ──────────────────────────────────────────────────
+
+export type TrashRow = { kind: "persona" | "squad"; name: string; at: number; entry: string };
+
+/** 휴지통 칸 - 줄마다 종류 - 이름 - 지운 시각 - 되살리기 - 영구 삭제. 서버가 준 순서(최근 우선) 그대로다.
+ *  동작 뒤에는 `router.refresh()`로 서버 목록을 다시 읽는다(왼쪽 목록과 `휴지통 n`이 같이 갈린다). */
+function TrashPane({ projectId, trash, nowMs }: { projectId: string; trash: TrashRow[]; nowMs: number }) {
+  const t = useT();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  const run = (act: () => Promise<PersonaResult>) =>
+    start(async () => {
+      const r = await act();
+      if (r.ok) {
+        setError(null);
+        router.refresh();
+      } else setError(r.message ?? t("persona.trash.failed"));
+    });
+
+  return (
+    <div className="flex flex-col gap-3">
+      <h2 className="text-lg font-semibold">{t("persona.trash.row")}</h2>
+      {error !== null && (
+        <Alert variant="destructive">
+          <TriangleAlert aria-hidden />
+          <AlertTitle>{error}</AlertTitle>
+        </Alert>
+      )}
+      <ul className="flex flex-col divide-y rounded-lg border bg-surface">
+        {trash.map((e) => (
+          <li key={`${e.kind}/${e.entry}`} className="flex flex-wrap items-center gap-3 p-3">
+            <Badge variant="outline">
+              {e.kind === "persona" ? t("persona.trash.kindPersona") : t("persona.trash.kindSquad")}
+            </Badge>
+            <span className="min-w-0 grow truncate font-mono text-sm" title={e.name}>
+              {e.name}
+            </span>
+            <span className="text-xs text-muted-foreground" title={t("persona.trash.deletedAt")}>
+              {dateTimeLabel(e.at, nowMs)}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pending}
+              onClick={() => run(() => restoreTrashAction(projectId, e.kind, e.entry))}
+            >
+              {t("persona.trash.restore")}
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger
+                render={
+                  <Button variant="ghost" size="sm" disabled={pending}>
+                    <Trash2 aria-hidden />
+                    {t("persona.trash.purge")}
+                  </Button>
+                }
+              />
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>
+                    {t("persona.trash.purgeTitlePrefix")} {e.name}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription>
+                    <span className="font-mono text-xs break-all">{e.entry}</span> {t("persona.trash.purgeBody")}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    onClick={() => run(() => purgeTrashAction(projectId, e.kind, e.entry))}
+                  >
+                    {t("persona.trash.purge")}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
