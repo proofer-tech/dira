@@ -63,6 +63,7 @@ import { useHotkey, useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { splitAttachments } from "@/lib/attachment-format";
+import { closeAction, requestDirty } from "@/lib/close-guard";
 import { MarkdownEditor } from "@/components/markdown-editor";
 import { FrontmatterRowsEditor } from "@/components/markdown-frontmatter-rows-editor";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
@@ -1493,6 +1494,9 @@ export type DepOption = { hash: string; title: string; met: boolean; duedate: st
 export function useCloseGuard(dirty: boolean, reset: () => void, initialOpen = false) {
   const [open, setOpen] = useState(initialOpen);
   const [asking, setAsking] = useState(false);
+  // 닫기 콜백이 렌더 전 클로저로 불려도(Esc - 밖 클릭 - 미러 재클릭) 가장 최근 `dirty`를 읽는다.
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
   const discard = () => {
     setAsking(false);
     setOpen(false);
@@ -1507,8 +1511,9 @@ export function useCloseGuard(dirty: boolean, reset: () => void, initialOpen = f
      *  `setOpen(false)`는 `onOpenChange`를 안 태우므로(실측) 버튼도 이걸 부른다 — 안 모으면
      *  Esc로 닫을 때와 버튼으로 닫을 때가 갈린다. */
     close: (next: boolean) => {
-      if (next) setOpen(true);
-      else if (dirty) setAsking(true);
+      const act = closeAction(next, dirtyRef.current);
+      if (act === "open") setOpen(true);
+      else if (act === "ask") setAsking(true);
       else discard();
     },
   };
@@ -1654,7 +1659,7 @@ export function useRequestForm(project: string) {
     att,
     // **첨부도 `dirty`에 든다**(§8 §거동) — 본문보다 되돌리기 어려운 것이 이쪽이다. 접수 확인
     // 화면(`done`)은 이미 접수돼서 잃을 것이 없으니 묻지 않는다.
-    dirty: !done && (body !== "" || att.dirty),
+    dirty: requestDirty(done, body, att.dirty),
     // 닫히면 빈 칸으로 돌아간다 — 접수한 본문이 남아 있으면 같은 요구가 두 번 접수된다(§3).
     // 칩은 비지만 올라간 파일은 안 지운다(§8 수명).
     reset: () => {
