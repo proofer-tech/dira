@@ -2267,6 +2267,8 @@ export const ko: Record<string, string> = {
   "browser.linkCap.suffix": "으로 다 차서 링크를 못 엽니다.",
   "browser.linkError.text": "링크를 못 열었습니다.",
   "browser.addressBar.openExternal": "기본 브라우저에서 열기",
+  "browser.comment.toggle": "댓글",
+  "browser.comment.title": "화면 댓글",
   "browser.addressBar.release": "반납",
 
   // 소스 컨트롤(§11-3 결정 1-2-3-4, P366-8 · P366-9) — 체크아웃 목록·status·업스트림·커밋·
@@ -4638,6 +4640,8 @@ export const en: Record<string, string> = {
   "browser.linkCap.suffix": ") — can't open the link.",
   "browser.linkError.text": "Couldn't open the link.",
   "browser.addressBar.openExternal": "Open in default browser",
+  "browser.comment.toggle": "Comment",
+  "browser.comment.title": "Screen comment",
   "browser.addressBar.release": "Release",
   "browser.mirror.inUse.suffix": "in use",
 

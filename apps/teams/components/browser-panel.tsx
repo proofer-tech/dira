@@ -9,10 +9,13 @@
  *  시작한다. `TerminalSurface`처럼 탭을 오가는 동안(표면 전환)은 `hidden`으로만 접히므로
  *  그 사이에는 걷힌 상태가 유지된다 — 결정 6이 요구하는 것은 새로고침·탭 닫기 재시작 둘뿐이다. */
 import { useEffect, useRef, useState } from "react";
+import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle } from "@/components/ui/popover";
+import { DiscardConfirm, RequestForm, useCloseGuard, useRequestForm } from "@/components/ticket-ui";
+import { uploadAttachment } from "@/app/(app)/p/[project]/actions";
 import { toast } from "sonner";
 import { useLocale, useT } from "@/components/language-provider";
 import { LINK_SLOT_HASH, LINK_TAB_EVENT, normalizeAddressInput, readCdpFrameStream } from "@/lib/cdp-relay";
-import { keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
+import { commentPoint, keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trackPending, useLinkPendingReporter, useTrackedRouter } from "@/lib/route-pending";
@@ -113,6 +116,98 @@ function inUseLabel(locale: "ko" | "en", name: string, t: (key: string) => strin
   return wrap("", subject, t("browser.mirror.inUse.suffix"));
 }
 
+/** 댓글 하나(§P466) - 클릭 순간 프레임을 올리고, 그 자리 표식과 꼬리 달린 팝오버 폼을 그린다.
+ *  `pick`이 있는 동안만 마운트되므로 클릭마다 빈 본문의 새 폼이다. 닫기 확인은 `useCloseGuard`. */
+type CommentPick = { frame: string; x: number; y: number; w: number; h: number; px: number; py: number; url: string };
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+/** `comment-<YYYYMMDD-HHMMSS>.jpg`, 로컬 시각. */
+function commentFileName(d: Date): string {
+  const date = `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
+  return `comment-${date}-${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}.jpg`;
+}
+
+function CommentPopover({ projectId, pick, onClosed }: { projectId: string; pick: CommentPick; onClosed: () => void }) {
+  const t = useT();
+  const locale = useLocale();
+  const form = useRequestForm(projectId);
+  const guard = useCloseGuard(form.dirty, () => {
+    form.reset();
+    onClosed();
+  }, true);
+  const [shot, setShot] = useState<{ path?: string; error?: string }>({});
+  const markerRef = useRef<HTMLSpanElement>(null);
+  const uploaded = useRef(false);
+
+  useEffect(() => {
+    if (uploaded.current) return;
+    uploaded.current = true;
+    const bin = atob(pick.frame);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    const data = new FormData();
+    data.set("file", new File([bytes], commentFileName(new Date()), { type: "image/jpeg" }));
+    uploadAttachment(projectId, data, locale).then(
+      (r) => setShot(r.ok ? { path: r.path } : { error: r.error }),
+      (e: unknown) => setShot({ error: e instanceof Error ? e.message : String(e) }),
+    );
+  }, [pick.frame, projectId]);
+
+  const extra = shot.path
+    ? {
+        comment_url: pick.url,
+        comment_shot: shot.path,
+        comment_x: String(pick.x),
+        comment_y: String(pick.y),
+        comment_size: `${pick.w}x${pick.h}`,
+      }
+    : undefined;
+
+  return (
+    <>
+      <span
+        ref={markerRef}
+        aria-hidden
+        className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-primary"
+        style={{ left: pick.px, top: pick.py }}
+      />
+      <Popover open={guard.open} onOpenChange={guard.close}>
+        <PopoverContent
+          anchor={markerRef}
+          arrow
+          side="bottom"
+          sideOffset={10}
+          className="max-h-[calc(100dvh-2rem)] w-[min(36rem,calc(100vw-2rem))] overflow-y-auto"
+        >
+          <PopoverHeader>
+            <PopoverTitle>{t("browser.comment.title")}</PopoverTitle>
+            <PopoverDescription className="truncate font-mono text-xs">{pick.url}</PopoverDescription>
+          </PopoverHeader>
+          <div className="relative w-fit max-w-[240px] self-start">
+            {/* eslint-disable-next-line @next/next/no-img-element -- base64 데이터 URL */}
+            <img src={`data:image/jpeg;base64,${pick.frame}`} alt="" className="block w-full rounded border" />
+            <span
+              aria-hidden
+              className="absolute size-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white bg-primary"
+              style={{ left: `${(pick.x / pick.w) * 100}%`, top: `${(pick.y / pick.h) * 100}%` }}
+            />
+          </div>
+          {shot.error && <p className="text-xs break-all text-destructive">{shot.error}</p>}
+          <RequestForm
+            form={form}
+            onClose={() => guard.close(false)}
+            extra={extra}
+            submitDisabled={!shot.path}
+          />
+          <DiscardConfirm guard={guard} />
+        </PopoverContent>
+      </Popover>
+    </>
+  );
+}
+
 export function BrowserMirror({
   projectId,
   hash,
@@ -143,6 +238,11 @@ export function BrowserMirror({
   const [frame, setFrame] = useState<string | null>(null);
   const [lost, setLost] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
+  // §P466 - 댓글 모드(저장 안 함)와 열려 있는 댓글 하나. 팝오버가 열린 동안 미러를 누르면 먼저
+  // 닫기를 거치므로(밖 클릭이 `pointerdown`에서 닫는다) 그 클릭은 새 자리로 안 받는다.
+  const [commentMode, setCommentMode] = useState(false);
+  const [pick, setPick] = useState<CommentPick | null>(null);
+  const pressedWhileOpen = useRef(false);
   const [address, setAddress] = useState<string | null>(null);
   const [addressInput, setAddressInput] = useState("");
   // §11-20 결정 2 — 엔터에서 켜지고 다음 `event: url`에서 꺼진다. 그 사건이 안 오면(릴레이
@@ -273,6 +373,14 @@ export function BrowserMirror({
         >
           {t("browser.addressBar.openExternal")}
         </Button>
+        <Button
+          size="xs"
+          variant={commentMode ? "secondary" : "ghost"}
+          aria-pressed={commentMode}
+          onClick={() => setCommentMode((on) => !on)}
+        >
+          {t("browser.comment.toggle")}
+        </Button>
         {isLinkSlot && (
           <Button
             size="xs"
@@ -290,12 +398,12 @@ export function BrowserMirror({
         tabIndex={unlocked ? 0 : -1}
         className="relative min-h-0 flex-1 bg-black outline-none"
         onKeyDown={(e) => {
-          if (!unlocked) return;
+          if (!unlocked || commentMode || pick) return;
           e.preventDefault();
           postInput(url, keyBody("keydown", e.key, e.code));
         }}
         onKeyUp={(e) => {
-          if (!unlocked) return;
+          if (!unlocked || commentMode || pick) return;
           e.preventDefault();
           postInput(url, keyBody("keyup", e.key, e.code));
         }}
@@ -311,32 +419,48 @@ export function BrowserMirror({
             이 층이 곧 입력 캡처 표면이다(이미지 자신은 상호작용 요소가 아니다 — 마우스·휠을
             여기서 잡아 POST로 옮긴다). */}
         <div
-          className="absolute inset-0"
-          onClick={() => {
+          className={commentMode ? "absolute inset-0 cursor-crosshair" : "absolute inset-0"}
+          onPointerDownCapture={() => {
+            pressedWhileOpen.current = pick !== null;
+          }}
+          onClick={(e) => {
+            if (commentMode) {
+              if (pressedWhileOpen.current) {
+                pressedWhileOpen.current = false;
+                return;
+              }
+              const img = imgRef.current;
+              if (!frame || !img || !address) return;
+              const natural = { width: img.naturalWidth, height: img.naturalHeight };
+              const hit = commentPoint(e.clientX, e.clientY, img.getBoundingClientRect(), natural);
+              if (hit) setPick({ frame, ...hit, ...{ w: natural.width, h: natural.height }, url: address });
+              return;
+            }
             if (unlocked) return;
             if (window.confirm(t("browser.wrap.confirm"))) setUnlocked(true);
           }}
           onMouseDown={(e) => {
-            if (!unlocked) return;
+            if (!unlocked || commentMode) return;
             const { x, y } = point(e.clientX, e.clientY);
             postInput(url, mouseButtonBody("mousedown", e.button, x, y));
           }}
           onMouseUp={(e) => {
-            if (!unlocked) return;
+            if (!unlocked || commentMode) return;
             const { x, y } = point(e.clientX, e.clientY);
             postInput(url, mouseButtonBody("mouseup", e.button, x, y));
           }}
           onMouseMove={(e) => {
-            if (!unlocked) return;
+            if (!unlocked || commentMode) return;
             const { x, y } = point(e.clientX, e.clientY);
             postInput(url, mouseButtonBody("mousemove", e.button, x, y));
           }}
           onWheel={(e) => {
-            if (!unlocked) return;
+            if (!unlocked || commentMode) return;
             const { x, y } = point(e.clientX, e.clientY);
             postInput(url, wheelBody(x, y, e.deltaX, e.deltaY));
           }}
         />
+        {pick && <CommentPopover key={pick.frame + pick.px + pick.py} projectId={projectId} pick={pick} onClosed={() => setPick(null)} />}
       </div>
     </div>
   );

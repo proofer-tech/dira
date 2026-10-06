@@ -1490,8 +1490,8 @@ export type DepOption = { hash: string; title: string; met: boolean; duedate: st
  *
  *  `dirty`면 닫기를 한 번 막고, `버리고 닫기`를 받은 뒤에만 `reset`이 돈다. 되돌릴 방법이 없는
  *  삭제라서다. `dirty`가 아니면 묻지 않고 그대로 닫힌다. */
-function useCloseGuard(dirty: boolean, reset: () => void) {
-  const [open, setOpen] = useState(false);
+export function useCloseGuard(dirty: boolean, reset: () => void, initialOpen = false) {
+  const [open, setOpen] = useState(initialOpen);
   const [asking, setAsking] = useState(false);
   const discard = () => {
     setAsking(false);
@@ -1516,7 +1516,7 @@ function useCloseGuard(dirty: boolean, reset: () => void) {
 
 /** 닫기 확인 — 문구·기본 초점은 §3이 정해 둔 값이다. 삭제 확인(`DeleteTicketButton`)과 같은
  *  `AlertDialog`고 같은 규칙이다: 기본 초점이 취소 쪽이라 Enter 한 번에 글이 날아가지 않는다. */
-function DiscardConfirm({ guard }: { guard: ReturnType<typeof useCloseGuard> }) {
+export function DiscardConfirm({ guard }: { guard: ReturnType<typeof useCloseGuard> }) {
   const t = useT();
   return (
     <AlertDialog open={guard.asking} onOpenChange={guard.setAsking}>
@@ -1627,6 +1627,154 @@ function DepsPicker({
   );
 }
 
+/** 요구 접수 폼의 상태 한 벌 - 다이얼로그(`RequestDialog`)와 홈 브라우저 댓글 팝오버
+ *  (`browser-panel.tsx`)가 같은 훅과 같은 `RequestForm`을 쓴다(§P466). 닫기 확인(`useCloseGuard`)은
+ *  그릇 쪽이 들고, 여기서는 `dirty`와 `reset`만 내준다. */
+export function useRequestForm(project: string) {
+  const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
+  // 본문은 **controlled**여야 한다: React 19는 form action이 끝나면 폼을 리셋하므로, uncontrolled면
+  // 발행이 실패한 순간 사람이 쓴 글이 사라진다(실측). 실패 사유만 남고 본문이 비면 사유가 무의미하다.
+  const [body, setBody] = useState("");
+  // 마지막으로 **닫은** 결과. `useActionState`에는 리셋이 없어서 접수 확인도 실패 사유도 계속
+  // 남는다 — 이걸 안 들면 닫았다 다시 열 때 접수 확인이 그대로 떠 있거나(두 번째 요구를 못 쓴다)
+  // 본문 없는 실패 사유만 남는다(§6이 요구하는 3요소 중 둘을 잃은 문장이다. §3).
+  const [dismissed, setDismissed] = useState<NewTicketState>({});
+  const live = state !== dismissed;
+  const done = live && state.ok ? state.hash : null;
+  const att = useAttachments(project);
+  return {
+    project,
+    state,
+    action,
+    pending,
+    body,
+    setBody,
+    live,
+    done,
+    att,
+    // **첨부도 `dirty`에 든다**(§8 §거동) — 본문보다 되돌리기 어려운 것이 이쪽이다. 접수 확인
+    // 화면(`done`)은 이미 접수돼서 잃을 것이 없으니 묻지 않는다.
+    dirty: !done && (body !== "" || att.dirty),
+    // 닫히면 빈 칸으로 돌아간다 — 접수한 본문이 남아 있으면 같은 요구가 두 번 접수된다(§3).
+    // 칩은 비지만 올라간 파일은 안 지운다(§8 수명).
+    reset: () => {
+      setBody("");
+      att.reset();
+      setDismissed(state);
+    },
+  };
+}
+
+/** 요구 접수 폼 - 접수 확인 화면과 입력 폼 둘 다 이 컴포넌트가 그린다. `extra`는 서버로 더 보낼
+ *  hidden 값(댓글의 `comment_*` 다섯 개), `submitDisabled`는 그 값이 아직 준비 중일 때 접수를
+ *  막는다. 닫기는 부르는 쪽의 `onClose`(`guard.close(false)`)다. */
+export function RequestForm({
+  form,
+  onClose,
+  vault,
+  extra,
+  submitDisabled = false,
+}: {
+  form: ReturnType<typeof useRequestForm>;
+  onClose: () => void;
+  vault?: Vault;
+  extra?: Record<string, string>;
+  submitDisabled?: boolean;
+}) {
+  const t = useT();
+  const { project, state, action, pending, body, setBody, live, done, att } = form;
+  // `⌘↵`(§3 · §0-6). 참견·홈 질의 칸과 **같은 바인딩**이다 — 액션을 새로 만들면 §0-6 충돌
+  // 검증이 기본 키맵을 거절한다. 조합 문자열은 여기 안 적는다: 사람이 키를 바꾸면 이 칸도 따라간다.
+  const sendCombo = useKeymap().bindings["interject.send"];
+  // 활성 에픽(§에픽 §결정 10) — 값은 제출 순간에만 필요하다. `useSearchParams()`는 이 컴포넌트가
+  // 셸(레이아웃)에도 마운트되어(`trigger="hotkey"`) `pnpm build`가 그 자리에 Suspense 경계를
+  // 요구할 수 있어 제출 시점에 `location`을 직접 읽는 쪽이 더 싸다 — hidden input을 uncontrolled로
+  // 두고 `onSubmit`에서 그 값을 채운다.
+  const epicRef = useRef<HTMLInputElement>(null);
+  return done ? (
+    // 접수 확인은 **이 자리**다 — 상세로 튀면 "당신이 티켓을 만들었다"가 되고, 실제로 일어난
+    // 일은 큐가 요구를 접수했다는 것뿐이다(사람 지적 `fb0d309c`). 해시·kind·persona는
+    // 말하지 않는다: 사람이 고르지 않은 값이고 여기서 할 일도 없다. 상세는 링크로 남는다.
+    <div className="space-y-4">
+      {/* 문장은 서버가 만든다(§에픽 §결정 10) — `epicTitle()`·`제목 없음` 갈래를 여기서
+          두 번째로 짜지 않는다. */}
+      <p className="text-sm">{state.message}</p>
+      {/* 오른쪽 정렬 · 1차 액션(`닫기`)이 가장 오른쪽이다(§비주얼 §4-3) */}
+      <div className="flex flex-wrap items-center justify-end gap-4">
+        <Link
+          href={`/p/${project}/tickets/${done}`}
+          className="text-sm underline-offset-4 hover:underline"
+        >
+          {t("ticketDetail.viewSubmittedRequest")}
+        </Link>
+        <Button variant="outline" size="sm" onClick={() => onClose()}>
+          {t("common.close")}
+        </Button>
+      </div>
+    </div>
+  ) : (
+    // `min-w-0` — 위 답변 다이얼로그와 **같은 결함 · 같은 처방**이다(§비주얼 §3 간격 관용구).
+    // 이 폼의 `<Textarea>`는 `field-sizing-content`라 안 쪼개지는 긴 토큰 한 줄이 그대로
+    // min-content가 된다(실측: 100자 토큰에서 그릇 544 → 707.2 · 팝업 576에 가로 스크롤바)
+    <form
+      action={action}
+      className="min-w-0 space-y-4"
+      // 화면이 이미 아는 활성 에픽을 제출 순간에 채운다(§에픽 §결정 10) — 값이 없으면
+      // 빈 문자열이고, 서버는 빈 값을 `epic:` 줄을 안 쓰는 것과 같게 본다.
+      onSubmit={() => {
+        if (epicRef.current) epicRef.current.value = activeEpicFrom(location.pathname, location.search);
+      }}
+    >
+      <input type="hidden" name="project" value={project} />
+      <input type="hidden" name="mode" value="req" />
+      <input type="hidden" name="epic" ref={epicRef} />
+      {Object.entries(extra ?? {}).map(([name, value]) => (
+        <input key={name} type="hidden" name={name} value={value} />
+      ))}
+      {/* 요구 본문은 상세에서 `<Markdown breaks="untilHeading">`로 렌더된다(§10 표 — 이
+          다이얼로그가 만드는 티켓은 항상 `kind: request`다). 위지윅 면의 `Enter`가 그
+          렌더와 같아지려면 값이 여기서도 `untilHeading`이어야 한다(규칙 ⑤). */}
+      <MarkdownEditor
+        name="body"
+        value={body}
+        onValueChange={setBody}
+        rows={12}
+        required
+        autoFocus
+        ariaLabel={t("ticketDetail.requestBodyAriaLabel")}
+        placeholder={t("ticketDetail.requestBodyPlaceholder")}
+        breaks="untilHeading"
+        vault={vault}
+        onPaste={att.onPaste}
+        // `⌘↵`로 접수한다. `Enter`는 줄바꿈 그대로고, 한글 조합 중의 `Enter`는
+        // `matchCombo`의 `isComposing` 가드가 막는다(§3 · §21과 같은 규칙, 세 번째 칸이다).
+        //
+        // **폼을 제출한다 — 서버 액션을 직접 부르지 않는다**(§3). `requestSubmit()`을
+        // `<form action>` 경로로 돌린다 — 위지윅 면의 제출값은 hidden input이라 네이티브
+        // `required` 검사가 안 걷혀서(barred) 빈 본문은 여기서 직접 막는다(`body.trim()`).
+        // `pending`은 버튼의 `disabled`가 하는 일을 여기서 한 번 더 한다 — 키에는
+        // `disabled`가 없다.
+        onKeyDown={(e) => {
+          if (!matchCombo(e.nativeEvent, sendCombo)) return;
+          e.preventDefault();
+          if (!pending && !submitDisabled && body.trim()) e.currentTarget.closest("form")?.requestSubmit();
+        }}
+      />
+      {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
+      {live && state.error && (
+        <Failure title={t("ticketDetail.requestFailedTitle")} message={state.error} />
+      )}
+      {/* 칩 줄 · 실패 사유 줄 · 액션 행(§27). 제출 버튼은 사람이 지목한 자리 그대로
+          행의 오른쪽 끝이고(요구 `027d8e96` · §비주얼 §4-3) 손잡이가 그 왼쪽에 놓인다 */}
+      <AttachmentField att={att}>
+        <Button type="submit" disabled={pending || submitDisabled || !body.trim()}>
+          {pending ? t("ticketDetail.requesting") : t("ticketDetail.requestAccept")}
+        </Button>
+      </AttachmentField>
+    </form>
+  );
+}
+
 /** 요구 접수 — 자연어 한 칸. kind·persona·deps를 **사람에게 묻지 않는다**
  *  (서버가 `kind: request`·`persona: pm`·deps 없음으로 고정한다. DESIGN.md §3).
  *  title 칸도 없다 — 첫 줄에서 만든다.
@@ -1650,35 +1798,9 @@ export function RequestDialog({
   vault?: Vault;
 }) {
   const t = useT();
-  const [state, action, pending] = useActionState<NewTicketState, FormData>(createTicket, {});
-  // 본문은 **controlled**여야 한다: React 19는 form action이 끝나면 폼을 리셋하므로, uncontrolled면
-  // 발행이 실패한 순간 사람이 쓴 글이 사라진다(실측). 실패 사유만 남고 본문이 비면 사유가 무의미하다.
-  const [body, setBody] = useState("");
-  // 마지막으로 **닫은** 결과. `useActionState`에는 리셋이 없어서 접수 확인도 실패 사유도 계속
-  // 남는다 — 이걸 안 들면 닫았다 다시 열 때 접수 확인이 그대로 떠 있거나(두 번째 요구를 못 쓴다)
-  // 본문 없는 실패 사유만 남는다(§6이 요구하는 3요소 중 둘을 잃은 문장이다. §3).
-  const [dismissed, setDismissed] = useState<NewTicketState>({});
-  const live = state !== dismissed;
-  const done = live && state.ok ? state.hash : null;
-  const att = useAttachments(project);
-  // `⌘↵`(§3 · §0-6). 참견·홈 질의 칸과 **같은 바인딩**이다 — 액션을 새로 만들면 §0-6 충돌
-  // 검증이 기본 키맵을 거절한다. 조합 문자열은 여기 안 적는다: 사람이 키를 바꾸면 이 칸도 따라간다.
-  const sendCombo = useKeymap().bindings["interject.send"];
-  // 활성 에픽(§에픽 §결정 10) — 값은 제출 순간에만 필요하다. `useSearchParams()`는 이 컴포넌트가
-  // 셸(레이아웃)에도 마운트되어(`trigger="hotkey"`) `pnpm build`가 그 자리에 Suspense 경계를
-  // 요구할 수 있어 제출 시점에 `location`을 직접 읽는 쪽이 더 싸다 — hidden input을 uncontrolled로
-  // 두고 `onSubmit`에서 그 값을 채운다.
-  const epicRef = useRef<HTMLInputElement>(null);
-
-  // 닫히면 빈 칸으로 돌아간다 — 접수한 본문이 남아 있으면 같은 요구가 두 번 접수된다(§3).
-  // 접수 확인 화면(`done`)은 **묻지 않는다**: 이미 접수돼서 잃을 것이 없다.
-  // **첨부도 `dirty`에 든다**(§8 §거동) — 본문보다 되돌리기 어려운 것이 이쪽이다.
-  // 칩은 비지만 올라간 파일은 안 지운다(§8 수명).
-  const guard = useCloseGuard(!done && (body !== "" || att.dirty), () => {
-    setBody("");
-    att.reset();
-    setDismissed(state);
-  });
+  const form = useRequestForm(project);
+  const { done } = form;
+  const guard = useCloseGuard(form.dirty, form.reset);
 
   // `⌘/`(§0-6 `board.request`). **셸 인스턴스 하나만 듣는다** — 보드에는 이 컴포넌트가 둘이고
   // 둘 다 들으면 키 한 번에 다이얼로그가 둘 열린다(§3 · `SettingsDialog`이 `icon`만 듣는 그 모양).
@@ -1710,85 +1832,7 @@ export function RequestDialog({
             </DialogDescription>
           )}
         </DialogHeader>
-        {done ? (
-          // 접수 확인은 **이 자리**다 — 상세로 튀면 "당신이 티켓을 만들었다"가 되고, 실제로 일어난
-          // 일은 큐가 요구를 접수했다는 것뿐이다(사람 지적 `fb0d309c`). 해시·kind·persona는
-          // 말하지 않는다: 사람이 고르지 않은 값이고 여기서 할 일도 없다. 상세는 링크로 남는다.
-          <div className="space-y-4">
-            {/* 문장은 서버가 만든다(§에픽 §결정 10) — `epicTitle()`·`제목 없음` 갈래를 여기서
-                두 번째로 짜지 않는다. */}
-            <p className="text-sm">{state.message}</p>
-            {/* 오른쪽 정렬 · 1차 액션(`닫기`)이 가장 오른쪽이다(§비주얼 §4-3) */}
-            <div className="flex flex-wrap items-center justify-end gap-4">
-              <Link
-                href={`/p/${project}/tickets/${done}`}
-                className="text-sm underline-offset-4 hover:underline"
-              >
-                {t("ticketDetail.viewSubmittedRequest")}
-              </Link>
-              <Button variant="outline" size="sm" onClick={() => guard.close(false)}>
-                {t("common.close")}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          // `min-w-0` — 위 답변 다이얼로그와 **같은 결함 · 같은 처방**이다(§비주얼 §3 간격 관용구).
-          // 이 폼의 `<Textarea>`는 `field-sizing-content`라 안 쪼개지는 긴 토큰 한 줄이 그대로
-          // min-content가 된다(실측: 100자 토큰에서 그릇 544 → 707.2 · 팝업 576에 가로 스크롤바)
-          <form
-            action={action}
-            className="min-w-0 space-y-4"
-            // 화면이 이미 아는 활성 에픽을 제출 순간에 채운다(§에픽 §결정 10) — 값이 없으면
-            // 빈 문자열이고, 서버는 빈 값을 `epic:` 줄을 안 쓰는 것과 같게 본다.
-            onSubmit={() => {
-              if (epicRef.current) epicRef.current.value = activeEpicFrom(location.pathname, location.search);
-            }}
-          >
-            <input type="hidden" name="project" value={project} />
-            <input type="hidden" name="mode" value="req" />
-            <input type="hidden" name="epic" ref={epicRef} />
-            {/* 요구 본문은 상세에서 `<Markdown breaks="untilHeading">`로 렌더된다(§10 표 — 이
-                다이얼로그가 만드는 티켓은 항상 `kind: request`다). 위지윅 면의 `Enter`가 그
-                렌더와 같아지려면 값이 여기서도 `untilHeading`이어야 한다(규칙 ⑤). */}
-            <MarkdownEditor
-              name="body"
-              value={body}
-              onValueChange={setBody}
-              rows={12}
-              required
-              autoFocus
-              ariaLabel={t("ticketDetail.requestBodyAriaLabel")}
-              placeholder={t("ticketDetail.requestBodyPlaceholder")}
-              breaks="untilHeading"
-              vault={vault}
-              onPaste={att.onPaste}
-              // `⌘↵`로 접수한다. `Enter`는 줄바꿈 그대로고, 한글 조합 중의 `Enter`는
-              // `matchCombo`의 `isComposing` 가드가 막는다(§3 · §21과 같은 규칙, 세 번째 칸이다).
-              //
-              // **폼을 제출한다 — 서버 액션을 직접 부르지 않는다**(§3). `requestSubmit()`을
-              // `<form action>` 경로로 돌린다 — 위지윅 면의 제출값은 hidden input이라 네이티브
-              // `required` 검사가 안 걷혀서(barred) 빈 본문은 여기서 직접 막는다(`body.trim()`).
-              // `pending`은 버튼의 `disabled`가 하는 일을 여기서 한 번 더 한다 — 키에는
-              // `disabled`가 없다.
-              onKeyDown={(e) => {
-                if (!matchCombo(e.nativeEvent, sendCombo)) return;
-                e.preventDefault();
-                if (!pending && body.trim()) e.currentTarget.closest("form")?.requestSubmit();
-              }}
-            />
-            {/* 실패는 이 자리에 남는다 — 닫으면 본문과 함께 사라진다(§3) */}
-            {live && state.error && (
-              <Failure title={t("ticketDetail.requestFailedTitle")} message={state.error} />
-            )}
-            {/* 칩 줄 · 실패 사유 줄 · 액션 행(§27). 제출 버튼은 사람이 지목한 자리 그대로
-                행의 오른쪽 끝이고(요구 `027d8e96` · §비주얼 §4-3) 손잡이가 그 왼쪽에 놓인다 */}
-            <AttachmentField att={att}>
-              <Button type="submit" disabled={pending || !body.trim()}>
-                {pending ? t("ticketDetail.requesting") : t("ticketDetail.requestAccept")}
-              </Button>
-            </AttachmentField>
-          </form>
-        )}
+        <RequestForm form={form} onClose={() => guard.close(false)} vault={vault} />
         <DiscardConfirm guard={guard} />
       </DialogContent>
     </Dialog>

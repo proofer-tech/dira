@@ -19,12 +19,15 @@ function PopoverContent({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
+  anchor,
+  arrow = false,
+  children,
   ...props
 }: PopoverPrimitive.Popup.Props &
   Pick<
     PopoverPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
-  >) {
+    "align" | "alignOffset" | "side" | "sideOffset" | "anchor"
+  > & { arrow?: boolean }) {
   return (
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Positioner
@@ -32,6 +35,7 @@ function PopoverContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
+        anchor={anchor}
         className="isolate z-50"
       >
         <PopoverPrimitive.Popup
@@ -41,7 +45,16 @@ function PopoverContent({
             className
           )}
           {...props}
-        />
+        >
+          {children}
+          {arrow && (
+            <PopoverPrimitive.Arrow className="flex data-[side=bottom]:top-[-7px] data-[side=left]:right-[-11px] data-[side=left]:rotate-90 data-[side=right]:left-[-11px] data-[side=right]:-rotate-90 data-[side=top]:bottom-[-7px] data-[side=top]:rotate-180">
+              <svg width="20" height="8" viewBox="0 0 20 8" aria-hidden>
+                <path d="M0 8 L10 0 L20 8 Z" className="fill-popover" />
+              </svg>
+            </PopoverPrimitive.Arrow>
+          )}
+        </PopoverPrimitive.Popup>
       </PopoverPrimitive.Positioner>
     </PopoverPrimitive.Portal>
   )

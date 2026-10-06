@@ -51,6 +51,33 @@ export function scaleToFrame(
   return { x: Math.round(rx * natural.width), y: Math.round(ry * natural.height) };
 }
 
+/** `object-contain`으로 그려진 `<img>` 상자(`box`) 안에서 실제 그림이 차지하는 내용 사각형과, 그
+ *  안의 클릭 한 점을 프레임 픽셀 좌표로 옮긴다(§P466 값 표 §좌표). 위아래 또는 좌우 띠 위의
+ *  클릭이나 프레임이 없는 경우(`natural` 0)는 `null`이다. `px`·`py`는 상자 왼쪽 위 기준의 CSS
+ *  px(표식을 놓는 자리)이다. `scaleToFrame`에 상자를 그대로 넘기면 띠 만큼 어긋나서 따로 둔다. */
+export function commentPoint(
+  clientX: number,
+  clientY: number,
+  box: { left: number; top: number; width: number; height: number },
+  natural: { width: number; height: number },
+): { x: number; y: number; px: number; py: number } | null {
+  if (box.width <= 0 || box.height <= 0 || natural.width <= 0 || natural.height <= 0) return null;
+  const scale = Math.min(box.width / natural.width, box.height / natural.height);
+  const w = natural.width * scale;
+  const h = natural.height * scale;
+  const left = box.left + (box.width - w) / 2;
+  const top = box.top + (box.height - h) / 2;
+  const dx = clientX - left;
+  const dy = clientY - top;
+  if (dx < 0 || dy < 0 || dx >= w || dy >= h) return null;
+  return {
+    x: Math.min(natural.width - 1, Math.floor(dx / scale)),
+    y: Math.min(natural.height - 1, Math.floor(dy / scale)),
+    px: clientX - box.left,
+    py: clientY - box.top,
+  };
+}
+
 export function mouseButtonBody(
   domType: "mousedown" | "mouseup" | "mousemove",
   domButton: number,
