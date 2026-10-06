@@ -153,7 +153,7 @@ function CommentPopover({ projectId, pick, onClosed }: { projectId: string; pick
       (r) => setShot(r.ok ? { path: r.path } : { error: r.error }),
       (e: unknown) => setShot({ error: e instanceof Error ? e.message : String(e) }),
     );
-  }, [pick.frame, projectId]);
+  }, [pick.frame, projectId, locale]);
 
   const extra = shot.path
     ? {
