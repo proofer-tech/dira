@@ -229,6 +229,42 @@ The built-in browser has no back button and no bookmarks, and it inherits none o
 the browser you use every day. A screen you have to sign into with a Google account, or one that
 needs an extension to work, is what this button is for.
 
+### Pointing at the page to file a request on the spot
+
+When you see something to fix on the page you are looking at, you can point at it and file a
+request right there. Press `Comment` at the right-hand end of the address bar. Every browser tab
+has it. Once it is on, the button stays pressed and the cursor over the page turns into a
+crosshair.
+
+Now press any point on the page. A small dot lands there, and a speech bubble opens with its tail
+pointing at the dot. Its title is `Screen comment`, with the current address on one line below.
+At the top sits a small copy of the page as it was the moment you pressed, with the spot marked.
+Below that is the same form as the board's `New request` dialog. Write the body, then press
+`New request` or hit `⌘↵`. When it goes through, a confirmation line and a
+`See the request you submitted` link appear inside the bubble.
+
+What you filed is one `kind: request` ticket addressed to pm. Under the body you wrote, a
+`## Screen comment` section is added with three lines.
+
+- `URL` - the address in the address bar when you pressed
+- `Screenshot` - the path to the image that was on screen at that moment
+  (`attachments/comment-<date-time>.jpg`)
+- `Click` - the pixel position you pressed inside that screenshot, and the screenshot's size
+
+So pm can tell what the request points at without opening the page again. You do not attach the
+screenshot yourself, and you cannot remove it from the bubble. Other files still go in through the
+attachment field.
+
+**While `Comment` is on, the page takes no clicks.** Press a link and nothing navigates; scrolling
+and keys do not reach the page either. On a browser a worker is using, the prompt asking whether to
+unlock input does not appear. Pressing the black bands around the picture, or a tab with no picture
+yet, does nothing.
+
+`Comment` stays on after you file. Press another spot and a fresh, empty bubble opens. A bubble
+closes with `Esc`, a click outside it, or `Close`. If you were in the middle of writing, you get the
+same confirmation the dialog asks for. To work the page again, press `Comment` once more to turn it
+off. The setting is not saved, so after a reload it is off.
+
 ### When the slots are full
 
 Six browsers run at a time. **With the `Link` browser already up, the limit does not come into
