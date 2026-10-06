@@ -21,6 +21,7 @@ import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { dispatchToWip, type DispatchToWipResult } from "@/lib/dispatch";
 import { findTicket } from "@/lib/engine";
 import { kickIdleWorker } from "@/lib/kick";
+import { screenComment } from "@/lib/screen-comment";
 import { isHash, parseAssignment } from "@/lib/paths";
 import { PRIORITY_DEFAULT, PRIORITY_MAX, PRIORITY_MIN, reqTitle, stateOf, stemOf } from "@/lib/queue";
 import { epicTitle } from "@/lib/epics";
@@ -144,7 +145,9 @@ export async function createTicket(
       project,
       form.getAll("attachment").map((a) => String(a)),
     );
-    let content = withAttachments(body, attached);
+    // 화면 댓글(P466) - 요구 접수만 받고, 다섯 값이 다 있어야 한다. 블록은 본문 다음-첨부 줄 앞이다.
+    const comment = req ? await screenComment(project, (k) => String(form.get(k) ?? ""), locale) : null;
+    let content = withAttachments(comment ? (body.trimEnd() ? body.trimEnd() + "\n\n" : "") + comment.block : body, attached);
     if (content && !content.endsWith("\n")) content += "\n";
 
     const text = (h: string) =>

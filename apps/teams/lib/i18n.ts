@@ -2077,6 +2077,13 @@ export const ko: Record<string, string> = {
   "boardPage.action.kindPrefix": "kind는",
   "boardPage.action.kindMiddle": "중 하나입니다:",
   "boardPage.action.unknownDepsPrefix": "큐에 없는 deps 해시입니다:",
+  "screenComment.invalidPrefix": "화면 댓글 값이 올바르지 않습니다",
+  "screenComment.heading": "## 화면 댓글",
+  "screenComment.url": "URL",
+  "screenComment.shot": "스크린샷",
+  "screenComment.click": "클릭 위치",
+  "screenComment.shotSize": "스크린샷",
+  "screenComment.basis": "기준",
   "boardPage.action.hashExhausted": "해시를 10번 뽑았는데 전부 이미 쓰이고 있습니다 — 큐 디렉터리를 확인하세요.",
   // `요구사항이 ${label} (${epic}) 에픽으로 접수되었습니다.` — 라벨이 없으면 `board.epic.noTitle`을
   // 그대로 재사용한다(사이드바·이 문장이 같은 글자여야 한다).
@@ -4450,6 +4457,13 @@ export const en: Record<string, string> = {
   "boardPage.action.kindPrefix": "kind must be one of",
   "boardPage.action.kindMiddle": "— got:",
   "boardPage.action.unknownDepsPrefix": "No such deps hash in the queue:",
+  "screenComment.invalidPrefix": "The screen comment values are invalid",
+  "screenComment.heading": "## Screen comment",
+  "screenComment.url": "URL",
+  "screenComment.shot": "Screenshot",
+  "screenComment.click": "Click",
+  "screenComment.shotSize": "in",
+  "screenComment.basis": "screenshot",
   "boardPage.action.hashExhausted":
     "Drew 10 hashes and every one is already taken — check the queue directory.",
   // `Request received in the P338 (p338) epic.` — 라벨·해시가 가운데 끼는 자리라 접두가 문장을
