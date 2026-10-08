@@ -8460,7 +8460,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 사람 요구: 워커와 페르소나는 `"$HOME/.config/dira/bin/dira"`를 실행하되, 엔진 칸에는 `custom`이
 아니라 claude로 보여야 한다. effort는 모델처럼 따로 고르는 자리로 둔다.
 
-지금 워커 화면의 엔진 칸이 w1-w4와 페르소나 여섯 개에서 `claude` + `custom`으로 뜬다. 별도 엔진은
+지금 `engineCell`이 w1-w4 워커 파일의 엔진 줄과 페르소나 여섯 개에서 `claude` + `custom`을 낸다(워커 표에는 엔진 열이 없다 - 9a82f00e가 엔진 컨트롤을 페르소나 화면으로 옮겼다). 별도 엔진은
 없다 - `~/.config/dira/bin/dira`는 claude 실행 파일을 고정 경로에 둔 사본이다(엔진 수정 24번째 -
 27번째 계약). 원인은 `lib/workers.ts`의 `parseEngineValue`가 엔진 줄을 카탈로그 템플릿과 글자 단위로
 대조하는데, `0a9405ea`(요구 `84aae879`)가 파일에 붙인 `--thinking-display summarized`가 카탈로그
@@ -8481,9 +8481,9 @@ effort 선택지는 claude에만 둔다.
 | 대입 없는 워커 | `DEFAULT_ENGINE`(셀 `title`의 argv 전문)은 지금처럼 tick.sh가 실제로 돌리는 줄이다 - 이 토큰이 **없다**. 카탈로그에서 유도하되 이 토큰을 뺀 줄로 만든다. 표시는 `claude` + `assumed` 그대로다 |
 | effort 자리 | claude 템플릿에서 모델 자리 바로 뒤에 effort 자리를 둔다 - 펴면 `--effort <값>`, 고르지 않으면 통째로 사라진다. 결과가 지금 developer 파일의 순서(`--model sonnet --effort medium --input-format ...`)와 글자로 같아야 한다 |
 | effort 선택지 | claude만 - `지정 안 함`(맨 앞, 기본값) - `low` - `medium` - `high` - `xhigh` - `max`. `claude --help`의 `--effort <level>` 목록(2026-10-08 실측, 2.1.289) 그대로다. 직접 입력은 없고 목록 밖의 값은 서버가 거부한다. codex - grok - agy는 effort 자리가 없고 팝오버에 effort 칸이 안 뜬다(agy는 강도가 이미 모델 이름 접미사다) |
-| 값의 모양 | `{ engineId, model }`이 `{ engineId, model, effort }`가 된다. `effort`의 `지정 안 함`은 빈 문자열이다. 워커 엔진 저장 액션과 페르소나 `engine` 저장 액션이 둘 다 `effort`를 받는다 |
+| 값의 모양 | `{ engineId, model }`이 `{ engineId, model, effort }`가 된다. `effort`의 `지정 안 함`은 빈 문자열이다. 워커 파일을 쓰는 `createWorker`와 페르소나 `engine` 저장 액션이 둘 다 `effort`를 받는다 |
 | 엔진 칸 표시 | `claude · sonnet · effort medium`. 모델 없이 effort만 있으면 `claude · effort medium`. effort가 없으면 지금 그대로(`claude · opus` - `claude`). 홈 에이전트가 쓰는 `engineCell` label도 같은 글자다 |
-| 팝오버 | 워커 엔진 팝오버와 페르소나 엔진 칸에 모델 선택 바로 아래 `effort` 선택 한 줄. 열 때 초기값은 파일에서 읽은 값이다. 엔진을 claude 밖으로 바꾸면 effort 칸이 사라지고 저장 값의 effort는 빈 문자열이다 |
+| 팝오버 | 페르소나 엔진 칸에 모델 선택 바로 아래 `effort` 선택 한 줄(워커 엔진 팝오버는 없다 - 워커 엔진은 화면에서 고치지 않는다). 열 때 초기값은 파일에서 읽은 값이다. 엔진을 claude 밖으로 바꾸면 effort 칸이 사라지고 저장 값의 effort는 빈 문자열이다 |
 | ko-en | `effort` - `지정 안 함`을 `lib/i18n.ts` 두 언어에 단다. 선택지 값(`low` 등)은 번역하지 않는다 |
 
 #### 안 하는 것
@@ -8506,12 +8506,12 @@ effort 선택지는 claude에만 둔다.
 
 #### 수용조건
 
-- [ ] 이 큐의 w1 - w4 워커 행 엔진 칸이 `claude · sonnet`이고 `custom` 배지가 없다. w5 - w6 행은 `claude`이고 배지가 없다.
+- [ ] 이 큐의 `workers/w1.sh` - `w4.sh` 대입 줄을 `engineCell`에 넣으면 label이 `claude · sonnet`이고 badge가 `null`이다. w5 - w6은 `claude`이고 badge가 `null`이다.
 - [ ] §5에서 developer 페르소나의 엔진 칸이 `claude · sonnet · effort medium`으로 열리고 `custom` 표시가 없다. pm - designer - writer는 `claude · opus`, qa - archive-manager는 `claude · sonnet`이다.
 - [ ] developer 엔진 칸에서 아무것도 안 바꾸고 저장하면 `personas/developer/engine` 바이트가 안 바뀐다.
-- [ ] w1 엔진 팝오버에서 effort `high`를 골라 저장하면 `workers/w1.sh`의 대입 줄에 `--model sonnet --effort high`와 맨 뒤 `--thinking-display summarized`가 있고, 엔진 칸이 `claude · sonnet · effort high`가 된다.
-- [ ] w5 엔진 팝오버에서 저장하면 대입 줄 맨 뒤에 `--thinking-display summarized`가 붙는다.
-- [ ] 엔진을 codex로 바꾸면 effort 칸이 사라지고, 저장한 줄에 `--effort`가 0번 나온다.
+- [ ] 임시 큐에서 `createWorker(root, name, "claude", "sonnet", "high")`로 쓴 대입 줄에 `--model sonnet --effort high`와 맨 뒤 `--thinking-display summarized`가 있고, 그 줄의 `engineCell` label이 `claude · sonnet · effort high`다.
+- [ ] 임시 큐에서 모델 - effort 없이 `createWorker(root, name, "claude")`로 쓴 대입 줄 맨 뒤에 `--thinking-display summarized`가 붙고 label이 `claude`다.
+- [ ] 페르소나 엔진 칸에서 엔진을 codex로 바꾸면 effort 칸이 사라지고, 저장한 줄에 `--effort`가 0번 나온다.
 - [ ] effort에 `huge`를 담아 저장 액션을 직접 부르면 거부되고 파일이 안 바뀐다.
 - [ ] `TICKET_ENGINE` 대입이 없는 워커의 엔진 칸은 `claude` + `assumed`이고, 셀 `title`에 `--thinking-display`가 0번 나온다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff master -- tick.sh tickets.py`가 0줄이다.
