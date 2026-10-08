@@ -59,6 +59,7 @@ const {
   watchdogHookSourceLine,
   watchdogState,
   engineArgv,
+  ENGINE_ARR,
   engineCell,
   exampleWorkers,
   ENGINES,
@@ -3169,7 +3170,8 @@ test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 고정한다 (
   // grok은 codex와 같은 비스트리밍 경로이므로 프롬프트가 argv로 간다. 다만 위치 인자가 아니라
   // `-p`의 값이라 **맨 끝이 아니다** — 그래서 이 단언은 codex의 것과 모양이 갈린다.
   assert.deepStrictEqual(grok, [
-    '"$HOME/.config/dira/bin/dira-grok"',
+    '"$HOME/.config/dira/bin/dira"',
+    "grok",
     "-p",
     '"{prompt}"',
     "--session-id",
@@ -3181,10 +3183,10 @@ test("엔진 템플릿 — 바꿔 쓸 수 없는 자리 일곱을 고정한다 (
   ]);
   // 모델을 주면 `-m <모델>`이 그 자리에 끼고 나머지 토큰 순서가 안 바뀐다
   assert.deepStrictEqual(engineArgv("grok", "grok-4.5"), [
-    ...grok.slice(0, 7),
+    ...grok.slice(0, 8),
     "-m",
     "grok-4.5",
-    ...grok.slice(7),
+    ...grok.slice(8),
   ]);
   // ④의 나머지 절반 — grok에도 `--session-id "{sid}"`가 있다(tick.sh:94 reap · §2-1 스트림)
   assert.ok(grok.join(" ").includes('--session-id "{sid}"'));
@@ -3268,18 +3270,33 @@ test("renderEngineBlock ↔ parseEngineValue — 카탈로그 전 조합이 왕�
   // 다시 그려 대조하므로 카탈로그가 틀리면 같이 틀린다. 여기가 스펙 대조다(§4-3 §템플릿 3벌).
   assert.deepStrictEqual(
     parseEngineValue(
-      '"$HOME/.config/dira/bin/dira-grok" -p "{prompt}" --session-id "{sid}"' +
+      '"$HOME/.config/dira/bin/dira" grok -p "{prompt}" --session-id "{sid}"' +
         " --permission-mode bypassPermissions --output-format streaming-messages-json",
     ),
     { engineId: "grok", model: NO_MODEL, effort: "" },
   );
   assert.deepStrictEqual(
     parseEngineValue(
-      '"$HOME/.config/dira/bin/dira-grok" -p "{prompt}" --session-id "{sid}"' +
+      '"$HOME/.config/dira/bin/dira" grok -p "{prompt}" --session-id "{sid}"' +
         " --permission-mode bypassPermissions -m grok-4.5 --output-format streaming-messages-json",
     ),
     { engineId: "grok", model: "grok-4.5", effort: "" },
   );
+  // P468 옛 줄 호환: 첫 칸이 dira-<x>인 옛 줄도 같은 값으로 읽고 engineCell이 custom 배지를 안 단다
+  for (const [id, rest] of [
+    ["codex", 'exec --json -s danger-full-access --skip-git-repo-check -m gpt-5.5 "{prompt}"'],
+    ["grok", '-p "{prompt}" --session-id "{sid}" --permission-mode bypassPermissions --output-format streaming-messages-json'],
+    ["agy", '--output-format stream-json --dangerously-skip-permissions --print-timeout 5400s -p "{prompt}"'],
+  ] as const) {
+    const oldLine = `"$HOME/.config/dira/bin/dira-${id}" ${rest}`;
+    assert.strictEqual(engineCell(oldLine).badge, null, id);
+    assert.strictEqual(parseEngineValue(oldLine)?.engineId, id);
+    assert.ok(engineCell(oldLine).label.startsWith(id), engineCell(oldLine).label);
+    const saved = renderEngineBlock(id);
+    assert.ok(saved.startsWith(`${ENGINE_ARR}=("$HOME/.config/dira/bin/dira" ${id} `), saved);
+    assert.strictEqual(engineName(`"$HOME/.config/dira/bin/dira" ${id} x`), id);
+  }
+  assert.strictEqual(engineName('"$HOME/.config/dira/bin/dira" -p x'), "claude");
   // 손으로 쓴 커스텀은 null이다 — 토큰 하나만 달라도 카탈로그가 아니다
   assert.strictEqual(parseEngineValue("claude -p --dangerously-skip-permissions"), null);
   assert.strictEqual(parseEngineValue("codex exec --json \"{prompt}\""), null);

@@ -124,6 +124,8 @@ export type Worker = {
   cwdFix?: string;
 };
 
+const ROUTED_ENGINES = ["codex", "grok", "agy"];
+
 /** 엔진 이름 = **첫 토큰의 basename**. `tick.sh:52`의 `basename "${TICKET_ENGINE[0]}"`와 같은
  *  식이다 — 인증 판정(§0-4)이 이 값 하나에 걸리므로 식을 두 벌로 적지 않고 화면이 이걸 부른다.
  *  ponytail: 셸을 실행하지 않으니 따옴표만 벗긴다 — `$VAR` 전개는 `parseWorkerFile`의 다른
@@ -134,7 +136,11 @@ export function engineName(engine: string | null): string {
   const name = path.basename(first.replace(/^(['"])(.*)\1$/, "$2"));
   // 엔진 수정 27번째 계약 3(tick.sh:550-554와 같은 판정, 한 자리뿐이다):
   // dira -> claude(24번째 그대로), dira-<x> -> <x>, 그 외는 basename 그대로.
-  if (name === "dira") return "claude";
+  // P468: 라우터 줄 `dira <엔진>`은 둘째 토큰이 엔진 이름이고, 옛 `dira-<x>`도 같은 값이다.
+  if (name === "dira") {
+    const second = (engine ?? DEFAULT_ENGINE).trim().split(/\s+/)[1] ?? "";
+    return ROUTED_ENGINES.includes(second) ? second : "claude";
+  }
   return name.startsWith("dira-") ? name.slice("dira-".length) : name;
 }
 
@@ -799,7 +805,8 @@ export const ENGINES: readonly {
     // `workspace-write`로도 부족하다 — `.dira`가 워크트리 밖(큐)을 가리켜 티켓 rename이 막힌다.
     // `--skip-git-repo-check` 없으면 레포가 아닌 TICKET_CWD에서 매 tick 즉시 거부된다.
     argv: [
-      '"$HOME/.config/dira/bin/dira-codex"',
+      '"$HOME/.config/dira/bin/dira"',
+      "codex",
       "exec",
       "--json",
       "-s",
@@ -819,7 +826,8 @@ export const ENGINES: readonly {
     // `--permission-mode bypassPermissions` 하나로 파일 쓰기까지 지난다(실측 §4-3 §grok).
     // codex가 `-s danger-full-access`를 **필요로 했던 것**과 갈리는 자리다.
     argv: [
-      '"$HOME/.config/dira/bin/dira-grok"',
+      '"$HOME/.config/dira/bin/dira"',
+      "grok",
       "-p",
       '"{prompt}"',
       "--session-id",
@@ -854,7 +862,8 @@ export const ENGINES: readonly {
     // `-p "{prompt}"`가 맨 뒤인 이유와 `--print-timeout 5400s`가 있는 이유는 위 헤더 주석과
     // §4-3 표(agy 행 둘)에 있다. `<T>`가 아니라 고정값인 것은 §4-3 §agy ⑥ 천장 1과 같은 자리다.
     argv: [
-      '"$HOME/.config/dira/bin/dira-agy"',
+      '"$HOME/.config/dira/bin/dira"',
+      "agy",
       "--output-format",
       "stream-json",
       "--dangerously-skip-permissions",
@@ -920,6 +929,9 @@ export function parseEngineValue(
   engine: string,
 ): { engineId: EngineId; model: string; effort: string } | null {
   const toks = engine.trim().split(/\s+/);
+  // P468 옛 줄 호환: 첫 칸이 `"$HOME/.config/dira/bin/dira-<x>"`면 `dira <x>`로 읽는다(파일은 안 고친다).
+  const old = /^"\$HOME\/\.config\/dira\/bin\/dira-(codex|grok|agy)"$/.exec(toks[0] ?? "");
+  if (old) toks.splice(0, 1, '"$HOME/.config/dira/bin/dira"', old[1]);
   const joined = toks.join(" ");
   for (const e of ENGINES) {
     const i = toks.indexOf(e.flag);
