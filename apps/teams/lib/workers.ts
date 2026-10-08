@@ -729,6 +729,17 @@ export const NO_MODEL = "";
 /** 고정 템플릿 안에서 `[flag, model]`로 펴지는 자리. `NO_MODEL`이면 통째로 사라진다. */
 const MODEL_SLOT = " model";
 
+/** claude 템플릿에서 모델 자리 바로 뒤. 고르면 `--effort <값>`, 안 고르면 통째로 사라진다(P467). */
+const EFFORT_SLOT = " effort";
+
+/** `claude --help`의 `--effort <level>` 목록(2026-10-08 실측, 2.1.289). 빈 문자열 = 지정 안 함.
+ *  claude만 쓴다 - 다른 엔진에 넘기면 던진다. */
+export const NO_EFFORT = "";
+export const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
+/** claude 템플릿의 맨 뒤 두 토큰. 화면에서 고르는 값이 아니라 늘 붙는다(P467). */
+const THINKING_TOKS = ["--thinking-display", "summarized"];
+
 export const ENGINE_ARR = "TICKET_ENGINE";
 
 /** 화면이 그리는 목록의 유일한 출처. **모델 이름은 실측으로만 오른다** — 확인 못 한 이름을
@@ -756,11 +767,13 @@ export const ENGINES: readonly {
       '"{sid}"',
       "--dangerously-skip-permissions",
       MODEL_SLOT,
+      EFFORT_SLOT,
       "--input-format",
       "stream-json",
       "--output-format",
       "stream-json",
       "--verbose",
+      ...THINKING_TOKS,
     ],
   },
   {
@@ -860,10 +873,11 @@ export const ENGINES: readonly {
  *  적으면 화면이 받는 값과 서버가 받는 값이 갈린다. */
 export const MODEL_RE = /^[A-Za-z0-9._:/-]+$/;
 
-/** 고른 값 → argv 토큰. 템플릿은 고정이고 모델 자리만 끼운다. */
+/** 고른 값 → argv 토큰. 템플릿은 고정이고 모델·effort 자리만 끼운다. */
 export function engineArgv(
   id: EngineId,
   model: string = NO_MODEL,
+  effort: string = NO_EFFORT,
   locale: Locale = DEFAULT_LOCALE,
 ): string[] {
   const e = ENGINES.find((x) => x.id === id);
@@ -871,31 +885,51 @@ export function engineArgv(
   if (model !== NO_MODEL && !MODEL_RE.test(model)) {
     throw new Error(`${t(locale, "workers.engine.invalidModelCharsPrefix")} ${model}`);
   }
-  return e.argv.flatMap((tok) => (tok === MODEL_SLOT ? (model ? [e.flag, model] : []) : [tok]));
+  if (effort !== NO_EFFORT && (id !== "claude" || !(CLAUDE_EFFORTS as readonly string[]).includes(effort))) {
+    throw new Error(`${t(locale, "workers.engine.invalidEffortPrefix")} ${effort}`);
+  }
+  return e.argv.flatMap((tok) =>
+    tok === MODEL_SLOT ? (model ? [e.flag, model] : [])
+    : tok === EFFORT_SLOT ? (effort ? ["--effort", effort] : [])
+    : [tok],
+  );
 }
 
-/** `tick.sh:51-53`. 워커가 덮어쓰지 않으면 실제로 이게 돈다 — "기본값"이라고 얼버무리지 않는다.
- *  **카탈로그에서 유도한다**: 손으로 적었더니 엔진이 스트리밍 입력으로 바뀐 뒤에도 옛 argv
- *  (`-p "{prompt}" … --output-format json`)로 남아, 대입 없는 워커의 `엔진` 열이 안 도는 커맨드를
- *  말하고 §4-3 역파싱이 그 워커 전부를 `커스텀`으로 읽었다. 두 벌이면 반드시 갈린다. */
-const DEFAULT_ENGINE = engineArgv("claude").join(" ");
+/** `tick.sh:51-53`. 워커가 덮어쓰지 않으면 실제로 이게 돈다 - "기본값"이라고 얼버무리지 않는다.
+ *  **카탈로그에서 유도한다**: 손으로 적었더니 엔진이 스트리밍 입력으로 바뀐 뒤에도 옛 argv로
+ *  남아 §4-3 역파싱이 그 워커 전부를 `커스텀`으로 읽었다. 두 벌이면 반드시 갈린다.
+ *  tick.sh의 실제 줄에는 `--thinking-display summarized`가 **없으므로** 그 두 토큰을 뺀다(P467). */
+const DEFAULT_ENGINE = engineArgv("claude").slice(0, -THINKING_TOKS.length).join(" ");
 
 /** 파일에 들어갈 블록 텍스트. 한 줄이다 — 사람이 고칠 자리가 아니라 GUI가 소유하는 대입이다. */
-export function renderEngineBlock(id: EngineId, model: string = NO_MODEL): string {
-  return `${ENGINE_ARR}=(${engineArgv(id, model).join(" ")})`;
+export function renderEngineBlock(
+  id: EngineId,
+  model: string = NO_MODEL,
+  effort: string = NO_EFFORT,
+  locale: Locale = DEFAULT_LOCALE,
+): string {
+  return `${ENGINE_ARR}=(${engineArgv(id, model, effort, locale).join(" ")})`;
 }
 
 /** 역파싱: 워커 파일에서 읽은 `engine` 문자열 → 고른 값. 카탈로그 템플릿과 **글자로** 안 맞으면
  *  `null`(= 손으로 쓴 커스텀 엔진)이다. 행이 지금 값을 표시하려면 이게 필요하다(§4-3). */
-export function parseEngineValue(engine: string): { engineId: EngineId; model: string } | null {
+export function parseEngineValue(
+  engine: string,
+): { engineId: EngineId; model: string; effort: string } | null {
   const toks = engine.trim().split(/\s+/);
+  const joined = toks.join(" ");
   for (const e of ENGINES) {
     const i = toks.indexOf(e.flag);
     const model = i >= 0 && i + 1 < toks.length ? toks[i + 1] : NO_MODEL;
-    // 모델을 뽑아 템플릿을 다시 그려 통째로 대조한다 — 토큰 하나라도 다르면 커스텀이다.
-    if (MODEL_RE.test(model) || model === NO_MODEL) {
-      if (engineArgv(e.id, model).join(" ") === toks.join(" ")) return { engineId: e.id, model };
-    }
+    const j = e.id === "claude" ? toks.indexOf("--effort") : -1;
+    const effort = j >= 0 && j + 1 < toks.length ? toks[j + 1] : NO_EFFORT;
+    if (model !== NO_MODEL && !MODEL_RE.test(model)) continue;
+    if (effort !== NO_EFFORT && !(CLAUDE_EFFORTS as readonly string[]).includes(effort)) continue;
+    // 모델·effort를 뽑아 템플릿을 다시 그려 통째로 대조한다 - 토큰 하나라도 다르면 커스텀이다.
+    // claude는 맨 뒤 `--thinking-display summarized`가 없는 줄도 같은 값이다(P467).
+    const full = engineArgv(e.id, model, effort);
+    const bare = e.id === "claude" ? full.slice(0, -THINKING_TOKS.length) : full;
+    if (full.join(" ") === joined || bare.join(" ") === joined) return { engineId: e.id, model, effort };
   }
   return null;
 }
@@ -906,6 +940,7 @@ export function parseEngineValue(engine: string): { engineId: EngineId; model: s
  *  |---|---|---|
  *  | 카탈로그와 맞음 · 모델 있음 | `claude · opus` | 없음 |
  *  | 〃 · 모델 없음 | `codex` | 없음 |
+ *  | 〃 · effort 있음 | `claude · sonnet · effort medium` | 없음 |
  *  | **없음**(`engine === null`) | `claude` | `assumed` — 실제로 도는 값을 그리고 배지가 사실을 알려 준다 |
  *  | 카탈로그와 안 맞음 | `mock-engine`(첫 토큰 basename) | `custom` |
  *
@@ -916,7 +951,7 @@ export function engineCell(engine: string | null): {
   /** 셀 `title`에 붙는 argv 전문. 대입이 없으면 **실제로 도는** tick.sh 기본값이다 */
   argv: string;
   /** 팝오버의 초기값. `null`이면 고른 것이 없는 채로 열린다(손으로 쓴 값을 덮어쓰지 않는다) */
-  value: { engineId: EngineId; model: string } | null;
+  value: { engineId: EngineId; model: string; effort: string } | null;
 } {
   // `??`가 아니라 `||`다: 빈 블록(`TICKET_ENGINE=()`)도 tick.sh 51~53행이 기본값으로 되돌린다 —
   // 그 워커도 "기본값을 쓰는 중"이 사실이고, 빈 label로 셀이 비는 길이 여기서 닫힌다.
@@ -924,7 +959,7 @@ export function engineCell(engine: string | null): {
   const value = parseEngineValue(argv);
   if (!value) return { label: engineName(argv), badge: "custom", argv, value: null };
   return {
-    label: value.model ? `${value.engineId} · ${value.model}` : value.engineId,
+    label: [value.engineId, value.model, value.effort && `effort ${value.effort}`].filter(Boolean).join(" · "),
     badge: engine ? null : "assumed",
     argv,
     value,
@@ -968,9 +1003,10 @@ function applyEngineBlock(
   text: string,
   id: EngineId,
   model: string,
+  effort: string,
   locale: Locale = DEFAULT_LOCALE,
 ): string {
-  const block = renderEngineBlock(id, model);
+  const block = renderEngineBlock(id, model, effort, locale);
   const b = parseArrayBlock(text, ENGINE_ARR, locale);
   if (b.ok) return text.slice(0, b.start) + block + text.slice(b.end);
   // 모양이 다른 블록(`+=`·2개·주석·안 닫힘)은 종전대로 거부다. 없는 것만 삽입이다.
@@ -3065,6 +3101,7 @@ export async function createWorker(
   name: string,
   engine: EngineId = "claude",
   model: string = NO_MODEL,
+  effort: string = NO_EFFORT,
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<{ path: string; template: string }> {
   // 템플릿 확인이 먼저다 — workers/가 아예 없는 큐에서 `resolveWithin`의 ENOENT를 먼저 만나면
@@ -3105,7 +3142,7 @@ export async function createWorker(
   const file = await workerFile(root, name, locale);
   // 값 검증(모르는 엔진 · 셸 메타문자가 든 모델)은 `engineArgv`가 한다 — 이 경로도 신뢰
   // 경계고, 던지면 **파일을 만들기 전에** 멈춘다.
-  const next = applyEngineBlock(rewriteCwd(text, root, name), engine, model, locale);
+  const next = applyEngineBlock(rewriteCwd(text, root, name), engine, model, effort, locale);
   // O_EXCL. 있는 워커를 덮어쓰면 돌고 있는 cron 줄의 내용이 바뀐다.
   await writeFile(file, next, { flag: "wx" });
   await chmod(file, 0o755);

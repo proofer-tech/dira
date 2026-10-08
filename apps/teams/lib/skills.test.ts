@@ -1006,13 +1006,14 @@ test("엔진 — 왕복. 쓰는 바이트가 워커 파일과 같은 한 줄이�
   assert.deepEqual(await writePersonaEngine(personas, "eng", "codex", "gpt-5.5"), {
     engineId: "codex",
     model: "gpt-5.5",
+    effort: "",
   });
   assert.equal(readFileSync(file, "utf8"), `${renderEngineBlock("codex", "gpt-5.5")}\n`);
-  assert.deepEqual(await readPersonaEngine(personas, "eng"), { engineId: "codex", model: "gpt-5.5" });
+  assert.deepEqual(await readPersonaEngine(personas, "eng"), { engineId: "codex", model: "gpt-5.5", effort: "" });
 
   // 모델 없이 — NO_MODEL이면 플래그가 통째로 사라진다(카탈로그 규약, §4-3)
   await writePersonaEngine(personas, "eng", "claude");
-  assert.deepEqual(await readPersonaEngine(personas, "eng"), { engineId: "claude", model: "" });
+  assert.deepEqual(await readPersonaEngine(personas, "eng"), { engineId: "claude", model: "", effort: "" });
 });
 
 test("엔진 — null이면 파일을 지운다(= 지정 없음)", async () => {
@@ -1057,9 +1058,10 @@ test("엔진 — 커스텀 값을 force 없이 저장하면 PersonaEngineCustomE
   assert.equal(readFileSync(file, "utf8"), "TICKET_ENGINE=(mock-engine --flag --autocompact 150000)");
 
   // 사람이 확인하고 다시 부르면(force) 종전대로 덮어쓴다.
-  assert.deepEqual(await writePersonaEngine(personas, "custom-save", "claude", "opus", true), {
+  assert.deepEqual(await writePersonaEngine(personas, "custom-save", "claude", "opus", "", true), {
     engineId: "claude",
     model: "opus",
+    effort: "",
   });
   assert.equal(readFileSync(file, "utf8"), `${renderEngineBlock("claude", "opus")}\n`);
 });
@@ -1074,6 +1076,21 @@ test("엔진 — 모르는 엔진·위험한 모델은 거부하고 파일을 �
     /쓸 수 없는 문자/,
   );
   assert.equal(existsSync(path.join(personas, "bad-eng", "engine")), false);
+});
+
+test("엔진 — effort를 파일에 쓰고 되읽는다. 목록 밖이면 거부하고 파일이 안 바뀐다 (P467)", async () => {
+  const file = path.join(personas, "eng-effort", "engine");
+  assert.deepEqual(await writePersonaEngine(personas, "eng-effort", "claude", "sonnet", "medium"), {
+    engineId: "claude",
+    model: "sonnet",
+    effort: "medium",
+  });
+  const before = readFileSync(file, "utf8");
+  assert.equal(before, `${renderEngineBlock("claude", "sonnet", "medium")}\n`);
+  assert.match(before, /--model sonnet --effort medium --input-format .* --thinking-display summarized\)\n$/);
+  await assert.rejects(() => writePersonaEngine(personas, "eng-effort", "claude", "sonnet", "huge"), /effort/);
+  await assert.rejects(() => writePersonaEngine(personas, "eng-effort", "codex", "", "high"), /effort/);
+  assert.equal(readFileSync(file, "utf8"), before);
 });
 
 test("엔진 — 이름이 신뢰 경계다", async () => {

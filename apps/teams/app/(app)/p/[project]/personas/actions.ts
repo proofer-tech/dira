@@ -350,14 +350,18 @@ export async function savePersonaEngineAction(
   name: string,
   engine: string | null,
   model: string,
+  effort = "",
   force = false,
-): Promise<PersonaResult & { engine?: { engineId: EngineId; model: string } | null; custom?: string }> {
+): Promise<
+  PersonaResult & { engine?: { engineId: EngineId; model: string; effort: string } | null; custom?: string }
+> {
   try {
     const result = await writePersonaEngine(
       await personasDir(projectId),
       name,
       engine as EngineId | null,
       model,
+      effort,
       force,
     );
     revalidatePath(`/p/${projectId}/personas`);

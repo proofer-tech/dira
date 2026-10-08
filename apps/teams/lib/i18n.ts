@@ -1542,6 +1542,7 @@ export const ko: Record<string, string> = {
   "workers.context.lineChangedAfterInsert": "줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.",
 
   "workers.engine.unknownEnginePrefix": "모르는 엔진입니다:",
+  "workers.engine.invalidEffortPrefix": "effort는 claude의 low, medium, high, xhigh, max 중 하나여야 합니다:",
   "workers.engine.invalidModelCharsPrefix": "모델 이름에 쓸 수 없는 문자가 있습니다(영문·숫자·. _ : / - 만):",
   "workers.engine.noWorkerFileLine": "`. <레포>/tick.sh` 줄이 없습니다 — 이 파일은 워커가 아닙니다.",
 
@@ -3759,6 +3760,7 @@ export const en: Record<string, string> = {
   "workers.context.lineChangedAfterInsert": "The file doesn't match what was expected after the line went in. Nothing was written.",
 
   "workers.engine.unknownEnginePrefix": "Unknown engine:",
+  "workers.engine.invalidEffortPrefix": "effort must be one of claude's low, medium, high, xhigh, max:",
   "workers.engine.invalidModelCharsPrefix": "The model name has characters that aren't allowed (letters, digits, . _ : / - only):",
   "workers.engine.noWorkerFileLine": "No `. <repo>/tick.sh` line — this file isn't a worker.",
 

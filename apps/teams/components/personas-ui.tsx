@@ -137,7 +137,7 @@ import { cn } from "@/lib/utils";
 
 /** `engine` 사이드카가 읽어 낸 값 3종(`readPersonaEngine`과 같은 모양). `{ raw }`는 카탈로그와
  *  안 맞는 커스텀 인자다 — 사람이 손으로 얹은 꼬리를 "지정 없음"으로 뭉개지 않는다(`77ca2128`). */
-export type PersonaEngineValue = { engineId: string; model: string } | { raw: string } | null;
+export type PersonaEngineValue = { engineId: string; model: string; effort: string } | { raw: string } | null;
 
 /** 서버가 읽어 넘긴 한 항목. `body: null` = PROFILE.md가 없다(엔진의 WARN 케이스). */
 export type PersonaRow = {
@@ -2433,7 +2433,7 @@ const DispatchPolicySection = memo(function DispatchPolicySection({
    *  트리거의 값이 곧 사실이라 힌트가 없다(§23 §개정 표). */
   engineHint: string | null;
   onLimitSaved: (limit: number | null) => void;
-  onEngineSaved: (engine: { engineId: string; model: string } | null) => void;
+  onEngineSaved: (engine: { engineId: string; model: string; effort: string } | null) => void;
 }) {
   const t = useT();
   return (
@@ -2737,7 +2737,7 @@ function EngineField({
   engine: PersonaEngineValue;
   engines: EngineCatalog;
   modelPattern: string;
-  onSaved: (engine: { engineId: string; model: string } | null) => void;
+  onSaved: (engine: { engineId: string; model: string; effort: string } | null) => void;
 }) {
   const t = useT();
   const catalog = engine && "engineId" in engine ? engine : null;
@@ -2761,7 +2761,7 @@ function EngineField({
 
   const save = (id: string | null, model: string, force = false) =>
     start(async () => {
-      const r = await savePersonaEngineAction(projectId, name, id, model, force);
+      const r = await savePersonaEngineAction(projectId, name, id, model, catalog?.effort ?? "", force);
       if (r.ok) {
         onSaved(r.engine ?? null);
         setError(null);

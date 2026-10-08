@@ -171,6 +171,7 @@ test("engineName·parseEngineValue — 고정 경로를 쓰는 오늘의 페르�
   assert.deepStrictEqual(parseEngineValue(todaysPersonaValue), {
     engineId: "claude",
     model: "sonnet",
+    effort: "",
   });
   assert.strictEqual(engineName(todaysPersonaValue), "claude");
 });
@@ -1934,9 +1935,9 @@ test("createWorker — 엔진은 고른 값이다. 템플릿에서 딸려 오지
   const got = Object.fromEntries(
     (await listWorkers(root, [])).map((w) => [w.name, engineCell(w.engine).value]),
   );
-  assert.deepStrictEqual(got.w2, { engineId: "claude", model: "opus" });
-  assert.deepStrictEqual(got.w3, { engineId: "claude", model: NO_MODEL });
-  assert.deepStrictEqual(got.w1, { engineId: "codex", model: "gpt-5.5" }); // 템플릿은 그대로다
+  assert.deepStrictEqual(got.w2, { engineId: "claude", model: "opus", effort: "" });
+  assert.deepStrictEqual(got.w3, { engineId: "claude", model: NO_MODEL, effort: "" });
+  assert.deepStrictEqual(got.w1, { engineId: "codex", model: "gpt-5.5", effort: "" }); // 템플릿은 그대로다
 
   // 신뢰 경계: 값 검증은 파일을 만들기 **전에** 던진다 — 반쯤 만들어진 워커가 남지 않는다
   await assert.rejects(createWorker(root, "w4", "claude", "a b; rm -rf /"), /쓸 수 없는 문자/);
@@ -3242,7 +3243,10 @@ test("엔진 카탈로그의 claude = tick.sh의 실제 기본값이다 (눈으�
   // 카탈로그 토큰은 **파일에 적히는 모양**이라 `"{sid}"`처럼 따옴표와 `$HOME` 리터럴이 살아
   // 있다. bash가 벗기고 편 쪽에 맞춘다.
   assert.deepStrictEqual(
-    engineArgv("claude").map((t) => t.replace(/^"(.*)"$/, "$1").replace("$HOME", HOME_STUB)),
+    // tick.sh 기본 줄에는 `--thinking-display summarized`가 없다(P467) - 맨 뒤 두 토큰을 뺀다
+    engineArgv("claude")
+      .slice(0, -2)
+      .map((t) => t.replace(/^"(.*)"$/, "$1").replace("$HOME", HOME_STUB)),
     got,
   );
 });
@@ -3255,7 +3259,7 @@ test("renderEngineBlock ↔ parseEngineValue — 카탈로그 전 조합이 왕�
       assert.ok(parseContextBlock(block, "TICKET_ENGINE").ok, `${e.id}/${m}: 블록을 못 읽는다`);
       const value = engineArgv(e.id, m).join(" ");
       assert.strictEqual(block, `TICKET_ENGINE=(${value})`);
-      assert.deepStrictEqual(parseEngineValue(value), { engineId: e.id, model: m });
+      assert.deepStrictEqual(parseEngineValue(value), { engineId: e.id, model: m, effort: "" });
       // 엔진 이름 판정(§0-4 인증 배너)이 그대로 뜬다
       assert.strictEqual(engineName(value), e.id);
     }
@@ -3267,14 +3271,14 @@ test("renderEngineBlock ↔ parseEngineValue — 카탈로그 전 조합이 왕�
       '"$HOME/.config/dira/bin/dira-grok" -p "{prompt}" --session-id "{sid}"' +
         " --permission-mode bypassPermissions --output-format streaming-messages-json",
     ),
-    { engineId: "grok", model: NO_MODEL },
+    { engineId: "grok", model: NO_MODEL, effort: "" },
   );
   assert.deepStrictEqual(
     parseEngineValue(
       '"$HOME/.config/dira/bin/dira-grok" -p "{prompt}" --session-id "{sid}"' +
         " --permission-mode bypassPermissions -m grok-4.5 --output-format streaming-messages-json",
     ),
-    { engineId: "grok", model: "grok-4.5" },
+    { engineId: "grok", model: "grok-4.5", effort: "" },
   );
   // 손으로 쓴 커스텀은 null이다 — 토큰 하나만 달라도 카탈로그가 아니다
   assert.strictEqual(parseEngineValue("claude -p --dangerously-skip-permissions"), null);
@@ -3290,7 +3294,7 @@ test("engineCell — 엔진 열에 빈칸이 되는 경우가 없다 (§비주�
     label: "claude · opus",
     badge: null,
     argv: engineArgv("claude", "opus").join(" "),
-    value: { engineId: "claude", model: "opus" },
+    value: { engineId: "claude", model: "opus", effort: "" },
   });
   assert.strictEqual(engineCell(engineArgv("codex").join(" ")).label, "codex");
 
@@ -3300,8 +3304,8 @@ test("engineCell — 엔진 열에 빈칸이 되는 경우가 없다 (§비주�
   assert.deepStrictEqual(none, {
     label: "claude",
     badge: "assumed",
-    argv: engineArgv("claude").join(" "),
-    value: { engineId: "claude", model: NO_MODEL },
+    argv: engineArgv("claude").slice(0, -2).join(" "), // tick.sh의 실제 줄 - thinking 토큰 없음
+    value: { engineId: "claude", model: NO_MODEL, effort: "" },
   });
   // 같은 명령이 파일에 **적혀 있으면** 배지가 없다 — 이 한 비트가 셋째와 첫째를 가른다
   assert.strictEqual(engineCell(none.argv).badge, null);
@@ -3342,3 +3346,50 @@ test("personaEngineHint — 미지정 힌트 (§비주얼 §23 §개정 · 요�
   );
 });
 
+
+test("P467 - 엔진 칸이 claude로 읽히고 effort가 모델처럼 따로 있다", async () => {
+  const H = '"$HOME/.config/dira/bin/dira" -p --session-id "{sid}" --dangerously-skip-permissions';
+  const T = "--input-format stream-json --output-format stream-json --verbose";
+  const W = "--thinking-display summarized";
+  // 이 큐의 실제 엔진 줄 모양: w5-w6 / w1-w4 / developer / pm
+  const cases: [string, string][] = [
+    [`${H} --model sonnet ${T} ${W}`, "claude · sonnet"],
+    [`${H} ${T}`, "claude"],
+    [`${H} --model sonnet --effort medium ${T} ${W}`, "claude · sonnet · effort medium"],
+    [`${H} --model opus ${T} ${W}`, "claude · opus"],
+    [`${H} --effort high ${T} ${W}`, "claude · effort high"],
+    [`${H} --model sonnet ${T}`, "claude · sonnet"], // 토큰 없는 줄도 같은 값
+  ];
+  for (const [line, label] of cases) {
+    const c = engineCell(line);
+    assert.strictEqual(c.label, label);
+    assert.strictEqual(c.badge, null, line);
+  }
+  // personas/developer/engine과 글자로 같다
+  assert.strictEqual(
+    renderEngineBlock("claude", "sonnet", "medium"),
+    `TICKET_ENGINE=(${H} --model sonnet --effort medium ${T} ${W})`,
+  );
+  // 토큰 없는 줄은 같은 값, 렌더하면 맨 뒤에 붙는다
+  const bare = `${H} --model sonnet ${T}`;
+  assert.deepStrictEqual(parseEngineValue(bare), { engineId: "claude", model: "sonnet", effort: "" });
+  assert.ok(renderEngineBlock("claude", "sonnet").endsWith(`${T} ${W})`));
+  // 대입 없는 워커: assumed, argv에 --thinking-display 0번
+  const none = engineCell(null);
+  assert.strictEqual(none.label, "claude");
+  assert.strictEqual(none.badge, "assumed");
+  assert.ok(!none.argv.includes("--thinking-display"));
+  // 목록 밖 effort와 claude 밖 effort는 던진다
+  assert.throws(() => renderEngineBlock("claude", "", "huge"), /effort/);
+  for (const id of ["codex", "grok", "agy"] as const) {
+    assert.throws(() => renderEngineBlock(id, "", "high"), /effort/);
+  }
+  // 목록 밖 effort가 든 파일 줄은 커스텀이다
+  assert.strictEqual(parseEngineValue(`${H} --effort huge ${T} ${W}`), null);
+  // 워커 저장 경로: effort가 파일에 쓰이고, 거부하면 파일이 안 만들어진다
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\nTICKET_CWD=/tmp\n. tick.sh\n" });
+  const { path: f } = await createWorker(root, "w2", "claude", "sonnet", "high");
+  assert.match(readFileSync(f, "utf8"), /--model sonnet --effort high --input-format .* --thinking-display summarized\)/);
+  await assert.rejects(createWorker(root, "w3", "claude", "", "huge"), /effort/);
+  assert.strictEqual(existsSync(path.join(root, "workers", "w3.sh")), false);
+});

@@ -29,7 +29,7 @@ import { skillUploadError } from "./skill-upload-limit.ts";
 import { DEFAULT_LOCALE, t, wrap, type Locale } from "./i18n.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { personaFilePath } from "./projects.ts";
-import { type EngineId, NO_MODEL, parseEngineValue, renderEngineBlock } from "./workers.ts";
+import { type EngineId, NO_EFFORT, NO_MODEL, parseEngineValue, renderEngineBlock } from "./workers.ts";
 
 const execFileP = promisify(execFile);
 
@@ -735,7 +735,7 @@ export async function writePersonaLimit(dir: string, name: string, limit: number
 export async function readPersonaEngine(
   dir: string,
   name: string,
-): Promise<{ engineId: EngineId; model: string } | { raw: string } | null> {
+): Promise<{ engineId: EngineId; model: string; effort: string } | { raw: string } | null> {
   let file: string;
   try {
     file = await personaFilePath(dir, name, "engine");
@@ -774,8 +774,9 @@ export async function writePersonaEngine(
   name: string,
   id: EngineId | null,
   model: string = NO_MODEL,
+  effort: string = NO_EFFORT,
   force = false,
-): Promise<{ engineId: EngineId; model: string } | null> {
+): Promise<{ engineId: EngineId; model: string; effort: string } | null> {
   const file = await personaFilePath(dir, name, "engine");
   if (id === null) {
     await rm(file, { force: true });
@@ -786,9 +787,9 @@ export async function writePersonaEngine(
     if (current && "raw" in current) throw new PersonaEngineCustomError(current.raw);
   }
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, `${renderEngineBlock(id, model)}\n`, "utf8");
+  await writeFile(file, `${renderEngineBlock(id, model, effort)}\n`, "utf8");
   const back = await readPersonaEngine(dir, name);
-  if (!back || !("engineId" in back) || back.engineId !== id || back.model !== model) {
+  if (!back || !("engineId" in back) || back.engineId !== id || back.model !== model || back.effort !== effort) {
     await rm(file, { force: true });
     throw new Error(t("ko", "persona.engine.writeVerifyFailed"));
   }
