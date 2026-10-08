@@ -49,7 +49,7 @@
 # 기본 엔진은 스트리밍 입력이다 - 최초 프롬프트도 argv가 아니라 stdin(FIFO)으로 간다.
 # 그래서 기본값에 {prompt}가 없다(도는 세션에 같은 입구로 말을 거는 참견 자리).
 # TICKET_ENGINE=("$HOME/.config/dira/bin/dira" -p --session-id "{sid}" --dangerously-skip-permissions --input-format stream-json --output-format stream-json --verbose)
-# TICKET_ENGINE=(codex exec --json "{prompt}")
+# TICKET_ENGINE=("$HOME/.config/dira/bin/dira" codex exec --json "{prompt}")
 
 # --- 나머지 (아래 값이 기본값) ---
 # TICKET_INPROGRESS=".wip"               # 진행중 상태 파일명 접미사

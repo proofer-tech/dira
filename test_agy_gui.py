@@ -37,7 +37,7 @@ WORKER = """\
 TICKET_NAME="w1"
 TICKET_CWD="{tmp}"
 TICKET_PROMPT_FMT="please pick up %s"
-TICKET_ENGINE=("{engine}" "{{sid}}")
+TICKET_ENGINE=("{engine}" {extra}"{{sid}}")
 . "{tick}"
 """
 
@@ -121,13 +121,13 @@ try:
     launchctl = mkfile(os.path.join(home, ".local", "bin", "launchctl"), FAKE_LAUNCHCTL)
     os.chmod(launchctl, os.stat(launchctl).st_mode | stat.S_IEXEC)
 
-    dira_agy = mkfile(os.path.join(tmp, "bin", "dira-agy"), STUB_ENGINE)
+    dira_agy = mkfile(os.path.join(tmp, "bin", "dira"), STUB_ENGINE)
     os.chmod(dira_agy, os.stat(dira_agy).st_mode | stat.S_IEXEC)
     dira_claude = mkfile(os.path.join(tmp, "bin", "claude"), STUB_ENGINE)
     os.chmod(dira_claude, os.stat(dira_claude).st_mode | stat.S_IEXEC)
     # 실행 불가 dira-agy(PATH 폴백 재현용) - basename은 같은 dira-agy지만 실행 비트가 없어
     # tick.sh가 "${ENGSUF:-agy}"로 bare agy에 돌아간다(§27 계약 3 폴백).
-    dira_agy_noexec = mkfile(os.path.join(tmp, "bin2", "dira-agy"), STUB_ENGINE, 0o644)
+    dira_agy_noexec = mkfile(os.path.join(tmp, "bin2", "dira"), STUB_ENGINE, 0o644)
     engine_result = mkfile(os.path.join(tmp, "bin", "engine-result.sh"),
                             ENGINE_RESULT.format(tickets=tickets), 0o755)
 
@@ -138,12 +138,12 @@ try:
         mkfile(os.path.join(tickets, "cafe0001.md"),
                "---\nticket: cafe0001\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
 
-    def dryrun(engine_path, managername):
+    def dryrun(engine_path, managername, extra=""):
         queue()
         if os.path.exists(runlog):
             os.remove(runlog)
         w1 = mkfile(os.path.join(root, "workers", "w1.sh"),
-                    WORKER.format(tmp=tmp, tick=TICK, engine=engine_path), 0o755)
+                    WORKER.format(tmp=tmp, tick=TICK, engine=engine_path, extra=extra), 0o755)
         env = dict(os.environ, TICKET_LOCAL=local, HOME=home,
                    FAKE_MANAGERNAME=managername, FAKE_GUI_OK="1")
         r = subprocess.run([w1, "dryrun"], capture_output=True, text=True,
@@ -153,12 +153,12 @@ try:
         assert lines, "runner.log에 엔진: 줄이 없다\n" + r.stdout + r.stderr
         return lines[-1]
 
-    def tick_once(engine_path, extra_env):
+    def tick_once(engine_path, extra_env, extra=""):
         queue()
         if os.path.exists(runlog):
             os.remove(runlog)
         w1 = mkfile(os.path.join(root, "workers", "w1.sh"),
-                    WORKER.format(tmp=tmp, tick=TICK, engine=engine_path), 0o755)
+                    WORKER.format(tmp=tmp, tick=TICK, engine=engine_path, extra=extra), 0o755)
         env = dict(os.environ, TICKET_LOCAL=local, HOME=home, **extra_env)
         return subprocess.run([w1, "tick"], capture_output=True, text=True,
                                env=env, timeout=60)
@@ -171,14 +171,14 @@ try:
             return ""
 
     # --- ① Background + dira-agy -> 감싼다 ---
-    line = dryrun(dira_agy, "Background")
+    line = dryrun(dira_agy, "Background", '"agy" ')
     first = line.split()[0]
     assert os.path.basename(first) == "agy-gui.sh", \
         "Background + dira-agy인데 안 감쌌다: " + line
-    assert line.split()[1] == dira_agy, "원래 엔진 argv가 뒤에 안 남았다: " + line
+    assert line.split()[1:3] == [dira_agy, "agy"], "원래 엔진 argv가 뒤에 안 남았다: " + line
 
     # --- ② Aqua + dira-agy -> 안 감싼다 ---
-    line = dryrun(dira_agy, "Aqua")
+    line = dryrun(dira_agy, "Aqua", '"agy" ')
     first = line.split()[0]
     assert first == dira_agy, "Aqua인데 감쌌다: " + line
     assert "agy-gui.sh" not in line, "Aqua인데 agy-gui.sh가 섞였다: " + line
@@ -195,12 +195,12 @@ try:
     # --- ⑤ Background + dira-agy(실행 불가, PATH 폴백으로 bare agy가 됨) -> 그래도 감싼다 ---
     # ENGBN은 폴백 전 원래 basename(dira-agy)을 기억해 두는 값이라, 폴백으로 첫 칸이 bare
     # "agy"로 바뀌어도 감싸기 판정이 안 흔들려야 한다(재디스패치 복구 3이 고친 실버그).
-    line = dryrun(dira_agy_noexec, "Background")
+    line = dryrun(dira_agy_noexec, "Background", '"agy" ')
     parts = line.split()
     assert os.path.basename(parts[0]) == "agy-gui.sh", \
         "PATH 폴백(bare agy)인데 안 감쌌다: " + line
-    assert parts[1] == "agy", \
-        "폴백 뒤 원래 엔진 자리가 bare agy가 아니다: " + line
+    assert parts[1] == "agy" and parts[2] != "agy", \
+        "폴백 뒤 원래 엔진 자리가 bare agy 하나가 아니다: " + line
 
     print("OK - tick.sh Background 감싸기 판정 다섯 경우 통과")
 
