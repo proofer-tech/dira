@@ -8455,6 +8455,63 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P468. 고정 경로 실행 파일이 `dira` 하나고, 엔진은 그 안에서 고른다 (요구 `58d23974`, 왕복 0회)
+
+사람 요구: *"dira-codex, dira-agy, dira-grok 이면 각각 이름이 다르잖아요. 한 파일로 하고 내부에서
+라우팅하게 해주세요"*. 지금 `refresh_fixed_engine`은 `$HOME/.config/dira/bin`에 엔진마다 사본을 하나씩
+굽는다(claude는 `dira`, 나머지는 `dira-<엔진>`). 엔진 수정 27번째 승인이 이 모양을 골랐고, 그때
+포기한 것이 <이름이 글자 그대로 하나>였다. 이 블록이 그 하나를 되찾는다.
+
+27번째 승인이 디스패처(1(b))를 탈락시킨 근거는 *`bin/dira`가 진짜 엔진을 exec하는 순간 TCC가 보는
+것이 다시 버전 경로*라는 것이었다. 탈락한 원인은 exec 대상이 버전 경로라는 점이지 디스패처라는
+점이 아니다. 라우터가 exec하는 대상이 **고정 사본**이면 TCC가 보는 절대경로는 업데이트와 무관하게
+엔진마다 하나로 고정되고, 사람이 준 불변(*한 번 허용해두면 이후에 또 안 묻는다*)이 그대로 유지된다.
+판정과 경계는 `docs/design/결정-기록.md` §엔진 수정 마흔네 번째 승인에 있다. 사람이 정하지 않은
+것은 주도성 5로 pm이 정했다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| `bin`에 남는 것 | `$HOME/.config/dira/bin/dira` 한 파일과 `engines/` 디렉터리 하나다. `dira-codex` - `dira-grok` - `dira-agy`와 그 `.src` - `.stamp` - `.pkg.*` - `.old`는 굽기가 끝난 뒤 지운다 |
+| 고정 사본의 자리 | `$HOME/.config/dira/bin/engines/<엔진>` - `claude` `codex` `grok` `agy`. 굽는 방법(APFS 클론 - 복사 - codex 패키지 복제와 상대 심링크 - `.src` - `.stamp` 신선도 판정 - `*.tmp.*` 청소)은 지금 `refresh_fixed_engine` 그대로이고 자리만 옮긴다 |
+| 라우터 `bin/dira` | bash 스크립트다. 첫 인자가 `codex` - `grok` - `agy` 중 하나면 그 인자를 빼고 `engines/<그 엔진>`을 `exec`한다. 아니면 인자를 그대로 두고 `engines/claude`를 `exec`한다. 고를 사본이 없거나 실행할 수 없으면 PATH의 같은 이름(`claude` 등)을 `exec`한다. 엔진은 자식 프로세스가 아니라 `exec`로 띄운다 - 시그널 - 종료 코드 - pid가 지금과 같아야 reap이 안 갈린다 |
+| 라우터를 쓰는 자리 | `refresh_fixed_engine`이 매 tick 라우터 내용을 대조해 다르면 원자 교체로 다시 쓴다(`os.replace`). 라우터 본문은 `tick.sh` 안 상수 하나다 |
+| claude 줄 | 바뀌지 않는다 - `"$HOME/.config/dira/bin/dira" -p ...`는 첫 인자가 엔진 이름이 아니므로 claude로 간다. 이 큐의 워커 파일과 페르소나 `engine` 파일은 한 바이트도 안 고친다 |
+| 다른 엔진 줄 | `"$HOME/.config/dira/bin/dira" codex exec ...` - `dira grok -p ...` - `dira agy --output-format ...`. GUI 카탈로그 `ENGINES`의 codex - grok - agy argv 첫 토큰을 `dira`로 바꾸고 둘째 토큰에 엔진 이름을 넣는다. `worker.sh.example`도 같은 모양으로 적는다 |
+| 엔진 이름 판정 | `tick.sh`의 `ENGINE_NAME`은 한 자리에서만 낸다(§27 계약 3 유지). 첫 칸 basename이 `dira`이면 둘째 칸이 `codex` - `grok` - `agy`일 때 그 이름, 아니면 `claude`다. 쿨다운 파일 - 인증 게이트 - 토큰 회전 - 스킬 주입 - agy GUI 감싸기(`agy-gui.sh`)가 모두 이 값을 읽는다. agy 감싸기 조건은 basename `dira-agy` 대조를 버리고 `ENGINE_NAME=agy`를 읽는다 |
+| 옛 줄 호환 | 첫 칸이 `.../bin/dira-<x>`인 옛 줄은 디스패치 직전에 `.../bin/dira <x> ...`로 읽어 돈다. 파일은 다시 쓰지 않는다. GUI 대조(`parseEngineValue`)도 옛 줄을 새 줄과 같은 엔진 - 같은 모델로 읽어 `custom` 배지를 안 붙인다. 저장하면 새 모양으로 쓰인다 |
+| PATH 폴백 | 라우터를 못 만들었거나 실행할 수 없으면 종전대로 PATH의 엔진 이름으로 돈다. 이때 둘째 칸의 엔진 이름 토큰은 빼고 돈다 |
+
+#### 안 하는 것
+
+- TCC 항목을 엔진 넷에서 하나로 합치기. exec한 뒤 TCC가 보는 것은 사본 경로라서 엔진마다 한 번씩은 허용을 받는다. claude도 자리가 `bin/dira`에서 `bin/engines/claude`로 옮기므로 첫 디스패치 때 한 번 더 묻는다. 이후 업데이트에서는 묻지 않는다.
+- 자식 프로세스로 띄워 책임 프로세스를 라우터로 묶는 방식. 실측이 없고, bash 라우터의 책임 프로세스가 무엇으로 잡히는지 판정할 근거가 없다.
+- 이 큐의 워커 - 페르소나 파일 일괄 다시 쓰기. 지금 전원 claude라서 고칠 줄이 없다.
+- 매뉴얼. 매뉴얼에는 `dira-<엔진>` 이름이 나오지 않는다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P468-1 | 엔진 - `refresh_fixed_engine`이 `engines/` 사본과 라우터를 굽고 옛 `dira-*`를 지운다. `ENGINE_NAME` 판정 - 옛 줄 호환 - PATH 폴백 - agy 감싸기 조건. `worker.sh.example`. `test_fixed_engine_codex.py` - `test_agy_gui.py`를 새 모양으로 고치고 라우터 단언을 더한다 | developer | - | 미발행 |
+| P468-2 | GUI - `ENGINES` codex - grok - agy argv를 `dira <엔진>` 모양으로, `parseEngineValue`가 옛 `dira-<x>` 줄을 같은 값으로 읽는다. `workers.test.ts` | developer | P468-1 | 미발행 |
+| P468-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P468-2 | 미발행 |
+
+P468-2가 P468-1에 걸린 이유는 GUI가 새 모양을 먼저 쓰면, 엔진이 그 줄을 못 읽는 동안 저장한 codex - grok - agy 워커가 디스패치에서 깨지기 때문이다. 에픽을 안 연다.
+
+#### 수용조건
+
+- [ ] 임시 `HOME`에서 tick 한 번 뒤에 `ls "$HOME/.config/dira/bin"`이 `dira`와 `engines` 둘만 낸다. 미리 만들어 둔 `dira-codex` - `dira-grok` - `dira-agy` - `dira-agy.*.old` - `dira-codex.pkg.*`가 남지 않는다.
+- [ ] `ls "$HOME/.config/dira/bin/engines"`가 PATH에 있는 엔진만큼 `claude` `codex` `grok` `agy`를 낸다(PATH에 없는 엔진은 조용히 빠진다).
+- [ ] `"$HOME/.config/dira/bin/dira" --version`이 `claude --version`과 같은 줄을 내고, `dira codex --version`이 `codex --version`과 같은 줄을 낸다(grok - agy도 같다).
+- [ ] PATH의 claude 실체가 다른 버전으로 바뀐 뒤 tick 한 번이 지나도 `bin/engines/claude` 경로는 그대로이고 `--version`만 새 값이다.
+- [ ] 이 큐의 워커가 claude 티켓을 도는 동안 `ps -o comm= -p <세션 pid>`가 `.../bin/engines/claude`이고 `versions/`를 담지 않는다.
+- [ ] 첫 칸 `"$HOME/.config/dira/bin/dira"`, 둘째 칸 `codex`인 워커 파일 하나로 `dryrun`을 돌리면 쿨다운 파일 이름이 `cooldown-codex`다. 첫 칸이 옛 `.../bin/dira-codex`인 파일도 같은 결과다.
+- [ ] 둘째 칸이 `agy`인 워커가 Aqua가 아닌 세션에서 디스패치되면 argv 첫 칸이 `agy-gui.sh`다.
+- [ ] 이 큐의 `workers/*.sh`와 `personas/*/engine`이 `git diff`와 파일 바이트 둘 다로 안 바뀌고, GUI 엔진 칸에 `custom` 배지가 0개다.
+- [ ] GUI 페르소나 엔진 칸에서 codex를 골라 저장하면 `engine` 파일 첫 토큰이 `"$HOME/.config/dira/bin/dira"`이고 둘째 토큰이 `codex`다. 옛 `dira-codex` 줄로 된 파일은 `codex`로 뜨고 `custom` 배지가 없다.
+- [ ] `grep -l 'dira-codex\|dira-grok\|dira-agy' tick.sh worker.sh.example apps/teams/lib/workers.ts`가 옛 줄 호환 주석 - 코드 외에는 0건이다.
+- [ ] 고친 파일이 들어간 `test_*.py`(`test_fixed_engine_codex.py` - `test_agy_gui.py` 포함, `tick.sh`를 고쳤으므로 전량)와 `cd apps/teams && pnpm test` - `pnpm exec tsc --noEmit`이 통과한다.
+
 ### P467. 엔진 칸이 claude로 보이고, effort를 모델처럼 따로 고른다 (요구 `4bb7ffcc`, 왕복 0회)
 
 사람 요구: 워커와 페르소나는 `"$HOME/.config/dira/bin/dira"`를 실행하되, 엔진 칸에는 `custom`이
