@@ -24,6 +24,7 @@ const {
   getProject,
   isMultiTokenAllowed,
   listPersonas,
+  personaNames,
   listSquads,
   multiplayPath,
   multitokenPath,
@@ -1230,4 +1231,30 @@ test("숨김 조건 - 열린 티켓이 있거나 프로필이 생기면 다시 �
     all.map((e) => e.deletedAt.getTime()),
     all.map((e) => e.deletedAt.getTime()).sort((a, b) => b - a),
   );
+});
+
+test("빠지는 조건 - 휴지통 - 숨김 기록 + 디렉터리 없음 + 열린 티켓 0장, 두 목록이 같다 (P469)", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  const pdir = path.join(root, "personas");
+  mkdirSync(path.join(pdir, ".trash", "x@20261006-124635"), { recursive: true });
+  mkdirSync(path.join(pdir, "y"), { recursive: true }); // PROFILE.md 없는 디렉터리
+  writeFileSync(path.join(pdir, ".hidden"), "y 20261006-124635\nz 20261006-124635\n");
+  const tk = (persona: string, state: string) => ({ persona, state }) as never;
+  const both = async (tickets: never[]) => {
+    const a = await personaNames(pdir, tickets);
+    assert.deepStrictEqual((await listPersonas(pdir, tickets)).map((p) => p.name), a);
+    return a;
+  };
+  const done = [tk("x", "done"), tk("z", "done"), tk("plain", "done")];
+  assert.deepStrictEqual(await both(done), ["plain", "y"]); // 기록 없는 이름은 남고, 디렉터리 있는 y도 남는다
+  assert.deepStrictEqual(await both([...done, tk("x", "open")]), ["plain", "x", "y"]);
+  assert.deepStrictEqual(await both([...done, tk("z", "wip")]), ["plain", "y", "z"]);
+  const file = (h: string, persona: string, ext: string) =>
+    writeFileSync(path.join(root, "tickets", `${h}${ext}`), `---\nticket: ${h}\npersona: ${persona}\n---\n`);
+  file("aaaa1111", "x", ".done.md");
+  file("aaaa2222", "z", ".done.md");
+  file("aaaa3333", "plain", ".done.md");
+  assert.deepStrictEqual((await readSummary({ root })).personas, ["plain", "y"]);
+  file("aaaa4444", "x", ".md");
+  assert.deepStrictEqual((await readSummary({ root })).personas, ["plain", "x", "y"]);
 });

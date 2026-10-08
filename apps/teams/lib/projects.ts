@@ -940,11 +940,15 @@ const profilePath = (dir: string, name: string) => personaFilePath(dir, name, "P
  *  받아주지 않으므로(`persona_of`가 빈 문자열로 만든다) 절대 쓰이지 않는 디렉터리다. */
 export async function personaNames(dir: string, tickets: Ticket[] = []): Promise<string[]> {
   const ents = await readdir(dir, { withFileTypes: true }).catch(() => []);
-  const names = new Set(
-    ents.filter((e) => e.isDirectory() && NAME_RE.test(e.name)).map((e) => e.name),
-  );
+  const dirs = new Set(ents.filter((e) => e.isDirectory() && NAME_RE.test(e.name)).map((e) => e.name));
+  const names = new Set(dirs);
   for (const t of tickets) if (t.persona) names.add(t.persona); // 프로필 없는 이름 = 엔진의 WARN
-  return [...names].sort();
+  if (names.size === dirs.size) return [...names].sort(); // 티켓만 부르는 이름이 없으면 뺄 것도 없다
+  // 빠지는 조건(P469): 휴지통 항목 또는 `.hidden` 기록 + 디렉터리 없음 + 열린 참조 티켓 0장.
+  // `readSummary`와 `listPersonas`가 둘 다 이 함수를 지난다 - 판정은 이 한 자리다.
+  const gone = new Set([...(await readHidden(dir)).keys(), ...(await listTrash(dir, "persona")).map((e) => e.name)]);
+  const live = new Set(tickets.filter((t) => t.state !== "done" && t.persona).map((t) => t.persona));
+  return [...names].filter((n) => dirs.has(n) || live.has(n) || !gone.has(n)).sort();
 }
 
 // ── 숨김 목록 (DESIGN.md P465) ──────────────────────────────────────────────
@@ -991,11 +995,10 @@ export async function unhidePersona(dir: string, name: string): Promise<void> {
 }
 
 /** 위 이름들 + 각각의 `PROFILE.md`·참조 수. **파일을 이름 수만큼 읽는다** — 목록 행처럼 이름만
- *  필요한 화면은 `personaNames`를 부른다(§0 표 · §성능 예산). 숨김 조건 셋(기록 있음 · 프로필 없음 ·
- *  열린 참조 티켓 0장)이 모두 참인 이름은 뺀다(P465). */
+ *  필요한 화면은 `personaNames`를 부른다(§0 표 · §성능 예산). 빠지는 조건(휴지통 - 숨김 기록 ·
+ *  디렉터리 없음 · 열린 참조 티켓 0장)은 `personaNames`가 판정한다(P465 - P469). */
 export async function listPersonas(dir: string, tickets: Ticket[] = []): Promise<Persona[]> {
-  const hidden = await readHidden(dir);
-  const all = await Promise.all(
+  return Promise.all(
     (await personaNames(dir, tickets)).map(async (name) => {
       const file = path.join(dir, name, "PROFILE.md");
       const refs = tickets.filter((t) => t.persona === name);
@@ -1011,7 +1014,6 @@ export async function listPersonas(dir: string, tickets: Ticket[] = []): Promise
       };
     }),
   );
-  return all.filter((p) => !(hidden.has(p.name) && p.body === null && p.refs.open + p.refs.wip === 0));
 }
 
 /** 저장. 없으면 만든다 — 목록에 "프로필 없음"으로 뜬 이름을 그 자리에서 채우게 하려고
