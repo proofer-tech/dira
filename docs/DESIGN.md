@@ -8496,10 +8496,10 @@ effort 선택지는 claude에만 둔다.
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P467-1 | 서버 - claude 템플릿에 `--thinking-display summarized`와 effort 자리, 대조-렌더-`engineCell` label, 워커 - 페르소나 저장 액션의 `effort` 인자 + 테스트 | developer | - | 대기 |
-| P467-2 | 화면 - 워커 엔진 팝오버와 페르소나 엔진 칸의 `effort` 선택 + i18n(ko-en) | developer | P467-1 | 대기 |
-| P467-3 | 문서 - 매뉴얼 `worker.md` - `personas.md`(ko-en)가 effort를 고르는 법과 엔진 칸 표시를 알려 준다 | writer | P467-2 | 대기 |
-| P467-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P467-2 | 대기 |
+| P467-1 | 서버 - claude 템플릿에 `--thinking-display summarized`와 effort 자리, 대조-렌더-`engineCell` label, 워커 - 페르소나 저장 액션의 `effort` 인자 + 테스트 | developer | - | 발행 `7dfb8f94` |
+| P467-2 | 화면 - 워커 엔진 팝오버와 페르소나 엔진 칸의 `effort` 선택 + i18n(ko-en) | developer | P467-1 | 발행 `a25cefb8` |
+| P467-3 | 문서 - 매뉴얼 `worker.md` - `personas.md`(ko-en)가 effort를 고르는 법과 엔진 칸 표시를 알려 준다 | writer | P467-2 | 발행 `3f956491` |
+| P467-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P467-2 | 발행 `845d8a59` |
 
 `deps`가 P467-1에 걸린 이유는 화면이 넘길 `effort` 인자와 값의 모양이 그 티켓에서 생기기 때문이다.
 매뉴얼과 QA는 화면이 있어야 확인할 대상이 생긴다. 에픽을 안 연다.
