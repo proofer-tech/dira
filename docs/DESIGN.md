@@ -8493,8 +8493,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P468-1 | 엔진 - `refresh_fixed_engine`이 `engines/` 사본과 라우터를 굽고 옛 `dira-*`를 지운다. `ENGINE_NAME` 판정 - 옛 줄 호환 - PATH 폴백 - agy 감싸기 조건. `worker.sh.example`. `test_fixed_engine_codex.py` - `test_agy_gui.py`를 새 모양으로 고치고 라우터 단언을 더한다 | developer | - | 발행 `fc34db50` |
-| P468-2 | GUI - `ENGINES` codex - grok - agy argv를 `dira <엔진>` 모양으로, `parseEngineValue`가 옛 `dira-<x>` 줄을 같은 값으로 읽는다. `workers.test.ts` | developer | P468-1 | 발행 `fc34db50` |
-| P468-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P468-2 | 발행 `0c905eda` |
+| P468-2 | GUI - `ENGINES` codex - grok - agy argv를 `dira <엔진>` 모양으로, `parseEngineValue`가 옛 `dira-<x>` 줄을 같은 값으로 읽는다. `workers.test.ts` | developer | P468-1 | 발행 `0c905eda` |
+| P468-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P468-2 | 발행 `69e34bf8` |
 
 P468-2가 P468-1에 걸린 이유는 GUI가 새 모양을 먼저 쓰면, 엔진이 그 줄을 못 읽는 동안 저장한 codex - grok - agy 워커가 디스패치에서 깨지기 때문이다. 에픽을 안 연다.
 
