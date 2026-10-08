@@ -750,6 +750,8 @@ export const ENGINES: readonly {
   flag: string;
   /** 목록. 맨 앞은 항상 `NO_MODEL`이고, 여기 없는 이름은 화면의 `직접 입력`이 받는다 */
   models: readonly string[];
+  /** effort 선택지. claude만 있고 없으면 화면에 effort 칸이 안 뜬다(P467) */
+  efforts?: readonly string[];
   /** argv 토큰 **고정 문자열**. `{prompt}`·`{sid}`는 글자 그대로다(tick.sh:236이 치환한다) */
   argv: readonly string[];
 }[] = [
@@ -758,6 +760,7 @@ export const ENGINES: readonly {
     flag: "--model",
     // 별칭은 정의상 최신을 가리키는 고정 포인터라 풀네임과 달리 안 낡는다(§4-3 근거 2).
     models: [NO_MODEL, "opus", "sonnet", "fable", "haiku"],
+    efforts: CLAUDE_EFFORTS,
     // 엔진 수정 27번째 계약 2·5: PATH의 이름이 아니라 고정 경로다 — 사람이 화면에서 한 번
     // 고르면 §24가 구운 하드링크를 되돌리던 회귀(GUI가 §24를 매번 되돌리고 있었다)를 막는다.
     argv: [

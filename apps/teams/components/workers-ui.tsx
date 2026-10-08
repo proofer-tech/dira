@@ -355,7 +355,7 @@ export function CreateWorkerButton({
             <Button
               disabled={pending || !name.trim()}
               onClick={() =>
-                start(async () => setResult(await createWorkerAction(projectId, name, undefined, undefined, locale)))
+                start(async () => setResult(await createWorkerAction(projectId, name, undefined, undefined, undefined, locale)))
               }
             >
               {pending ? t("common.creating") : t("common.create")}

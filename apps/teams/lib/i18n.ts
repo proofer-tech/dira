@@ -1159,6 +1159,8 @@ export const ko: Record<string, string> = {
   "persona.engine.unset": "지정 없음",
   "persona.engine.modelLabel": "모델",
   "persona.engine.noModel": "모델 지정 안 함",
+  "persona.engine.effortLabel": "effort",
+  "persona.engine.noEffort": "지정 안 함",
   "persona.engine.customOption": "직접 입력…",
   "persona.engine.customModelAriaLabel": "모델 이름 직접 입력",
   "persona.engine.modelNamePlaceholder": "모델 이름",
@@ -3648,6 +3650,8 @@ export const en: Record<string, string> = {
   "persona.engine.unset": "Not set",
   "persona.engine.modelLabel": "Model",
   "persona.engine.noModel": "No model",
+  "persona.engine.effortLabel": "effort",
+  "persona.engine.noEffort": "Not set",
   // `MODEL_RE`가 `…`를 안 받아 모델 이름과 겹칠 수 없다 - 한국어가 한글로 얻던 것을 여기서는
   // 말줄임표가 준다(`ko`의 `직접 입력…`과 같은 장치).
   "persona.engine.customOption": "Type one in…",

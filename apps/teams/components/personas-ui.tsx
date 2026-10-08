@@ -2583,12 +2583,12 @@ function LimitField({
  *  `node:fs`를 물어 클라이언트가 import할 수 없고, 목록을 여기 다시 적으면 화면이 파일에
  *  안 들어가는 이름을 그리게 된다(두 벌은 반드시 갈린다). §23 ①이 워커 행에 쓰던 것과 같은
  *  카탈로그를 이 화면이 옮겨 받는다(대상만 워커 파일 → `personas/<이름>/engine`으로 갈린다). */
-export type EngineCatalog = readonly { id: string; models: readonly string[] }[];
+export type EngineCatalog = readonly { id: string; models: readonly string[]; efforts?: readonly string[] }[];
 
 /** 고른 값. `모델 지정 안 함`은 **빈 문자열**이고(`NO_MODEL`) 라벨은 화면이 붙인다(§23 ③).
  *  `custom`이면 `model`은 사람이 친 글자다 — 목록 값과 같은 자리를 쓴다. `engine`이 빈 문자열이면
  *  **지정 없음**이다(엔진 Select가 비어 있는 채로 열린다 — §23 ③ 손으로 쓴 값과 같은 표현). */
-type EnginePick = { engine: string; model: string; custom?: boolean };
+type EnginePick = { engine: string; model: string; effort?: string; custom?: boolean };
 
 /** 지금 값으로 만들 수 있는가. 직접 입력만 걸린다 — 빈 값(`+`가 0글자를 안 받는다)과 셸
  *  메타문자가 여기서 막힌다. **즉시 거절일 뿐이고** 진짜 검증은 서버가 다시 한다(§23 ④). */
@@ -2618,6 +2618,7 @@ function EngineFields({
   // 봐야 한다 — 저장되는 상태는 `custom: true` 플래그뿐이라 이 문자열 자체는 안 남는다.
   const CUSTOM = t("persona.engine.customOption");
   const models = engines.find((e) => e.id === value.engine)?.models ?? [];
+  const efforts = engines.find((e) => e.id === value.engine)?.efforts;
   // 고른 엔진에 **없는** 기능들(§4-3 · §23 ⑤ 예고 줄). 판정도 이름도 `lib/urls.ts` 한 자리다.
   const missing = engineMissing(value.engine, locale);
   // 빈 칸은 아직 거절이 아니다 — `직접 입력…`을 고르자마자 빨간 줄이 뜨면 사람이 무엇을
@@ -2630,7 +2631,7 @@ function EngineFields({
         <Label htmlFor={`${idPrefix}-engine`}>{t("persona.engine.label")}</Label>
         {/* 엔진을 바꾸면 모델은 `모델 지정 안 함`으로 돌아간다 — 목록이 엔진에 딸려 있어서
             `opus`를 든 채 codex로 넘어가면 화면이 없는 조합을 보여준다(§23 ③). */}
-        <Select value={value.engine} onValueChange={(v) => onChange({ engine: String(v), model: "" })}>
+        <Select value={value.engine} onValueChange={(v) => onChange({ engine: String(v), model: "", effort: "" })}>
           <SelectTrigger id={`${idPrefix}-engine`} className="w-full font-mono">
             {/* 비는 자리는 **지정 없음**이다 — 그 페르소나는 워커 자신의 엔진을 쓴다 */}
             <SelectValue placeholder={t("persona.engine.unset")} />
@@ -2652,8 +2653,8 @@ function EngineFields({
           onValueChange={(v) =>
             onChange(
               String(v) === CUSTOM
-                ? { engine: value.engine, model: "", custom: true }
-                : { engine: value.engine, model: String(v) },
+                ? { engine: value.engine, model: "", effort: value.effort, custom: true }
+                : { engine: value.engine, model: String(v), effort: value.effort },
             )
           }
         >
@@ -2688,7 +2689,7 @@ function EngineFields({
               placeholder={t("persona.engine.modelNamePlaceholder")}
               value={value.model}
               onChange={(e) =>
-                onChange({ engine: value.engine, model: e.target.value, custom: true })
+                onChange({ engine: value.engine, model: e.target.value, effort: value.effort, custom: true })
               }
             />
             {bad ? (
@@ -2706,6 +2707,32 @@ function EngineFields({
           </>
         )}
       </div>
+
+      {/* effort는 모델처럼 따로 고른다. claude에만 있고 엔진을 바꾸면 사라진다(P467). 값은 argv
+          토큰이라 mono, `지정 안 함`은 문장이라 sans다. 빈 문자열이 지정 안 함이다. */}
+      {efforts && (
+        <div className="space-y-2">
+          <Label htmlFor={`${idPrefix}-effort`}>{t("persona.engine.effortLabel")}</Label>
+          <Select
+            value={value.effort ?? ""}
+            onValueChange={(v) => onChange({ ...value, effort: String(v) })}
+          >
+            <SelectTrigger
+              id={`${idPrefix}-effort`}
+              className={cn("w-full", value.effort && "font-mono")}
+            >
+              <SelectValue>{(v) => (v ? String(v) : t("persona.engine.noEffort"))}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {["", ...efforts].map((x) => (
+                <SelectItem key={x} value={x} className={x ? "font-mono" : undefined}>
+                  {x || t("persona.engine.noEffort")}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* 예고 — 고장이 아니라 기능 집합이 다르다(§23 ⑤). 새 그릇을 만들지 않는다.
           **없는 기능을 세어서 문장을 만든다**(§4-3 개정): codex는 둘 다 없고 grok은 참견만
@@ -2742,7 +2769,11 @@ function EngineField({
   const t = useT();
   const catalog = engine && "engineId" in engine ? engine : null;
   const custom = engine && "raw" in engine ? engine.raw : null;
-  const initial = (): EnginePick => ({ engine: catalog?.engineId ?? "", model: catalog?.model ?? "" });
+  const initial = (): EnginePick => ({
+    engine: catalog?.engineId ?? "",
+    model: catalog?.model ?? "",
+    effort: catalog?.effort ?? "",
+  });
   const [open, setOpen] = useState(false);
   const [pick, setPick] = useState<EnginePick>(initial);
   const [error, setError] = useState<string | null>(null);
@@ -2754,14 +2785,14 @@ function EngineField({
   const labelId = `persona-engine-${name}-label`;
   const triggerId = `persona-engine-${name}-value`;
   const display = catalog
-    ? catalog.model
-      ? `${catalog.engineId} · ${catalog.model}`
-      : catalog.engineId
+    ? [catalog.engineId, catalog.model, catalog.effort && `effort ${catalog.effort}`]
+        .filter(Boolean)
+        .join(" · ")
     : (custom ?? t("persona.engine.unset"));
 
-  const save = (id: string | null, model: string, force = false) =>
+  const save = (id: string | null, model: string, effort: string, force = false) =>
     start(async () => {
-      const r = await savePersonaEngineAction(projectId, name, id, model, catalog?.effort ?? "", force);
+      const r = await savePersonaEngineAction(projectId, name, id, model, effort, force);
       if (r.ok) {
         onSaved(r.engine ?? null);
         setError(null);
@@ -2825,7 +2856,7 @@ function EngineField({
                 variant="ghost"
                 size="sm"
                 disabled={pending}
-                onClick={() => save(null, "")}
+                onClick={() => save(null, "", "")}
               >
                 {t("persona.engine.unsetAction")}
               </Button>
@@ -2835,7 +2866,7 @@ function EngineField({
               className="ml-auto aria-disabled:opacity-50"
               aria-disabled={!ready}
               onClick={() => {
-                if (ready) save(pick.engine, pick.model);
+                if (ready) save(pick.engine, pick.model, pick.effort ?? "");
               }}
             >
               {pending ? t("common.saving") : t("common.save")}
@@ -2857,7 +2888,7 @@ function EngineField({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
-            <AlertDialogAction disabled={pending} onClick={() => save(pick.engine, pick.model, true)}>
+            <AlertDialogAction disabled={pending} onClick={() => save(pick.engine, pick.model, pick.effort ?? "", true)}>
               {t("persona.engine.overwriteConfirm")}
             </AlertDialogAction>
           </AlertDialogFooter>
