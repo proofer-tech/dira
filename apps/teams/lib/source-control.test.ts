@@ -8,6 +8,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   commitStaged,
+  gitResult,
+  UNLISTED_UPSTREAM,
   listCheckouts,
   listRemoteBranches,
   parseStatus,
@@ -170,6 +172,30 @@ test("listRemoteBranches · setUpstream — origin/HEAD은 후보에서 빠지�
   // origin 리모트의 URL은 안 바뀐다(§11-3 결정 3).
   const url = execFileSync("git", ["-C", repo, "remote", "get-url", "origin"], { encoding: "utf8" }).trim();
   assert.strictEqual(url, upstream);
+});
+
+test("gitResult — 스테이지 실패는 git 사유가 error에 들고, 성공이면 error가 null이다 (§0-25 결정 9)", async () => {
+  const repo = makeRepo();
+  writeFileSync(path.join(repo, "b.txt"), "new\n");
+  const ok = await gitResult(repo, () => stageFile(repo, "b.txt"));
+  assert.strictEqual(ok.error, null);
+  assert.strictEqual(ok.status?.staged.length, 1);
+
+  writeFileSync(path.join(repo, ".git", "index.lock"), "");
+  writeFileSync(path.join(repo, "c.txt"), "new\n");
+  const stage = await gitResult(repo, () => stageFile(repo, "c.txt"));
+  assert.match(stage.error ?? "", /index\.lock/);
+  const unstage = await gitResult(repo, () => unstageFile(repo, "b.txt"));
+  assert.match(unstage.error ?? "", /index\.lock/);
+  const all = await gitResult(repo, () => stageAll(repo));
+  assert.match(all.error ?? "", /index\.lock/);
+  assert.ok(stage.status, "실패해도 status는 다시 읽어 낸다");
+});
+
+test("gitResult — 목록 밖 업스트림은 git 사유가 아니라 UNLISTED_UPSTREAM 표지다", async () => {
+  const repo = makeRepo();
+  const r = await gitResult(repo, () => setUpstream(repo, "origin/nope"));
+  assert.strictEqual(r.error, UNLISTED_UPSTREAM);
 });
 
 // ── commitStaged · pushCheckout · pullCheckout (§11-3 결정 4) ──────────────────

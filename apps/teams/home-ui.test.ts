@@ -215,9 +215,9 @@ const commitB = s.indexOf("\n  };", commitA);
 assert.ok(commitA >= 0 && commitB > commitA, "home-ui.tsx: commit 구간을 못 찾았다");
 const commitBody = s.slice(commitA, commitB);
 
-test("commit() — setMessage(\"\")가 runResult의 onSuccess로만 들어간다 — 실패해도 무조건 지우던 종전 버그가 없다", () => {
+test("commit() — setMessage(\"\")가 run의 onSuccess로만 들어간다 — 실패해도 무조건 지우던 종전 버그가 없다", () => {
   assert.ok(
-    commitBody.includes('() => setMessage("")'),
+    commitBody.includes('const clear = () => setMessage("")'),
     "commit()이 성공 콜백 자리에서 메시지를 안 비운다",
   );
   const unconditionalClear = /\n\s*setMessage\(""\);\s*\n/.test(commitBody);

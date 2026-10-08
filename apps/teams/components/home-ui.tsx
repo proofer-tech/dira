@@ -2134,13 +2134,12 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState<ScmBusy>(null);
   const [message, setMessage] = useState("");
-  const [actionError, setActionError] = useState<string | null>(null);
   // 커밋 - push - pull이 막 끝난 자리에만 뜨는 한 줄(§11-18 결정 3) — 다음 액션을 누르거나
-  // 체크아웃을 갈면 지운다. `actionError`와 배타적이라 항상 둘 중 하나만 쥔다.
+  // 체크아웃을 갈면 지운다. 오류 카드(`opError`)와 배타적이라 항상 둘 중 하나만 쥔다.
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  // pull만 §0-25의 A/S를 지난다(결정 7-8) — 오류 카드를 먼저 그리고 그 위에서 A/S가 도는 순서를
-  // 이 훅이 쥔다. `pullError`가 곧 그 카드의 내용이고 `fixing`이 뜨는 동안 카드는 안 사라진다.
-  const { error: pullError, fixing, setError: setPullError, run: runSelfHealRetry } = useSelfHealRetry();
+  // 일곱 조작이 전부 §0-25의 A/S를 지난다(결정 7-9) — 오류 카드를 먼저 그리고 그 위에서 A/S가 도는
+  // 순서를 이 훅이 쥔다. `opError`가 곧 그 카드 한 장의 내용이고 `fixing`이 뜨는 동안 카드는 안 사라진다.
+  const { error: opError, fixing, setError: setOpError, run: runSelfHealRetry } = useSelfHealRetry();
 
   const loadStatus = async (id: string) => {
     setFailed(false);
@@ -2185,74 +2184,62 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
   // 다른 체크아웃을 고르면 앞 status를 즉시 비운다(§11-18 결정 1) — 그 자리가 스켈레톤으로 간다.
   const pick = (id: string) => {
     setSelected(id);
-    setActionError(null);
     setSuccessMsg(null);
-    setPullError(null);
+    setOpError(null);
     setMessage("");
     setStatus(null);
     void loadStatus(id);
   };
 
-  // 스테이지 - 해제 - 전부 스테이지 - 업스트림 넷이 같은 모양이다: 서버가 최신 status를 그대로
-  // 돌려주므로 화면은 그 값 하나로 갈아 끼운다(폴링 응답과 같은 왕복 한 벌). `busy`는 겹쳐 누르는
-  // 클릭을 막는다 — git 프로세스 둘이 같은 인덱스를 동시에 건드리는 자리를 안 만든다.
-  const run = (fn: () => Promise<GitStatus | null>, kind: ScmBusy) => {
+  // 소스 컨트롤 조작 일곱이 전부 이 하나를 지난다(§0-25 결정 9): 서버가 `ScmResult`를 돌려주면 status를
+  // 갈아 끼우고, git 사유는 오류 카드 한 장으로 먼저 그리고 그 위에서 A/S가 한 번 돈다. 입력 검증
+  // 표지(`EMPTY_MESSAGE` - `UNLISTED_UPSTREAM`)는 git 실패가 아니라 A/S에 안 넘기고 같은 카드에 문구만
+  // 그린다 - 두 경우는 A/S 호출 전에 `errorOf`에서 갈린다. `NO_PUSH_SH`는 화면 문구로 옮긴 문장을
+  // A/S에 넘긴다. `busy`는 A/S가 도는 동안도 유지돼 겹쳐 누르는 클릭을 막는다.
+  const run = (
+    fn: () => Promise<ScmResult>,
+    kind: NonNullable<ScmBusy>,
+    surface: string,
+    successKey?: string,
+    onSuccess?: () => void,
+  ) => {
     if (!selected || busy) return;
-    setActionError(null);
+    const checkoutId = selected;
     setSuccessMsg(null);
     setBusy(kind);
-    void fn()
-      .then((next) => next && setStatus(next))
-      .finally(() => setBusy(null));
-  };
-
-  // 커밋 - push 둘이 같은 모양이다: `status`를 실행 직후 값으로 갈고 `error`를 그대로 낸다
-  // (§11-3 결정 4 — "실패 사유가 그대로 뜬다"). `NO_PUSH_SH`만 화면 낱말로 옮긴다. 성공하면
-  // `successKey` 한 줄이 뜬다(§11-18 결정 3) — 실패하면 안 뜨고 `onSuccess`도 안 돈다.
-  const runResult = (fn: () => Promise<ScmResult>, kind: ScmBusy, successKey: string, onSuccess?: () => void) => {
-    if (!selected || busy) return;
-    setActionError(null);
-    setSuccessMsg(null);
-    setBusy(kind);
-    void fn()
+    const show = (e: string) =>
+      e === "EMPTY_MESSAGE"
+        ? t("home.scm.commitEmpty")
+        : e === "UNLISTED_UPSTREAM"
+          ? t("home.scm.upstreamUnlisted")
+          : e === "NO_PUSH_SH"
+            ? t("home.scm.noPushSh")
+            : e;
+    const local = (e: string | null) => e === "EMPTY_MESSAGE" || e === "UNLISTED_UPSTREAM";
+    void runSelfHealRetry(fn, (r) => (r.error && !local(r.error) ? show(r.error) : null), {
+      projectId: project,
+      surface,
+      checkoutId,
+    })
       .then((r) => {
         if (r.status) setStatus(r.status);
-        if (r.error) {
-          setActionError(r.error === "EMPTY_MESSAGE" ? t("home.scm.commitEmpty") : r.error);
-        } else {
-          setSuccessMsg(t(successKey));
+        if (r.error && local(r.error)) setOpError(show(r.error));
+        else if (!r.error) {
+          if (successKey) setSuccessMsg(t(successKey));
           onSuccess?.();
         }
       })
       .finally(() => setBusy(null));
   };
 
-  // pull만 따로 둔다 - 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 A/S가 한 번 돈다(결정 7-8).
-  // 왕복이 둘이다: `scmPull` 첫 시도가 실패로 정착한 뒤에야 `runSelfHeal`을 부르고, `ticketed`가
-  // 아니면 `scmPull`을 한 번 더 부른다 - 그 순서를 `useSelfHealRetry`가 쥔다.
-  const runPull = () => {
-    if (!selected || busy) return;
-    const checkoutId = selected;
-    setActionError(null);
-    setSuccessMsg(null);
-    setBusy("pull");
-    void runSelfHealRetry(
-      () => scmPull(project, checkoutId),
-      (r) => r.error,
-      { projectId: project, surface: "home.sourceControl.pull", checkoutId },
-    )
-      .then((r) => {
-        if (r.status) setStatus(r.status);
-        if (!r.error) setSuccessMsg(t("home.scm.pulled"));
-      })
-      .finally(() => setBusy(null));
-  };
+  const runPull = () => selected && run(() => scmPull(project, selected), "pull", "home.sourceControl.pull", "home.scm.pulled");
 
   // 메시지 칸의 `Cmd/Ctrl+Enter`가 커밋 버튼과 같다(§11-18 결정 3). 메시지는 성공했을 때만 비운다
   // — 실패하면 적은 글이 그대로 남는다.
   const commit = () => {
     if (busy || !status || status.staged.length === 0 || !message.trim() || !selected) return;
-    runResult(() => scmCommit(project, selected, message), "commit", "home.scm.committed", () => setMessage(""));
+    const clear = () => setMessage("");
+    run(() => scmCommit(project, selected, message), "commit", "home.sourceControl.commit", "home.scm.committed", clear);
   };
 
   if (!checkouts) {
@@ -2349,17 +2336,15 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   {status.behind}
                 </span>
               </div>
-              {pullError ? (
+              {opError && (
                 <div className="px-2">
                   <SelfHealAlert
                     title={t("home.scm.pullFailedTitle")}
-                    error={pullError}
+                    error={opError}
                     fixing={fixing}
                     fixingText={t("home.scm.pullFixing")}
                   />
                 </div>
-              ) : (
-                actionError && <p className="px-2 text-xs text-destructive">{actionError}</p>
               )}
               <div className="flex gap-2 px-2">
                 {selectedCheckout && (selectedCheckout.isRoot || selectedCheckout.pushSh) ? (
@@ -2368,7 +2353,7 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                     size="xs"
                     className="flex-1"
                     aria-disabled={busy !== null || undefined}
-                    onClick={() => runResult(() => scmPush(project, selected), "push", "home.scm.pushed")}
+                    onClick={() => run(() => scmPush(project, selected), "push", "home.sourceControl.push", "home.scm.pushed")}
                   >
                     {busy === "push" ? t("home.scm.pushing") : t("home.scm.push")}
                   </Button>
@@ -2385,13 +2370,13 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   {busy === "pull" ? t("home.scm.pulling") : t("home.scm.pull")}
                 </Button>
               </div>
-              {!pullError && !actionError && successMsg && (
+              {!opError && successMsg && (
                 <p className="px-2 text-xs text-muted-foreground">{successMsg}</p>
               )}
               <div className="px-2">
                 <Select
                   value={status.upstream ?? ""}
-                  onValueChange={(branch) => branch && run(() => scmSetUpstream(project, selected!, branch), "upstream")}
+                  onValueChange={(branch) => branch && run(() => scmSetUpstream(project, selected!, branch), "upstream", "home.sourceControl.upstream")}
                   disabled={busy !== null}
                 >
                   <SelectTrigger size="sm" className="w-full">
@@ -2414,7 +2399,7 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                   aria-disabled={busy !== null || status.unstaged.length === 0 || undefined}
                   onClick={() => {
                     if (busy || status.unstaged.length === 0) return;
-                    run(() => scmStageAll(project, selected), "stageAll");
+                    run(() => scmStageAll(project, selected), "stageAll", "home.sourceControl.stageAll");
                   }}
                 >
                   {busy === "stageAll" ? t("home.scm.stagingAll") : t("home.scm.stageAll")}
@@ -2431,7 +2416,7 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                       key={`s-${f.path}`}
                       file={f}
                       title={t("home.scm.unstageTitle")}
-                      onClick={() => run(() => scmUnstage(project, selected, f.path), { path: f.path })}
+                      onClick={() => run(() => scmUnstage(project, selected, f.path), { path: f.path }, "home.sourceControl.unstage")}
                       moving={isBusyPath(busy, f.path)}
                     />
                   ))}
@@ -2448,7 +2433,7 @@ function ScmSurface({ project, projectName }: { project: string; projectName: st
                       key={`u-${f.path}`}
                       file={f}
                       title={t("home.scm.stageTitle")}
-                      onClick={() => run(() => scmStage(project, selected, f.path), { path: f.path })}
+                      onClick={() => run(() => scmStage(project, selected, f.path), { path: f.path }, "home.sourceControl.stage")}
                       moving={isBusyPath(busy, f.path)}
                     />
                   ))}

@@ -59,6 +59,7 @@ import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/pro
 import { killPty, openPty, ptyStatuses, restartPty, type PtyStatus } from "@/lib/pty";
 import {
   commitStaged,
+  gitResult,
   listCheckouts,
   listRemoteBranches,
   pullCheckout,
@@ -501,45 +502,33 @@ export async function releaseLinkAction(projectId: string): Promise<Run> {
   return releaseLinkBrowser(project.root);
 }
 
-/** 파일 하나를 스테이지 - 해제한다(§11-3 결정 2). 성공 여부와 무관하게 최신 status를 다시
- *  읽어 낸다 — 화면이 그 값 하나로 목록을 갈아 끼운다(폴링 응답들과 같은 왕복 한 벌). */
-export async function scmStage(projectId: string, checkoutId: string, filePath: string): Promise<GitStatus | null> {
-  try {
-    const project = await required(projectId);
-    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
-    if (!checkout) return null;
-    await stageFile(checkout.path, filePath);
-    return await readStatus(checkout.path);
-  } catch {
-    return null;
-  }
+/** 스테이지 - 해제 - 전부 스테이지(§11-3 결정 2) - 실패를 삼키지 않고 `ScmResult`로 돌려준다
+ *  (§0-25 결정 9). 실패해도 최신 status를 다시 읽어 낸다 - 화면이 그 값으로 목록을 갈아 끼운다. */
+export async function scmStage(projectId: string, checkoutId: string, filePath: string): Promise<ScmResult> {
+  return scmGit(projectId, checkoutId, (cwd) => stageFile(cwd, filePath));
 }
 
-export async function scmUnstage(
+export async function scmUnstage(projectId: string, checkoutId: string, filePath: string): Promise<ScmResult> {
+  return scmGit(projectId, checkoutId, (cwd) => unstageFile(cwd, filePath));
+}
+
+export async function scmStageAll(projectId: string, checkoutId: string): Promise<ScmResult> {
+  return scmGit(projectId, checkoutId, (cwd) => stageAll(cwd));
+}
+
+/** 넷이 같이 쓰는 몸통 - 체크아웃을 신뢰 경계 안에서 풀고(`resolveCheckout`) `gitResult`에 맡긴다. */
+async function scmGit(
   projectId: string,
   checkoutId: string,
-  filePath: string,
-): Promise<GitStatus | null> {
+  op: (cwd: string) => Promise<boolean | void>,
+): Promise<ScmResult> {
   try {
     const project = await required(projectId);
     const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
-    if (!checkout) return null;
-    await unstageFile(checkout.path, filePath);
-    return await readStatus(checkout.path);
-  } catch {
-    return null;
-  }
-}
-
-export async function scmStageAll(projectId: string, checkoutId: string): Promise<GitStatus | null> {
-  try {
-    const project = await required(projectId);
-    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
-    if (!checkout) return null;
-    await stageAll(checkout.path);
-    return await readStatus(checkout.path);
-  } catch {
-    return null;
+    if (!checkout) return { status: null, error: null };
+    return await gitResult(checkout.path, () => op(checkout.path));
+  } catch (e) {
+    return { status: null, error: (e as Error).message };
   }
 }
 
@@ -556,23 +545,11 @@ export async function scmRemoteBranches(projectId: string, checkoutId: string): 
 
 /** 업스트림을 바꾼다. `setUpstream`이 `branch`를 그 체크아웃의 원격 추적 브랜치 목록에서 다시
  *  확인한다 — 화면이 준 값을 그대로 믿지 않는다(신뢰 경계). */
-export async function scmSetUpstream(
-  projectId: string,
-  checkoutId: string,
-  branch: string,
-): Promise<GitStatus | null> {
-  try {
-    const project = await required(projectId);
-    const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
-    if (!checkout) return null;
-    await setUpstream(checkout.path, branch);
-    return await readStatus(checkout.path);
-  } catch {
-    return null;
-  }
+export async function scmSetUpstream(projectId: string, checkoutId: string, branch: string): Promise<ScmResult> {
+  return scmGit(projectId, checkoutId, (cwd) => setUpstream(cwd, branch));
 }
 
-/** 커밋 - push - pull 셋의 공통 응답 모양(§11-3 결정 4) — `status`는 실행 직후 다시 읽은 값
+/** 소스 컨트롤 조작 일곱의 공통 응답 모양(§11-3 결정 4) — `status`는 실행 직후 다시 읽은 값
  *  (성공이든 실패든, 화면이 항상 최신을 본다), `error`는 실패 사유 그대로다(git 자신의 문구 —
  *  화면이 다시 번역하지 않는다). `NO_PUSH_SH`만 예외 — 사유가 아니라 sentinel이라 화면이
  *  자기 낱말로 보여준다(아래 `scmPush`). */

@@ -152,6 +152,27 @@ export async function stageAll(cwd: string): Promise<void> {
   await git(cwd, ["add", "-A"]);
 }
 
+/** 스테이지 넷 - 업스트림의 공통 꼴(§0-25 결정 9) - 조작이 던지면 git 사유를 `error`에 담고, 실행 직후
+ *  status를 다시 읽어 같이 돌려준다. `false`를 돌려주는 조작(`setUpstream`이 목록 밖 브랜치를 거절한
+ *  경우)은 git이 아니라 신뢰 경계 거절이라 `UNLISTED_UPSTREAM` 표지로 가른다 - 화면이 A/S에 안 넘긴다. */
+export const UNLISTED_UPSTREAM = "UNLISTED_UPSTREAM";
+export async function gitResult(
+  cwd: string,
+  op: () => Promise<boolean | void>,
+): Promise<{ status: GitStatus | null; error: string | null }> {
+  let error: string | null = null;
+  try {
+    if ((await op()) === false) error = UNLISTED_UPSTREAM;
+  } catch (e) {
+    error = reasonOf(e);
+  }
+  try {
+    return { status: await readStatus(cwd), error };
+  } catch (e) {
+    return { status: null, error: error ?? reasonOf(e) };
+  }
+}
+
 /** 업스트림 후보 목록(§11-3 결정 3). `origin/HEAD` 같은 symref는 뺀다 — 그건 사람이 고를
  *  추적 대상이 아니라 리모트의 기본 브랜치를 가리키는 별칭이다. 기본 출력(`-> ` 화살표가 붙는
  *  그 한 줄)으로 거른다 — `--format=%(refname:short)`는 그 줄을 `origin/HEAD`가 아니라
