@@ -214,6 +214,12 @@ Press the `Engine` value and you pick one of `claude` · `codex` · `grok` · `a
 within it. A model name not on the list goes in through `Type one in…`. Leave it at `Not set` and
 it uses the engine of whichever worker took the ticket.
 
+Pick `claude` and one more field, `effort`, appears right under the model. You pick one of
+`Not set` · `low` · `medium` · `high` · `xhigh` · `max`. Other engines have no such field, and
+switching the engine removes it and empties what you picked. After you save, the engine value
+reads like `claude · sonnet · effort medium`: engine, model, effort, in that order, with
+whatever you left unset dropped.
+
 `Limit` in the same section is how many in-progress tickets that persona may hold at once. Add
 workers and that one persona still does not go past that number.
 

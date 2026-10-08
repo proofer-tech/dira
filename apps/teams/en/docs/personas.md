@@ -247,6 +247,13 @@ under the value tells you what the workers are using now. Pick here and whicheve
 it up, this persona runs on that engine and that model. Press `Clear` and it goes back to the
 worker's side.
 
+Only when the engine is `claude` is there an `effort` field under the model. It sets how hard
+the session thinks before it answers, and the default is `Not set`, which leaves it to claude's
+own default. Pick one of the five steps from `low` to `max` and the engine value turns into
+something like `claude · sonnet · effort medium`. With no model it reads `claude · effort medium`,
+and with no effort it reads `claude · sonnet`. codex, grok, and agy have no such field, and
+switching the engine to one of them empties the effort you picked.
+
 Both write the file the moment you save, but what they catch is **the next ticket selection
 onward**.
 
