@@ -8511,9 +8511,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P470-1 | GUI - 소스 컨트롤의 commit - push - 스테이지 넷 - 업스트림이 pull과 같은 A/S 왕복을 지난다 + 넷의 액션이 `ScmResult`를 돌려준다 + 테스트 | developer | - | 발행 |
-| P470-2 | GUI - 워커 생성의 워크트리 단계 실패가 A/S를 지나고 남은 단계를 한 번 더 실행한다 + 테스트 | developer | - | 발행 |
-| P470-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P470-1, P470-2 | 발행 |
+| P470-1 | GUI - 소스 컨트롤의 commit - push - 스테이지 넷 - 업스트림이 pull과 같은 A/S 왕복을 지난다 + 넷의 액션이 `ScmResult`를 돌려준다 + 테스트 | developer | - | 발행 `4e077300` |
+| P470-2 | GUI - 워커 생성의 워크트리 단계 실패가 A/S를 지나고 남은 단계를 한 번 더 실행한다 + 테스트 | developer | - | 발행 `17302adf` |
+| P470-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P470-1, P470-2 | 발행 `b2dc9444` |
 
 P470-1과 P470-2는 고치는 파일이 겹치지 않아(`home-ui.tsx` - `home/actions.ts` 대 `workers-ui.tsx` -
 `workers/actions.ts`) 서로 안 엮는다. 에픽을 안 연다.
