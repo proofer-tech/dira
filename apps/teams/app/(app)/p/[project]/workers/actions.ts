@@ -7,10 +7,13 @@
  *
  *  검증과 문구는 `lib/`에 있다. 이 파일이 하는 일은 **프로젝트 id → 등록된 root** 해석과
  *  Error를 직렬화 가능한 결과로 바꾸는 것뿐이다(클라이언트로 Error는 못 넘어간다). */
+import { stat } from "node:fs/promises";
+import nodePath from "node:path";
 import { revalidatePath } from "next/cache";
 import { track } from "@/lib/analytics";
 import { runWorker } from "@/lib/engine";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
+import { isName } from "@/lib/paths";
 import { getProject, validateOntologyInput } from "@/lib/projects";
 import {
   applyCommonSource,
@@ -121,6 +124,26 @@ export async function createWorkerAction(
     };
   } catch (e) {
     return fail(e);
+  }
+}
+
+/** 워크트리 단계 실패가 A/S를 지난 뒤 남은 단계를 한 번 더 실행한다(§P470, `workers.create.worktree`).
+ *  `prepareWorktree`가 이미 있는 트리 - 풀리는 심링크를 건너뛰는 멱등이라 끝난 단계는 다시 안
+ *  돈다. 이름은 클라이언트 입력이라 **방금 만든 워커 파일이 있는 이름만** 받는다 - 임의 이름으로
+ *  트리를 만들지 못하게 한다. */
+export async function retryWorktreeAction(
+  projectId: string,
+  name: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<{ ok: boolean; message?: string; worktree?: WorktreePrep }> {
+  try {
+    const root = await rootOf(projectId, locale);
+    if (!isName(name) || !(await stat(nodePath.join(root, "workers", `${name}.sh`)).then(() => true, () => false))) {
+      return { ok: false, message: `${t(locale, "workers.create.invalidNamePrefix")} ${name}` };
+    }
+    return { ok: true, worktree: await prepareWorktree(root, name, locale) };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
   }
 }
 

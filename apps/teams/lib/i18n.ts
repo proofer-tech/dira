@@ -1660,6 +1660,7 @@ export const ko: Record<string, string> = {
   "workers.create.worktreeDoneLabel": "작업 디렉터리",
   "workers.create.worktreeDoneMiddle": "를 만들고, 그 안의",
   "workers.create.worktreeDoneSuffix": "가 이 프로젝트를 가리키는 것까지 확인했습니다.",
+  "workers.create.worktreeFixing": "워크트리 오류를 고치는 중",
   "workers.create.worktreeFailedHint":
     "작업 디렉터리가 없으면 이 워커는 티켓을 물었다 되돌립니다 — 남은 명령을 셸에서 실행하세요",
   "workers.create.nameLabel": "이름",
@@ -3876,6 +3877,7 @@ export const en: Record<string, string> = {
   "workers.create.worktreeDoneLabel": "Working directory",
   "workers.create.worktreeDoneMiddle": " is created, and the",
   "workers.create.worktreeDoneSuffix": " inside it points at this project — checked.",
+  "workers.create.worktreeFixing": "Fixing the worktree error",
   "workers.create.worktreeFailedHint":
     "Without a working directory this worker claims a ticket and puts it right back — run the rest of the commands in your shell",
   "workers.create.nameLabel": "Name",

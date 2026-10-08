@@ -137,3 +137,10 @@ test("ContextRejection 호출 두 곳 모두 missing을 넘긴다", () => {
     assert.match(call, /missing=\{[^}]+\.missing\}/, `missing을 안 넘기는 호출: ${call}`);
   }
 });
+
+// P470-2 - 워크트리 단계 실패가 A/S를 지난다. 레포가 아니라 건너뛴 경우와 성공은 안 부른다.
+test("워커 생성의 워크트리 실패가 useSelfHealRetry를 지난다", () => {
+  assert.match(s, /surface: "workers\.create\.worktree"/);
+  assert.match(s, /made\.worktree\.skipped \|\| made\.worktree\.done === 3\) return;/);
+  assert.match(s, /retryWorktreeAction\(projectId, made\.name, locale\)/);
+});

@@ -25,6 +25,7 @@ import {
   applySelfHealAction,
   copyContextAction,
   createWorkerAction,
+  retryWorktreeAction,
   deleteWorkerAction,
   reapWorkerAction,
   registerWorkerAction,
@@ -240,6 +241,7 @@ export function CreateWorkerButton({
   const [name, setName] = useState(defaultName);
   const [result, setResult] = useState<WorkerActionResult | null>(null);
   const [pending, start] = useTransition();
+  const heal = useSelfHealRetry();
   const created = result?.created;
 
   return (
@@ -298,9 +300,12 @@ export function CreateWorkerButton({
                 </p>
               ) : (
                 <>
-                  <Failure
+                  {/* 오류 카드가 먼저 뜨고 그 위에서 A/S가 돈다(P470) - `heal.run`이 순서를 쥔다 */}
+                  <SelfHealAlert
                     title={t(WORKTREE_STEP_KEYS[created.worktree.done])}
-                    message={created.worktree.reason ?? ""}
+                    error={created.worktree.reason ?? ""}
+                    fixing={heal.fixing}
+                    fixingText={t("workers.create.worktreeFixing")}
                   />
                   <p className="text-sm font-medium">{t("workers.create.worktreeFailedHint")}</p>
                   {created.worktree.rest.map((cmd) => (
@@ -355,7 +360,27 @@ export function CreateWorkerButton({
             <Button
               disabled={pending || !name.trim()}
               onClick={() =>
-                start(async () => setResult(await createWorkerAction(projectId, name, undefined, undefined, undefined, locale)))
+                start(async () => {
+                  const res = await createWorkerAction(projectId, name, undefined, undefined, undefined, locale);
+                  setResult(res); // 실패 단계 카드가 먼저 뜬다
+                  const made = res.created;
+                  // 레포가 아니라 건너뛴 경우(skipped)와 성공(done 3)은 A/S를 안 부른다
+                  if (!made || made.worktree.skipped || made.worktree.done === 3) return;
+                  let first = true;
+                  const last = await heal.run(
+                    async () => {
+                      if (first) {
+                        first = false;
+                        return made.worktree; // 첫 시도는 생성 액션이 이미 했다
+                      }
+                      const r = await retryWorktreeAction(projectId, made.name, locale);
+                      return r.worktree ?? { ...made.worktree, reason: r.message ?? "" };
+                    },
+                    (w) => (w.done === 3 || w.skipped ? null : (w.reason ?? "")),
+                    { projectId, surface: "workers.create.worktree" },
+                  );
+                  setResult({ ...res, created: { ...made, worktree: last } }); // 재시도가 실패하면 카드와 남은 명령 그대로
+                })
               }
             >
               {pending ? t("common.creating") : t("common.create")}

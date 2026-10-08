@@ -2042,6 +2042,18 @@ test("prepareWorktree — .dira가 이미 있으면 EEXIST로 멈추고 되돌�
   assert.throws(() => statSync(path.join(tree, ".dira", ".dira"))); // 미끼 큐를 안 만들었다
 });
 
+test("prepareWorktree - done 1에서 멈춘 뒤 다시 실행하면 끝난 1단계(add)를 반복하지 않고 남은 단계만 한다 (P470-2)", async () => {
+  const { root } = makeRepo({ ".dira/keep": "tracked\n" });
+  const tree = path.join(root, "worktrees", "w2");
+  const first = await prepareWorktree(root, "w2");
+  assert.strictEqual(first.done, 1);
+  writeFileSync(path.join(tree, "marker.txt"), "트리를 다시 만들면 사라진다\n");
+  rmSync(path.join(tree, ".dira"), { recursive: true, force: true }); // A/S가 막힌 자리를 치웠다
+  assert.deepStrictEqual(await prepareWorktree(root, "w2"), { dir: tree, done: 3, rest: [] });
+  assert.strictEqual(readFileSync(path.join(tree, "marker.txt"), "utf8").length > 0, true); // add를 안 다시 돌렸다
+  assert.strictEqual(realpathSync(path.join(tree, ".dira")), realpathSync(root));
+});
+
 test("prepareWorktree — dirname(root)가 git 레포가 아니면 실패가 아니라 정상 종료다", async () => {
   const base = mkdtempSync(path.join(tmpdir(), "fst-norepo-"));
   tmps.push(base);
