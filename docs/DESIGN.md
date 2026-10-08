@@ -8488,8 +8488,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P469-1 | 서버 - 빠지는 조건 함수 하나를 `lib/projects.ts`에 두고 `readSummary` - `listPersonas`가 부른다 + `projects.test.ts`에 휴지통 항목 - 숨김 - 열린 티켓 - 디렉터리 있음 네 경우 | developer | - | 발행 `-` |
-| P469-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P469-1 | 발행 `-` |
+| P469-1 | 서버 - 빠지는 조건 함수 하나를 `lib/projects.ts`에 두고 `readSummary` - `listPersonas`가 부른다 + `projects.test.ts`에 휴지통 항목 - 숨김 - 열린 티켓 - 디렉터리 있음 네 경우 | developer | - | 발행 `972c27d1` |
+| P469-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P469-1 | 발행 `f6748a0d` |
 
 P469-2가 P469-1에 걸린 이유는 판정할 동작이 그 티켓에서 생기기 때문이다. 에픽을 안 연다.
 
