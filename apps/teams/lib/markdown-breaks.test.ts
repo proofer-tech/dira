@@ -37,3 +37,21 @@ test("목록·인용 안쪽까지 들어간다(`all`)", () => {
   assert.match(html("- 가\n  나", "all"), /가<br\/>\n나/);
   assert.match(html("> 가\n> 나", "all"), /가<br\/>\n나/);
 });
+
+const SP = '<div aria-hidden="true" data-blank-lines="2" style="height:2lh;margin:0"></div>';
+
+test("연속 빈 줄 n개(n >= 2)는 n - 1줄 높이의 간격 요소를 더한다", () => {
+  for (const mode of ["untilHeading", "all"] as const) {
+    assert.equal(html("가\n\n\n\n나", mode), `<p>가</p>\n${SP}\n<p>나</p>`);
+  }
+  assert.match(html("가\n\n\n나", "all"), /data-blank-lines="1" style="height:1lh/);
+});
+
+test("빈 줄 하나, 첫 `##` 뒤, breaks 없음, 펜스 안은 지금과 같다", () => {
+  assert.equal(html("가\n\n나", "all"), "<p>가</p>\n<p>나</p>");
+  const after = "가\n\n## 질문\n\n나\n\n\n\n다";
+  assert.equal(html(after, "untilHeading"), html(after));
+  assert.equal(html("가\n\n\n\n나"), "<p>가</p>\n<p>나</p>");
+  const fence = "```\n가\n\n\n\n나\n```";
+  assert.equal(html(fence, "all"), html(fence));
+});

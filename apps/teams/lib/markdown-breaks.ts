@@ -17,7 +17,13 @@
  *  펜스는 `code`(자식 없는 `value`)라 이 walker가 지나간다. */
 
 /** mdast의 부분집합. `unist` 타입을 안 가져오는 이유는 하나 — 여기서 보는 것이 이 셋뿐이다. */
-type Node = { type: string; value?: string; children?: Node[] };
+type Node = {
+  type: string;
+  value?: string;
+  children?: Node[];
+  position?: { start: { line: number }; end: { line: number } };
+  data?: unknown;
+};
 
 /** 줄 끝·다음 줄 앞의 공백은 버린다(`remark-breaks`와 같은 판정). 남기면 `<br>` 옆에 빈칸이 뜬다. */
 const NL = /[\t ]*\r?\n[\t ]*/;
@@ -37,12 +43,40 @@ function harden(node: Node): void {
   });
 }
 
+/** 이웃한 루트 블록 사이의 원문 빈 줄이 n개(n >= 2)면 빈 줄 n - 1개 높이(`lh`)의 간격 요소를 끼운다.
+ *  판정은 문자열이 아니라 블록의 원문 줄 위치(mdast position)다 — 펜스 안의 빈 줄은 한 블록 안이라
+ *  틈으로 안 잡힌다. ponytail: 이웃 문단의 기본 마진은 그대로라 간격이 마진 하나만큼 더 크다. */
+function spacer(prev: Node, next: Node): Node[] {
+  if (!prev.position || !next.position) return [];
+  const blank = next.position.start.line - prev.position.end.line - 1;
+  if (blank < 2) return [];
+  return [
+    {
+      type: "paragraph",
+      children: [],
+      data: {
+        hName: "div",
+        hProperties: { ariaHidden: "true", "data-blank-lines": String(blank - 1), style: `height:${blank - 1}lh;margin:0` },
+      },
+    },
+  ];
+}
+
 /** `all`은 트리 전부, `untilHeading`은 루트의 첫 `heading` 직전까지. */
 export function softBreaks(mode: "all" | "untilHeading") {
   return () => (tree: unknown) => {
-    for (const child of (tree as Node).children ?? []) {
-      if (mode === "untilHeading" && child.type === "heading") return;
-      harden(child);
+    const root = tree as Node;
+    const out: Node[] = [];
+    let stopped = false;
+    for (const child of root.children ?? []) {
+      if (mode === "untilHeading" && child.type === "heading") stopped = true;
+      if (!stopped) {
+        const prev = out[out.length - 1];
+        if (prev) out.push(...spacer(prev, child));
+        harden(child);
+      }
+      out.push(child);
     }
+    root.children = out;
   };
 }
