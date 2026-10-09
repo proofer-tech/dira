@@ -59,6 +59,9 @@ const nextConfig: NextConfig = {
   // 아무리 키워도 이 관문이 먼저 자른다(10MB 초과 시 "Request body exceeded 10MB ... Only the
   // first 10MB will be available" 경고 후 `installSkillAction`이 `Unexpected end of form`으로
   // 죽는다 — 실측 `ec687d52`). 두 한도를 같은 값으로 묶는다.
+  // dev 서버가 서버 액션 호출을 `이름(인자) in 259ms`로 찍는다 - 환경변수 값 같은 인자가 터미널
+  // 로그에 평문으로 남는다(요구 `04daa929`, 티켓 `9d0293f4`). 호출 로그는 값 말고 쓸 곳이 없어 끈다.
+  logging: { serverFunctions: false },
   experimental: { serverActions: { bodySizeLimit: BODY_SIZE_LIMIT }, proxyClientMaxBodySize: BODY_SIZE_LIMIT },
   // 다중 토큰 잠금(DESIGN.md §0-13 §잠금) — `isMultiToken()`이 읽는 값을 빌드 시각에 상수로
   // 인라인한다. 런타임 env로 두면 배포한 dmg가 잠금 분기를 품은 채 나가 env 하나로 열린다.
