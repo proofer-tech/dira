@@ -5,6 +5,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFile
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
+  findCodexTranscript,
   findGrokTranscript,
   findStream,
   findTranscript,
@@ -1045,4 +1046,109 @@ test("lastActivity — grok을 안 주면(기본 false) claude 레코드 모양�
   const withExplicitFalse = await lastActivity(f, false);
   assert.deepEqual(withDefault, withExplicitFalse);
   assert.equal(withDefault?.label, "Read");
+});
+
+// ---------- codex - rollout 연결과 변환 (요구 `c490f58f`, 티켓 5ec520e7) ----------
+
+const CX_ROOT = path.join(tmp, "codex", "sessions");
+const CX_PROJECT = "/p/proj";
+const CX_SID_A = "aaaaaaaa-0000-4000-8000-00000000000a";
+const CX_SID_B = "bbbbbbbb-0000-4000-8000-00000000000b";
+mkdirSync(path.join(CX_ROOT, "2026", "10", "09"), { recursive: true });
+let cxN = 0;
+/** rollout 파일 한 벌. `reads`는 도구 결과로 읽힌 `[해시, sid]` 목록이다 */
+const cxFile = (cwd: string, reads: [string, string][], quoted = "") => {
+  const f = path.join(CX_ROOT, "2026", "10", "09", `rollout-2026-10-09T00-00-0${cxN++}-fixture.jsonl`);
+  const out = (text: string) =>
+    rec({
+      timestamp: "2026-10-09T13:00:01.000Z",
+      type: "response_item",
+      payload: { type: "custom_tool_call_output", id: `o${cxN}${text.length}`, call_id: "c", output: [{ type: "input_text", text }] },
+    });
+  writeFileSync(
+    f,
+    rec({ timestamp: "2026-10-09T13:00:00.000Z", type: "session_meta", payload: { cwd } }) +
+      // 첫 프롬프트에 인용된 UUID는 근거가 아니다
+      rec({ timestamp: "2026-10-09T13:00:00.500Z", type: "response_item", payload: { type: "message", id: "m0", role: "user", content: [{ type: "input_text", text: `session_id: ${quoted}` }] } }) +
+      reads.map(([h, s]) => out(JSON.stringify({ output: `---\nticket: ${h}\ntitle: t\nsession_id: ${s}\n---\n\n## Goal\nx` }))).join(""),
+  );
+  return f;
+};
+const cxA = cxFile(`${CX_PROJECT}/.dira/worktrees/w1`, [["11111111", CX_SID_A]], CX_SID_B);
+const cxB = cxFile(`${CX_PROJECT}/.dira/worktrees/w2`, [["22222222", CX_SID_B]], CX_SID_A);
+cxFile(`${CX_PROJECT}/.dira/worktrees/w3`, [["33333333", CX_SID_A]]); // 해시가 다른 티켓
+
+test("findCodexTranscript - 티켓 읽기 결과의 fm 쌍만 근거다. 인용 UUID는 자기 파일이 아니다", async () => {
+  assert.equal(await findCodexTranscript(CX_SID_A, "11111111", CX_PROJECT, CX_ROOT), cxA);
+  assert.equal(await findCodexTranscript(CX_SID_B, "22222222", CX_PROJECT, CX_ROOT), cxB);
+  assert.equal(await findCodexTranscript(CX_SID_A, "22222222", CX_PROJECT, CX_ROOT), null); // 해시와 sid가 안 맞는 쌍
+});
+
+test("findCodexTranscript - 다른 프로젝트의 cwd, 잘못된 UUID와 해시, 없는 저장소는 null", async () => {
+  assert.equal(await findCodexTranscript(CX_SID_A, "11111111", "/p/other", CX_ROOT), null);
+  assert.equal(await findCodexTranscript("../x", "11111111", CX_PROJECT, CX_ROOT), null);
+  assert.equal(await findCodexTranscript(CX_SID_A, "../../etc", CX_PROJECT, CX_ROOT), null);
+  assert.equal(await findCodexTranscript(CX_SID_A, "11111111", CX_PROJECT, path.join(tmp, "없음")), null);
+});
+
+test("findCodexTranscript - 나중에 생긴 파일도 찾고, 같은 쌍을 읽은 파일이 둘이면 고르지 않는다", async () => {
+  const sid = "cccccccc-0000-4000-8000-00000000000c";
+  assert.equal(await findCodexTranscript(sid, "44444444", CX_PROJECT, CX_ROOT), null); // 아직 없다
+  const f1 = cxFile(`${CX_PROJECT}/.dira/worktrees/w1`, [["44444444", sid]]);
+  assert.equal(await findCodexTranscript(sid, "44444444", CX_PROJECT, CX_ROOT), f1); // 음성이 안 굳는다
+  rmSync(f1); // 파일 소실 - 캐시를 믿지 않고 재탐색한다
+  assert.equal(await findCodexTranscript(sid, "44444444", CX_PROJECT, CX_ROOT), null);
+  const sid2 = "eeeeeeee-0000-4000-8000-00000000000e";
+  cxFile(`${CX_PROJECT}/.dira/worktrees/w1`, [["66666666", sid2]]);
+  cxFile(`${CX_PROJECT}/.dira/worktrees/w2`, [["66666666", sid2]]);
+  assert.equal(await findCodexTranscript(sid2, "66666666", CX_PROJECT, CX_ROOT), null); // 모호
+});
+
+test("findCodexTranscript - 읽기 결과가 나중에 append되면 그때 연결된다", async () => {
+  const sid = "dddddddd-0000-4000-8000-00000000000d";
+  const f = cxFile(`${CX_PROJECT}/.dira/worktrees/w1`, []);
+  assert.equal(await findCodexTranscript(sid, "55555555", CX_PROJECT, CX_ROOT), null);
+  appendFileSync(f, rec({ timestamp: "2026-10-09T13:00:09.000Z", type: "response_item", payload: { type: "function_call_output", id: "fo", call_id: "c", output: `---\nticket: 55555555\nsession_id: ${sid}\n---\n` } }));
+  assert.equal(await findCodexTranscript(sid, "55555555", CX_PROJECT, CX_ROOT), f);
+});
+
+test("codex - 메시지-reasoning-도구가 사건이 되고 event_msg 중복과 미지원은 건너뛴다", async () => {
+  const f = path.join(tmp, "cx-events.jsonl");
+  const ts = (n: number) => `2026-10-09T13:00:0${n}.000Z`;
+  const ri = (n: number, payload: object) => rec({ timestamp: ts(n), type: "response_item", payload });
+  writeFileSync(
+    f,
+    rec({ timestamp: ts(0), type: "session_meta", payload: { cwd: CX_PROJECT } }) +
+      ri(1, { type: "message", id: "m1", role: "developer", content: [{ type: "input_text", text: "지시문" }] }) +
+      ri(1, { type: "message", id: "m2", role: "user", content: [{ type: "input_text", text: "프롬프트" }] }) +
+      rec({ timestamp: ts(1), type: "event_msg", payload: { type: "item_completed", item: { type: "UserMessage" } } }) +
+      ri(2, { type: "reasoning", id: "r1", summary: [{ type: "summary_text", text: "생각" }] }) +
+      ri(2, { type: "reasoning", id: "r2", summary: [], encrypted_content: "x" }) +
+      ri(3, { type: "custom_tool_call", id: "t1", call_id: "k1", name: "exec", input: "ls" }) +
+      ri(4, { type: "custom_tool_call_output", id: "t1o", call_id: "k1", output: [{ type: "input_text", text: "a\nb" }] }) +
+      ri(5, { type: "function_call", id: "f1", call_id: "k2", name: "shell", arguments: '{"cmd":"pwd"}' }) +
+      ri(6, { type: "function_call_output", call_id: "k2", output: "/x" }) +
+      ri(7, { type: "message", id: "m3", role: "assistant", content: [{ type: "output_text", text: "끝" }] }) +
+      rec({ timestamp: ts(7), type: "event_msg", payload: { type: "agent_message", message: "끝" } }) +
+      ri(8, { type: "mystery" }),
+  );
+  const { events } = await tailEvents(f, 0, "codex");
+  assert.deepEqual(events.map((e) => e.kind), ["prompt", "thinking", "tool_use", "tool_result", "tool_use", "tool_result", "text"]);
+  assert.equal(events[2].toolId, "k1");
+  assert.equal(events[3].toolId, "k1");
+  assert.equal(events[3].body, "a\nb");
+  assert.equal(events[4].body, JSON.stringify({ cmd: "pwd" }, null, 2));
+  assert.equal(new Set(events.map((e) => e.key)).size, events.length);
+});
+
+test("codex - 불완전한 마지막 줄은 완성된 뒤 한 번만 나온다", async () => {
+  const f = path.join(tmp, "cx-partial.jsonl");
+  const line = rec({ timestamp: "2026-10-09T13:00:01.000Z", type: "response_item", payload: { type: "message", id: "p1", role: "assistant", content: [{ type: "output_text", text: "안녕" }] } });
+  writeFileSync(f, line.slice(0, 40));
+  const a = await tailEvents(f, 0, "codex");
+  assert.equal(a.events.length, 0);
+  appendFileSync(f, line.slice(40));
+  const b = await tailEvents(f, a.offset, "codex");
+  assert.equal(b.events.length, 1);
+  assert.equal((await tailEvents(f, b.offset, "codex")).events.length, 0);
 });

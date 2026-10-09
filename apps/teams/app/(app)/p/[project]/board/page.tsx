@@ -581,11 +581,11 @@ export default async function Board({
               .filter((t) => statusOf(t) === "wip")
               .map(async (t) => {
                 const sid = sessionIdOf(t.fm);
-                const s = sid ? await findStream(sid) : null;
+                const s = sid ? await findStream(sid, { hash: t.stem, root: project.root }) : null;
                 const progress = planProgress(planOf(t.body));
                 return [
                   t.path,
-                  wipLine(s ? await lastActivity(s.file, s.grok, locale) : null, progress),
+                  wipLine(s ? await lastActivity(s.file, s.fmt, locale) : null, progress),
                 ] as const;
               }),
           ),

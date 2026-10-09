@@ -156,12 +156,12 @@ export async function tailSession(
       const rounds = await dispatchRoundsForHash(t.root, t.stem);
       const r = rounds[round - 1];
       if (!r) return { events: [], offset: at, live: false, inbox: false, done: false, refs: NO_REFS };
-      const s = await findStream(r.sid);
+      const s = await findStream(r.sid, { hash: t.stem, root: t.root });
       if (!s) return { events: [], offset: at, live: false, inbox: false, done: false, refs: NO_REFS };
       // grok은 init 레코드가 없다 — 그 회차의 구간은 파일 전체다(§2-3 개정 표의 물러남 그대로).
-      const start = s.grok || r.n === 1 ? 0 : await nthInitOffset(s.file, r.n);
-      const end = s.grok ? undefined : await nthInitOffset(s.file, r.n + 1);
-      const chunk = await tailEvents(s.file, start, s.grok, await readLanguage(), end);
+      const start = s.fmt || r.n === 1 ? 0 : await nthInitOffset(s.file, r.n);
+      const end = s.fmt ? undefined : await nthInitOffset(s.file, r.n + 1);
+      const chunk = await tailEvents(s.file, start, s.fmt, await readLanguage(), end);
       return { ...chunk, live: false, inbox: false, done: false, refs: NO_REFS };
     } catch {
       return { events: [], offset: at, live: false, inbox: false, done: false, refs: NO_REFS };
@@ -175,9 +175,9 @@ export async function tailSession(
     if (!t.sessionId) return { events: [], offset: at, live, inbox, done, refs: NO_REFS };
     // 어느 엔진 형식인지는 **파일이 어느 트리에 있나**가 정한다(§4-3 §grok) — 이 폴링이 워커
     // 목록을 읽지 않는 이유다. 2초마다 새로 무는 fs는 종전 그대로 티켓 하나 + 글롭이다.
-    const s = await findStream(t.sessionId);
+    const s = await findStream(t.sessionId, { hash: t.stem, root: t.root });
     if (!s) return { events: [], offset: at, live, inbox, done, refs: NO_REFS };
-    const chunk = await tailEvents(s.file, at, s.grok, await readLanguage());
+    const chunk = await tailEvents(s.file, at, s.fmt, await readLanguage());
     // 이 회차의 새 글만 훑는다 — `mayHaveRefs`가 그 모양을 못 찾으면 `listTickets`를 안 돈다
     // (대부분의 회차, §성능 예산). 걸리면 그때만 큐 전체를 다시 읽는다 — 다른 폴링(보드 5초)도
     // 이미 매 회차 fs를 새로 문다, 여기는 걸리는 회차만이라 더 싸다.

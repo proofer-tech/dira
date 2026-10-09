@@ -365,7 +365,7 @@ const FEATURE_ENGINES = {
   /** §2-2 참견 — `--input-format stream-json` 인접이 있어야 `tick.sh:263-270`이 FIFO를 판다 */
   interject: { labelKey: "urls.feature.interject", engines: ["claude"] },
   /** §2-1 세션 스트림 — 트랜스크립트 파일이 있어야 한다. grok은 자리·형식이 다를 뿐 **있다** */
-  stream: { labelKey: "urls.feature.stream", engines: ["claude", "grok"] },
+  stream: { labelKey: "urls.feature.stream", engines: ["claude", "grok", "codex"] },
 } as const;
 
 export type EngineFeature = keyof typeof FEATURE_ENGINES;

@@ -137,11 +137,203 @@ export async function findGrokTranscript(
  *  트리에 있느냐*가 곧 형식이고, 그래서 이 값이 `holderEngine`과 독립이다 — 워커가 이미 놓아 준
  *  완료 티켓에서도 스트림이 뜬다. claude를 먼저 보므로 claude 큐에서는 읽기가 종전과 같다
  *  (`~/.grok`을 아예 안 연다). */
-export async function findStream(sessionId: string): Promise<{ file: string; grok: boolean } | null> {
+export async function findStream(
+  sessionId: string,
+  codex?: { hash: string; root: string },
+): Promise<{ file: string; grok: boolean; fmt: StreamFormat } | null> {
   const claude = await findTranscript(sessionId);
-  if (claude) return { file: claude, grok: false };
+  if (claude) return { file: claude, grok: false, fmt: false };
   const grok = await findGrokTranscript(sessionId);
-  return grok ? { file: grok, grok: true } : null;
+  if (grok) return { file: grok, grok: true, fmt: true };
+  // codex는 세션 UUID가 dira의 것과 달라 파일 이름으로 못 찾는다 - 티켓 해시와 프로젝트가 있어야 본다
+  const cx = codex ? await findCodexTranscript(sessionId, codex.hash, codex.root) : null;
+  return cx ? { file: cx, grok: false, fmt: "codex" } : null;
+}
+
+/** 기록 형식. `false`는 claude, `true`는 grok, `"codex"`는 codex rollout이다 */
+export type StreamFormat = boolean | "codex";
+
+/** codex 세션 저장소. 서버의 `CODEX_HOME`이 있으면 그 아래, 없으면 `~/.codex/sessions`다 */
+const codexSessionsRoot = () => path.join(process.env.CODEX_HOME || path.join(homedir(), ".codex"), "sessions");
+
+/** rollout 파일 하나의 증분 탐색 상태. `scanned`까지는 다시 안 읽는다 */
+type CodexScan = { scanned: number; cwd: string | null; refs: Set<string> };
+const codexScans = new Map<string, CodexScan>();
+/** `<root>\0<sid>\0<hash>\0<project root>` -> 찾은 파일. 양성만 담고, 파일이 사라지면 재탐색한다 */
+const codexHits = new Map<string, string>();
+
+const unquote = (v: string) => v.trim().replace(/^["']+|["']+$/g, "");
+
+/** 도구 결과 텍스트에서 frontmatter 블록을 찾아 `ticket`-`session_id` 쌍을 낸다.
+ *  본문 속 다른 문장에 인용된 UUID는 frontmatter가 아니라 쌍이 안 된다. */
+function fmPairs(text: string, into: Set<string>) {
+  for (const m of text.matchAll(/(?:^|\n)---\n([\s\S]*?)\n---(?:\n|$)/g)) {
+    const fm: Record<string, string> = {};
+    for (const l of m[1].split("\n")) {
+      const i = l.indexOf(":");
+      if (i > 0) fm[l.slice(0, i).trim()] = unquote(l.slice(i + 1));
+    }
+    if (fm.ticket && fm.session_id) into.add(`${fm.ticket}\0${fm.session_id}`);
+  }
+}
+
+/** rollout의 도구 결과 한 줄에서 사람이 읽는 글 조각들. exec 결과는 JSON 문자열 안에 `output`이 있다 */
+function outputTexts(output: unknown): string[] {
+  const parts = typeof output === "string" ? [output] : Array.isArray(output) ? output : [];
+  const out: string[] = [];
+  for (const raw of parts) {
+    const text = typeof raw === "string" ? raw : ((raw ?? {}) as { text?: unknown }).text;
+    if (typeof text !== "string") continue;
+    out.push(text);
+    if (text.startsWith("{")) {
+      try {
+        const o = (JSON.parse(text) as { output?: unknown }).output;
+        if (typeof o === "string") out.push(o);
+      } catch {
+        // 일부러 JSON이 아닌 글이다
+      }
+    }
+  }
+  return out;
+}
+
+/** 새로 붙은 바이트만 읽어 `scan`을 갱신한다. 불완전한 마지막 줄은 다음에 다시 읽는다 */
+async function scanRollout(file: string, scan: CodexScan) {
+  let fh;
+  try {
+    fh = await open(file, "r");
+  } catch {
+    return;
+  }
+  try {
+    const { size } = await fh.stat();
+    if (size < scan.scanned) {
+      scan.scanned = 0; // 줄어든 파일 - 처음부터
+      scan.cwd = null;
+      scan.refs.clear();
+    }
+    if (size === scan.scanned) return;
+    const buf = Buffer.alloc(size - scan.scanned);
+    const { bytesRead } = await fh.read(buf, 0, buf.length, scan.scanned);
+    const chunk = buf.subarray(0, bytesRead);
+    const cut = chunk.lastIndexOf(0x0a);
+    if (cut < 0) return;
+    for (const line of chunk.subarray(0, cut).toString("utf8").split("\n")) {
+      const isMeta = scan.cwd === null && line.includes('"session_meta"');
+      if (!isMeta && !(line.includes("session_id") && line.includes("_output"))) continue;
+      let r: { type?: unknown; payload?: { type?: unknown; cwd?: unknown; output?: unknown } };
+      try {
+        r = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const p = r.payload;
+      if (isMeta && r.type === "session_meta" && typeof p?.cwd === "string") scan.cwd = p.cwd;
+      else if (r.type === "response_item" && (p?.type === "custom_tool_call_output" || p?.type === "function_call_output"))
+        for (const text of outputTexts(p.output)) fmPairs(text, scan.refs);
+    }
+    scan.scanned += cut + 1;
+  } finally {
+    await fh.close();
+  }
+}
+
+/** codex rollout 파일 중 **이 티켓을 읽은 도구 결과가 있고 cwd가 이 프로젝트 안인** 파일 하나.
+ *  후보가 둘 이상이면 고르지 않는다(null). 파일 이름이나 최신 여부는 근거가 아니다.
+ *
+ *  ponytail: 매 조회마다 날짜 디렉터리 전체를 readdir+stat하고 자란 파일만 증분으로 읽는다.
+ *  양성은 캐시하므로 이 비용은 아직 못 찾은 동안만 든다. 세션이 수천 개가 되면 날짜 창으로 줄인다. */
+export async function findCodexTranscript(
+  sessionId: string,
+  hash: string,
+  projectRoot: string,
+  root = codexSessionsRoot(),
+): Promise<string | null> {
+  if (!UUID_RE.test(sessionId) || !/^[0-9a-f]{8}$/.test(hash)) return null;
+  const key = [root, sessionId, hash, projectRoot].join("\0");
+  const hit = codexHits.get(key);
+  if (hit) {
+    if (await access(hit).then(() => true, () => false)) return hit;
+    codexHits.delete(key);
+  }
+  const files: string[] = [];
+  const walk = async (dir: string, depth: number) => {
+    let ents;
+    try {
+      ents = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of ents) {
+      const p = path.join(dir, e.name);
+      if (depth < 3 && e.isDirectory()) await walk(p, depth + 1);
+      else if (depth === 3 && e.isFile() && /^rollout-.*\.jsonl$/.test(e.name)) files.push(p);
+    }
+  };
+  await walk(root, 0);
+  const inProject = (cwd: string | null) =>
+    cwd !== null && (cwd === projectRoot || cwd.startsWith(projectRoot.replace(/\/+$/, "") + "/"));
+  const matches: string[] = [];
+  for (const f of files) {
+    let scan = codexScans.get(f);
+    if (!scan) codexScans.set(f, (scan = { scanned: 0, cwd: null, refs: new Set() }));
+    await scanRollout(f, scan);
+    if (inProject(scan.cwd) && scan.refs.has(`${hash}\0${sessionId}`)) matches.push(f);
+  }
+  if (matches.length !== 1) return null;
+  codexHits.set(key, matches[0]);
+  return matches[0];
+}
+
+/** codex `response_item` 한 줄 -> **claude 레코드 모양**. 접히지 않는 줄(`event_msg` 중복 알림,
+ *  developer 지시문, 암호화된 빈 reasoning, 모르는 종류)은 `null`이다. */
+function codexRecord(rec: unknown): unknown {
+  if (!rec || typeof rec !== "object") return null;
+  const r = rec as { type?: unknown; timestamp?: unknown; ordinal?: unknown; payload?: unknown };
+  if (r.type !== "response_item" || typeof r.timestamp !== "string") return null;
+  const p = (r.payload ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : undefined);
+  const uuid = str(p.id) ?? `${r.timestamp}#${String(r.ordinal ?? "")}`;
+  const msg = (role: "user" | "assistant", content: unknown[]) => ({
+    timestamp: r.timestamp,
+    uuid,
+    message: { role, content },
+  });
+  const textOf = (v: unknown) =>
+    (Array.isArray(v) ? v : [])
+      .map((b) => str((b as { text?: unknown })?.text) ?? "")
+      .filter(Boolean)
+      .join("\n");
+  switch (p.type) {
+    case "message": {
+      if (p.role !== "user" && p.role !== "assistant") return null;
+      const text = textOf(p.content);
+      return text ? msg(p.role, [{ type: "text", text }]) : null;
+    }
+    case "reasoning": {
+      const text = textOf(p.summary);
+      return text ? msg("assistant", [{ type: "thinking", thinking: text }]) : null;
+    }
+    case "custom_tool_call":
+      return msg("assistant", [{ type: "tool_use", name: str(p.name), input: p.input, id: str(p.call_id) }]);
+    case "function_call": {
+      let input: unknown = p.arguments;
+      try {
+        if (typeof input === "string") input = JSON.parse(input);
+      } catch {
+        // 인자가 JSON이 아니면 문자열 그대로 보인다
+      }
+      return msg("assistant", [{ type: "tool_use", name: str(p.name), input, id: str(p.call_id) }]);
+    }
+    case "custom_tool_call_output":
+    case "function_call_output":
+      return {
+        ...msg("user", [{ type: "tool_result", content: outputTexts(p.output).join("\n"), tool_use_id: str(p.call_id) }]),
+        uuid: str(p.id) ?? `${str(p.call_id) ?? uuid}:out`,
+      };
+    default:
+      return null;
+  }
 }
 
 /** `n`번째(1부터) `{"type":"system","subtype":"init"}` 레코드의 바이트 오프셋(§2-3 개정 - 재활용
@@ -200,7 +392,7 @@ export async function nthInitOffset(file: string, n: number): Promise<number> {
 export async function tailEvents(
   file: string,
   offset: number,
-  grok = false,
+  grok: StreamFormat = false,
   locale: Locale = DEFAULT_LOCALE,
   end?: number,
 ): Promise<{ events: StreamEvent[]; offset: number }> {
@@ -227,7 +419,7 @@ export async function tailEvents(
     let promptSeen = start > 0; // offset>0이면 세션 프롬프트도 그 `enqueue`도 이미 지나갔다
     let enqueueSeen = start > 0;
     // grok 레코드에는 `cwd`가 없다 — 담긴 자리가 **디렉터리 이름**이라 그것을 되돌려 쓴다
-    const cwd = grok ? grokCwd(path.basename(path.dirname(path.dirname(file)))) : undefined;
+    const cwd = grok === true ? grokCwd(path.basename(path.dirname(path.dirname(file)))) : undefined;
     for (const line of chunk.subarray(0, cut).toString("utf8").split("\n")) {
       if (!line.trim()) continue;
       let rec: unknown;
@@ -237,7 +429,7 @@ export async function tailEvents(
         continue; // 파싱 불가능한 줄은 조용히 건너뛴다. 스트림이 멈추는 것이 최악이다
       }
       if (grok) {
-        rec = grokRecord(rec, cwd);
+        rec = grok === "codex" ? codexRecord(rec) : grokRecord(rec, cwd);
         if (rec === null) continue; // 대응물 없는 종류(`hook_execution` 등)는 건너뛴다
       }
       // **첫 `enqueue`는 안 흘린다**(§2-1) — 세션 프롬프트와 같은 글이고 이미 접힌 줄로 있다.
@@ -286,7 +478,7 @@ export async function tailEvents(
  *  3종)가 같은 스캔에 다른 판정(필터 없음)을 얹는 둘째 소비자다. */
 export async function lastActivity(
   file: string,
-  grok = false,
+  grok: StreamFormat = false,
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<StreamEvent | null> {
   for await (const rec of recordsBackward(file, grok)) {
@@ -312,7 +504,7 @@ export async function lastActivity(
  *  안 된다. 같은 이유로 "요약이 빈 tool_use"도 그대로 돌려준다 — 도구 이름 자체가 활동 문구다. */
 export async function lastEvent(
   file: string,
-  grok = false,
+  grok: StreamFormat = false,
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<StreamEvent | null> {
   for await (const rec of recordsBackward(file, grok)) {
@@ -328,7 +520,7 @@ export async function lastEvent(
  *
  *  ponytail: 트랜스크립트 전문을 읽고 뒤에서 훑는다(실측 p90 1.5MB · 5건 3.6ms). 파일이 수십
  *  MB가 되거나 진행중이 두 자릿수가 되면 그때 꼬리 창 + 미스 시 직전 값 유지(세션별 오프셋 캐시) */
-async function* recordsBackward(file: string, grok: boolean): AsyncGenerator<unknown> {
+async function* recordsBackward(file: string, grok: StreamFormat): AsyncGenerator<unknown> {
   let buf: Buffer;
   try {
     buf = await readFile(file);
@@ -336,7 +528,7 @@ async function* recordsBackward(file: string, grok: boolean): AsyncGenerator<unk
     return; // 삭제·권한·아직 없는 파일 — 사람에게는 `히트 0`과 같은 뜻이다(*지금 말할 게 없다*)
   }
   // grok 레코드에는 `cwd`가 없다 — `tailEvents`와 같은 자리에서 디렉터리 이름을 되돌린다
-  const cwd = grok ? grokCwd(path.basename(path.dirname(path.dirname(file)))) : undefined;
+  const cwd = grok === true ? grokCwd(path.basename(path.dirname(path.dirname(file)))) : undefined;
   // 줄을 끊는 것은 **바이트**다(`tailEvents`와 같은 근거 — `\n`은 UTF-8 멀티바이트 시퀀스 안에
   // 나타나지 않는다). 그래서 **훑은 줄만 문자열이 된다**: 전문을 `toString().split("\n")`으로 한 번에
   // 펴면 11MB 파일 하나에 50ms가 드는데(실측) 실제로 파싱하는 것은 뒤 두세 줄·수 KB다.
@@ -353,7 +545,7 @@ async function* recordsBackward(file: string, grok: boolean): AsyncGenerator<unk
       continue; // 깨진 줄에 **멈추지 않는다** — 그 한 줄 때문에 줄이 꺼지는 것이 최악이다
     }
     if (grok) {
-      rec = grokRecord(rec, cwd);
+      rec = grok === "codex" ? codexRecord(rec) : grokRecord(rec, cwd);
       if (rec === null) continue; // 대응물 없는 종류는 건너뛴다(`tailEvents`와 같은 규칙)
     }
     yield rec;
@@ -683,7 +875,7 @@ export function recordToEvents(
           label: name,
           summary: s.text,
           summaryMono: s.mono,
-          body: b.input === undefined ? "" : JSON.stringify(b.input, null, 2),
+          body: b.input === undefined ? "" : typeof b.input === "string" ? b.input : JSON.stringify(b.input, null, 2),
           ...(typeof b.id === "string" ? { toolId: b.id } : {}),
           ...(edit ? { diff: lineDiff(edit.old, edit.new), replaceAll: edit.replaceAll } : {}),
         });

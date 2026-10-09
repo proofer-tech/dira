@@ -263,9 +263,9 @@ test("engineCan — 기능마다 집합이 다르다. grok에서 둘이 갈린�
   assert.equal(engineCan("interject", "claude"), true);
   assert.equal(engineCan("interject", "codex"), false);
   assert.equal(engineCan("interject", "grok"), false);
-  // 표 2행: 세션 스트림은 `{claude, grok}` — **이 한 칸이 이 회차의 전부다**
+  // 표 2행: 세션 스트림은 `{claude, grok, codex}` — **이 한 칸이 이 회차의 전부다**
   assert.equal(engineCan("stream", "claude"), true);
-  assert.equal(engineCan("stream", "codex"), false);
+  assert.equal(engineCan("stream", "codex"), true); // 요구 c490f58f: rollout 연결로 지원
   assert.equal(engineCan("stream", "grok"), true);
   // agy는 `FEATURE_ENGINES` 어느 집합에도 없다(4dfe01fb) — 두 기능 다 `false`
   assert.equal(engineCan("interject", "agy"), false);
@@ -286,7 +286,7 @@ test("engineMissing — 없는 기능의 이름만, 표 순서대로(§비주얼
   // 이 배열이 그대로 `<엔진> 워커는 <…과 …>이 없습니다` 한 줄이 된다. claude에서 비는 것이
   // 곧 그 줄이 안 뜨는 근거다 — 정상 상태에 안내를 켜지 않는다(§0-2).
   assert.deepEqual(engineMissing("claude"), []);
-  assert.deepEqual(engineMissing("codex"), ["참견", "세션 스트림"]);
+  assert.deepEqual(engineMissing("codex"), ["참견"]); // 스트림은 rollout 연결로 지원(c490f58f)
   assert.deepEqual(engineMissing("grok"), ["참견"]);
   // agy는 FEATURE_ENGINES에 없어서 둘 다 빠진다(4dfe01fb) — 카탈로그에 새 엔진을 더할 때
   // 이 표에 줄을 안 더하면 이 자리가 그것을 잡는다.
@@ -294,7 +294,7 @@ test("engineMissing — 없는 기능의 이름만, 표 순서대로(§비주얼
   // 종전 문장이 한 글자도 안 갈린다는 근거(회귀) — codex 워커의 예고 줄 그대로다.
   assert.equal(
     `codex 워커는 ${engineMissing("codex").join("과 ")}이 없습니다 — 티켓 수행은 같습니다.`,
-    "codex 워커는 참견과 세션 스트림이 없습니다 — 티켓 수행은 같습니다.",
+    "codex 워커는 참견이 없습니다 — 티켓 수행은 같습니다.",
   );
 });
 

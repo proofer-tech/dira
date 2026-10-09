@@ -220,9 +220,9 @@ export default async function TicketDetail({
   // `init` 레코드가 없어 대상 밖이다(회차 1과 같은 오프셋 0). `lastLogByWorker`가 이미
   // `listWorkers`·`reassignCount`로 이 요청 안에서 한 번 읽혔다(`cache()`) — 파일을 두 번 안 연다.
   const sessionId = sessionIdOf(ticket.fm) ?? (await lastDispatchSid(project.root, ticket.stem));
-  const transcript = sessionId ? await findStream(sessionId) : null;
+  const transcript = sessionId ? await findStream(sessionId, { hash: ticket.stem, root: project.root }) : null;
   let startOffset = 0;
-  if (transcript && sessionId && !transcript.grok) {
+  if (transcript && sessionId && !transcript.fmt) {
     const round = await dispatchRound(project.root, ticket.stem, sessionId);
     if (round >= 2) startOffset = await nthInitOffset(transcript.file, round);
   }
