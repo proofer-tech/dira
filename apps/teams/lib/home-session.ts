@@ -108,7 +108,7 @@ import { openTab, closeTab as closeTabPure, type Tab } from "./tabs.ts";
 import { browserPortPath, isValidCdpHash, LINK_SLOT_HASH, portFromDevToolsFile } from "./cdp-relay.ts";
 import { listBrowserPoolSlots } from "./browser-pool.ts";
 import { ptyStatuses, terminalTail } from "./pty.ts";
-import { findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
+import { findStream, findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
 
@@ -2343,13 +2343,19 @@ export async function pollHome(
     });
   }
 
-  const file = await findTranscript(sid);
+  // 워커 세션이면 서버가 읽은 티켓 식별자와 프로젝트 루트로 codex 기록까지 찾는다(요구 `756ebb05`).
+  // 클라이언트 값은 안 쓴다: 대화 id(워커 목록에 없는 값)는 힌트 없이 claude/grok만 본다.
+  const workerRow = workers.find((w) => w.id === sid);
+  const root = workerRow ? (await getProject(projectId))?.root : undefined;
+  const stream = await findStream(sid, workerRow && root ? { hash: workerRow.stem, root } : undefined);
+  const file = stream?.file ?? null;
+  const fmt = stream?.fmt ?? false;
   // **우리 자식이면 자식의 stdout**(`live.activity`) — **남의 `.wip` 워커 세션이면 트랜스크립트의
   // 마지막 사건**(`activityFromEvent`) — 그 외(끝났거나 파일이 없다)는 `null`이다.
   const activity = running
     ? (entry?.live.activity ?? null)
     : workerLive && file
-      ? activityFromEvent(await lastEvent(file, false, locale))
+      ? activityFromEvent(await lastEvent(file, fmt, locale))
       : null;
   if (!file) {
     return chunk({
@@ -2378,7 +2384,7 @@ export async function pollHome(
       pendingInterject: running ? (entry?.live.pendingInterject ?? null) : null,
     });
   }
-  const r = await tailEvents(file, at, false, locale);
+  const r = await tailEvents(file, at, fmt, locale);
   const turns = toTurns(r.events);
   // **겹침 판정**(§7 §누적기를 비우는 자리 — 요구 `3dc948ac` · 실측 `c5d287ac`, 이 머신).
   // 누적기는 `message_start`에서만 비므로(`eatLine` 무수정) 도구가 도는 동안은 그대로 있다.

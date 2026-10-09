@@ -1967,6 +1967,82 @@ test("워커 세션 — 사라진 `current`는 대화 0건과 같고, 고르면 
   assert.strictEqual(isAsking(id), false); // 세션을 아예 안 띄웠다
 });
 
+test("워커 세션 - 완료된 codex 기록이 뜬다. 워커 할당이 없어도, 전환·새로고침 뒤에도 같고, 다른 프로젝트나 모호한 연결은 빈 상태다 (요구 `756ebb05`)", async () => {
+  const mk = (tag: string) => {
+    const root = path.join(mkdtempSync(path.join(tmpdir(), `ha-cx-${tag}-`)), ".dira");
+    tmps.push(path.dirname(root));
+    mkdirSync(path.join(root, "tickets"), { recursive: true });
+    return root;
+  };
+  const rootA = mk("a");
+  const rootB = mk("b");
+  writeFileSync(
+    registryPath(),
+    JSON.stringify({ version: 1, projects: [{ id: "cxa", name: "A", root: rootA }, { id: "cxb", name: "B", root: rootB }] }),
+  );
+  const sidOk = uuid(61);
+  const sidAmb = uuid(62);
+  const sidMiss = uuid(63);
+  const put = (root: string, hash: string, sid: string) =>
+    writeFileSync(path.join(root, "tickets", `${hash}.done.md`), `---\nticket: ${hash}\ntitle: t${hash}\nsession_id: ${sid}\n---\n\n본문\n`);
+  put(rootA, "cc000001", sidOk);
+  put(rootA, "cc000002", sidAmb);
+  put(rootA, "cc000003", sidMiss);
+  put(rootB, "cc000001", sidOk); // 다른 프로젝트에 같은 쌍의 티켓이 있어도 자기 cwd 밖 기록은 안 읽는다
+
+  const prevHome = process.env.CODEX_HOME;
+  const cxHome = mkdtempSync(path.join(tmpdir(), "ha-cxhome-"));
+  tmps.push(cxHome);
+  process.env.CODEX_HOME = cxHome;
+  try {
+    const dir = path.join(cxHome, "sessions", "2026", "10", "10");
+    mkdirSync(dir, { recursive: true });
+    const rec = (o: object) => JSON.stringify(o) + "\n";
+    let n = 0;
+    const rollout = (cwd: string, hash: string, sid: string, answer: string) => {
+      const out = JSON.stringify({ output: `---\nticket: ${hash}\ntitle: t\nsession_id: ${sid}\n---\n\n## Goal\nx` });
+      const f = path.join(dir, `rollout-2026-10-10T00-00-0${n++}-fx.jsonl`);
+      writeFileSync(
+        f,
+        rec({ timestamp: "2026-10-10T01:00:00.000Z", type: "session_meta", payload: { cwd } }) +
+          rec({ timestamp: "2026-10-10T01:00:01.000Z", type: "response_item", payload: { type: "custom_tool_call_output", id: "o1", call_id: "c", output: [{ type: "input_text", text: out }] } }) +
+          rec({ timestamp: "2026-10-10T01:00:02.000Z", type: "response_item", payload: { type: "message", id: "m1", role: "assistant", content: [{ type: "output_text", text: answer }] } }),
+      );
+    };
+    rollout(path.join(path.dirname(rootA), ".dira", "worktrees", "w1"), "cc000001", sidOk, "코덱스가 한 말");
+    rollout(path.join(path.dirname(rootA), ".dira", "worktrees", "w1"), "cc000002", sidAmb, "모호 하나");
+    rollout(path.join(path.dirname(rootA), ".dira", "worktrees", "w2"), "cc000002", sidAmb, "모호 둘");
+
+    // 워커 할당은 없다(`.done`이고 어떤 워커도 안 쥐고 있다). 고르면 저장된 기록이 뜬다
+    assert.strictEqual(await switchConversation("cxa", sidOk), true);
+    const first = await pollHome("cxa", null, 0);
+    assert.strictEqual(first.sessionId, sidOk);
+    assert.ok(first.turns.some((t) => t.text === "코덱스가 한 말"));
+    // 다른 세션(대화 0건이라 비운다)으로 갔다 돌아와도, 새로고침(offset 0)해도 같다
+    assert.strictEqual(await switchConversation("cxa", sidMiss), true);
+    assert.strictEqual(await switchConversation("cxa", sidOk), true);
+    const again = await pollHome("cxa", null, 0);
+    assert.deepStrictEqual(again.turns.map((t) => t.text), first.turns.map((t) => t.text));
+    // 이어 읽기는 새 사건이 없으면 비어 있다
+    assert.deepStrictEqual((await pollHome("cxa", sidOk, first.offset)).turns, []);
+
+    // 다른 프로젝트: 같은 쌍의 티켓이 있어도 그 프로젝트 cwd 안의 기록이 아니라 빈 상태다
+    assert.strictEqual(await switchConversation("cxb", sidOk), true);
+    const other = await pollHome("cxb", null, 0);
+    assert.deepStrictEqual(other.turns, []);
+    // 파일이 없다 / 같은 쌍을 읽은 파일이 둘이다 = 모호: 다른 파일로 대체하지 않고 빈 상태다
+    for (const sid of [sidMiss, sidAmb]) {
+      assert.strictEqual(await switchConversation("cxa", sid), true);
+      const c = await pollHome("cxa", null, 0);
+      assert.deepStrictEqual(c.turns, []);
+      assert.strictEqual(c.sessionId, sid);
+    }
+  } finally {
+    if (prevHome === undefined) delete process.env.CODEX_HOME;
+    else process.env.CODEX_HOME = prevHome;
+  }
+});
+
 test("도는 워커 세션은 스레드에서도 돈다 — 활동은 트랜스크립트의 마지막 사건에서, 그 판정이 폴링을 안 끊는다 (§7 · 요구 `161a881e`)", async () => {
   const id = "worker-live-activity";
   const root = path.join(mkdtempSync(path.join(tmpdir(), "ha-wla-")), ".dira");
