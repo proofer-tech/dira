@@ -209,11 +209,60 @@ export async function commitStaged(cwd: string, message: string): Promise<ScmOut
   }
 }
 
-/** push — 자리마다 향하는 곳이 하나로 정해진다(§11-3 결정 4, 답 `4-2.(c)`). 루트는 `git push`
- *  (= `origin`), 워크트리는 `.dira/push.sh`를 인자 없이 부른다(= 통합 브랜치 - 락과 non-ff
- *  재시도의 정본이 그 파일이다). **`push.sh`를 고치지 않는다 - 부르기만 한다.** 그 파일이
- *  없으면(`pushSh === false`) 헬퍼를 만들어 넣지 않고 사유만 낸다. */
-export async function pushCheckout(checkout: Checkout): Promise<ScmOutcome> {
+/** 워크트리를 통합 브랜치(로컬)와 동기화한다(DESIGN.md §0-25 결정 10). 이미 조상이면 아무것도
+ *  안 한다. 갈라졌으면 깨끗한 체크아웃에서만 `git merge --no-edit`이고, 충돌이면 이번 조작이
+ *  시작한 merge만 abort한다 - reset --hard와 stash는 안 쓴다. 사유가 있으면 문자열을 낸다. */
+async function syncWithIntegration(cwd: string, integration: string): Promise<string | null> {
+  const ref = `refs/heads/${integration}`;
+  try {
+    await git(cwd, ["rev-parse", "--verify", "-q", ref]);
+  } catch {
+    return `INTEGRATION_BRANCH_MISSING: ${integration}`;
+  }
+  const isAncestor = await git(cwd, ["merge-base", "--is-ancestor", ref, "HEAD"]).then(
+    () => true,
+    () => false,
+  );
+  if (isAncestor) return null;
+  try {
+    const gitDir = (await git(cwd, ["rev-parse", "--git-dir"])).stdout.trim();
+    const abs = path.resolve(cwd, gitDir);
+    for (const f of ["MERGE_HEAD", "rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD"]) {
+      if (await access(path.join(abs, f)).then(() => true, () => false)) return `IN_PROGRESS: ${f}`;
+    }
+    if ((await git(cwd, ["symbolic-ref", "-q", "HEAD"]).catch(() => ({ stdout: "" }))).stdout.trim() === "") {
+      return "DETACHED_HEAD";
+    }
+    if ((await git(cwd, ["status", "--porcelain"])).stdout.trim() !== "") return "DIRTY_CHECKOUT";
+    const before = (await git(cwd, ["rev-parse", "HEAD"])).stdout.trim();
+    try {
+      await git(cwd, ["merge", "--no-edit", ref]);
+    } catch (e) {
+      const reason = reasonOf(e);
+      const now = (await git(cwd, ["rev-parse", "HEAD"])).stdout.trim();
+      const merging = await access(path.join(abs, "MERGE_HEAD")).then(() => true, () => false);
+      if (merging && now === before) {
+        try {
+          await git(cwd, ["merge", "--abort"]);
+        } catch (ae) {
+          return `ABORT_FAILED: ${reasonOf(ae)}`;
+        }
+      }
+      return reason;
+    }
+    return null;
+  } catch (e) {
+    return reasonOf(e);
+  }
+}
+
+/** push - 자리마다 향하는 곳이 하나로 정해진다(§11-3 결정 4, 답 `4-2.(c)`). 루트는 `git push`
+ *  (= `origin`), 워크트리는 로컬 통합 브랜치와 먼저 동기화한 뒤 `.dira/push.sh`를 인자 없이
+ *  부른다(= 통합 브랜치 - 락의 정본이 그 파일이다, §0-25 결정 10). 헬퍼가 non-ff로 거절하면
+ *  한 번만 다시 동기화하고 재호출한다. **`push.sh`를 고치지 않는다 - 부르기만 한다.** 그 파일이
+ *  없으면(`pushSh === false`) 헬퍼를 만들어 넣지 않고 사유만 낸다. `integration`이 `null`이면
+ *  대상을 추측하지 않고 `NO_INTEGRATION_BRANCH`다. */
+export async function pushCheckout(checkout: Checkout, integration: string | null = null): Promise<ScmOutcome> {
   if (checkout.isRoot) {
     try {
       await git(checkout.path, ["push"]);
@@ -223,14 +272,29 @@ export async function pushCheckout(checkout: Checkout): Promise<ScmOutcome> {
     }
   }
   if (!checkout.pushSh) return { ok: false, error: "NO_PUSH_SH" };
-  try {
-    await promisify(execFile)("bash", [path.join(checkout.path, ".dira", "push.sh")], {
+  if (!integration) return { ok: false, error: "NO_INTEGRATION_BRANCH" };
+  const helper = () =>
+    promisify(execFile)("bash", [path.join(checkout.path, ".dira", "push.sh")], {
       cwd: checkout.path,
       maxBuffer: 16 * 1024 * 1024,
     });
+  const sync = await syncWithIntegration(checkout.path, integration);
+  if (sync) return { ok: false, error: sync };
+  try {
+    await helper();
     return { ok: true, error: null };
   } catch (e) {
-    return { ok: false, error: reasonOf(e) };
+    const reason = reasonOf(e);
+    // ponytail: git push의 non-ff 문구로만 가른다. 헬퍼가 종료 코드를 구분하면 그쪽으로.
+    if (!/non-fast-forward|fetch first/i.test(reason)) return { ok: false, error: reason };
+    const again = await syncWithIntegration(checkout.path, integration);
+    if (again) return { ok: false, error: again };
+    try {
+      await helper();
+      return { ok: true, error: null };
+    } catch (e2) {
+      return { ok: false, error: reasonOf(e2) };
+    }
   }
 }
 

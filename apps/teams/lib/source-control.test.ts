@@ -290,7 +290,7 @@ test("pushCheckout — 워크트리는 .dira/push.sh를 인자 없이 부른다"
     "#!/bin/bash\necho called > \"$(dirname \"$0\")/../called\"\n",
   );
   const checkout: Checkout = { id: "wt-push", path: wt, branch: "feature", isRoot: false, pushSh: true };
-  const r = await pushCheckout(checkout);
+  const r = await pushCheckout(checkout, "main");
   assert.deepStrictEqual(r, { ok: true, error: null });
   const called = readFileSync(path.join(wt, "called"), "utf8");
   assert.strictEqual(called.trim(), "called");
@@ -302,4 +302,117 @@ test("pushCheckout — push.sh가 없으면 헬퍼를 만들지 않고 사유만
   const r = await pushCheckout(checkout);
   assert.strictEqual(r.ok, false);
   assert.strictEqual(r.error, "NO_PUSH_SH");
+});
+
+// ── 워크트리 push의 통합 브랜치 동기화 (§0-25 결정 10) ─────────────────────────
+
+const G = (cwd: string, ...a: string[]) => execFileSync("git", ["-C", cwd, ...a], { encoding: "utf8" }).trim();
+
+/** 통합 브랜치 `dev`가 받는 트리에 체크아웃된 저장소 + 그 위 워크트리 + 실제 push.sh 사본. */
+function makeIntegrationSetup() {
+  const repo = makeRepo();
+  G(repo, "checkout", "-q", "-b", "dev");
+  G(repo, "config", "receive.denyCurrentBranch", "updateInstead"); // 실물 받는 트리와 같은 설정
+  const origin = mkdtempSync(path.join(tmpdir(), "scm-origin-"));
+  tmps.push(origin);
+  execFileSync("git", ["clone", "-q", "--bare", repo, origin]);
+  G(repo, "remote", "add", "origin", origin);
+  const wt = path.join(repo, "..", `wt-${path.basename(repo)}`);
+  G(repo, "worktree", "add", "-q", "-b", "feat", wt);
+  tmps.push(wt);
+  mkdirSync(path.join(wt, ".dira"));
+  writeFileSync(path.join(repo, ".git", "info", "exclude"), ".dira/\n"); // 실물처럼 gitignore
+  const src = readFileSync(path.join(import.meta.dirname, "../../../templates/hooks/push.sh"), "utf8");
+  writeFileSync(path.join(wt, ".dira", "push.sh"), src.replaceAll("<통합 브랜치>", "dev"));
+  const checkout: Checkout = { id: path.basename(wt), path: wt, branch: "feat", isRoot: false, pushSh: true };
+  const commit = (cwd: string, file: string, body = file) => {
+    writeFileSync(path.join(cwd, file), body + "\n");
+    G(cwd, "add", file);
+    G(cwd, "commit", "-qm", file);
+    return G(cwd, "rev-parse", "HEAD");
+  };
+  return { repo, origin, wt, checkout, commit };
+}
+
+test("pushCheckout - 통합 브랜치가 전진해도 두 회차 모두 성공하고 origin은 그대로다", async () => {
+  const { repo, origin, wt, checkout, commit } = makeIntegrationSetup();
+  const originBefore = G(origin, "rev-parse", "HEAD");
+  const made: string[] = [];
+  for (const n of [1, 2]) {
+    made.push(commit(repo, `dev${n}.txt`));
+    made.push(commit(wt, `feat${n}.txt`));
+    const r = await pushCheckout(checkout, "dev");
+    assert.deepStrictEqual(r, { ok: true, error: null });
+  }
+  for (const c of made) G(repo, "merge-base", "--is-ancestor", c, "dev");
+  assert.strictEqual(G(origin, "rev-parse", "HEAD"), originBefore);
+});
+
+test("pushCheckout - 통합 대상이 없으면 추측하지 않고 헬퍼도 안 부른다", async () => {
+  const { checkout } = makeIntegrationSetup();
+  assert.strictEqual((await pushCheckout(checkout, null)).error, "NO_INTEGRATION_BRANCH");
+  assert.match((await pushCheckout(checkout, "nope")).error ?? "", /INTEGRATION_BRANCH_MISSING/);
+});
+
+test("pushCheckout - dirty 체크아웃은 합치지 않고 HEAD와 파일을 보존한다", async () => {
+  const { repo, wt, checkout, commit } = makeIntegrationSetup();
+  commit(repo, "dev1.txt");
+  commit(wt, "feat1.txt");
+  writeFileSync(path.join(wt, "untracked.txt"), "u\n");
+  const head = G(wt, "rev-parse", "HEAD");
+  const r = await pushCheckout(checkout, "dev");
+  assert.strictEqual(r.error, "DIRTY_CHECKOUT");
+  assert.strictEqual(G(wt, "rev-parse", "HEAD"), head);
+  assert.strictEqual(readFileSync(path.join(wt, "untracked.txt"), "utf8"), "u\n");
+});
+
+test("pushCheckout - 내용 충돌이면 이번 merge만 abort하고 호출 전 상태로 돌린다", async () => {
+  const { repo, wt, checkout, commit } = makeIntegrationSetup();
+  commit(repo, "same.txt", "dev side");
+  commit(wt, "same.txt", "feat side");
+  const head = G(wt, "rev-parse", "HEAD");
+  const r = await pushCheckout(checkout, "dev");
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(G(wt, "rev-parse", "HEAD"), head);
+  assert.strictEqual(G(wt, "status", "--porcelain"), "");
+  assert.throws(() => G(wt, "rev-parse", "-q", "--verify", "MERGE_HEAD"));
+});
+
+test("pushCheckout - 진행 중인 merge가 있으면 건드리지 않는다", async () => {
+  const { repo, wt, checkout, commit } = makeIntegrationSetup();
+  commit(repo, "same.txt", "dev side");
+  commit(wt, "same.txt", "feat side");
+  assert.throws(() => G(wt, "merge", "--no-edit", "dev"));
+  const r = await pushCheckout(checkout, "dev");
+  assert.match(r.error ?? "", /IN_PROGRESS: MERGE_HEAD/);
+  G(wt, "rev-parse", "-q", "--verify", "MERGE_HEAD"); // 사람의 merge가 남아 있다
+});
+
+function fakeHelper(wt: string, script: string) {
+  writeFileSync(path.join(wt, ".dira", "push.sh"), `#!/bin/bash\n${script}\n`);
+}
+
+test("pushCheckout - non-ff 경합은 한 번만 다시 합치고 헬퍼를 재호출한다", async () => {
+  const { repo, wt, checkout, commit } = makeIntegrationSetup();
+  commit(wt, "feat1.txt");
+  // 첫 호출은 그 사이 dev가 전진한 척 non-ff로 거절한다.
+  fakeHelper(
+    wt,
+    `n=$(cat "$(dirname "$0")/n" 2>/dev/null || echo 0); echo $((n+1)) > "$(dirname "$0")/n"
+if [ "$n" = 0 ]; then cd "${repo}" && echo x > late.txt && git add late.txt && git commit -qm late; echo "! [rejected] (non-fast-forward)" >&2; exit 1; fi`,
+  );
+  const r = await pushCheckout(checkout, "dev");
+  assert.deepStrictEqual(r, { ok: true, error: null });
+  assert.strictEqual(readFileSync(path.join(wt, ".dira", "n"), "utf8").trim(), "2");
+  G(wt, "merge-base", "--is-ancestor", "dev", "HEAD"); // 두 번째 통합이 late를 가져왔다
+});
+
+test("pushCheckout - non-ff가 아닌 헬퍼 실패는 재시도하지 않는다", async () => {
+  const { wt, checkout, commit } = makeIntegrationSetup();
+  commit(wt, "feat1.txt");
+  fakeHelper(wt, `echo x >> "$(dirname "$0")/n"; echo "Authentication failed" >&2; exit 1`);
+  const r = await pushCheckout(checkout, "dev");
+  assert.strictEqual(r.ok, false);
+  assert.match(r.error ?? "", /Authentication failed/);
+  assert.strictEqual(readFileSync(path.join(wt, ".dira", "n"), "utf8").trim(), "x");
 });

@@ -31,6 +31,7 @@ import type { RefIndex } from "@/lib/markdown-refs";
 import { openWithinApp, type OpenResult } from "@/lib/paths";
 import { listTickets, type Ticket } from "@/lib/queue";
 import { ensureBrowseHooks } from "@/lib/scaffold";
+import { readIntegrationBranch } from "@/lib/workers";
 import {
   closeHomeTab,
   createSchedule as createScheduleRow,
@@ -579,7 +580,7 @@ export async function scmPush(projectId: string, checkoutId: string): Promise<Sc
     const project = await required(projectId);
     const checkout = await resolveCheckout(repoOf(project.root), checkoutId);
     if (!checkout) return { status: null, error: null };
-    const r = await pushCheckout(checkout);
+    const r = await pushCheckout(checkout, checkout.isRoot ? null : await readIntegrationBranch(project.root));
     return { status: await readStatus(checkout.path), error: r.error };
   } catch (e) {
     return { status: null, error: (e as Error).message };
