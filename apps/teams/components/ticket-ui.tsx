@@ -10,6 +10,7 @@
 import {
   Fragment,
   useActionState,
+  useEffect,
   useRef,
   useState,
   useTransition,
@@ -1496,7 +1497,9 @@ export function useCloseGuard(dirty: boolean, reset: () => void, initialOpen = f
   const [asking, setAsking] = useState(false);
   // 닫기 콜백이 렌더 전 클로저로 불려도(Esc - 밖 클릭 - 미러 재클릭) 가장 최근 `dirty`를 읽는다.
   const dirtyRef = useRef(dirty);
-  dirtyRef.current = dirty;
+  useEffect(() => {
+    dirtyRef.current = dirty;
+  }, [dirty]);
   const discard = () => {
     setAsking(false);
     setOpen(false);
