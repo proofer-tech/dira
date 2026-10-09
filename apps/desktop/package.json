@@ -57,6 +57,10 @@
         "to": "engine/tickets.py"
       },
       {
+        "from": "../../dira_env.py",
+        "to": "engine/dira_env.py"
+      },
+      {
         "from": "../../agy-gui.sh",
         "to": "engine/agy-gui.sh"
       },

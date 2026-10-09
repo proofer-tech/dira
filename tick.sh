@@ -116,6 +116,12 @@ ROUTER_BODY='#!/bin/bash
 d="$(cd "$(dirname "$0")" && pwd)"
 e=claude
 case "${1:-}" in codex|grok|agy) e="$1"; shift ;; esac
+# 요구 04daa929: `dira env ...`는 엔진이 아니라 환경변수 클라이언트다(python3 표준 라이브러리만).
+if [ "${1:-}" = env ] && [ "$e" = claude ]; then
+  shift
+  [ -f "$d/engines/dira_env.py" ] && exec python3 "$d/engines/dira_env.py" "$@"
+  echo "dira env: 클라이언트가 설치되지 않았습니다" >&2; exit 69
+fi
 [ -x "$d/engines/$e" ] && exec "$d/engines/$e" "$@"
 exec "$e" "$@"'
 refresh_fixed_engine() {
@@ -182,6 +188,12 @@ refresh_fixed_engine() {
   # §27 계약 4: mv -f가 지금 실행 중인 고정 경로를 못 덮을 때(macOS ETXTBSY, 워커 여러 장이
   # 도는 큐에서는 정상) 남는 임시 파일을 갱신할 때마다 쓸어낸다. 갱신 실패는 종전대로 조용하다.
   rm -f "$BIN_DIR"/*.tmp.[0-9]* "$ENGINES_DIR"/*.tmp.[0-9]* 2>/dev/null
+  # 요구 04daa929: env 클라이언트는 라우터 옆에 굽는다(내용이 다르면 원자 교체).
+  if [ -f "$CODE/dira_env.py" ] && ! cmp -s "$CODE/dira_env.py" "$ENGINES_DIR/dira_env.py" 2>/dev/null; then
+    cp "$CODE/dira_env.py" "$ENGINES_DIR/dira_env.py.tmp.$$" 2>/dev/null \
+      && python3 -c 'import os,sys;os.replace(sys.argv[1],sys.argv[2])' "$ENGINES_DIR/dira_env.py.tmp.$$" "$ENGINES_DIR/dira_env.py" \
+      || rm -f "$ENGINES_DIR/dira_env.py.tmp.$$"
+  fi
   # P468-1: 라우터 본문이 다르면 원자 교체. 옛 dira-<엔진>과 부속 파일은 굽기가 끝난 뒤 지운다.
   if ! cmp -s <(printf '%s\n' "$ROUTER_BODY") "$FIXED_ENGINE" 2>/dev/null; then
     printf '%s\n' "$ROUTER_BODY" > "$FIXED_ENGINE.tmp.$$" 2>/dev/null \
