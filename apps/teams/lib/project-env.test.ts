@@ -7,7 +7,7 @@ import path from "node:path";
 // 데스크톱 쪽은 자기 tsconfig로 검사된다 - 정적 import로 이 패키지의 tsc에 끌어들이지 않는다.
 const desk = (f: string) => import(new URL(`../../desktop/${f}`, import.meta.url).href);
 type Cipher = { isEncryptionAvailable(): boolean; encryptString(p: string): Buffer; decryptString(c: Buffer): string };
-import { callEnvBridge, validateEnvName, validateEnvValue } from "./project-env.ts";
+import { callEnvBridge, codeAfterList, validateEnvName, validateEnvValue } from "./project-env.ts";
 
 const SECRET = "s3cr3t-유니크-값";
 const env = { DIRA_ENV_BRIDGE_URL: "http://x", DIRA_ENV_BRIDGE_SECRET: "tok" };
@@ -85,4 +85,11 @@ test("실물 브리지와의 왕복: 추가 - 교체 - 삭제와 오류 코드",
     rmSync(dir, { recursive: true, force: true });
   }
   assert.ok(corrupt);
+});
+
+test("codeAfterList - 충돌 뒤 재읽기는 안내를 남기고 평소 읽기와 성공한 변경 뒤에는 안내가 없다", () => {
+  assert.equal(codeAfterList("conflict", true), "conflict");
+  assert.equal(codeAfterList("not-found", true), "not-found");
+  assert.equal(codeAfterList("conflict", false), null);
+  assert.equal(codeAfterList(null, false), null);
 });

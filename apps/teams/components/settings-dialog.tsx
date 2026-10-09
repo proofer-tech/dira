@@ -91,7 +91,7 @@ import { ConfigTable, OntologyMetricsField, OntologyMigration } from "@/componen
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
 import type { AutonomyLevel } from "@/lib/projects";
-import type { EnvErrorCode, EnvItem } from "@/lib/project-env";
+import { codeAfterList, type EnvErrorCode, type EnvItem } from "@/lib/project-env";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, actionName, formatCombo, type ActionId } from "@/lib/keymap";
 import { wrap } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -1532,13 +1532,14 @@ function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean
     setDeleting(null);
   };
 
-  const load = useCallback(() => {
+  // keep: 충돌 뒤 재읽기는 방금 낸 안내를 지우지 않는다(다음 동작이나 닫힘까지 남는다)
+  const load = useCallback((keep = false) => {
     const mine = projectId;
     void listEnvAction(mine).then((r) => {
       if (live.current !== mine) return;
       if (r.ok) {
         setItems(r.items);
-        setCode(null);
+        setCode((prev) => codeAfterList(prev, keep));
       } else {
         setCode(r.code);
       }
@@ -1577,7 +1578,7 @@ function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean
         if (r.code === "conflict" || r.code === "not-found") {
           setReplacing(null);
           setDeleting(null);
-          load();
+          load(true);
         }
       }
     });

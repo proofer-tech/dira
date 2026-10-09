@@ -109,3 +109,9 @@ export async function callEnvBridge(
     return { ok: false, code: "unavailable" };
   }
 }
+
+/** 목록을 새로 읽는 데 성공한 뒤 화면에 남을 안내. 충돌 뒤 재읽기(`keep`)는 방금 낸 안내를 지키고,
+ *  그 밖의 읽기는 지운다 - 안내는 다음 사용자 동작이나 닫힘에서 지워진다. */
+export function codeAfterList(prev: EnvErrorCode | null, keep: boolean): EnvErrorCode | null {
+  return keep ? prev : null;
+}
