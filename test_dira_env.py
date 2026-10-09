@@ -57,7 +57,10 @@ def start():
 
 
 app = start()
-ENV = dict(os.environ, TICKET_ROOT=projA, TICKET_LOCAL=local)
+HOME = os.path.join(tmp, "home")
+os.makedirs(os.path.join(HOME, ".config", "dira", "bin", "engines"))
+shutil.copy(CLI, os.path.join(HOME, ".config", "dira", "bin", "engines", "dira_env.py"))
+ENV = dict(os.environ, TICKET_ROOT=projA, TICKET_LOCAL=local, HOME=HOME)
 ENVB = dict(ENV, TICKET_ROOT=projB)
 ENVW = dict(ENV, TICKET_ROOT=os.path.join(wt, ".dira"))
 
@@ -223,6 +226,18 @@ fixed = os.path.join(tmp, ".config", "dira", "bin", "dira")
 assert os.path.isfile(os.path.join(os.path.dirname(fixed), "engines", "dira_env.py"))
 r = subprocess.run([fixed, "env", "list"], capture_output=True, env=ENV)
 assert r.returncode == 0 and r.stdout.decode().split()[0] == "A", r
+
+# 옛 tick.sh가 라우터를 env 분기 없는 옛 형태로 되덮어도, 안내하는 고정 경로 클라이언트는 그대로 돈다
+open(fixed, "w").write('#!/bin/bash\nd="$(cd "$(dirname "$0")" && pwd)"\ne=claude\nexec "$e" "$@"\n')
+ctx = subprocess.run([sys.executable, CLI, "context"], capture_output=True, env=dict(ENV, HOME=tmp)).stdout.decode()
+assert "python3 ~/.config/dira/bin/engines/dira_env.py list" not in ctx  # 사본이 있는 HOME에서만 안내한다
+ctx = dira("context").stdout.decode()
+assert "python3 ~/.config/dira/bin/engines/dira_env.py" in ctx and "bin/dira env" not in ctx
+r = subprocess.run([sys.executable, os.path.join(tmp, ".config", "dira", "bin", "engines", "dira_env.py"), "list"], capture_output=True, env=ENV)
+assert r.returncode == 0 and r.stdout.decode().split()[0] == "A", r
+# 사본이 없으면 명령 대신 사용 불가
+none = dira("context", env=dict(ENV, HOME=os.path.join(tmp, "nohome"))).stdout.decode()
+assert "설치되어 있지 않아" in none and "list`" not in none
 
 # 앱 종료: 연결 파일이 남아 있어도 자식을 시작하지 않는다
 app.kill(); app.wait()

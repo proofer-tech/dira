@@ -275,6 +275,12 @@ def context():
         state = "등록된 이름: " + (", ".join(names) if names else "(없음)")
     except Fail as e:
         state = "지금은 사용할 수 없습니다 (%s). 목록이 비었다는 뜻이 아닙니다. 데스크톱 앱이 실행 중인지 확인하고 다시 시도하세요." % str(e).split(":")[0]
+    # 라우터(~/.config/dira/bin/dira)는 env 분기 없는 옛 tick.sh가 되덮을 수 있다. 라우터와 무관한 고정
+    # 경로의 클라이언트 사본을 안내하고, 그 사본이 없으면 돌지 않을 명령 대신 사용 불가를 알린다.
+    client = os.path.expanduser("~/.config/dira/bin/engines/dira_env.py")
+    if not os.path.isfile(client):
+        print("프로젝트 환경변수 명령(%s)이 설치되어 있지 않아 지금은 사용할 수 없습니다. 목록이 비었다는 뜻이 아닙니다." % client)
+        return
     pre = "TICKET_ROOT=%s " % shlex.quote(root)
     if os.environ.get("TICKET_LOCAL"):
         pre += "TICKET_LOCAL=%s " % shlex.quote(local)
@@ -282,7 +288,7 @@ def context():
 
 ===== 프로젝트 환경변수 =====
 %s
-명령은 모두 `%s~/.config/dira/bin/dira env` 로 시작한다(이하 DIRA_ENV).
+명령은 모두 `%spython3 ~/.config/dira/bin/engines/dira_env.py` 로 시작한다(이하 DIRA_ENV).
 - 목록: `DIRA_ENV list`
 - 추가: `DIRA_ENV create NAME --stdin` (값은 stdin으로만 넣는다)
 - 교체: `DIRA_ENV replace NAME --revision REV --stdin` (REV는 list가 알려 준 값)
