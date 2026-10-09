@@ -348,6 +348,27 @@ test("pushCheckout - 통합 브랜치가 전진해도 두 회차 모두 성공�
   assert.strictEqual(G(origin, "rev-parse", "HEAD"), originBefore);
 });
 
+test("pushCheckout - 옛 사본(master 하드코딩)은 부르지 않고 사유를 내며 master를 만들지 않는다", async () => {
+  const { repo, wt, checkout, commit } = makeIntegrationSetup();
+  const src = readFileSync(path.join(import.meta.dirname, "../../../templates/hooks/push.sh"), "utf8");
+  writeFileSync(path.join(wt, ".dira", "push.sh"), src.replaceAll("<통합 브랜치>", "dev").replace('HEAD:"$_branch"', "HEAD:master"));
+  commit(repo, "dev1.txt");
+  commit(wt, "feat1.txt");
+  const r = await pushCheckout(checkout, "dev");
+  assert.strictEqual(r.ok, false);
+  assert.match(r.error ?? "", /HELPER_TARGET_MISMATCH/);
+  assert.strictEqual(G(repo, "branch", "--list", "master"), "");
+  writeFileSync(path.join(wt, ".dira", "push.sh"), src); // 자리표시자가 안 채워진 사본
+  assert.strictEqual((await pushCheckout(checkout, "dev")).error, "HELPER_TARGET_UNFILLED");
+});
+
+test("pushCheckout - 헬퍼가 성공해도 HEAD가 통합 브랜치에 없으면 실패로 낸다", async () => {
+  const { wt, checkout, commit } = makeIntegrationSetup();
+  commit(wt, "feat1.txt");
+  writeFileSync(path.join(wt, ".dira", "push.sh"), "#!/bin/bash\nexit 0\n");
+  assert.match((await pushCheckout(checkout, "dev")).error ?? "", /NOT_INTEGRATED/);
+});
+
 test("pushCheckout - 통합 대상이 없으면 추측하지 않고 헬퍼도 안 부른다", async () => {
   const { checkout } = makeIntegrationSetup();
   assert.strictEqual((await pushCheckout(checkout, null)).error, "NO_INTEGRATION_BRANCH");
@@ -399,7 +420,8 @@ test("pushCheckout - non-ff 경합은 한 번만 다시 합치고 헬퍼를 재�
   fakeHelper(
     wt,
     `n=$(cat "$(dirname "$0")/n" 2>/dev/null || echo 0); echo $((n+1)) > "$(dirname "$0")/n"
-if [ "$n" = 0 ]; then cd "${repo}" && echo x > late.txt && git add late.txt && git commit -qm late; echo "! [rejected] (non-fast-forward)" >&2; exit 1; fi`,
+if [ "$n" = 0 ]; then cd "${repo}" && echo x > late.txt && git add late.txt && git commit -qm late; echo "! [rejected] (non-fast-forward)" >&2; exit 1; fi
+git push . HEAD:dev`,
   );
   const r = await pushCheckout(checkout, "dev");
   assert.deepStrictEqual(r, { ok: true, error: null });

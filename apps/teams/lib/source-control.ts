@@ -2,7 +2,7 @@
  *  파싱하지 않는다(§11-3 결정 1) — 출처는 `lib/workers.ts`가 이미 `prepareWorktree`에서 쓰는
  *  `listWorktreeEntries`(`git worktree list --porcelain`)다. */
 import { execFile } from "node:child_process";
-import { access, realpath } from "node:fs/promises";
+import { access, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { listWorktreeEntries, nfc } from "./workers.ts";
@@ -271,11 +271,25 @@ export async function pushCheckout(checkout: Checkout, integration: string | nul
       cwd: checkout.path,
       maxBuffer: 16 * 1024 * 1024,
     });
+  // 헬퍼 사본이 다른 브랜치로 push하면 성공을 반환하고 통합 브랜치는 그대로다 - 부르기 전에 거른다.
+  const text = await readFile(path.join(checkout.path, ".dira", "push.sh"), "utf8").catch(() => "");
+  if (text.includes('_branch="<통합 브랜치>"')) return { ok: false, error: "HELPER_TARGET_UNFILLED" };
+  if (integration !== "master" && /HEAD:master\b/.test(text)) {
+    return { ok: false, error: `HELPER_TARGET_MISMATCH: push.sh는 master로 push하는데 통합 브랜치는 ${integration}다` };
+  }
   const sync = await syncWithIntegration(checkout.path, integration);
   if (sync) return { ok: false, error: sync };
+  // 성공을 믿지 않고 반영을 확인한다 - HEAD가 통합 브랜치의 후손이어야 push가 된 것이다.
+  const landed = async () =>
+    (await git(checkout.path, ["merge-base", "--is-ancestor", "HEAD", `refs/heads/${integration}`]).then(
+      () => true,
+      () => false,
+    ))
+      ? { ok: true as const, error: null }
+      : { ok: false as const, error: `NOT_INTEGRATED: push.sh가 성공했지만 HEAD가 ${integration}에 없다` };
   try {
     await helper();
-    return { ok: true, error: null };
+    return await landed();
   } catch (e) {
     const reason = reasonOf(e);
     // ponytail: git push의 non-ff 문구로만 가른다. 헬퍼가 종료 코드를 구분하면 그쪽으로.
@@ -284,7 +298,7 @@ export async function pushCheckout(checkout: Checkout, integration: string | nul
     if (again) return { ok: false, error: again };
     try {
       await helper();
-      return { ok: true, error: null };
+      return await landed();
     } catch (e2) {
       return { ok: false, error: reasonOf(e2) };
     }
