@@ -6,13 +6,16 @@
 // 토스트로, 아니면 OS 알림으로 알린다(U1·U2·U3 — 설치는 다음 실행 때).
 // 스펙: ../../docs/DESIGN.md §데스크톱 앱 ("고정하는 것" 1~8, N1~N6) · §릴리스 · 자동 업데이트
 // (R5~R8) · §표면이 창 안으로 들어온다 (T1~T7).
-import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain, nativeImage, shell } from "electron";
+import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain, nativeImage, safeStorage, shell } from "electron";
 // 이름 가져오기(`import { autoUpdater }`)가 아닌 이유: electron-updater는 CJS이고 그 이름을
 // `Object.defineProperty(exports, ...)`의 getter로 단다 — cjs-module-lexer가 못 보는 형태라
 // ESM 이름 가져오기가 `SyntaxError`로 죽는다. 기본 가져오기는 `module.exports` 그 자체다.
 import updater from "electron-updater";
 import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { createEnvBridge } from "./env-bridge.ts";
+import { createEnvStore } from "./env-store.ts";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
@@ -66,6 +69,26 @@ let killedIntentionally: ChildProcess | null = null;
  *  `true`다. 같은 사고로 렌더러 사망과 자식 `exit`가 함께 울려도 이 플래그가 뒤엣것을 건너뛰어
  *  `showWindow()`가(그 안의 `restart-server`가) 두 번 안 돈다. */
 let reviving = false;
+
+/** 프로젝트 환경변수(요구 04daa929) - 암호화는 OS 보안 저장소(`safeStorage`)가 한다. Linux에서
+ *  `basic_text`는 키가 평문 취급이라 잠김과 같게 본다(평문 대체 저장 없음). 브리지는 앱이 뜬 동안
+ *  127.0.0.1에만 열리고, 서버 자식에게는 주소와 secret이 환경변수로만 간다(토큰은 프로젝트마다 파생). */
+const envBridgeSecret = randomBytes(32).toString("hex");
+let envBridgeUrl = "";
+async function startEnvBridge() {
+  const backendOk = () =>
+    process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text";
+  const store = createEnvStore({
+    dir: join(app.getPath("userData"), "project-env"),
+    cipher: {
+      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable() && backendOk(),
+      encryptString: (p) => safeStorage.encryptString(p),
+      decryptString: (c) => safeStorage.decryptString(c),
+    },
+  });
+  const { port } = await createEnvBridge({ store, secret: envBridgeSecret }).listen();
+  envBridgeUrl = `http://127.0.0.1:${port}`;
+}
 
 /** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (고정하는 것 1). */
 function freePort(): Promise<number> {
@@ -187,6 +210,7 @@ function startServer(port: number): ChildProcess {
       // §0-11 — 이 셋이 통계의 전부다. **버전을 넘기는 것이 곧 셸 판정이다**(`shellParams()`:
       // 값이 있으면 `desktop`, 없으면 `browser`). 손으로 적지 않는다 — package.json이 정본이다.
       DIRA_APP_VERSION: app.getVersion(),
+      ...(envBridgeUrl ? { DIRA_ENV_BRIDGE_URL: envBridgeUrl, DIRA_ENV_BRIDGE_SECRET: envBridgeSecret } : {}),
       ...gaCredentials(),
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -1037,6 +1061,7 @@ async function showWindow() {
 
 async function boot() {
   installAppMenu(); // 실패 화면만 뜨는 실행에도 메뉴는 있다
+  await startEnvBridge().catch((e) => console.error(`[dira] 환경변수 브리지를 못 열었습니다: ${(e as Error).message}`));
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   child = startServer(port);
