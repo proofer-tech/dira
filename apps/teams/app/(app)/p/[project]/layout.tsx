@@ -9,7 +9,6 @@ import { notFound } from "next/navigation";
 import {
   Bell,
   CircleDot,
-  Clock,
   CloudOff,
   FileDiff,
   MessageSquareReply,
@@ -395,7 +394,7 @@ export default async function ProjectLayout({
               `Suspense` 밖이라 껍데기와 같이 즉시 뜬다(값이 이미 손에 있다 — §38 §다섯 상태 로딩).
               묶는 컴포넌트를 안 만든다 — `// ponytail: 두 번째 자리가 생기면 그때 묶는다` */}
           <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-            <Clock aria-hidden className="size-3 shrink-0" />
+            <NextDispatch periods={current.idlePeriods} locale={locale} />
             {/* 라벨은 §2 워커 4상태 표의 말이다 — 손으로 적지 않는다(`유휴`를 만들지 않는다).
                 `sr-only` 접두어로 낭독이 `idle 워커 w3 w9`가 된다: 앞에 읽히는 것이 엔진 한도라
                 낱말 하나로 주어를 안 바꾸면 `idle`이 엔진의 상태로 들린다(§38 §접근성) */}
@@ -410,9 +409,6 @@ export default async function ProjectLayout({
             <span className="truncate font-mono" title={idleNames}>
               {idleNames}
             </span>
-            {/* §1-6 다음 디스패치까지 남은 초 — 이름들 뒤 마지막 자식(§1-6 §값 §자리).
-                idle이 없으면 `idlePeriods`가 비어 `NextDispatch`가 아무것도 안 그린다. */}
-            <NextDispatch periods={current.idlePeriods} locale={locale} />
           </div>
         </footer>
       )}

@@ -12,3 +12,19 @@ export function secondsLeft(periods: readonly (30 | 60)[], now: number = Date.no
   const sec = Math.floor(now / 1000);
   return Math.min(...periods.map((p) => p - (sec % p)));
 }
+
+/** 남은 초와 그것을 낸 워커의 주기 — 시계 호의 몫은 `left / period`다 (P471 결정 1).
+ *  최솟값이 겹치면(30·60이 같은 `left`) 더 짧은 주기 쪽을 쓴다. 비면 `null`. */
+export function dispatchProgress(
+  periods: readonly (30 | 60)[],
+  now: number = Date.now(),
+): { left: number; period: 30 | 60 } | null {
+  if (periods.length === 0) return null;
+  const sec = Math.floor(now / 1000);
+  let best: { left: number; period: 30 | 60 } | null = null;
+  for (const period of periods) {
+    const left = period - (sec % period);
+    if (!best || left < best.left || (left === best.left && period < best.period)) best = { left, period };
+  }
+  return best;
+}
