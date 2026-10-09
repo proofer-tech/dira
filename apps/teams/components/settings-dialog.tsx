@@ -34,6 +34,8 @@ import {
 } from "lucide-react";
 import {
   captureEngineProfileAction,
+  changeEnvAction,
+  listEnvAction,
   deleteEngineProfileAction,
   deleteTokenAction,
   readAnalyticsAction,
@@ -89,6 +91,7 @@ import { ConfigTable, OntologyMetricsField, OntologyMigration } from "@/componen
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
 import type { AutonomyLevel } from "@/lib/projects";
+import type { EnvErrorCode, EnvItem } from "@/lib/project-env";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, actionName, formatCombo, type ActionId } from "@/lib/keymap";
 import { wrap } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -1507,6 +1510,193 @@ function IntegrationBranchField({ projectId, open }: { projectId: string; open: 
   );
 }
 
+/** 프로젝트 환경변수(요구 04daa929 · ENV-3). 이름 · 수정 시각 · 고정 마스크만 그린다 — 값을 읽는
+ *  길이 없고(브리지가 목록에 값을 안 준다) 입력은 빈 비밀번호 칸으로 시작해 성공이나 닫힘에서
+ *  버린다. 목록은 성공 응답으로만 바꾼다(실패한 쓰기는 오류 줄만 남긴다). 프로젝트가 바뀌면
+ *  `projectId` 의존 effect가 목록과 입력을 비우고, 늦게 온 이전 프로젝트 응답은 버린다. */
+function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean }) {
+  const t = useT();
+  const [items, setItems] = useState<EnvItem[] | null>(null);
+  const [name, setName] = useState("");
+  const [value, setValue] = useState("");
+  const [replacing, setReplacing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
+  const [code, setCode] = useState<EnvErrorCode | null>(null);
+  const [pending, start] = useTransition();
+  const live = useRef(projectId);
+
+  const discardInput = () => {
+    setName("");
+    setValue("");
+    setReplacing(null);
+    setDeleting(null);
+  };
+
+  const load = useCallback(() => {
+    const mine = projectId;
+    void listEnvAction(mine).then((r) => {
+      if (live.current !== mine) return;
+      if (r.ok) {
+        setItems(r.items);
+        setCode(null);
+      } else {
+        setCode(r.code);
+      }
+    });
+  }, [projectId]);
+
+  useEffect(() => {
+    live.current = projectId;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 프로젝트 전환과 닫힘에서 이전 값을 버리는 한 갈래뿐이다
+    setItems(null);
+    discardInput();
+    setCode(null);
+    if (open) load();
+  }, [projectId, open, load]);
+
+  const submit = (
+    change:
+      | { op: "create"; name: string; value: string }
+      | { op: "replace"; name: string; value: string; expectedRevision: string }
+      | { op: "delete"; name: string; expectedRevision: string },
+  ) =>
+    start(async () => {
+      const mine = projectId;
+      const r = await changeEnvAction(mine, change);
+      if (live.current !== mine) return;
+      if (r.ok) {
+        setCode(null);
+        discardInput();
+        setItems((cur) => {
+          const rest = (cur ?? []).filter((i) => i.name !== change.name);
+          return change.op === "delete" ? rest : [...rest, r.item].sort((a, b) => a.name.localeCompare(b.name));
+        });
+      } else {
+        setCode(r.code);
+        setValue("");
+        if (r.code === "conflict" || r.code === "not-found") {
+          setReplacing(null);
+          setDeleting(null);
+          load();
+        }
+      }
+    });
+
+  const fieldCode = code === "invalid-name" || code === "reserved" || code === "duplicate" || code === "invalid-value";
+
+  return (
+    <div data-setting="project.env" className="space-y-2 border-t pt-4">
+      <h3 className="text-sm font-medium">{t("env.title")}</h3>
+      <p className="text-xs text-muted-foreground">{t("env.note")}</p>
+      {code && (
+        <p role="alert" className="text-xs text-status-stale">
+          {t(`env.err.${code}`)}
+        </p>
+      )}
+      {items === null ? (
+        !code && <p className="text-sm text-muted-foreground">{t("env.loading")}</p>
+      ) : items.length === 0 ? (
+        <p className="text-sm text-muted-foreground">{t("env.empty")}</p>
+      ) : (
+        <ul className="space-y-1">
+          {items.map((i) => (
+            <li key={i.name} className="space-y-1">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-mono">{i.name}</span>
+                <span className="font-mono text-muted-foreground">{t("env.mask")}</span>
+                <span className="ml-auto text-xs text-muted-foreground">{i.updatedAt}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => {
+                    setReplacing(replacing === i.name ? null : i.name);
+                    setDeleting(null);
+                    setValue("");
+                  }}
+                >
+                  {t("env.replace")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={pending}
+                  onClick={() => {
+                    setDeleting(deleting === i.name ? null : i.name);
+                    setReplacing(null);
+                  }}
+                >
+                  <Trash2 className="size-4" aria-label={t("env.delete")} />
+                </Button>
+              </div>
+              {replacing === i.name && (
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    aria-label={t("env.valueLabel")}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                  />
+                  <Button
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => submit({ op: "replace", name: i.name, value, expectedRevision: i.revision })}
+                  >
+                    {pending ? t("env.saving") : t("env.replaceSave")}
+                  </Button>
+                </div>
+              )}
+              {deleting === i.name && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span>
+                    <span className="font-mono">{i.name}</span>
+                    {t("env.deleteConfirm")}
+                  </span>
+                  <Button size="sm" variant="ghost" onClick={() => setDeleting(null)}>
+                    {t("env.cancel")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={pending}
+                    onClick={() => submit({ op: "delete", name: i.name, expectedRevision: i.revision })}
+                  >
+                    {pending ? t("env.saving") : t("env.deleteConfirmYes")}
+                  </Button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="flex gap-2">
+        <Input
+          className="font-mono"
+          placeholder={t("env.nameLabel")}
+          aria-label={t("env.nameLabel")}
+          aria-invalid={fieldCode || undefined}
+          autoComplete="off"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <Input
+          type="password"
+          autoComplete="new-password"
+          placeholder={t("env.valueLabel")}
+          aria-label={t("env.valueLabel")}
+          value={replacing ? "" : value}
+          disabled={!!replacing}
+          onChange={(e) => setValue(e.target.value)}
+        />
+        <Button size="sm" disabled={pending || !name || !!replacing} onClick={() => submit({ op: "create", name, value })}>
+          {pending && !replacing ? t("env.saving") : t("env.add")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /** §설정이 프로젝트와 공통으로 갈린다 — 트리 첫 그룹의 유일한 노드가 여는 패널(§비주얼 §45 ⑫).
  *  다섯 자리(해석 결과 · 온톨로지 마이그레이션 · 온톨로지 가져오기 · 이름 · 등록 해제)는 옛
  *  `ProjectSettingsDialog`에서 그대로 옮겨 온 것이다 — 조작도 문구도 안 바뀐다(결정 1 · 3).
@@ -1641,6 +1831,7 @@ function ProjectSection({
       </div>
 
       <IntegrationBranchField projectId={id} open={open} />
+      <ProjectEnvField projectId={id} open={open} />
 
       {/* 자리 5 — 등록 해제. 확인은 이 자리 안에서 뜬다(결정 4) — 다이얼로그 머리도 트리도
           안 갈린다 */}

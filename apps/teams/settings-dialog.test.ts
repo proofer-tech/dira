@@ -134,3 +134,20 @@ test("TokensSection이 첫 조회 대기(rows === null)에 aria-busy 스켈레�
 test("재조회는 rows를 비우지 않는다(setRows(null) 호출 없음)", () => {
   assert.ok(!s.includes("setRows(null)"));
 });
+
+// ENV-2/ENV-3 — 환경변수 영역은 값을 읽거나 복사하는 길이 없고, 입력은 비밀번호 칸이며,
+// 프로젝트가 바뀌면 이전 응답을 버린다.
+const envStart = s.indexOf("function ProjectEnvField(");
+const envBody = s.slice(envStart, s.indexOf("function ProjectSection(", envStart));
+
+test("환경변수 영역: 값 입력은 password뿐이고 보기와 복사 동작이 없다", () => {
+  assert.ok(envStart >= 0);
+  assert.equal((envBody.match(/type="password"/g) ?? []).length, 2);
+  assert.doesNotMatch(envBody, /type="text"|clipboard|Copy|Eye\b|navigator\./);
+  assert.match(envBody, /t\("env\.mask"\)/);
+});
+
+test("환경변수 영역: 프로젝트 전환 시 비우고 늦은 응답을 버린다", () => {
+  assert.match(envBody, /live\.current !== mine/);
+  assert.match(envBody, /setItems\(null\);\s*discardInput\(\);/);
+});

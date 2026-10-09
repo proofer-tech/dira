@@ -10,6 +10,13 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
 import {
+  callEnvBridge,
+  validateEnvName,
+  validateEnvValue,
+  type EnvErrorCode,
+  type EnvItem,
+} from "@/lib/project-env";
+import {
   addToken,
   captureEngineProfile,
   deleteEngineProfile,
@@ -1000,4 +1007,37 @@ export async function saveIntegrationBranchAction(
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
+}
+
+// ── 프로젝트 환경변수 (요구 04daa929 · ENV-3) ──
+// 값은 이 액션의 인자로만 들어가고 응답에는 `{name, updatedAt, revision}`과 고정 오류 코드만 나간다.
+
+type EnvListResult = { ok: true; items: EnvItem[] } | { ok: false; code: EnvErrorCode };
+type EnvChangeResult = { ok: true; item: EnvItem } | { ok: false; code: EnvErrorCode };
+
+async function envRoot(id: string): Promise<string | null> {
+  return (await getProject(id))?.root ?? null;
+}
+
+export async function listEnvAction(id: string): Promise<EnvListResult> {
+  const root = await envRoot(id);
+  if (!root) return { ok: false, code: "unavailable" };
+  const r = await callEnvBridge(root, { op: "list" });
+  return r.ok ? { ok: true, items: r.data as EnvItem[] } : r;
+}
+
+/** ENV-3 순서: 이름 형식 -> 예약 이름 -> 값 -> 브리지(중복 · 충돌 · 잠김). */
+export async function changeEnvAction(
+  id: string,
+  change:
+    | { op: "create"; name: string; value: string }
+    | { op: "replace"; name: string; value: string; expectedRevision: string }
+    | { op: "delete"; name: string; expectedRevision: string },
+): Promise<EnvChangeResult> {
+  const bad = validateEnvName(change.name) ?? (change.op === "delete" ? null : validateEnvValue(change.value));
+  if (bad) return { ok: false, code: bad };
+  const root = await envRoot(id);
+  if (!root) return { ok: false, code: "unavailable" };
+  const r = await callEnvBridge(root, change);
+  return r.ok ? { ok: true, item: r.data as EnvItem } : r;
 }
