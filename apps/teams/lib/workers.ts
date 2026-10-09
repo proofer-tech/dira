@@ -1271,11 +1271,13 @@ const failLine = /^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[[^\]]*\] FAIL (\S+) .* 로
  *  부르면 파일이 없을 때 `oauth-token`을 항목 하나로 들여와 **새로 쓴다**, 이 판정 경로가 그
  *  부작용을 내면 "파일 없으면 종전 그대로"가 깨진다. 없음·깨짐·모양 다름 = 빈 배열이다 —
  *  `anyTokenEligible`·`limitWaitUntil` 둘 다 이 하나를 통해서만 `tokens.json`을 본다. */
-async function readTokenList(): Promise<TokenEntry[]> {
+async function readTokenList(engine = "claude"): Promise<Pick<TokenEntry, "enabled" | "exhaustedUntil">[]> {
   try {
     const raw: unknown = JSON.parse(await readFile(tokensPath(), "utf8"));
-    const tokens = (raw as TokensFile)?.claude?.tokens;
-    return Array.isArray(tokens) ? tokens : [];
+    // claude는 `tokens`, codex는 `profiles`다(§0-23 §그릇). 한도 판정은 두 칸의 공통 필드만 쓴다.
+    const file = raw as TokensFile;
+    const list = engine === "claude" ? file?.claude?.tokens : engine === "codex" ? file?.codex?.profiles : undefined;
+    return Array.isArray(list) ? list : [];
   } catch {
     return [];
   }
@@ -1283,8 +1285,8 @@ async function readTokenList(): Promise<TokenEntry[]> {
 
 /** §0-13 §`모두 소진`은 새 알림이 아니다. 없음·깨짐·모양 다름 = 목록을 안 쓰는 판(오늘 전부) =
  *  `false`, 종전 판정 그대로 간다. */
-async function anyTokenEligible(): Promise<boolean> {
-  return (await readTokenList()).some((t) => isEligible(t));
+async function anyTokenEligible(engine = "claude"): Promise<boolean> {
+  return (await readTokenList(engine)).some((t) => isEligible(t));
 }
 
 /** §0-21 결정 4 — 워커 행이 말하는 `리밋 대기`의 복귀 시각(epoch 초, `exhaustedUntil`과 같은
@@ -1294,8 +1296,8 @@ async function anyTokenEligible(): Promise<boolean> {
  *  eligible이 1장이라도 있으면 `null`이다(리밋 대기가 아니다). eligible이 0장인데
  *  `exhaustedUntil`이 하나도 없으면(토큰 0개 · 전부 비활성) 그릴 시각이 없다 — 그때도 `null`이다
  *  (§0-21 §다섯 상태의 에러 갈래, "그릴 값이 없으면 안 그린다"). */
-export async function limitWaitUntil(): Promise<number | null> {
-  const tokens = await readTokenList();
+export async function limitWaitUntil(engine = "claude"): Promise<number | null> {
+  const tokens = await readTokenList(engine);
   if (tokens.length === 0 || tokens.some((t) => isEligible(t))) return null;
   const untils = tokens.map((t) => t.exhaustedUntil).filter((v): v is number => v != null);
   return untils.length > 0 ? Math.min(...untils) : null;
@@ -1309,6 +1311,7 @@ async function failureOf(
   logsDir: string,
   line: string | null,
   coolUntil: () => Promise<number>,
+  engine = "claude",
 ): Promise<WorkerFailure | null> {
   const m = line && failLine.exec(line);
   if (!m) return null;
@@ -1332,7 +1335,7 @@ async function failureOf(
   // §0-13 §`모두 소진`은 새 알림이 아니다. 회전이 아직 지문을 못 푼 cron 한 칸(최대 60초) 동안
   // 쿨다운은 살아 있어도 **쓸 토큰이 남아 있으면** 이 배너는 거짓말이다 — 요구는 *모두* 걸렸을
   // 때만 보내라고 정했다. 읽는 것은 여기까지 온 살아 있는 실패뿐이라 정상 상태의 I/O는 0이다.
-  if (await anyTokenEligible()) return null;
+  if (await anyTokenEligible(engine)) return null;
   return { at, hash, reason, log };
 }
 
@@ -1757,6 +1760,7 @@ export async function listWorkers(
         path.join(dir, "logs"),
         logs.byWorker[eff]?.result ?? null,
         coolUntil(parsed.engine),
+        engineName(parsed.engine),
       ),
       context: await contextOf(root, text, parsed.cwd),
       // 이 줄이 없는 워커는 공통을 못 받는다 — 화면이 경고 + `공통 적용`을 띄운다(§4-1).

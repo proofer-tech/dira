@@ -1445,6 +1445,38 @@ test("limitWaitUntil — eligible이 0장이면 가장 이른 exhaustedUntil, 1�
   rmSync(tokensPath(), { force: true });
 });
 
+test("limitWaitUntil(codex) — profiles 칸을 같은 규칙으로 보고 claude 칸과 섞이지 않는다", async () => {
+  const prof = (id: string, over: Record<string, unknown> = {}) => ({
+    id,
+    addedAt: "2026-01-01T00:00:00Z",
+    enabled: true,
+    exhaustedUntil: null,
+    ...over,
+  });
+  // codex 둘 다 소진, claude는 eligible — codex만 가장 이른 시각을 낸다.
+  writeFileSync(
+    tokensPath(),
+    JSON.stringify({
+      claude: { active: "a", tokens: [tokenEntry("a")] },
+      codex: { active: "x", profiles: [prof("x", { exhaustedUntil: exhausted + 50 }), prof("y", { exhaustedUntil: exhausted })] },
+    }),
+  );
+  assert.strictEqual(await limitWaitUntil("codex"), exhausted);
+  assert.strictEqual(await limitWaitUntil("claude"), null);
+
+  // codex 하나가 eligible이면 null, codex 칸이 없으면 null.
+  writeFileSync(
+    tokensPath(),
+    JSON.stringify({ codex: { active: "x", profiles: [prof("x", { exhaustedUntil: exhausted }), prof("y")] } }),
+  );
+  assert.strictEqual(await limitWaitUntil("codex"), null);
+  writeFileSync(tokensPath(), JSON.stringify({ claude: { active: "a", tokens: [tokenEntry("a", { exhaustedUntil: exhausted })] } }));
+  assert.strictEqual(await limitWaitUntil("codex"), null);
+  assert.strictEqual(await limitWaitUntil("claude"), exhausted);
+
+  rmSync(tokensPath(), { force: true });
+});
+
 /** `-l`은 `tab`을 읽고, `crontab -`은 `out`에 쓴다. 만들어진 명령을 **진짜 셸에** 먹여
  *  결과 crontab을 본다. 읽는 파일과 쓰는 파일을 나눈 건 `crontab -l | … | crontab -`이
  *  한 파이프라인이라 같은 파일이면 읽기 도중 truncate되는 경주가 나서다.

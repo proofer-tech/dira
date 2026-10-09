@@ -112,7 +112,11 @@ export default async function Workers({ params }: { params: Promise<{ project: s
   const usage = await listUsage(project.root);
   // `tokens.json` 파일 읽기 1회, 워커 수와 무관하다(§비주얼 §57 §로딩). `null`이면 `리밋 대기`가
   // 행 전체에 안 뜬다 — eligible이 1장이라도 있거나 tokens.json이 없다.
-  const limitUntil = await limitWaitUntil();
+  // 엔진마다 하나다(claude · codex) — 파일 읽기는 엔진 수만큼이고 워커 수와 무관하다.
+  const limitUntil: Record<string, number | null> = {
+    claude: await limitWaitUntil("claude"),
+    codex: await limitWaitUntil("codex"),
+  };
   // 만들기 다이얼로그의 두 줄(수 + 뜻) — 새 셈을 안 만든다, P357-3이 낸 `sessionCapOf` 그대로
   // 부른다(정본 절 결정 1). 큐 하나가 상한을 독점하지 않는다는 것을 보여주려면 이 프로젝트 하나가
   // 아니라 등록된 큐 전부를 훑어야 한다.
@@ -242,14 +246,14 @@ export default async function Workers({ params }: { params: Promise<{ project: s
                     <StatusBadge status={w.status} locale={locale} />
                     {/* `status` 배지를 대체하지 않고 나란히 뜬다(§비주얼 §57 §2) — claude가
                         eligible 0장이고 이 워커가 실제로 `idle`(락 없음)일 때만 뜬다. */}
-                    {w.status === "idle" && w.engineName === "claude" && limitUntil != null && (
+                    {w.status === "idle" && limitUntil[w.engineName] != null && (
                       <Badge
                         variant="outline"
                         className="text-status-blocked bg-status-blocked/10 border-status-blocked/30"
                         title={t(locale, "workers.limitBadge.title")}
                       >
                         <Hourglass aria-hidden />
-                        {t(locale, "workers.limitBadge.labelPrefix")} {dateTimeLabel(limitUntil * 1000)}
+                        {t(locale, "workers.limitBadge.labelPrefix")} {dateTimeLabel(limitUntil[w.engineName]! * 1000)}
                       </Badge>
                     )}
                     {NOTE_KEY[w.status] && (

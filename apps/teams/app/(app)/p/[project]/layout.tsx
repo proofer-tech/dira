@@ -40,7 +40,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { hasRegisteredToken, readAuth, readOtherEngineAuth, readTokenRows, readTokens } from "@/lib/auth";
+import { hasRegisteredToken, readAuth, readEngineProfileRows, readOtherEngineAuth, readTokenRows, readTokens } from "@/lib/auth";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
@@ -857,13 +857,15 @@ async function EngineCells({
   // 소모 속도는 트랜스크립트 스캔(30초 TTL)이고 한도는 외부 GET이라 **따로 도착한다**(§26 ⑧).
   // 직렬로 `await`하면 스캔이 GET 뒤에 줄을 서므로 같이 띄운다 — 둘 다 자기 캐시 뒤에 있다.
   // `tokens.json`은 claude 전용이다(§0-13 §범위) — claude가 없는 프로젝트에서는 안 읽는다.
-  const [limits, rates, tokenRows] = await Promise.all([
+  const [limits, rates, tokenRows, codexRows] = await Promise.all([
     engineLimits(engines, locale),
     usageRates(root, workers),
     engines.includes("claude") ? readTokenRows(locale) : Promise.resolve([]),
+    engines.includes("codex") ? readEngineProfileRows("codex", locale) : Promise.resolve([]),
   ]);
   // §0-8 §개정 ③ — 활성 항목의 표시 이름. 없으면(0개) 이 슬롯만 빠진다(`undefined`).
   const activeAccount = tokenRows.find((r) => r.status.kind === "active")?.label;
+  const activeCodex = codexRows.find((r) => r.status.kind === "active")?.label;
   // 소비량은 **게이지가 못 선 칸에서만** 쓴다(§26 ⑤). 전부 정상이면 로그를 아예 안 읽는다.
   // `limits[e]`가 없는 것(claude 활성 항목 0개, §0-8 §재개정 (3))은 실패가 아니라 부재라 안 센다.
   const usage = engines.some((e) => limits[e] && "error" in limits[e]) ? await listUsage(root) : null;
@@ -916,8 +918,8 @@ async function EngineCells({
                   .reduce((n, w) => n + (usage.byWorker[w.worker.normalize("NFC")] ?? 0), 0)
               : 0
           }
-          // `tokens.json`이 claude 전용이라(§0-13 §범위) 다른 엔진 칸은 이 슬롯을 안 얻는다
-          accountLabel={e === "claude" ? activeAccount : undefined}
+          // claude · codex만 계정 목록이 있다(§0-13, 2c62af00 계약 5) — 다른 엔진 칸은 이 슬롯을 안 얻는다
+          accountLabel={e === "claude" ? activeAccount : e === "codex" ? activeCodex : undefined}
           activeLabel={t(locale, "settings.tokens.active")}
           locale={locale}
         />
