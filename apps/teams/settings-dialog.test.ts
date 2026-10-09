@@ -119,3 +119,18 @@ test("ProjectSection의 load()는 그 useEffect 하나만 부른다 — 열림 �
   const calls = body.match(/\bload\(\)/g) ?? [];
   assert.equal(calls.length, 1, `load() 호출이 useEffect 하나여야 하는데 ${calls.length}곳이다`);
 });
+
+test("TokensSection이 첫 조회 대기(rows === null)에 aria-busy 스켈레톤을 그린다", () => {
+  const i = s.indexOf("if (rows === null) {");
+  assert.ok(i >= 0, "rows === null 분기를 못 찾았다");
+  const body = s.slice(i, s.indexOf("if (rows.length === 0)", i));
+  assert.match(body, /aria-busy="true"/);
+  assert.match(body, /<Skeleton /);
+  assert.match(body, /aria-hidden="true"/);
+  assert.ok(!body.includes("settings.tokens.empty"), "대기 중 빈 목록 안내가 나오면 안 된다");
+  assert.ok(!body.includes("return null"), "대기 분기가 아무것도 안 그리면 안 된다");
+});
+
+test("재조회는 rows를 비우지 않는다(setRows(null) 호출 없음)", () => {
+  assert.ok(!s.includes("setRows(null)"));
+});

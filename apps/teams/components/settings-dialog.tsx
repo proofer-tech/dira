@@ -117,6 +117,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   Sidebar,
@@ -1158,7 +1159,23 @@ function TokensSection({
       setEditingId(null);
     });
 
-  if (rows === null) return null; // 아직 안 읽었다 — 빈 목록과 헷갈리지 않는다
+  // 아직 안 읽었다 - 빈 목록과 헷갈리지 않게 행 모양 스켈레톤을 그린다. 장식이라 보조기술과
+  // 탭 순서에서 뺀다(스켈레톤은 포커스 대상이 없고 aria-hidden). 재조회는 rows가 남아 있어 여기로 안 온다.
+  if (rows === null) {
+    return (
+      <ul className="space-y-1.5" aria-busy="true" data-testid="tokens-skeleton">
+        {[0, 1].map((i) => (
+          <li key={i} aria-hidden="true" className="flex items-center justify-between gap-3 rounded-md border p-2">
+            <div className="space-y-1.5">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+            <Skeleton className="h-7 w-16" />
+          </li>
+        ))}
+      </ul>
+    );
+  }
   if (rows.length === 0) {
     return <p className="text-sm text-muted-foreground">{t("settings.tokens.empty")}</p>;
   }
