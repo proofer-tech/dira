@@ -3026,7 +3026,9 @@ export async function prepareWorktree(
  *  **§0-3 스캐폴딩과 §4-18 생성 버튼 폴백이 같이 부른다** — 두 벌로 갈리면 새 프로젝트와 워커
  *  0개인 큐의 첫 워커가 서로 다른 판정을 받는다. */
 export function engineRepo(locale: Locale = DEFAULT_LOCALE): { path: string } | { error: string } {
-  const env = process.env.DIRA_ENGINE?.trim();
+  // tick.sh도 세션 환경에 DIRA_ENGINE을 엔진 이름(claude)으로 세운다 - 절대경로만 경로로 읽는다
+  const raw = process.env.DIRA_ENGINE?.trim();
+  const env = raw && path.isAbsolute(raw) ? raw : undefined;
   const repo = env ? path.resolve(env) : path.resolve(process.cwd(), "..", "..");
   if (existsSync(path.join(repo, "tick.sh"))) return { path: repo };
   return {
