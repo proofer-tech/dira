@@ -6,7 +6,7 @@
  *  토큰이 생기면 61행 조건이 먼저 꺼져 다시 보지 않는다(§0-4). */
 import { spawn, type ChildProcess } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { accessSync, constants, statSync } from "node:fs";
+import { accessSync, constants, lstatSync, statSync } from "node:fs";
 import { chmod, cp, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -478,8 +478,14 @@ export async function captureEngineProfile(
   const id = randomUUID();
   const dir = engineProfileDir(engine, id);
   await mkdir(path.dirname(dir), { recursive: true });
-  await cp(src, dir, { recursive: true });
-  await chmod(dir, 0o700);
+  try {
+    // Unix 소켓(예: app-server-daemon/daemon-updater.sock)은 cp가 복사하지 못하고 인증과도 무관하다
+    await cp(src, dir, { recursive: true, filter: (from) => !lstatSync(from).isSocket() });
+    await chmod(dir, 0o700);
+  } catch (e) {
+    await rm(dir, { recursive: true, force: true }); // 이번 시도가 만든 불완전 사본만 지운다(id는 방금 만든 무작위값)
+    throw e;
+  }
   const entry: ProfileEntry = { id, addedAt: new Date().toISOString(), enabled: true, exhaustedUntil: null };
 
   if (!(await isMultiTokenAllowed())) {

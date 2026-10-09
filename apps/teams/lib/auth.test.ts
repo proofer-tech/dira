@@ -1,15 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { createHash } from "node:crypto";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -961,6 +964,51 @@ test("captureEngineProfile — 원본을 통째로 복사한다. 디렉터리 07
   assert.strictEqual(file.codex!.active, entry.id);
   assert.deepStrictEqual(file.codex!.profiles, [entry]);
   assert.ok(!("token" in entry));
+});
+
+test("captureEngineProfile — Unix 소켓은 빼고 복사하며 일반 파일·하위 디렉터리는 유지한다", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-sock-"));
+  const home = makeEngineHome(".codex");
+  const src = path.join(home, ".codex");
+  writeFileSync(path.join(src, "config.toml"), "model = 'x'\n");
+  mkdirSync(path.join(src, "app-server-daemon"));
+  writeFileSync(path.join(src, "app-server-daemon", "state.json"), "{}");
+  const server = createServer();
+  await new Promise<void>((res) => server.listen(path.join(src, "app-server-daemon", "d.sock"), res));
+  try {
+    const entry = await captureEngineProfile("codex", home);
+    const dir = engineDir("codex", entry.id);
+    assert.strictEqual(statSync(dir).mode & 0o777, 0o700);
+    assert.ok(!existsSync(path.join(dir, "app-server-daemon", "d.sock")));
+    assert.strictEqual(readFileSync(path.join(dir, "app-server-daemon", "state.json"), "utf8"), "{}");
+    assert.strictEqual(readFileSync(path.join(dir, "config.toml"), "utf8"), "model = 'x'\n");
+    assert.strictEqual(readFileSync(path.join(dir, "auth.json"), "utf8"), '{"ok":true}');
+    const file = await readTokens();
+    assert.deepStrictEqual(file.codex!.profiles, [entry]);
+    assert.strictEqual(file.codex!.active, entry.id);
+  } finally {
+    server.close();
+  }
+});
+
+test("captureEngineProfile — 복사가 실패하면 오류를 던지고 목록·활성·불완전 사본·원본이 그대로다", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-cpfail-"));
+  const first = await captureEngineProfile("codex", makeEngineHome(".codex"));
+  const home = makeEngineHome(".codex");
+  const bad = path.join(home, ".codex", "unreadable.json");
+  writeFileSync(bad, "x", { mode: 0o000 }); // 읽기 불가 파일로 cp를 실패시킨다
+  const before = readdirSync(path.dirname(engineDir("codex", first.id)));
+  try {
+    await assert.rejects(() => captureEngineProfile("codex", home));
+  } finally {
+    chmodSync(bad, 0o600);
+  }
+  assert.deepStrictEqual(readdirSync(path.dirname(engineDir("codex", first.id))), before);
+  const file = await readTokens();
+  assert.deepStrictEqual(file.codex!.profiles, [first]);
+  assert.strictEqual(file.codex!.active, first.id);
+  assert.ok(existsSync(engineDir("codex", first.id)));
+  assert.ok(existsSync(path.join(home, ".codex", "auth.json")));
 });
 
 test("captureEngineProfile — 원본이 없으면 던진다(버튼이 이미 막지만 방어로 한 번 더 잰다)", async () => {
