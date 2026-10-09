@@ -1083,6 +1083,8 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff c_squad
   fi
   ENGINE_NAME="${ENGSUF:-$ENGBN}"
   CDOWN="$LOCAL/run/cooldown-$ENGINE_NAME${TICKET_SLOT:+-$TICKET_SLOT}"
+  # 세션이 token-rotate.sh exhausted로 알릴 때 훅이 엔진을 판정하는 근거(요구 2c62af00). 자식이 상속한다.
+  export DIRA_ENGINE="$ENGINE_NAME"
 
   # P460-1: Background launchd 세션(cron 워커)은 로그인 키체인을 못 봐서 agy CLI가 대화형
   # OAuth로 빠진다(docs/design/요구-절.md §다른 사용자도 agy CLI만 깔려 있으면... 결정 1).

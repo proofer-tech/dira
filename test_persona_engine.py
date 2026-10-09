@@ -40,6 +40,7 @@ TICKET_ENGINE=("{tmp}/engine-base.sh" "{{sid}}")
 ENGINE = """\
 #!/bin/bash
 echo "$(basename "$0")" >> "{tmp}/ran.log"
+echo "$(basename "$0") DIRA_ENGINE=$DIRA_ENGINE" >> "{tmp}/env.log"
 printf '{{"session_id":"%s","type":"result","is_error":false,"subtype":"success"}}\\n' "$1"
 exit 0
 """
@@ -72,6 +73,11 @@ try:
            'TICKET_ENGINE=("%s/engine-pm.sh" "{sid}")\n' % tmp)
     mkfile(os.path.join(root, "personas", "developer", "engine"),
            'TICKET_ENGINE=("%s/engine-dev.sh" "{sid}")\n' % tmp)
+
+    # 엔진 이름이 codex인 가짜(basename이 곧 ENGINE_NAME이다)
+    mkfile(os.path.join(tmp, "cx", "codex"), ENGINE.format(tmp=tmp), 0o755)
+    mkfile(os.path.join(root, "personas", "writer", "engine"),
+           'TICKET_ENGINE=("%s/cx/codex" "{sid}")\n' % tmp)
 
     def queue(open_):
         """큐를 원하는 모양으로 다시 세운다."""
@@ -135,6 +141,14 @@ try:
         "persona 엔진 디스패치가 안 났다:\n" + added
     assert "engine-pm.sh" in ran(), "실제로 도는 명령이 재구성된 엔진이 아니다: " + ran()
     assert "engine-base.sh" not in ran(), "기본 엔진이 대신 돌았다: " + ran()
+
+    # --- 세션 환경에 DIRA_ENGINE이 엔진 이름으로 선다(token-rotate.sh exhausted의 엔진 판정 근거) ---
+    envlog = os.path.join(tmp, "env.log")
+    assert "engine-pm.sh DIRA_ENGINE=engine-pm.sh" in open(envlog).read(), open(envlog).read()
+    queue([("cafe0004", "writer")])
+    tick()
+    time.sleep(1)
+    assert "codex DIRA_ENGINE=codex" in open(envlog).read(), open(envlog).read()
 
     # --- ② 재구성된 엔진이 쿨다운 중이면 그 후보는 SKIP, 다른 엔진 쓰는 후보가 대신 뜬다 ---
     os.remove(ranlog)  # ①의 흔적을 지운다 - 이번 판정은 engine-dev.sh만 돌아야 한다
