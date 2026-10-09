@@ -263,14 +263,7 @@ async function syncWithIntegration(cwd: string, integration: string): Promise<st
  *  없으면(`pushSh === false`) 헬퍼를 만들어 넣지 않고 사유만 낸다. `integration`이 `null`이면
  *  대상을 추측하지 않고 `NO_INTEGRATION_BRANCH`다. */
 export async function pushCheckout(checkout: Checkout, integration: string | null = null): Promise<ScmOutcome> {
-  if (checkout.isRoot) {
-    try {
-      await git(checkout.path, ["push"]);
-      return { ok: true, error: null };
-    } catch (e) {
-      return { ok: false, error: reasonOf(e) };
-    }
-  }
+  if (checkout.isRoot) return syncRoot(checkout.path, true);
   if (!checkout.pushSh) return { ok: false, error: "NO_PUSH_SH" };
   if (!integration) return { ok: false, error: "NO_INTEGRATION_BRANCH" };
   const helper = () =>
@@ -298,13 +291,120 @@ export async function pushCheckout(checkout: Checkout, integration: string | nul
   }
 }
 
-/** pull은 `git pull --ff-only` 하나다(§11-3 결정 4) — 머지 커밋도 리베이스도 안 만든다. ff가
- *  안 되면 git 자신의 거절 사유를 그대로 낸다. */
+/** pull - 설정된 upstream을 fetch하고 같음/앞섬은 성공, 뒤처짐은 ff, 분기는 merge 커밋이다(§0-25 결정 10).
+ *  기존 커밋은 재작성하지 않는다. */
 export async function pullCheckout(cwd: string): Promise<ScmOutcome> {
+  return syncRoot(cwd, false);
+}
+
+// ── 일반 동기화(§0-25 결정 10) ──────────────────────────────────────────────
+
+// ponytail: 프로세스 안 직렬화만 한다. 서버가 여럿이면 git index.lock이 마지막 방어선이다.
+const chains = ((globalThis as { __scmChains?: Map<string, Promise<unknown>> }).__scmChains ??= new Map());
+async function serialized<T>(cwd: string, fn: () => Promise<T>): Promise<T> {
+  const key = await realpath(cwd).catch(() => cwd);
+  const prev = chains.get(key) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  const tail = run.catch(() => undefined);
+  chains.set(key, tail);
   try {
-    await git(cwd, ["pull", "--ff-only"]);
-    return { ok: true, error: null };
-  } catch (e) {
-    return { ok: false, error: reasonOf(e) };
+    return await run;
+  } finally {
+    if (chains.get(key) === tail) chains.delete(key);
   }
+}
+
+class SyncError extends Error {}
+const fail = (m: string): never => {
+  throw new SyncError(m);
+};
+const out = async (cwd: string, args: string[]) => (await git(cwd, args)).stdout.trim();
+const tryOut = (cwd: string, args: string[]) => out(cwd, args).catch(() => null);
+
+type Target = { branch: string; remote: string; ref: string; upstream: string };
+
+/** 병합을 시작해도 되는 체크아웃인가 - 진행 중 작업과 detached HEAD, upstream 부재는 이유만 낸다. */
+async function target(cwd: string): Promise<Target> {
+  for (const f of ["MERGE_HEAD", "rebase-merge", "rebase-apply", "CHERRY_PICK_HEAD", "REVERT_HEAD"]) {
+    const p = await out(cwd, ["rev-parse", "--git-path", f]);
+    if (await access(path.resolve(cwd, p)).then(() => true, () => false)) fail("OP_IN_PROGRESS: " + f);
+  }
+  const head = await tryOut(cwd, ["symbolic-ref", "-q", "--short", "HEAD"]);
+  if (!head) fail("DETACHED_HEAD");
+  const branch = head as string;
+  const remote = await tryOut(cwd, ["config", `branch.${branch}.remote`]);
+  const ref = await tryOut(cwd, ["config", `branch.${branch}.merge`]);
+  if (!remote || !ref) fail("NO_UPSTREAM");
+  return { branch, remote: remote as string, ref: ref as string, upstream: `${remote}/${(ref as string).replace(/^refs\/heads\//, "")}` };
+}
+
+/** fetch -> 관계 판정 -> 필요하면 ff 또는 merge. 충돌은 이번 merge만 abort한다. */
+async function integrate(cwd: string, t: Target): Promise<void> {
+  if (t.remote !== ".") await git(cwd, ["fetch", t.remote]);
+  const tip = await tryOut(cwd, ["rev-parse", "--verify", "-q", t.remote === "." ? t.ref : `refs/remotes/${t.upstream}`]);
+  if (!tip) fail("NO_UPSTREAM: " + t.upstream);
+  const [ahead, behind] = (await out(cwd, ["rev-list", "--left-right", "--count", `HEAD...${tip}`])).split(/\s+/).map(Number);
+  if (behind === 0) return; // 같음, 로컬만 앞섬
+  if ((await out(cwd, ["status", "--porcelain", "--untracked-files=all"])) !== "") fail("DIRTY_CHECKOUT");
+  const before = await out(cwd, ["rev-parse", "HEAD"]);
+  try {
+    await git(cwd, ahead === 0 ? ["merge", "--ff-only", tip as string] : ["merge", "--no-edit", "--no-ff", tip as string]);
+  } catch (e) {
+    const reason = reasonOf(e);
+    const merging = await tryOut(cwd, ["rev-parse", "-q", "--verify", "MERGE_HEAD"]);
+    const now = await tryOut(cwd, ["rev-parse", "HEAD"]);
+    if (!merging) fail(reason);
+    if (now !== before) fail("HEAD_MOVED: " + reason); // 다른 실행의 변경은 되돌리지 않는다
+    try {
+      await git(cwd, ["merge", "--abort"]);
+    } catch (a) {
+      fail("ABORT_FAILED: " + reasonOf(a));
+    }
+    fail("MERGE_CONFLICT: " + reason);
+  }
+}
+
+/** push 대상이 upstream과 같은 원격 브랜치 하나인지 본다. 다르거나 여럿이면 추측하지 않고 거절한다. */
+async function pushTarget(cwd: string, t: Target): Promise<void> {
+  const pushRemote =
+    (await tryOut(cwd, ["config", `branch.${t.branch}.pushRemote`])) ??
+    (await tryOut(cwd, ["config", "remote.pushDefault"])) ??
+    t.remote;
+  if (pushRemote !== t.remote) fail(`PUSH_TARGET_MISMATCH: pushRemote ${pushRemote} != ${t.remote}`);
+  const specs = (await tryOut(cwd, ["config", "--get-all", `remote.${t.remote}.push`]))?.split("\n").filter(Boolean) ?? [];
+  if (specs.length > 1) fail("PUSH_TARGET_AMBIGUOUS: " + specs.join(" "));
+  if (specs.length === 1) {
+    const dst = specs[0].replace(/^\+/, "").split(":")[1];
+    if (dst !== t.ref) fail(`PUSH_TARGET_MISMATCH: refspec ${specs[0]}`);
+  }
+  const mode = (await tryOut(cwd, ["config", "push.default"])) ?? "simple";
+  if (mode === "matching") fail("PUSH_TARGET_AMBIGUOUS: push.default=matching");
+  if (mode === "nothing") fail("PUSH_TARGET_MISMATCH: push.default=nothing");
+  if ((mode === "simple" || mode === "current") && t.ref !== `refs/heads/${t.branch}`)
+    fail(`PUSH_TARGET_MISMATCH: push.default=${mode} sends ${t.branch} to a branch named differently from ${t.ref}`);
+}
+
+const NON_FF = /non-fast-forward|fetch first|tip of your current branch is behind/i;
+
+function syncRoot(cwd: string, push: boolean): Promise<ScmOutcome> {
+  return serialized(cwd, async () => {
+    try {
+      const t = await target(cwd);
+      if (push) await pushTarget(cwd, t);
+      await integrate(cwd, t);
+      if (push) {
+        const send = () => git(cwd, ["push", t.remote, `HEAD:${t.ref}`]);
+        try {
+          await send();
+        } catch (e) {
+          if (!NON_FF.test(reasonOf(e)) || /remote rejected|hook/i.test(reasonOf(e))) throw e;
+          await integrate(cwd, t); // 대상이 push 도중 전진했다 - 한 번만 다시 통합하고 보낸다
+          await send();
+        }
+      }
+      return { ok: true, error: null };
+    } catch (e) {
+      return { ok: false, error: e instanceof SyncError ? e.message : reasonOf(e) };
+    }
+  });
 }

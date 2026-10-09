@@ -416,3 +416,174 @@ test("pushCheckout - non-ff가 아닌 헬퍼 실패는 재시도하지 않는다
   assert.match(r.error ?? "", /Authentication failed/);
   assert.strictEqual(readFileSync(path.join(wt, ".dira", "n"), "utf8").trim(), "x");
 });
+
+// ── 일반 동기화 (§0-25 결정 10) ──────────────────────────────────────────────
+
+/** bare 원격 + 복제본 둘(a, b). 둘 다 main이 origin/main을 추적한다. */
+function makeTrio() {
+  const base = mkdtempSync(path.join(tmpdir(), "scm-trio-"));
+  tmps.push(base);
+  const seed = makeRepo();
+  const bare = path.join(base, "bare.git");
+  execFileSync("git", ["clone", "-q", "--bare", seed, bare]);
+  const clone = (n: string) => {
+    const d = path.join(base, n);
+    execFileSync("git", ["clone", "-q", bare, d]);
+    G(d, "config", "user.email", "t@example.com");
+    G(d, "config", "user.name", "t");
+    return d;
+  };
+  return { bare, a: clone("a"), b: clone("b") };
+}
+const commitFile = (dir: string, name: string) => {
+  writeFileSync(path.join(dir, name), name + "\n");
+  G(dir, "add", name);
+  G(dir, "commit", "-qm", name);
+  return G(dir, "rev-parse", "HEAD");
+};
+const isAncestor = (dir: string, c: string) => {
+  try {
+    G(dir, "merge-base", "--is-ancestor", c, "HEAD");
+    return true;
+  } catch {
+    return false;
+  }
+};
+const bPush = (b: string) => {
+  G(b, "pull", "-q", "--no-rebase", "--no-edit");
+  G(b, "push", "-q", "origin", "main");
+};
+const rootOf = (p: string): Checkout => ({ id: "root", path: p, branch: "main", isRoot: true, pushSh: null });
+
+test("동기화 — pull과 루트 push 두 회차: 서로 다른 파일 커밋이 갈려도 성공하고 원래 커밋이 조상이다", async () => {
+  for (const mode of ["pull", "push"] as const) {
+    const { a, b } = makeTrio();
+    for (let i = 0; i < 2; i++) {
+      const mine = commitFile(a, `${mode}-a${i}`);
+      const theirs = commitFile(b, `${mode}-b${i}`);
+      bPush(b);
+      const r = mode === "pull" ? await pullCheckout(a) : await pushCheckout(rootOf(a));
+      assert.deepStrictEqual(r, { ok: true, error: null });
+      assert.ok(isAncestor(a, mine) && isAncestor(a, theirs));
+      if (mode === "push") assert.strictEqual(G(a, "rev-parse", "HEAD"), G(a, "rev-parse", "origin/main"));
+    }
+  }
+});
+
+test("동기화 — 같음/앞섬/뒤처짐은 머지 커밋이 없고 분기만 만든다", async () => {
+  const { a, b } = makeTrio();
+  const parents = () => G(a, "rev-list", "--parents", "-1", "HEAD").split(" ").length - 1;
+  const h0 = G(a, "rev-parse", "HEAD");
+  assert.deepStrictEqual(await pullCheckout(a), { ok: true, error: null }); // 같음
+  assert.strictEqual(G(a, "rev-parse", "HEAD"), h0);
+  const ahead = commitFile(a, "ahead");
+  assert.deepStrictEqual(await pullCheckout(a), { ok: true, error: null }); // 로컬만 앞섬
+  assert.strictEqual(G(a, "rev-parse", "HEAD"), ahead);
+  G(a, "push", "origin", "main");
+  commitFile(b, "behind");
+  bPush(b);
+  assert.deepStrictEqual(await pullCheckout(a), { ok: true, error: null }); // 뒤처짐
+  assert.strictEqual(G(a, "rev-parse", "HEAD"), G(b, "rev-parse", "HEAD")); // ff
+  commitFile(a, "l");
+  commitFile(b, "r");
+  bPush(b);
+  assert.deepStrictEqual(await pullCheckout(a), { ok: true, error: null }); // 분기
+  assert.strictEqual(parents(), 2);
+});
+
+test("동기화 — dirty, untracked, 진행 중 merge, detached, 내용 충돌에서 상태를 보존한다", async () => {
+  const snap = (d: string) => [G(d, "rev-parse", "HEAD"), G(d, "status", "--porcelain=v2"), G(d, "ls-files", "-s")].join("|");
+  const cases: Record<string, (a: string, b: string) => void> = {
+    dirty: (a) => writeFileSync(path.join(a, "a.txt"), "dirty\n"),
+    untracked: (a) => writeFileSync(path.join(a, "u.txt"), "u\n"),
+    detached: (a) => G(a, "checkout", "-q", "--detach"),
+    merging: (a) => {
+      G(a, "checkout", "-q", "-b", "x");
+      commitFile(a, "x1");
+      G(a, "checkout", "-q", "main");
+      commitFile(a, "m1");
+      try {
+        G(a, "merge", "--no-commit", "--no-ff", "x");
+      } catch {}
+      writeFileSync(path.join(a, ".git", "MERGE_HEAD"), G(a, "rev-parse", "x") + "\n");
+    },
+  };
+  for (const [name, setup] of Object.entries(cases)) {
+    const { a, b } = makeTrio();
+    commitFile(b, "r-" + name);
+    bPush(b);
+    if (name !== "detached") commitFile(a, "l-" + name);
+    setup(a, b);
+    const before = snap(a);
+    const r = await pullCheckout(a);
+    assert.strictEqual(r.ok, false, name);
+    assert.strictEqual(snap(a), before, name);
+  }
+  // 내용 충돌: 이번 merge만 abort하고 잔여 상태가 없다
+  const { a, b } = makeTrio();
+  writeFileSync(path.join(b, "a.txt"), "r\n");
+  G(b, "commit", "-qam", "r");
+  bPush(b);
+  writeFileSync(path.join(a, "a.txt"), "l\n");
+  G(a, "commit", "-qam", "l");
+  const before = G(a, "rev-parse", "HEAD");
+  const r = await pullCheckout(a);
+  assert.strictEqual(r.ok, false);
+  assert.match(r.error ?? "", /MERGE_CONFLICT/);
+  assert.strictEqual(G(a, "rev-parse", "HEAD"), before);
+  assert.strictEqual(G(a, "status", "--porcelain"), "");
+  assert.strictEqual(readFileSync(path.join(a, "a.txt"), "utf8"), "l\n");
+});
+
+test("동기화 — upstream 부재와 push 대상 불일치는 사유를 내고 원격에 안 쓴다", async () => {
+  const { a, bare } = makeTrio();
+  G(a, "checkout", "-q", "-b", "solo");
+  commitFile(a, "s");
+  const r1 = await pushCheckout({ ...rootOf(a), branch: "solo" });
+  assert.match(r1.error ?? "", /NO_UPSTREAM/);
+  G(a, "checkout", "-q", "main");
+  commitFile(a, "m");
+  G(a, "config", "remote.origin.push", "refs/heads/main:refs/heads/other");
+  const r2 = await pushCheckout(rootOf(a));
+  assert.match(r2.error ?? "", /PUSH_TARGET_MISMATCH/);
+  G(a, "config", "--add", "remote.origin.push", "refs/heads/main:refs/heads/main");
+  assert.match((await pushCheckout(rootOf(a))).error ?? "", /PUSH_TARGET_AMBIGUOUS/);
+  assert.notStrictEqual(G(bare, "rev-parse", "main"), G(a, "rev-parse", "HEAD"));
+  assert.strictEqual(G(bare, "branch", "--list", "other"), "");
+});
+
+test("동기화 — non-ff는 1회 재통합 후 성공하고 훅 거절은 재시도하지 않는다", async () => {
+  const { a, b, bare } = makeTrio();
+  // pre-receive 훅: 첫 호출에서 b의 커밋을 밀어 넣어 a의 push를 non-ff로 만든다
+  commitFile(b, "race");
+  const raceSha = G(b, "rev-parse", "HEAD");
+  const marker = path.join(bare, "hook-count");
+  mkdirSync(path.join(bare, "hooks"), { recursive: true });
+  writeFileSync(
+    path.join(bare, "hooks", "pre-receive"),
+    `#!/bin/sh\nn=$(cat "${marker}" 2>/dev/null || echo 0)\necho $((n+1)) > "${marker}"\nexit 0\n`,
+    { mode: 0o755 },
+  );
+  commitFile(a, "mine");
+  G(b, "push", "-q", "origin", "main"); // fetch 이후 원격이 전진 - 첫 통합은 이미 이걸 본다
+  assert.deepStrictEqual(await pushCheckout(rootOf(a)), { ok: true, error: null });
+  assert.ok(isAncestor(a, raceSha));
+  // 훅 거절: 횟수가 정확히 1 늘어난다
+  writeFileSync(path.join(bare, "hooks", "pre-receive"), `#!/bin/sh\necho x >> "${marker}"\nexit 1\n`, { mode: 0o755 });
+  const lines = () => readFileSync(marker, "utf8").split("\n").filter(Boolean).length;
+  const n0 = lines();
+  commitFile(a, "hooked");
+  const r = await pushCheckout(rootOf(a));
+  assert.strictEqual(r.ok, false);
+  assert.strictEqual(lines() - n0, 1);
+});
+
+test("동기화 — 같은 체크아웃의 동시 호출은 겹치지 않고 순서대로 돈다", async () => {
+  const { a, b } = makeTrio();
+  commitFile(b, "r");
+  bPush(b);
+  commitFile(a, "l");
+  const rs = await Promise.all([pullCheckout(a), pullCheckout(a), pushCheckout(rootOf(a))]);
+  assert.ok(rs.every((r) => r.ok), JSON.stringify(rs));
+  assert.strictEqual(G(a, "rev-parse", "HEAD"), G(a, "rev-parse", "origin/main"));
+});
