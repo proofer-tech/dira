@@ -27,7 +27,7 @@ import {
   type SaveResult,
 } from "@/lib/explorer";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
-import type { RefIndex } from "@/lib/markdown-refs";
+import type { RefIndex, TicketRefValue } from "@/lib/markdown-refs";
 import { openWithinApp, type OpenResult } from "@/lib/paths";
 import { listTickets, type Ticket } from "@/lib/queue";
 import { ensureBrowseHooks } from "@/lib/scaffold";
@@ -428,6 +428,8 @@ export type BrowserPoolRow = {
   hash: string;
   ownerKind: "worker" | "home" | "external" | null;
   ownerName: string | null;
+  /** `worker:` 슬롯이고 그 해시의 티켓이 큐에 있을 때만 값이 있다(P472) - 머리 줄이 제목 대신 이 표식을 그린다. */
+  ticket: TicketRefValue | null;
   busy: boolean;
 };
 
@@ -453,6 +455,7 @@ export async function browserPoolTickets(projectId: string): Promise<BrowserPool
   for (const slot of slots) {
     let ownerKind: BrowserPoolRow["ownerKind"] = null;
     let ownerName: string | null = null;
+    let ticketRef: TicketRefValue | null = null;
     if (slot.owner === "home") {
       ownerKind = "home";
     } else if (slot.owner === "external") {
@@ -463,8 +466,13 @@ export async function browserPoolTickets(projectId: string): Promise<BrowserPool
       if (!tickets) tickets = await listTickets(project.root, await resolveConfig(project));
       const ticket = tickets.find((tk) => tk.hash === slot.hash);
       ownerName = ticket ? `${ticket.persona} - ${ticket.title}` : workerName;
+      if (ticket) {
+        const epics = await listEpics(project.root, tickets);
+        const refs = await refreshKnownRefs(project.root, projectId, tickets, epics, [ticket.stem], []);
+        ticketRef = refs.tickets[ticket.stem] ?? null;
+      }
     }
-    rows.push({ hash: slot.hash, ownerKind, ownerName, busy: slot.busy });
+    rows.push({ hash: slot.hash, ownerKind, ownerName, ticket: ticketRef, busy: slot.busy });
   }
   return rows;
 }

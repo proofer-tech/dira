@@ -27,6 +27,8 @@ import {
   type BrowserPoolRow,
 } from "@/app/(app)/p/[project]/home/actions";
 import { linkCapToastMessage, linkErrorToastMessage, wrap, type Locale } from "@/lib/i18n";
+import { TicketRef } from "@/components/queue-ref";
+import type { TicketRefValue } from "@/lib/markdown-refs";
 import type { HomeChunk } from "@/lib/home-session";
 
 function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
@@ -212,6 +214,7 @@ export function BrowserMirror({
   projectId,
   hash,
   ownerName,
+  ticket,
   busy,
   onRelease,
   focusAddressToken,
@@ -221,6 +224,8 @@ export function BrowserMirror({
   /** 슬롯의 주인 이름(§11-13 결정 3) — 이미 `browserOwnerLabel`로 옮긴 값. `null`이면 그
    *  슬롯에 `owner` 파일이 없다(옛 슬롯) — 이름 없이 종전 상태만 그린다. */
   ownerName: string | null;
+  /** 있으면 머리 줄이 `<persona> - <TicketRef>가 쓰는 중`이다(P472) - 제목은 줄에 안 적는다. */
+  ticket?: TicketRefValue | null;
   /** 명령이 도는 동안만 참(§11-13 결정 2) — 이름 옆 점의 출처. */
   busy: boolean;
   /** `반납` 단추를 누르고 셸이 실제로 끝난 뒤 불린다(§11-15 결정 5) — 이 탭 자체를 닫는 것은
@@ -331,7 +336,15 @@ export function BrowserMirror({
                 className="size-1.5 shrink-0 animate-wip-pulse rounded-full bg-muted-foreground motion-reduce:animate-none"
               />
             )}
-            {ownerName && <span>{inUseLabel(locale, ownerName, t)}</span>}
+            {ownerName && ticket ? (
+              <span>
+                {ownerName.split(" - ")[0]} - <TicketRef value={ticket} coded={false} locale={locale} />
+                {locale === "ko" ? "" : " "}
+                {wrap("", locale === "ko" ? "가" : "", t("browser.mirror.inUse.suffix"))}
+              </span>
+            ) : (
+              ownerName && <span>{inUseLabel(locale, ownerName, t)}</span>
+            )}
             {unlocked && <span>{t("browser.wrap.unlocked")}</span>}
           </span>
           {unlocked && (

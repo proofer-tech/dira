@@ -2778,6 +2778,7 @@ function BrowserSurface({
                 projectId={project}
                 hash={tab.id}
                 ownerName={row ? browserOwnerLabel(row, t) : null}
+                ticket={row?.ticket ?? null}
                 busy={row?.busy ?? false}
                 onRelease={() => onReleaseTab(tab)}
                 focusAddressToken={focusAddressToken}
