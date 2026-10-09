@@ -245,11 +245,18 @@ DISPATCH_FP=""
 # 1분마다 풀어서, 16:30까지 닫혀 있어야 할 창에서 같은 티켓을 27번 태웠다).
 # 모델을 갈아도 5시간 리밋은 계정에 걸린 채라 애초에 풀 근거가 아니다.
 engine_fp() {
-  python3 -c 'import hashlib,sys
-try: tok = open(sys.argv[1], "rb").read()
-except OSError: tok = b""
+  # codex는 claude 토큰이 아니라 codex 활성 계정으로 지문을 만든다(DESIGN.md §Codex 계정 한도
+  # 계약 2) - claude 회전이 codex 쿨다운을 풀지 않고 codex 계정 전환만 푼다.
+  python3 -c 'import hashlib,json,os,sys
+if sys.argv[3] == "codex":
+    try: acc = json.load(open(sys.argv[2])).get("codex", {}).get("active") or ""
+    except Exception: acc = ""
+    tok = str(acc or os.environ.get("CODEX_HOME", "")).encode()
+else:
+    try: tok = open(sys.argv[1], "rb").read()
+    except OSError: tok = b""
 print(hashlib.sha1(tok).hexdigest()[:12])' \
-    "$TOKENF"
+    "$TOKENF" "$LOCAL/tokens.json" "${ENGINE_NAME:-}"
 }
 # $2(known)는 복귀 시각을 리밋이 실제로 줬는지 - 1이면 있음, 그 외(빈 값 포함)는 미상.
 # token-rotate.sh의 tick 모드가 이 3번째 줄로 "미상" 쿨다운엔 exhaustedUntil을 안 찍는다
@@ -1764,7 +1771,7 @@ sys.exit(0 if isinstance(o, dict) and o.get("type") == "result" else 1)'
 # 스캔이 마지막 값으로 덮어써진다) 체인 전체가 끝난 뒤의 판정은 종전 그대로 맞는다.
 segment_result() {
   tail -n +"$(( $2 + 1 ))" "$1" 2>/dev/null | python3 -c \
-    'import json,sys
+    'import datetime,json,re,sys
 LIMIT_WORDS = ("usage limit", "rate limit", "quota")
 sid = ""; ok = ""; reason = ""; reset = ""; ctx = ""
 for ln in sys.stdin:
@@ -1795,9 +1802,20 @@ for ln in sys.stdin:
         if info.get("status") == "rejected" and isinstance(info.get("resetsAt"), int):
             reset = str(info["resetsAt"])
     elif o.get("type") == "error":
-        msg = str(o.get("message", "")).lower()
+        raw_msg = str(o.get("message", ""))
+        msg = raw_msg.lower()
         if any(k in msg for k in LIMIT_WORDS):
             reason = "api_error"
+            # codex는 복귀 시각을 로컬 시각 텍스트("try again at 3:48 AM.")로만 준다 -
+            # 지금 이후 처음 오는 그 시각의 epoch로 바꾼다(DESIGN.md §Codex 계정 한도 계약 1).
+            m = re.search(r"try again at (\d{1,2}):(\d{2})\s*([AP])M", raw_msg, re.I)
+            if m and not reset and 1 <= int(m.group(1)) <= 12 and int(m.group(2)) < 60:
+                h = int(m.group(1)) % 12 + (12 if m.group(3).upper() == "P" else 0)
+                now = datetime.datetime.now()
+                t = now.replace(hour=h, minute=int(m.group(2)), second=0, microsecond=0)
+                if t <= now:
+                    t += datetime.timedelta(days=1)
+                reset = str(int(t.timestamp()))
 print("|".join((sid, ok, reason, reset, ctx)))'
 }
 
@@ -2259,7 +2277,7 @@ printf '%s\n' "$OUT" >> "$LOGF"
 # 키 없음)은 한도 낱말 셋(usage limit·rate limit·quota) 매치로 같은 api_error에 떨어진다.
 # 값을 새로 안 만든다 - 셋 다 "api_error"라 [ "$REASON" = "api_error" ] 게이트는 무수정이다.
 VERDICT=$(printf '%s' "$OUT" | python3 -c \
-  'import json,sys
+  'import datetime,json,re,sys
 LIMIT_WORDS = ("usage limit", "rate limit", "quota")
 raw = sys.stdin.read(); sid = ""; ok = ""; reason = ""; reset = ""
 for ln in raw.splitlines():
@@ -2284,9 +2302,20 @@ for ln in raw.splitlines():
         if info.get("status") == "rejected" and isinstance(info.get("resetsAt"), int):
             reset = str(info["resetsAt"])
     elif o.get("type") == "error":
-        msg = str(o.get("message", "")).lower()
+        raw_msg = str(o.get("message", ""))
+        msg = raw_msg.lower()
         if any(k in msg for k in LIMIT_WORDS):
             reason = "api_error"
+            # codex는 복귀 시각을 로컬 시각 텍스트("try again at 3:48 AM.")로만 준다 -
+            # 지금 이후 처음 오는 그 시각의 epoch로 바꾼다(DESIGN.md §Codex 계정 한도 계약 1).
+            m = re.search(r"try again at (\d{1,2}):(\d{2})\s*([AP])M", raw_msg, re.I)
+            if m and not reset and 1 <= int(m.group(1)) <= 12 and int(m.group(2)) < 60:
+                h = int(m.group(1)) % 12 + (12 if m.group(3).upper() == "P" else 0)
+                now = datetime.datetime.now()
+                t = now.replace(hour=h, minute=int(m.group(2)), second=0, microsecond=0)
+                if t <= now:
+                    t += datetime.timedelta(days=1)
+                reset = str(int(t.timestamp()))
 if not sid:
     try: sid = json.loads(raw).get("session_id", "")
     except Exception: pass
