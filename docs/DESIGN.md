@@ -107,6 +107,69 @@ Codex 트랜스크립트 부재 전제 및 스트림 미지원 안내를 대체�
 두 개발 작업은 기존 공통 조회 함수를 기준으로 독립 착수한다. QA는 최종 구현을 검증해야 하므로
 두 작업에 의존한다. 발행 티켓은 `req: 756ebb05`로 묶고 별도 에픽은 열지 않는다.
 
+## Codex 계정 한도를 claude 토큰과 같은 방식으로 다룬다 (요구 `2c62af00`, 2026-10-10)
+
+codex 계정의 사용량 한도를 claude 토큰 관리와 같은 방식으로 다룬다. 복귀 시각 읽기, 쿨다운, 소진 표시,
+다음 계정으로의 자동 회전, 복구, 화면 표시와 조작이 모두 대상이다. 이 절은 `docs/design/스펙-화면별.md`
+§0-13 §범위의 "claude 하나다"와 §0-23 §천장, §안 여는 것의 "codex 자동 회전은 안 연다"를 codex에
+한해 대체한다. grok과 agy는 이번 범위에 넣지 않는다.
+
+### 확인한 사실
+
+- codex 한도 오류는 `{"type":"error","message":"You've hit your usage limit. ... try again at 3:48 AM."}`
+  형태이고 복귀 시각은 로컬 시각 텍스트로만 온다. `tick.sh`는 claude의 `resetsAt`만 읽으므로 codex는
+  매번 `엔진 불능 - 300초 쿨다운(복귀 미상)`과 known 0으로 쿨다운을 건다. 그 결과 리셋 전까지 실패가
+  확실한 세션을 5분마다 다시 띄운다(2026-10-10 01:25부터 756ebb05가 9회 실패).
+- `engine_fp`는 엔진과 상관없이 claude `oauth-token`을 해시한다. 따라서 claude 토큰이 회전하면
+  codex 쿨다운이 풀리고, codex 계정을 바꾸면 codex 쿨다운이 풀리지 않는다.
+- `token-rotate.sh`는 `tokens.json`의 `claude`만 읽는다. codex 행의 `exhaustedUntil`을 쓰는 코드가 없다.
+- 설정 > 인증의 계정 목록 컴포넌트(`TokensSection`, `TokenStatusBadge`)는 이미 codex와 공유한다.
+  워커 화면의 `리밋 대기` 배지, `limitWaitUntil`, `anyTokenEligible`, 상단 바의 활성 계정 이름,
+  종의 소진 알림은 claude만 본다.
+- 실측 시점에 `tokens.json`에는 `codex` 키가 없고 `~/.config/dira/engines/codex/` 아래 디렉터리 4개는
+  목록에 연결되어 있지 않다. 연결되지 않은 디렉터리를 자동으로 목록에 넣는 일은 이번 범위가 아니다.
+
+### 계약
+
+1. **복귀 시각:** codex 한도 메시지의 `try again at <h:mm AM|PM>`을 로컬 시각으로 읽어 다음에 오는 그
+   시각의 epoch로 바꾼다. 이미 지난 시각이면 다음 날로 넘긴다. 읽으면 known 1, 못 읽으면 지금처럼
+   300초와 known 0이다. claude의 `resetsAt` 경로는 바꾸지 않는다.
+2. **지문:** 쿨다운 지문은 엔진별로 그 엔진의 활성 계정에서 만든다. claude는 지금처럼 `oauth-token`,
+   codex는 `tokens.json`의 `codex.active`(없으면 `CODEX_HOME`, 그것도 없으면 빈 값)다. 그래서 claude
+   회전은 codex 쿨다운을 풀지 않고, codex 계정 전환은 codex 쿨다운을 푼다.
+3. **소진과 회전:** `token-rotate.sh`의 tick, exhausted, stamp, recover가 codex에도 같은 규칙으로 돈다.
+   살아 있고 known 1인 `cooldown-codex`가 있으면 활성 codex 계정에 `exhaustedUntil`을 찍고 다음 eligible
+   계정으로 `active`를 넘긴다. 한 쿨다운에 회전은 한 번, known 0이면 표시하지 않는다는 기존 규칙을 그대로
+   쓴다. 다음 디스패치에서는 `multiplay.sh`가 넘어간 계정의 `CODEX_HOME`을 세운다.
+4. **세션 입구:** 한도를 직접 본 codex 세션도 `bash .dira/token-rotate.sh exhausted`로 알린다. 훅이
+   지금 엔진을 판정해 codex 계정에 표시한다. 인자 형식은 바꾸지 않는다.
+5. **화면:** codex 계정 행이 claude 행과 같은 상태(활성, 대기, 비활성, `소진 - 복귀 시각`)와 같은 조작
+   (사용, 활성화/비활성화, 삭제, 라벨)을 보인다. 워커 화면의 `리밋 대기` 배지, 상단 바의 활성 계정 이름,
+   종의 모든 계정 소진 알림이 codex 워커와 codex 계정에도 뜬다. 쿨다운을 직접 지우는 버튼은 claude와
+   마찬가지로 만들지 않는다(§4-9).
+
+### 수용조건
+
+| 대상 | 검증 가능한 결과 |
+| --- | --- |
+| 복귀 시각 | 위 원문 오류 줄을 담은 codex 로그로 한도 판정을 돌리면 `cooldown-codex` 1줄이 다음 3:48 AM의 epoch, 3줄이 `1`이고 로그가 `복귀 <epoch>`를 남긴다. 시각이 없는 한도 메시지는 300초와 `0`이다. 이미 지난 시각과 12 AM, 12 PM을 다루는 테스트가 통과한다. |
+| 지문 분리 | claude `oauth-token`만 바꾸면 살아 있는 `cooldown-codex`가 유지되고, codex `active`만 바꾸면 다음 게이트에서 `cooldown-codex`가 풀린다. 반대 방향도 같다. |
+| 회전 | codex 계정 둘을 등록하고 known 1인 `cooldown-codex`를 걸면 다음 tick 한 번에 첫 계정에 `exhaustedUntil`이 찍히고 `active`가 둘째로 바뀐다. 같은 쿨다운으로 다시 돌려도 더 돌지 않고, 계정이 하나뿐이면 표시만 남는다. 복귀 시각이 지나면 그 계정이 다시 eligible이다. |
+| exhausted 입구 | codex 세션 환경에서 `bash .dira/token-rotate.sh exhausted`를 부르면 codex 활성 계정에 표시와 회전이 일어나고 claude `tokens.json` 항목은 바뀌지 않는다. |
+| 화면 | 소진된 codex 계정이 설정 > 인증에서 `소진`과 복귀 시각으로 보이고, codex 워커가 쿨다운이면 워커 화면에 `리밋 대기`가 보이며, codex 계정이 모두 소진되면 종에 알림이 뜬다. 활성 codex 계정 이름이 상단 바의 codex 칸에 붙는다. |
+| 회귀 | claude 회전과 소진 판정 테스트(`.dira/verify-token-rotate.sh` 포함), 변경 대상 테스트, `pnpm exec tsc --noEmit`이 통과한다. |
+
+### 작업 분담
+
+| 범위 | 담당 | 선행 조건 |
+| --- | --- | --- |
+| `tick.sh` 복귀 시각 읽기와 엔진별 지문(계약 1, 2) | developer | 없음 |
+| `token-rotate.sh` codex 소진, 회전, 복구, exhausted 입구(계약 3, 4) | developer | 없음 |
+| 화면의 codex 상태 표시(계약 5) | developer | 없음 |
+| 실제 codex 계정 둘로 전 구간 검증 | qa | 위 세 작업 완료 |
+
+세 개발 작업은 이 절의 계약을 기준으로 독립 착수한다. 발행 티켓은 `req: 2c62af00`로 묶는다.
+
 ## 무엇
 
 `.dira` 큐를 **보고 만지는 로컬 웹 UI**. CLI(`w1.sh list`, `vim tickets/*.md`)로 하던 일을
