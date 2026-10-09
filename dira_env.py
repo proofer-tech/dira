@@ -11,23 +11,21 @@
 않도록 python3 표준 라이브러리만 쓴다. 저장과 복호화는 데스크톱 앱(브리지)이 하고 이 파일은
 클라이언트다.
 
-## 브리지 연결 계약 (데스크톱 앱 쪽 구현이 이 계약을 따른다)
+## 브리지 연결 계약 (정본 구현: apps/desktop/env-bridge.ts, env-connect.ts)
 
-연결 파일: `$TICKET_LOCAL/env-bridge/<프로젝트 해시>.json` (TICKET_LOCAL 기본 `~/.config/dira`),
-0600, `{"port": 정수, "token": "문자열"}`. 프로젝트 해시는 정규화한 티켓 루트(realpath, NFC)의
-UTF-8 sha256 앞 16자리 16진수다. 토큰은 그 프로젝트에 결합되어 있어 다른 프로젝트 요청은 거부된다.
-프로젝트 루트는 `$TICKET_ROOT`, 없으면 cwd에서 위로 올라가며 찾은 `.dira`(워크트리의 `.dira`는
-큐를 가리키는 심링크라 realpath가 같은 큐로 모인다)다.
+연결 파일: `$TICKET_LOCAL/env-bridge/<프로젝트 키>.json` (TICKET_LOCAL 기본 `~/.config/dira`),
+0600, `{"port": 정수, "token": "문자열"}`. 데스크톱 앱이 떠 있는 동안 등록된 프로젝트마다 두고
+닫으면 지운다. 프로젝트 키는 티켓 루트(realpath, NFC)의 UTF-8 sha256 앞 32자리 16진수이고,
+토큰은 그 프로젝트 하나에 묶인 파생값이다(secret은 파일에 없다). 티켓 루트는 `$TICKET_ROOT`,
+없으면 cwd에서 위로 올라가며 찾은 `.dira`다(워크트리의 `.dira`는 큐 심링크라 같은 키로 모인다).
 
-요청: `POST http://127.0.0.1:<port>/env/<op>`, `Authorization: Bearer <token>`, JSON 본문.
-    list     {}                                        -> {"ok":true,"items":[{name,updatedAt,revision}]}
-    create   {"name","value"}                          -> {"ok":true,"item":{name,updatedAt,revision}}
-    replace  {"name","value","expectedRevision"}       -> {"ok":true,"item":{...}}
-    delete   {"name","expectedRevision"}               -> {"ok":true,"item":{...}}
-    resolve  {"names":[...]}  (run 전용 내부 경로)      -> {"ok":true,"values":{NAME:value}}
-실패: HTTP 4xx/5xx + {"ok":false,"code":<아래>,"message":"..."}. code는 unauthorized, invalid,
-reserved, duplicate, conflict, not_found, locked, corrupt, unavailable 중 하나다.
-resolve는 전부 있거나 전부 실패(not_found에 누락 이름을 message로)다. 응답과 오류에 값은 없다.
+요청: `http://127.0.0.1:<port>/env/v1/<op>`, `Authorization: Bearer <token>`.
+    GET  list?project=<루트>                                  -> {"items":[{name,updatedAt,revision}]}
+    POST create   {"project","name","value"}                  -> {name,updatedAt,revision}
+    POST replace  {"project","name","value","expectedRevision"} -> 같은 모양
+    POST delete   {"project","name","expectedRevision"}       -> 같은 모양
+    POST resolve  {"project","names":[...]}  (run 전용)        -> {"values":{NAME:value}}
+실패: HTTP 4xx/5xx + {"error":<코드>}. 값은 응답과 오류에 없다. resolve는 전부 있을 때만 값을 준다.
 """
 import hashlib
 import http.client
@@ -39,6 +37,7 @@ import signal
 import subprocess
 import sys
 import unicodedata
+import urllib.parse
 
 NAME_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
 RESERVED_EXACT = {"PATH", "HOME", "SHELL", "ENV", "BASH_ENV", "NODE_OPTIONS", "PYTHONPATH"}
@@ -49,9 +48,10 @@ MASK = b"***"
 # 종료 코드. 자식의 코드와 겹칠 수 있으나 우리 오류는 항상 stderr에 `dira env:`로 시작한다.
 EX_USAGE, EX_DATA, EX_NOTFOUND, EX_UNAVAILABLE, EX_CONFLICT, EX_NOPERM = 64, 65, 66, 69, 75, 77
 CODE_EXIT = {
-    "invalid": EX_DATA, "reserved": EX_DATA, "duplicate": EX_CONFLICT, "conflict": EX_CONFLICT,
-    "not_found": EX_NOTFOUND, "unauthorized": EX_NOPERM, "locked": EX_UNAVAILABLE,
-    "corrupt": EX_UNAVAILABLE, "unavailable": EX_UNAVAILABLE,
+    "invalid_name": EX_DATA, "reserved_name": EX_DATA, "invalid_value": EX_DATA, "too_large": EX_DATA,
+    "duplicate": EX_CONFLICT, "conflict": EX_CONFLICT, "not_found": EX_NOTFOUND,
+    "unauthorized": EX_NOPERM, "forbidden": EX_NOPERM, "bad_project": EX_NOPERM,
+    "locked": EX_UNAVAILABLE, "corrupt": EX_UNAVAILABLE, "unavailable": EX_UNAVAILABLE,
 }
 
 
@@ -73,6 +73,7 @@ def check_name(name):
 
 
 def project_root():
+    """프로젝트 키와 요청의 project 값이 되는 정규화한 티켓 루트."""
     root = os.environ.get("TICKET_ROOT")
     if not root:
         d = os.getcwd()
@@ -88,7 +89,7 @@ def project_root():
 
 def connection():
     local = os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
-    h = hashlib.sha256(project_root().encode("utf-8")).hexdigest()[:16]
+    h = hashlib.sha256(project_root().encode("utf-8")).hexdigest()[:32]
     try:
         with open(os.path.join(local, "env-bridge", h + ".json"), encoding="utf-8") as f:
             c = json.load(f)
@@ -97,13 +98,18 @@ def connection():
         raise Fail("unavailable: 데스크톱 앱이 실행 중이어야 합니다 (연결 정보가 없습니다)", EX_UNAVAILABLE)
 
 
-def call(op, body, scrub=()):
-    """브리지 호출. 오류 메시지에서 우리가 쥔 값은 가린다."""
+def call(op, body=None, scrub=()):
+    """브리지 호출. 오류는 코드만 받으므로 값이 새지 않지만 메시지에서 우리가 쥔 값은 한 번 더 가린다."""
     port, token = connection()
+    root = project_root()
+    headers = {"Authorization": "Bearer " + token}
     try:
         c = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
-        c.request("POST", "/env/" + op, json.dumps(body).encode("utf-8"),
-                  {"Authorization": "Bearer " + token, "Content-Type": "application/json"})
+        if body is None:
+            c.request("GET", "/env/v1/%s?project=%s" % (op, urllib.parse.quote(root, safe="")), headers=headers)
+        else:
+            headers["Content-Type"] = "application/json"
+            c.request("POST", "/env/v1/" + op, json.dumps(dict(body, project=root)).encode("utf-8"), headers)
         r = c.getresponse()
         raw = r.read()
         c.close()
@@ -114,14 +120,16 @@ def call(op, body, scrub=()):
         assert isinstance(d, dict)
     except (ValueError, AssertionError):
         raise Fail("unavailable: 브리지 응답을 읽지 못했습니다", EX_UNAVAILABLE)
-    if r.status < 300 and d.get("ok"):
+    if r.status < 300 and "error" not in d:
         return d
-    code = str(d.get("code") or "unavailable")
-    msg = str(d.get("message") or "")
-    for s in scrub:
-        if s:
-            msg = msg.replace(s, "***")
-    raise Fail("%s: %s" % (code, msg), CODE_EXIT.get(code, 1))
+    code = str(d.get("error") or "unavailable")
+    if r.status == 401:
+        code = "unauthorized"
+    msg = {"not_found": "없는 이름이 있습니다", "conflict": "revision이 다릅니다", "duplicate": "이미 있는 이름입니다"}.get(code, "")
+    for v in scrub:
+        if v:
+            msg = msg.replace(v, "***")
+    raise Fail("%s: %s" % (code, msg) if msg else code, CODE_EXIT.get(code, 1))
 
 
 def read_value():
@@ -141,9 +149,9 @@ def show(item):
 
 
 def parse_rev(s):
-    if not re.match(r"[0-9]+\Z", s or ""):
-        raise Fail("--revision은 숫자여야 합니다", EX_USAGE)
-    return int(s)
+    if not s:
+        raise Fail("--revision이 비었습니다", EX_USAGE)
+    return s
 
 
 def flags(args, spec):
@@ -260,7 +268,7 @@ def main(argv):
     if cmd == "list":
         if args:
             raise Fail("list는 인자가 없습니다", EX_USAGE)
-        for it in call("list", {})["items"]:
+        for it in call("list")["items"]:
             show(it)
     elif cmd in ("create", "replace"):
         opts, pos = flags(args, {"--stdin": False, "--revision": cmd == "replace"})
@@ -271,13 +279,13 @@ def main(argv):
         if cmd == "replace":
             body["expectedRevision"] = parse_rev(opts["--revision"])
         body["value"] = read_value()
-        show(call(cmd, body, scrub=(body["value"],))["item"])
+        show(call(cmd, body, scrub=(body["value"],)))
     elif cmd == "delete":
         opts, pos = flags(args, {"--revision": True})
         if len(pos) != 1 or "--revision" not in opts:
             raise Fail("사용법: dira env delete NAME --revision REV", EX_USAGE)
         check_name(pos[0])
-        show(call("delete", {"name": pos[0], "expectedRevision": parse_rev(opts["--revision"])})["item"])
+        show(call("delete", {"name": pos[0], "expectedRevision": parse_rev(opts["--revision"])}))
     elif cmd == "run":
         return run(args)
     else:

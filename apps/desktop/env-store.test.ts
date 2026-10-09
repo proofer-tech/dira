@@ -221,3 +221,22 @@ test("브리지 - 미인증 다른 프로젝트 경로 탈출 브라우저 요�
     b.server.close();
   }
 });
+
+test("브리지 - resolve는 인증 뒤 선택한 값만 주고 하나라도 없으면 값을 주지 않는다", async () => {
+  const b = await bridge(), a = project(), other = project(), ta = await b.tokenFor(a);
+  try {
+    await b.call("POST", "create", a, ta, { name: "ONE", value: "ZQ9\nx" });
+    await b.call("POST", "create", a, ta, { name: "TWO", value: "" });
+    const ok = await b.call("POST", "resolve", a, ta, { names: ["ONE"] });
+    assert.deepStrictEqual(JSON.parse(ok.text), { values: { ONE: "ZQ9\nx" } });
+    const miss = await b.call("POST", "resolve", a, ta, { names: ["ONE", "NOPE"] });
+    assert.strictEqual(miss.status, 404);
+    assert.ok(!miss.text.includes("ZQ9"));
+    assert.strictEqual((await b.call("POST", "resolve", a, null, { names: ["ONE"] })).status, 401);
+    assert.strictEqual((await b.call("POST", "resolve", other, ta, { names: ["ONE"] })).status, 403);
+    assert.strictEqual((await b.call("POST", "resolve", a, ta, { names: "ONE" })).status, 400);
+    assert.ok(b.logs.every((s) => !s.includes("ZQ9")));
+  } finally {
+    b.server.close();
+  }
+});

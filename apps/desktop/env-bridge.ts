@@ -1,6 +1,7 @@
 /** 환경변수 로컬 관리 브리지 (DESIGN.md §프로젝트 환경변수 저장과 실행 계약 2). 127.0.0.1 HTTP이고
- *  메인 프로세스에서 돈다. 계약은 `list` `create` `replace` `delete` 넷이며 값 조회 경로가 없다.
- *  `run`의 복호화는 `EnvStore.resolveForRun`을 메인 프로세스 안에서 직접 부른다(이 HTTP에 안 연다).
+ *  메인 프로세스에서 돈다. 계약은 `list` `create` `replace` `delete` 넷이고 값 조회 경로가 없다.
+ *  `resolve`는 `dira env run` 전용 복호화 경로다(`EnvStore.resolveForRun`). 같은 인증을 통과해야 하고
+ *  선택한 이름 전부가 있을 때만 값을 준다. 관리 응답(list 등)에는 값이 없다.
  *
  *  인증: 토큰 = HMAC-SHA256(secret, projectKey). 서버(`apps/teams`)와 세션은 secret을 받은
  *  쪽이 프로젝트마다 이 토큰을 파생한다(`deriveToken`). 요청이 지목한 프로젝트의 키로 다시 계산해
@@ -71,7 +72,7 @@ export function createEnvBridge(opts: {
       send(res, status, body);
     };
     if (req.headers.origin || req.headers.host !== `127.0.0.1:${port}`) return reply(403, { error: "forbidden" });
-    const m = /^\/env\/v1\/(list|create|replace|delete)$/.exec(url.pathname);
+    const m = /^\/env\/v1\/(list|create|replace|delete|resolve)$/.exec(url.pathname);
     if (!m) return reply(404, { error: "not_found" });
     const op = m[1];
     if ((op === "list") !== (req.method === "GET") || (op !== "list" && req.method !== "POST")) {
@@ -93,6 +94,11 @@ export function createEnvBridge(opts: {
       if (op === "create") return reply(200, await s.create(root, body.name, body.value));
       if (op === "replace") {
         return reply(200, await s.replace(root, body.name, body.value, body.expectedRevision));
+      }
+      if (op === "resolve") {
+        const names = body.names;
+        if (!Array.isArray(names) || !names.every((n) => typeof n === "string")) throw new EnvError("invalid_name");
+        return reply(200, { values: await s.resolveForRun(root, names) });
       }
       return reply(200, await s.delete(root, body.name, body.expectedRevision));
     } catch (e) {

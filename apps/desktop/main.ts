@@ -12,9 +12,10 @@ import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain
 // ESM 이름 가져오기가 `SyntaxError`로 죽는다. 기본 가져오기는 `module.exports` 그 자체다.
 import updater from "electron-updater";
 import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSync, watchFile, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createEnvBridge } from "./env-bridge.ts";
+import { publishConnections, unpublishConnections } from "./env-connect.ts";
 import { createEnvStore } from "./env-store.ts";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
@@ -88,6 +89,12 @@ async function startEnvBridge() {
   });
   const { port } = await createEnvBridge({ store, secret: envBridgeSecret }).listen();
   envBridgeUrl = `http://127.0.0.1:${port}`;
+  // 세션(`dira env`)이 읽는 프로젝트별 연결 파일. 프로젝트 등록이 바뀌면 다시 둔다.
+  const local = process.env.TICKET_LOCAL || join(homedir(), ".config", "dira");
+  const publish = () => void publishConnections({ local, port, secret: envBridgeSecret }).catch(() => {});
+  publish();
+  watchFile(join(local, "gui-projects.json"), { interval: 5000 }, publish);
+  app.on("will-quit", () => unpublishConnections(local));
 }
 
 /** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (고정하는 것 1). */
