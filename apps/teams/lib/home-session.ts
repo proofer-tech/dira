@@ -80,9 +80,10 @@
  *  허용목록(`ef1e8c89` 실측)으로만 열었지만, §7-5(요구 `ea5e6f4d`)가 그 목록과 경로 스코프를
  *  통째로 없애고 `--dangerously-skip-permissions`로 바꿨다 — 셸에 쓰기 제한이 없다(`TOOLS`
  *  주석). */
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { execClaude, tokenPath } from "./auth.ts";
 import type { Run } from "./engine.ts";
@@ -1020,7 +1021,23 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
  *  안 한다** — 순수 함수로 남아야 해서(결정 5) 받은 `ontologyDir`이 빈 문자열이면 문단을 안
  *  그린다. 존재 검사·`TICKET_ONTOLOGY` 재정의 판정은 `ask()`가 하고 그 결과(경로 또는 빈 문자열)를
  *  그대로 여기로 넘긴다. */
-export function buildPrompt(snapshot: string, question: string, ontologyDir: string, persona = ""): string {
+/** 프로젝트 환경변수 안내 블록(요구 04daa929) - 워커 디스패치와 같은 `dira_env.py context`를 부른다.
+ *  이름과 명령만 나오고 값·revision·토큰은 없다. 설치된 고정 경로에 클라이언트가 없거나 연결 설정이
+ *  없으면 빈 문자열이라 종전 프롬프트 그대로다. 호출은 실패해도 질문을 막지 않는다. */
+export async function envBlockOf(root: string): Promise<string> {
+  const local = process.env.TICKET_LOCAL || path.join(os.homedir(), ".config", "dira");
+  const client = path.join(os.homedir(), ".config", "dira", "bin", "engines", "dira_env.py"); // bin은 TICKET_LOCAL을 안 탄다(tick.sh BIN_DIR)
+  return new Promise((resolve) => {
+    execFile(
+      "python3",
+      [client, "context"],
+      { env: { ...process.env, TICKET_ROOT: root, TICKET_LOCAL: local }, timeout: 8000 },
+      (err, stdout) => resolve(err ? "" : stdout),
+    );
+  });
+}
+
+export function buildPrompt(snapshot: string, question: string, ontologyDir: string, persona = "", envBlock = ""): string {
   const ontologyBlock = ontologyDir
     ? `아래는 이 큐의 온톨로지가 있는 곳입니다.
 
@@ -1031,7 +1048,7 @@ ${ontologyDir} 안의 _ontology/SCHEMA.md가 지도입니다(객체·관계·액
 
 `
     : "";
-  return `${persona ? `${persona}\n\n` : ""}${ontologyBlock}${snapshot}
+  return `${persona ? `${persona}\n\n` : ""}${envBlock ? `${envBlock}\n` : ""}${ontologyBlock}${snapshot}
 
 ---
 
@@ -1253,6 +1270,7 @@ export async function ask(
     q,
     showOntology ? ontology : "",
     config?.personas ? await personaBlock(config.personas, persona ?? HOME_PERSONA) : "",
+    await envBlockOf(project.root),
   );
   const locale = await readLanguage(); // 위 §언어 층 둘 — 못 읽으면 `ko`로 흡수한다(같은 판정)
   const autonomy = await readAutonomy(); // §주도성 — 못 읽으면 4로 흡수한다(같은 판정)

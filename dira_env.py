@@ -33,6 +33,7 @@ import json
 import os
 import re
 import selectors
+import shlex
 import signal
 import subprocess
 import sys
@@ -98,13 +99,13 @@ def connection():
         raise Fail("unavailable: 데스크톱 앱이 실행 중이어야 합니다 (연결 정보가 없습니다)", EX_UNAVAILABLE)
 
 
-def call(op, body=None, scrub=()):
+def call(op, body=None, scrub=(), timeout=15):
     """브리지 호출. 오류는 코드만 받으므로 값이 새지 않지만 메시지에서 우리가 쥔 값은 한 번 더 가린다."""
     port, token = connection()
     root = project_root()
     headers = {"Authorization": "Bearer " + token}
     try:
-        c = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
         if body is None:
             c.request("GET", "/env/v1/%s?project=%s" % (op, urllib.parse.quote(root, safe="")), headers=headers)
         else:
@@ -260,6 +261,38 @@ def run(args):
     return 128 - rc if rc < 0 else rc
 
 
+def context():
+    """워커 디스패치와 홈 세션 프롬프트에 싣는 블록(내부용). 이름과 명령만 있고 값, revision, 토큰은 없다.
+    연결 파일이 없으면(연결 설정이 없는 엔진) 아무것도 안 낸다. 있는데 목록을 못 읽으면 빈 목록이 아니라
+    사용 불가로 알린다."""
+    root = project_root()
+    local = os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
+    h = hashlib.sha256(root.encode("utf-8")).hexdigest()[:32]
+    if not os.path.exists(os.path.join(local, "env-bridge", h + ".json")):
+        return
+    try:
+        names = [it["name"] for it in call("list", timeout=3)["items"]]
+        state = "등록된 이름: " + (", ".join(names) if names else "(없음)")
+    except Fail as e:
+        state = "지금은 사용할 수 없습니다 (%s). 목록이 비었다는 뜻이 아닙니다. 데스크톱 앱이 실행 중인지 확인하고 다시 시도하세요." % str(e).split(":")[0]
+    pre = "TICKET_ROOT=%s " % shlex.quote(root)
+    if os.environ.get("TICKET_LOCAL"):
+        pre += "TICKET_LOCAL=%s " % shlex.quote(local)
+    print("""아래는 이 프로젝트의 환경변수입니다. 값은 보이지 않고 다시 조회할 수도 없습니다.
+
+===== 프로젝트 환경변수 =====
+%s
+명령은 모두 `%s~/.config/dira/bin/dira env` 로 시작한다(이하 DIRA_ENV).
+- 목록: `DIRA_ENV list`
+- 추가: `DIRA_ENV create NAME --stdin` (값은 stdin으로만 넣는다)
+- 교체: `DIRA_ENV replace NAME --revision REV --stdin` (REV는 list가 알려 준 값)
+- 삭제: `DIRA_ENV delete NAME --revision REV`
+- 사용: `DIRA_ENV run --keys NAME1,NAME2 -- COMMAND ARGS...` (선택한 변수만 그 자식 프로세스에 들어간다)
+변경한 뒤에는 list를 다시 읽어 최신 상태를 확인한다. 사람만 가진 값이 필요하면 프로젝트 설정 화면에 입력하도록 요청한다.
+===== 프로젝트 환경변수 끝 =====
+""" % (state, pre))
+
+
 def main(argv):
     if not argv or argv[0] in ("-h", "--help"):
         print(__doc__.split("## 브리지")[0].strip())
@@ -288,6 +321,8 @@ def main(argv):
         show(call("delete", {"name": pos[0], "expectedRevision": parse_rev(opts["--revision"])}))
     elif cmd == "run":
         return run(args)
+    elif cmd == "context":
+        context()
     else:
         raise Fail("알 수 없는 명령: " + cmd, EX_USAGE)
     return 0

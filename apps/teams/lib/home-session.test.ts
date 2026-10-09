@@ -2479,3 +2479,22 @@ test("runSchedules — 이미 도는 회차는 버리고 last만 올라간다(�
     assert.strictEqual(isAsking(project.id), false);
   });
 });
+
+test("buildPrompt - envBlock을 주면 페르소나 뒤 스냅샷 앞에 실리고, 안 주면 종전 그대로다 (요구 04daa929)", () => {
+  const base = buildPrompt("SNAP", "질문", "", "PERSONA");
+  const withEnv = buildPrompt("SNAP", "질문", "", "PERSONA", "ENVBLOCK\n");
+  assert.ok(withEnv.indexOf("PERSONA") < withEnv.indexOf("ENVBLOCK") && withEnv.indexOf("ENVBLOCK") < withEnv.indexOf("SNAP"));
+  assert.strictEqual(withEnv.replace("ENVBLOCK\n\n", ""), base);
+  assert.strictEqual(questionOf(withEnv), "질문");
+});
+
+test("envBlockOf - 설치된 클라이언트가 없으면 빈 문자열이다 (연결 설정이 없는 엔진은 종전 그대로)", async () => {
+  const { envBlockOf } = await import("./home-session.ts");
+  const prev = process.env.HOME;
+  process.env.HOME = "/nonexistent-home-for-test";
+  try {
+    assert.strictEqual(await envBlockOf("/tmp/x/.dira"), "");
+  } finally {
+    process.env.HOME = prev;
+  }
+});

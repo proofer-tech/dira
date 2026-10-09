@@ -1313,6 +1313,18 @@ $(cat "$PROTOCOL")
 $PROMPT"
 fi
 
+# --- 프로젝트 환경변수 블록(요구 04daa929): 이름과 명령만 싣는다(값 revision 토큰 없음) ---
+# 연결 파일이 없으면 아무것도 안 낸다(연결 설정이 없는 엔진은 종전 그대로). 파이썬 표준 라이브러리만 쓴다.
+# 저장 값을 워커 환경에 주입하지 않는다 - 세션이 `dira env run`으로 자식에게만 넣는다.
+if [ -f "$CODE/dira_env.py" ]; then
+  ENVCTX="$(TICKET_ROOT="$TICKET_ROOT" TICKET_LOCAL="${TICKET_LOCAL:-}" python3 "$CODE/dira_env.py" context 2>/dev/null)"
+  if [ -n "$ENVCTX" ]; then
+    PROMPT="$ENVCTX
+
+$PROMPT"
+  fi
+fi
+
 # --- 온톨로지 블록: 위치 + 검색 방법만 싣는다(나열 없음, 9d7ba932) ---
 # 메모리는 페르소나의 것이고 온톨로지는 큐 전체의 것이라 블록을 가른다 - 그래서 페르소나 if 밖이고
 # `persona:`가 없는 티켓에도 실린다. 목차 나열(파일명+`## ` 절)을 걷었다 - 블록이 상수라 파일 수·

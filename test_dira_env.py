@@ -173,6 +173,45 @@ t0 = time.time()
 p.send_signal(signal.SIGTERM)
 assert p.wait(timeout=10) == 128 + signal.SIGTERM and time.time() - t0 < 5
 
+# --- 세션 컨텍스트 (ENV-5): 워커 디스패치 프롬프트와 `context` 블록
+def ticket_worker(root, name):
+    os.makedirs(os.path.join(root, "tickets"), exist_ok=True)
+    os.makedirs(os.path.join(root, "workers"), exist_ok=True)
+    open(os.path.join(root, "tickets", "aaaa1111.md"), "w").write("---\nticket: aaaa1111\ntitle: t\n---\n\n## Goal\nx\n")
+    w = os.path.join(root, "workers", name + ".sh")
+    open(w, "w").write('#!/bin/bash\nTICKET_NAME="%s"\nTICKET_CWD="%s"\nTICKET_PROMPT_FMT="pick %%s"\nTICKET_ENGINE=("%s/claude" "{prompt}")\n. "%s"\n'
+                       % (name, os.path.dirname(root), tmp, os.path.join(HERE, "tick.sh")))
+    os.chmod(w, 0o755)
+    return w
+
+
+def prompt_of(w):
+    r = subprocess.run([w, "dryrun"], capture_output=True, text=True, env=dict(os.environ, TICKET_LOCAL=local), timeout=60)
+    assert r.returncode == 0, r.stderr
+    return r.stdout + r.stderr
+
+
+tokA = json.load(open(ca))["token"]
+ctx = dira("context").stdout.decode()
+assert "A, EMPTYV, ML, MULTI" in ctx and "DIRA_ENV list" in ctx and "DIRA_ENV run --keys" in ctx and "다시 조회할 수도 없습니다" in ctx
+assert tokA not in ctx and SECRET not in ctx
+assert "unavailable" not in ctx and os.path.realpath(projA) in ctx
+wp = prompt_of(ticket_worker(projA, "wa"))
+assert "===== 프로젝트 환경변수 =====" in wp and "A, EMPTYV, ML, MULTI" in wp and tokA not in wp and SECRET not in wp
+assert "b-value" not in wp
+# 워커 환경에는 저장 값이 안 들어간다
+assert "ENVCTX" not in dira("context").stdout.decode()
+# 연결 설정이 없는 큐(다른 프로젝트, 연결 파일 없음)에는 블록이 없다
+assert "프로젝트 환경변수" not in prompt_of(ticket_worker(other, "wo"))
+assert dira("context", env=dict(ENV, TICKET_ROOT=other)).stdout == b""
+# 다른 프로젝트 B의 목록은 A의 프롬프트에 없고 A의 워크트리는 A와 같다
+assert dira("context", env=ENVW).stdout.decode().count("A, EMPTYV, ML, MULTI") == 1
+# 연결 장애는 빈 목록과 구별된다
+json.dump(dict(json.loads(good), token="bad"), open(ca, "w"))
+bad = dira("context").stdout.decode()
+assert "사용할 수 없습니다" in bad and "비었다는 뜻이 아닙니다" in bad and "(없음)" not in bad
+open(ca, "w").write(good)
+
 # 라우터: tick.sh가 굽는 dira가 `env`를 클라이언트로 보낸다(임시 HOME)
 q = os.path.join(tmp, "q")
 os.makedirs(os.path.join(q, "tickets")); os.makedirs(os.path.join(q, "workers"))
@@ -189,6 +228,8 @@ assert r.returncode == 0 and r.stdout.decode().split()[0] == "A", r
 app.kill(); app.wait()
 assert dira("run", "--keys", "A", "--", *touch).returncode == 69 and not os.path.exists(mark)
 assert dira("list").returncode == 69
+down = dira("context").stdout.decode()
+assert "사용할 수 없습니다" in down and "(없음)" not in down  # 앱 종료는 빈 목록이 아니다
 
 # 저장 파일과 임시 디렉터리 어디에도 시험 값 평문이 없다(가짜 암호화기가 접두사만 붙이므로 값은 저장 파일에
 # 보이는 것이 정상이다. 여기서는 연결 파일과 CLI가 만든 파일만 본다)
