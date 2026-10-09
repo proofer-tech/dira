@@ -9152,3 +9152,21 @@ designer 0장, writer 0장 - 화면과 매뉴얼이 다루는 조작이 안 바�
       배지가 사라진다. **트레이 메뉴에 새 항목이 0개다.**
 
 ---
+
+## GitHub CI 실패 복구 수용조건 (요구 8b10c0bf)
+
+2026-10-10 확인한 CI 실행 37933699766과 37948927933은 모두
+`apps/teams/components/ticket-ui.tsx`의 `useCloseGuard`에서 렌더링 중
+`dirtyRef.current = dirty`를 실행하여 `react-hooks/refs` 오류로 중단됐다.
+최신 실행은 오류 1건과 경고 31건을 기록했으며, 후속 테스트와 빌드는 실행되지 않았다.
+근거: https://github.com/proofer-tech/dira/actions/runs/37948927933
+
+| 범위 | 수용조건 |
+| --- | --- |
+| 닫기 확인 훅 수정 | 렌더링 중 ref를 수정하지 않으며, 최신 입력 변경 여부에 따라 닫기 확인과 버리기가 기존대로 동작한다. |
+| 로컬 검증 | `apps/teams`에서 `pnpm lint`, `pnpm exec tsc --noEmit`, `pnpm test`가 모두 종료 코드 0을 반환한다. ESLint 규칙 비활성화나 파일 제외로 오류를 숨기지 않는다. |
+| GitHub 검증 | 수정 커밋을 포함하는 원격 master SHA에서 CI의 lint, test, build 단계와 전체 실행이 성공한다. 해당 SHA와 실행 URL을 결과에 기록한다. |
+| 릴리스 확인 | 같은 SHA의 release 실행 결과를 확인하며 실패하면 원인별 수정 티켓으로 넘긴다. CI 성공을 release 성공으로 대신하지 않는다. |
+
+이번 범위는 확인된 CI 오류 수정과 실제 GitHub 실행 검증이다. 기존 경고의 일괄 정리나
+CI 검사 축소는 포함하지 않는다. 수정 티켓을 먼저 수행하고 QA가 반영된 SHA를 검증한다.
