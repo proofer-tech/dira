@@ -4,6 +4,11 @@ Set a value in the worker file **before** it sources `tick.sh` and it overrides 
 only line that has to be there is the source line. Everything below is optional. The source itself
 is in [`tick.sh`](https://github.com/proofer-tech/dira/blob/master/tick.sh).
 
+This chapter covers settings that change how workers behave. Do not put secret values a session
+needs, such as an API token, here. Register them in `Environment variables` in the project settings
+instead (the `Project environment variables` section of [Screens](/docs/screens); the commands to
+use them are in the `dira env` section of [CLI](/docs/ref-cli)).
+
 ## Worker settings
 
 | Variable | Default | What it does |

@@ -920,13 +920,14 @@ field. It takes you there without walking the tree.
 
 - **Project** — the first group in the tree. It only appears when you open settings from inside a
   project. There is a single line under it, and its name is the name of the project you are looking
-  at. Press it and eight things for that one project come up in this order — `Resolved values`,
+  at. Press it and nine things for that one project come up in this order — `Resolved values`,
   `Ontology migration`, `Folder to import`, `Edit ontology location`, the twelve metric cells,
-  `Name`, `Integration branch`, `Unregister`. The four in the middle all deal with the ontology, so
+  `Name`, `Integration branch`, `Environment variables`, `Unregister`. The four in the middle all deal with the ontology, so
   they stand together. Two of those four moved here from the ontology screen: `Edit ontology
   location` and the twelve metric cells (see [Archiving and the ontology](/docs/ontology)).
   `Integration branch` is the branch sessions push to, the one you set when you created the project
-  (see [Your first project](/docs/first-ticket)).
+  (see [Your first project](/docs/first-ticket)). `Environment variables` is covered in
+  [Project environment variables](#project-environment-variables) below.
 - **Authentication** — `claude` is at the top, with `codex` · `grok` · `agy` one line each below it.
   This is where you put in the long-lived token the cron-mounted workers use. The screen runs the
   issuing command for you. The details are in [Authentication](/docs/auth).
@@ -955,9 +956,73 @@ several accounts).
 
 Everything outside the `Project` group belongs to this computer and applies to every registered
 project. Authentication, language, the session limit — none of them are set per project. Values
-that do differ per project sit in two places. One is the eight things in the `Project` group you
+that do differ per project sit in two places. One is the nine things in the `Project` group you
 just saw; the other is `Worker settings`, opened separately from the top right of the workers screen (see
 [Workers](/docs/worker)).
+
+### Project environment variables
+
+> As of 2026-10-10 this panel exists on screen but is not yet connected to the desktop app
+> (`f48cf1c9`). Opening it now shows `Cannot reach the desktop app. Check that it is running.`
+> instead of the list, and nothing is saved. Restarting the app does not change that. Once that
+> ticket is done it works as described below.
+
+This is where you leave secret values for a project, such as an API token a session needs. In the
+`Project` group, `Environment variables` sits below `Integration branch` and above `Unregister`.
+Values are encrypted with this Mac's OS key storage (the Keychain on macOS) and kept in the app's
+data folder. They are never written to the queue, tickets, git, or a `.env` file.
+
+**Saved values cannot be viewed again.** The list shows the name, a fixed mask `••••••••`, and the
+time it was updated. There is no show button and no copy button. If you forget a value, get a new
+one from the service that issued it and replace it.
+
+- `Add` - fill in the `Name` and `Value` fields on the bottom row and press `Add`. A name starts
+  with a letter or underscore and uses only letters, digits, and underscores (for example
+  `TEST_API_TOKEN`). If the name already exists you get `That name already exists. Use Replace
+  value in the list.` A value can be up to 64 KiB.
+- `Replace value` - press `Replace value` on that row and an empty `Value` field opens. Enter the
+  new value and press `Save replacement`.
+- Delete - press the trash icon and `<name> will be deleted and gone from the next run.` comes
+  up. Nothing is deleted until you press `Confirm delete`.
+- There is no rename button. Delete it and add it under the new name.
+
+The value field always opens empty. When a save succeeds or you close the dialog, what you typed is
+thrown away.
+
+**A changed value takes effect from the next run.** A process a session has already started keeps
+the old value, and a deleted name is still there inside that process. If it needs the new value,
+run that process again.
+
+**Each project has its own values.** Another project can use the same name with a different value, and
+changing one leaves the other alone. Worker worktrees of the same queue use this project's values.
+They are also kept apart from the login tokens in [Authentication](/docs/auth). Unregistering the
+project does not delete the values; register the same folder again and they come back. There is no
+way to move them to another folder or another Mac.
+
+`PATH`, `HOME`, `SHELL`, `ENV`, `BASH_ENV`, `NODE_OPTIONS`, `PYTHONPATH`, and any name starting with
+`LD_`, `DYLD_`, `TICKET_`, or `DIRA_` cannot be registered. They control how sessions and the engine
+run, so you get `This name controls execution and cannot be registered.`
+
+When a save fails, one red line appears at the top of the panel. It is one of four.
+
+| On screen | Cause | What to do |
+|---|---|---|
+| `Cannot reach the desktop app. Check that it is running.` | The dira desktop app is closed or the connection dropped. Values only open while the app is running. | Start the app and try again. The list is not empty; nothing is saved or run while the app is closed. |
+| `The OS key storage is locked or unavailable. Unlock it and try again.` | The Keychain is locked, or the app was denied access to it. | Check that you are logged in to the Mac, allow access if a Keychain prompt appears, and try again. There is no fallback that stores the value in plain text. |
+| `It was changed elsewhere first. The list was reloaded, try again.` | Another session or window replaced or deleted the same name first. | Press it again on the reloaded list. The value you typed was thrown away, so enter it again. |
+| `That name was already deleted. The list was reloaded.` | Someone deleted it first. | Use `Add` to register it again if you still need it. |
+
+**This is where the protection ends.** The only place a value is decrypted is the environment of a
+process a session starts with `dira env run`. Values never reach the screen, the list, command output,
+or a session prompt, and in the output and progress log that dira records, any string identical to
+a value is masked. The process itself still gets the value as is. dira cannot stop a program from
+printing a transformed value or sending it to another server. The assumption is that sessions and
+programs running under the same Mac account are trusted. If you paste a value into a ticket, a chat,
+or a command argument, the plain text stays in that record and dira does not erase it. Enter values
+on this screen only.
+
+The commands a session uses to read these values are in the `dira env` section of
+[CLI](/docs/ref-cli).
 
 ## The project list
 
@@ -971,7 +1036,7 @@ writing as the page you see on the web. In the app, the list rides on top of it 
 - For a project that is not connected, the three count cells are empty. Not zero. Could not read and
   zero are different facts.
 - The gear in the `Actions` column opens `Settings`. That row's project comes up already selected
-  under the first tree group, `Project`, and the eight things from resolved values through
+  under the first tree group, `Project`, and the nine things from resolved values through
   unregister are there. No separate `Project settings` dialog opens any more (see [The settings
   dialog](#the-settings-dialog) above).
 - The right of the header carries `Manual` · `Market` · `Star` · `New project` ·

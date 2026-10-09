@@ -53,4 +53,70 @@
 평소에 큐를 다루는 데에는 워커 스크립트의 `list`, `dryrun`, `unassign`과 `handclaim`으로
 충분합니다.
 
+## `dira env` - 세션에서 프로젝트 환경변수 쓰기
+
+> 2026-10-10 현재 이 절의 명령과 세션 시작 안내는 아직 구현 중입니다. 세션에서 `dira env list`를
+> 실행해 명령을 찾지 못한다는 오류가 나면 아직 이 절대로 쓸 수 없는 상태입니다. 설정 화면 쪽
+> 상태는 [화면 소개](/docs/screens)의 `프로젝트 환경변수` 절 첫머리에 있습니다.
+
+설정 화면의 `환경변수`에 맡긴 값을 세션이 꺼내 쓰는 명령입니다. 화면 쪽 사용법과 지켜 주는
+범위는 [화면 소개](/docs/screens)의 `프로젝트 환경변수` 절에 있습니다. 명령도 화면과 같은
+값을 다루고, dira 데스크톱 앱이 떠 있어야 동작합니다.
+
+워커 세션과 프로젝트 홈 세션은 시작할 때 이 프로젝트에 등록된 변수 이름과 아래 명령을
+안내받습니다. 값과 revision은 받지 않습니다. 그 이름 목록은 세션이 시작된 시점의 것이라,
+중간에 누가 바꿨을 수 있으면 `dira env list`로 다시 읽습니다. 프로젝트 없이 연 홈 세션에는 이
+안내가 없습니다.
+
+| 명령 | 뜻 |
+|---|---|
+| `dira env list` | 이름, 수정 시각, revision을 출력합니다. 값은 출력하지 않습니다 |
+| `dira env create NAME --stdin` | stdin으로 받은 값을 새 이름으로 등록합니다. 같은 이름이 있으면 거절합니다 |
+| `dira env replace NAME --revision REV --stdin` | 새 값으로 교체합니다. REV가 지금 revision과 다르면 충돌로 끝납니다 |
+| `dira env delete NAME --revision REV` | 지웁니다. REV 판정은 `replace`와 같습니다 |
+| `dira env run --keys NAME1,NAME2 -- COMMAND ARGS...` | 고른 이름만 COMMAND의 환경에 넣어 실행합니다 |
+
+값은 stdin으로만 받습니다. 값을 명령 인자로 받는 옵션은 없고, 어떤 명령도 값을 출력하지
+않습니다. 등록은 이렇게 합니다.
+
+```sh
+# 클립보드에 복사해 둔 값을 등록한다. 값이 명령줄에 남지 않는다
+pbpaste | dira env create TEST_API_TOKEN --stdin
+
+# list에서 읽은 revision을 넘겨 새 값으로 교체한다
+dira env list
+pbpaste | dira env replace TEST_API_TOKEN --revision <list에 나온 revision> --stdin
+```
+
+`echo`나 `printf`에 값을 적어 파이프로 넘기지 마세요. 값이 명령 인자가 되어 셸 기록에 남습니다.
+세션이 사람만 가진 값이 필요하면 값을 대화로 받지 말고 설정 화면에 넣어 달라고 요청합니다.
+값이 대화나 도구 호출 기록에 한 번 들어가면 dira가 그 기록을 지워 주지 않습니다.
+
+`replace`나 `delete`가 충돌로 끝났으면 다른 세션이 먼저 바꾼 것입니다. `dira env list`로 새
+revision을 읽고 다시 실행하세요. 두 세션이 같은 revision으로 동시에 교체하면 하나만 성공합니다.
+
+### `run` - 고른 변수만 넣어 실행
+
+```sh
+dira env run --keys TEST_API_TOKEN,TEST_DB_URL -- python3 scripts/smoke.py --target staging
+```
+
+- `--keys`에 적은 이름만 들어갑니다. 등록돼 있어도 적지 않은 이름은 넘어가지 않습니다.
+- 적은 이름이 하나라도 없으면 COMMAND를 아예 시작하지 않습니다. 지운 이름, 등록할 수 없는 이름이
+  여기에 걸립니다.
+- 셸 환경에 같은 이름이 이미 있으면 등록한 값이 우선합니다. `run`을 부른 셸의 환경은 바뀌지
+  않습니다.
+- COMMAND는 셸을 거치지 않고 적힌 인자 그대로 실행됩니다. 파이프나 `$TEST_API_TOKEN` 같은 확장이
+  필요하면 `-- sh -c '...'`처럼 셸을 직접 부르세요.
+- 종료 코드는 COMMAND의 것을 그대로 돌려주고, Ctrl-C 같은 취소 신호도 COMMAND에 전달됩니다.
+- COMMAND의 stdout과 stderr, 진행 기록에서 넣은 값과 똑같은 문자열은 가려집니다. 여러 줄에 걸치거나
+  출력이 여러 번에 나눠 나와도 가립니다. 값을 바꿔 출력하는 것까지는 가리지 못합니다.
+- 값은 실행할 때마다 새로 읽습니다. 화면에서 교체하거나 지운 결과는 다음 `run`부터 반영되고, 이미
+  떠 있는 COMMAND는 옛 값으로 계속 돕니다.
+
+데스크톱 앱이 꺼져 있거나 연결이 끊기면 모든 `dira env` 명령이 `unavailable`로 끝납니다.
+`run`은 COMMAND를 시작하지 않고, `create`, `replace`, `delete`는 아무것도 저장하지 않습니다.
+변수가 없다는 뜻이 아니니 앱을 띄우고 다시 실행하세요. OS 키 저장소가 잠겼을 때 푸는 법은
+[화면 소개](/docs/screens)의 `프로젝트 환경변수` 절 표에 있습니다.
+
 다음은 [frontmatter 필드](/docs/ref-frontmatter)입니다.

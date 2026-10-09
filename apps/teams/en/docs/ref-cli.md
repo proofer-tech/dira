@@ -53,4 +53,75 @@ inside, and the ones a person uses directly are about `handclaim` and `find`.
 That said, the places a person touches the queue day to day are covered by the worker script's
 `list`, `dryrun`, and `unassign`, plus `handclaim`.
 
+## `dira env` - using project environment variables from a session
+
+> As of 2026-10-10 the commands in this section and the session start notice are still being built.
+> If running `dira env list` in a session fails with a command-not-found error, this section cannot
+> be followed yet. The state of the settings panel is at the top of the `Project environment
+> variables` section of [Screens](/docs/screens).
+
+These commands let a session use the values left in `Environment variables` in settings. How to use
+the screen and what is protected are in the `Project environment variables` section of
+[Screens](/docs/screens). The commands work on the same values, and they need the dira desktop app
+to be running.
+
+Worker sessions and project home sessions are told, when they start, the variable names registered
+for the project and the commands below. They do not receive values or revisions. That list of names
+is as of session start, so if someone may have changed it since, read it again with `dira env list`.
+A home session opened without a project gets no such notice.
+
+| Command | Meaning |
+|---|---|
+| `dira env list` | Prints name, updated time, and revision. Never prints values |
+| `dira env create NAME --stdin` | Registers the value read from stdin under a new name. Refuses a name that already exists |
+| `dira env replace NAME --revision REV --stdin` | Replaces the value. Ends in a conflict if REV is not the current revision |
+| `dira env delete NAME --revision REV` | Deletes it. REV is checked the same way as `replace` |
+| `dira env run --keys NAME1,NAME2 -- COMMAND ARGS...` | Runs COMMAND with only the chosen names in its environment |
+
+Values are read from stdin only. No option takes a value as a command argument, and no command
+prints a value. Registering looks like this.
+
+```sh
+# register a value copied to the clipboard; the value never appears on the command line
+pbpaste | dira env create TEST_API_TOKEN --stdin
+
+# read the revision from list, then replace with a new value
+dira env list
+pbpaste | dira env replace TEST_API_TOKEN --revision <revision from list> --stdin
+```
+
+Do not write a value into `echo` or `printf` and pipe it. The value becomes a command argument and
+stays in shell history. When a session needs a value only a person has, it should not ask for the
+value in the chat; it asks the person to enter it on the settings screen. Once a value has gone into
+a chat or a tool call record, dira does not erase it from that record.
+
+If `replace` or `delete` ends in a conflict, another session changed it first. Read the new
+revision with `dira env list` and run it again. When two sessions replace with the same revision at
+the same time, only one succeeds.
+
+### `run` - running with only the chosen variables
+
+```sh
+dira env run --keys TEST_API_TOKEN,TEST_DB_URL -- python3 scripts/smoke.py --target staging
+```
+
+- Only the names listed in `--keys` go in. A registered name you did not list is not passed.
+- If any listed name is missing, COMMAND is not started at all. Deleted names and names that cannot
+  be registered fail here.
+- If the shell already has a variable of the same name, the registered value wins. The environment
+  of the shell that called `run` does not change.
+- COMMAND is run with its arguments as written, without a shell. If you need a pipe or an expansion
+  such as `$TEST_API_TOKEN`, call a shell yourself, as in `-- sh -c '...'`.
+- The exit code is COMMAND's own, and cancel signals such as Ctrl-C are passed to COMMAND.
+- In COMMAND's stdout and stderr and in the progress log, any string identical to an injected value
+  is masked, even across lines or when the output arrives in pieces. A transformed value is not
+  masked.
+- Values are read fresh on every run. A replace or delete on the screen applies from the next `run`;
+  a COMMAND already running keeps the old value.
+
+If the desktop app is closed or the connection drops, every `dira env` command ends with
+`unavailable`. `run` does not start COMMAND, and `create`, `replace`, and `delete` save nothing. It
+does not mean there are no variables; start the app and run it again. How to unlock the OS key
+storage is in the table of the `Project environment variables` section of [Screens](/docs/screens).
+
 Next is [frontmatter fields](/docs/ref-frontmatter).

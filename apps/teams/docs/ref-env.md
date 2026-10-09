@@ -4,6 +4,10 @@
 하는 줄은 source 한 줄뿐입니다. 아래 변수는 전부 선택 사항입니다. 실제 소스는
 [`tick.sh`](https://github.com/proofer-tech/dira/blob/master/tick.sh)에 있습니다.
 
+이 장은 워커의 동작을 바꾸는 설정값을 다룹니다. 세션이 쓸 API 토큰 같은 비밀 값은 여기에 적지
+말고 프로젝트 설정의 `환경변수`에 등록하세요([화면 소개](/docs/screens)의 `프로젝트 환경변수`
+절, 꺼내 쓰는 명령은 [CLI](/docs/ref-cli)의 `dira env` 절).
+
 ## 워커 설정값
 
 | 변수 | 기본값 | 뜻 |
