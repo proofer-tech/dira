@@ -8980,10 +8980,10 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P474-1 | 홈 대화 지시문 - 쓰기 직전 재조회 - 상태별 갈래 - `.wip` 기록과 참견 명령 - Bash 쓰기 금지 + `home-session.test.ts` | developer | - | 발행 |
-| P474-2 | 보드 경고 - frontmatter 없는 파일과 같은 해시 두 상태 감지, 칸반 위 `Alert`, i18n(ko-en) + 테스트 | developer | - | 발행 |
-| P474-3 | 매뉴얼 - `requirements.md`가 홈 대화가 처리 중인 요구에 결정을 어떻게 전하는지, `troubleshooting.md`가 보드의 `티켓 파일 이상` 경고와 정리 방법을 알려 준다(영문판이 있으면 같이) | writer | - | 발행 |
-| P474-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P474-1, P474-2 | 발행 |
+| P474-1 | 홈 대화 지시문 - 쓰기 직전 재조회 - 상태별 갈래 - `.wip` 기록과 참견 명령 - Bash 쓰기 금지 + `home-session.test.ts` | developer | - | 발행 `d540eacf` |
+| P474-2 | 보드 경고 - frontmatter 없는 파일과 같은 해시 두 상태 감지, 칸반 위 `Alert`, i18n(ko-en) + 테스트 | developer | - | 발행 `8eca4f74` |
+| P474-3 | 매뉴얼 - `requirements.md`가 홈 대화가 처리 중인 요구에 결정을 어떻게 전하는지, `troubleshooting.md`가 보드의 `티켓 파일 이상` 경고와 정리 방법을 알려 준다(영문판이 있으면 같이) | writer | - | 발행 `8219e20e` |
+| P474-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P474-1, P474-2 | 발행 `7310ac08` |
 
 developer 두 장은 파일이 겹치지 않아 나란히 간다. writer는 문구가 위 표에 정해져 있어 구현을
 기다리지 않는다. QA는 확인할 대상이 두 장에서 생긴다. designer 0장 - 기존 `Alert` 모양을 쓴다.
