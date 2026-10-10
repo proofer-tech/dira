@@ -24,7 +24,8 @@ export type EnvErrorCode =
   | "locked"
   | "corrupt"
   | "io"
-  | "bad_project";
+  | "bad_project"
+  | "unauthorized";
 
 export class EnvError extends Error {
   code: EnvErrorCode;

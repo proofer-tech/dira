@@ -15,6 +15,7 @@ import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_pro
 import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSync, watchFile, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { createEnvBridge } from "./env-bridge.ts";
+import { createVercelLink } from "./vercel-link.ts";
 import { publishConnections, unpublishConnections } from "./env-connect.ts";
 import { createEnvStore } from "./env-store.ts";
 import { createServer } from "node:net";
@@ -79,15 +80,15 @@ let envBridgeUrl = "";
 async function startEnvBridge() {
   const backendOk = () =>
     process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text";
-  const store = createEnvStore({
-    dir: join(app.getPath("userData"), "project-env"),
-    cipher: {
-      isEncryptionAvailable: () => safeStorage.isEncryptionAvailable() && backendOk(),
-      encryptString: (p) => safeStorage.encryptString(p),
-      decryptString: (c) => safeStorage.decryptString(c),
-    },
-  });
-  const { port } = await createEnvBridge({ store, secret: envBridgeSecret }).listen();
+  const dir = join(app.getPath("userData"), "project-env");
+  const cipher = {
+    isEncryptionAvailable: () => safeStorage.isEncryptionAvailable() && backendOk(),
+    encryptString: (p: string) => safeStorage.encryptString(p),
+    decryptString: (c: Buffer) => safeStorage.decryptString(c),
+  };
+  const store = createEnvStore({ dir, cipher });
+  const vercel = createVercelLink({ dir, cipher });
+  const { port } = await createEnvBridge({ store, secret: envBridgeSecret, vercel }).listen();
   envBridgeUrl = `http://127.0.0.1:${port}`;
   // 세션(`dira env`)이 읽는 프로젝트별 연결 파일. 프로젝트 등록이 바뀌면 다시 둔다.
   const local = process.env.TICKET_LOCAL || join(homedir(), ".config", "dira");

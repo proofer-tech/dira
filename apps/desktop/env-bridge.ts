@@ -10,6 +10,7 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { EnvError, resolveProject, type EnvStore } from "./env-store.ts";
+import type { createVercelLink } from "./vercel-link.ts";
 
 export function deriveToken(secret: string, projectKey: string): string {
   return createHmac("sha256", secret).update(projectKey).digest("hex");
@@ -21,6 +22,7 @@ const STATUS: Record<string, number> = {
   invalid_value: 400,
   too_large: 413,
   bad_project: 400,
+  unauthorized: 422,
   duplicate: 409,
   conflict: 409,
   not_found: 404,
@@ -61,6 +63,8 @@ const sha = (s: string) => createHash("sha256").update(s).digest();
 
 export function createEnvBridge(opts: {
   store: EnvStore;
+  /** 있으면 `vercel/status|connect|disconnect|token` 경로가 열린다(요구 6f610c77). 같은 인증을 쓴다. */
+  vercel?: ReturnType<typeof createVercelLink>;
   secret: string;
   /** 경로와 상태 코드만 받는다. 본문과 토큰은 넘기지 않는다. */
   log?: (line: string) => void;
@@ -72,22 +76,30 @@ export function createEnvBridge(opts: {
       send(res, status, body);
     };
     if (req.headers.origin || req.headers.host !== `127.0.0.1:${port}`) return reply(403, { error: "forbidden" });
-    const m = /^\/env\/v1\/(list|create|replace|delete|resolve)$/.exec(url.pathname);
+    const m = /^\/env\/v1\/(list|create|replace|delete|resolve|vercel\/status|vercel\/connect|vercel\/disconnect|vercel\/token)$/.exec(url.pathname);
     if (!m) return reply(404, { error: "not_found" });
     const op = m[1];
-    if ((op === "list") !== (req.method === "GET") || (op !== "list" && req.method !== "POST")) {
+    if ((op === "list" || op === "vercel/status") !== (req.method === "GET") || (op !== "list" && req.method !== "POST")) {
       return reply(405, { error: "method" });
     }
     const bearer = /^Bearer (\S+)$/.exec(req.headers.authorization ?? "")?.[1];
     if (!bearer) return reply(401, { error: "unauthorized" });
     try {
-      const body = (op === "list" ? {} : await readBody(req)) as Record<string, unknown>;
-      const projectIn = op === "list" ? url.searchParams.get("project") : body.project;
+      const body = (op === "list" || op === "vercel/status" ? {} : await readBody(req)) as Record<string, unknown>;
+      const projectIn = op === "list" || op === "vercel/status" ? url.searchParams.get("project") : body.project;
       const { root, key } = await resolveProject(projectIn);
       const want = sha(deriveToken(opts.secret, key));
       if (!timingSafeEqual(want, sha(bearer))) {
         // 존재하는 다른 프로젝트의 토큰이거나 틀린 토큰 - 어느 쪽인지 알려주지 않는다.
         return reply(403, { error: "forbidden" });
+      }
+      const v = opts.vercel;
+      if (op.startsWith("vercel/")) {
+        if (!v) return reply(404, { error: "not_found" });
+        if (op === "vercel/status") return reply(200, await v.status(root));
+        if (op === "vercel/connect") return reply(200, await v.connect(root, body.projectId));
+        if (op === "vercel/disconnect") return reply(200, await v.disconnect(root));
+        return reply(200, await v.setToken(body.token ?? null));
       }
       const s = opts.store;
       if (op === "list") return reply(200, { items: await s.list(root) });
