@@ -1038,9 +1038,11 @@ this order and connects without asking once it narrows down to one.
    its teams. Press `Connect this project` on the row you want.
 
 Once connected, the line shows the team ID and project name, the last sync time, `Sync now`, and
-`Disconnect`. If it says `Not synced yet` instead of a time, the two sides have never been matched,
-so press `Sync now`. After that dira syncs on its own when the app starts and every 5 minutes while
-it runs.
+`Disconnect`. dira matches the two sides once the moment you connect, so there is nothing more to
+press. After that it syncs on its own when you open the settings screen, when the app starts, and
+every 5 minutes while the app runs. If `Not synced yet` stays where the time should be, the first
+sync has not finished yet or it failed. A failure shows `Could not sync. Try again shortly.` on the
+line. Wait a moment, then press `Sync now`.
 
 You do not need a separate Vercel login. If you ran `vercel login` on this Mac, dira uses the Vercel
 CLI's login as is. If you never logged in with the CLI or the login expired, the line says
