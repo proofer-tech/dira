@@ -30,9 +30,20 @@ Create a project and one squad is laid down with it. Its name is `default`. Open
 screen and that one row is already at the top of the left list. It is also the row picked
 first.
 
-There are four members. `pm`, `developer`, `qa`, `designer`. Five personas come with the
-project, and `archive-manager` alone is left out. A leader has no occasion to pick that
-persona. The session closing a ticket calls the name directly when it issues an archive ticket.
+There are five members. The `members` file holds these five lines.
+
+```
+pm
+developer
+qa
+designer
+writer
+```
+
+`writer` takes the text people read in order, such as the manual and on-screen guidance. Six
+personas come with the project, and `archive-manager` alone is left out. A leader has no
+occasion to pick that persona. The session closing a ticket calls the name directly when it
+issues an archive ticket.
 
 The leader is `pm`. That is the first-line rule as it stands. `rules` is not laid down, so pm
 decides whose job it is from the member names and the first line of each profile, nothing more.
@@ -70,6 +81,47 @@ leaving it on is easier. Who is in what shows straight from the list.
 
 Delete every squad and only personas are left, so the list goes flat and `Group view` goes with
 it.
+
+## Creating a squad from a description
+
+Instead of picking members and rules yourself, you can write down what the squad is for and
+hand that off. In the same create dialog as above, switch the `Kind` field to
+`Create squad from a description`. The dialog then has three fields.
+
+| Field | What goes in it |
+|---|---|
+| `Name` | The name of the squad to make. Same rule as above |
+| `Description` | What this squad does. Several lines are fine. Left empty, nothing is issued |
+| `Assignee` | The persona or squad that does the design. It is the same field as in the ticket issue dialog, and if `default` exists, `Squad default` is already picked |
+
+Press `Issue design ticket` and one ticket goes into the queue and the dialog closes. **At that
+moment the squad does not exist yet.** It is not in the left list either. The screen only writes
+the ticket. The session that takes the ticket creates the squad folder. If the name collides
+with a persona or another squad, `Couldn't issue the design ticket` appears and nothing is
+issued.
+
+On the board, the ticket's title is `스쿼드 설계 - <name>`. The body quotes your description and
+names the procedure the receiving session follows, `protocols/스쿼드-설계.md`. That session reads
+the existing personas first. Where a role already exists, it adds that persona as a member
+instead of making a new one. It picks how the squad works from these four patterns.
+
+| Pattern | Fits work where |
+|---|---|
+| Pipeline | one step's output is the next step's input |
+| Generate-verify | what was made has to pass a second pair of eyes |
+| Expert pool | each input needs a different specialty |
+| Supervisor | the work has to be re-split while watching progress |
+
+**When the ticket is done, check three things.** A squad by that name is in the left list. Pick
+that row, and the `Members` section has a leader and members, and `Rules` names the chosen
+pattern. Any persona the session made is in the list with a profile. Why it was built that way
+is in the ticket's `## 결과`: the chosen pattern and its reason, and which existing personas
+were reused.
+
+If the description is vague, the session does not ask back. It makes the smallest setup that
+fits and writes its assumptions in `## 결과`, so read that first. Change whatever you dislike on
+the screen, as in Choosing members below. This ticket does not edit the profile of an existing
+persona.
 
 ## Choosing members
 
@@ -253,6 +305,46 @@ frontmatter table on the ticket detail.
 `persona:` is a record, not an instruction. It is not erased when a session ends and the ticket
 is reclaimed, and the next dispatch resolves it again and overwrites it. To fix it on one
 person, delete the `squad:` line.
+
+## Reviewing a squad
+
+After a squad has been in use for a while, the same complaint comes back, the same cause blocks
+it again, or people skip the squad and issue tickets straight to a member. A review ticket fixes
+the squad from that record.
+
+Pick a squad row, and `Issue review ticket` is first in the button row at the top of the right
+column. Pressing it issues the ticket at once, with no confirmation. `Issued the review ticket:`
+and the ticket hash appear to the left of the button, and the hash opens that ticket. The title
+is `스쿼드 점검 - <name>` and `squad:` names this squad, so the leader receives it. Nothing
+issues one automatically. You decide when to review by pressing the button.
+
+**Press it when one of these happens.** You read the `## 결과` of that squad's tickets and see
+the same problem a second time. The leader gets blocked again for the same reason. People keep
+picking a member's name directly instead of the squad. The receiving session follows
+`protocols/스쿼드-점검.md` and gathers each member's memory, recent blocks, feedback tickets, and
+tickets that went around the squad. Of those, only the three kinds below count as signals.
+Something that happened once is not a signal.
+
+| Signal | Threshold |
+|---|---|
+| Repeated type | the same kind of remark or fix request 2 times or more |
+| Repeated block | `## 블록` from the same cause 2 times or more |
+| Squad bypass | a ticket a person issued straight to a member without the squad |
+
+**Read the outcome in the ticket's `## 결과`.** The signal table comes first. Each signal lists
+the ticket hash or memory file behind it, and its type. The type decides which file gets fixed.
+
+| Type | File fixed |
+|---|---|
+| Output quality | that member's `skills.md` |
+| Role | that member's `PROFILE.md` |
+| Order and handoff | this squad's `rules` |
+| Makeup | this squad's `members` |
+
+Below it, each changed file gets one line of reason. Only one signal is acted on per review, so
+usually one place changes. Signals left for later, and changes held back because they would undo
+an earlier fix, are listed there too. The next review picks them up. With no signals at all,
+nothing is changed and the result says `신호 0`.
 
 ## Deleting a squad
 
