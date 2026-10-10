@@ -962,11 +962,6 @@ just saw; the other is `Worker settings`, opened separately from the top right o
 
 ### Project environment variables
 
-> As of 2026-10-10 this panel exists on screen but is not yet connected to the desktop app
-> (`f48cf1c9`). Opening it now shows `Cannot reach the desktop app. Check that it is running.`
-> instead of the list, and nothing is saved. Restarting the app does not change that. Once that
-> ticket is done it works as described below.
-
 This is where you leave secret values for a project, such as an API token a session needs. In the
 `Project` group, `Environment variables` sits below `Integration branch` and above `Unregister`.
 Values are encrypted with this Mac's OS key storage (the Keychain on macOS) and kept in the app's
@@ -1023,6 +1018,105 @@ on this screen only.
 
 The commands a session uses to read these values are in the `dira env` section of
 [CLI](/docs/ref-cli).
+
+#### Connecting to Vercel
+
+If the project deploys to Vercel, you can keep the values stored here in step with the Vercel
+project's environment variables. The `Vercel` line right under the `Environment variables` heading is
+where that happens. You connect once per project.
+
+Press `Connect to Vercel` next to `No Vercel project linked`. dira looks for the Vercel project in
+this order and connects without asking once it narrows down to one.
+
+1. It looks for `.vercel/project.json` in the project folder. If the root has none, it goes down to
+   three levels of subfolders (a place like `apps/web/.vercel/project.json`). If you ever ran
+   `vercel link` in that folder, the file is there.
+2. Without the file, it looks for a Vercel project linked to the same repository as git `origin`. If
+   there is exactly one, it connects to that.
+3. With two or more candidates you get `Pick the Vercel project to connect.` and the list. With none
+   you get `No linked Vercel project found. Pick one below.` and every project in that account and
+   its teams. Press `Connect this project` on the row you want.
+
+Once connected, the line shows the team ID and project name, the last sync time, `Sync now`, and
+`Disconnect`. If it says `Not synced yet` instead of a time, the two sides have never been matched,
+so press `Sync now`. After that dira syncs on its own when the app starts and every 5 minutes while
+it runs.
+
+You do not need a separate Vercel login. If you ran `vercel login` on this Mac, dira uses the Vercel
+CLI's login as is. If you never logged in with the CLI or the login expired, the line says
+`Vercel login required. Paste a personal token.` How to clear that is in
+[When login is required](#when-login-is-required) below.
+
+`Disconnect` removes only the connection. Variables on both the dira side and the Vercel side stay.
+
+After connecting, values move by these rules. There is nothing to choose.
+
+- Adding, replacing, or deleting in dira goes to Vercel right away. dira writes to the production and
+  preview environments as sensitive variables. It never reads or writes the development environment
+  or variables scoped to a single branch.
+- Vercel variables whose value can be read (anything not sensitive) are brought into dira. The
+  production value comes first, the preview value if there is no production one.
+- If both sides changed since the last sync, the value changed later wins.
+- For variables joined by sync, deleting on one side deletes on the other. A variable that existed on
+  only one side before you connected never deletes the other side.
+
+#### Sync marks on variable rows
+
+Once connected, every variable row gets a sync mark to the right of the masked value. Before
+connecting there are none. Names that exist only on Vercel and not in dira appear separately at the
+bottom of the list.
+
+| Mark | Meaning | What to do |
+|---|---|---|
+| `In sync` | Both sides hold the same value. | Nothing. |
+| `Waiting for Vercel` | Saved in dira but not yet written to Vercel, because the network dropped or the Vercel login lapsed. Sessions keep using the dira value. | The next sync writes it again. To match now, press `Sync now`. If it stays, check whether the `Vercel` line is asking for a login. |
+| `Conflict, matched to the later value - dira value` or `- Vercel value` | Both sides changed since the last sync, so dira kept the value changed later. The trailing words name the side that won. The mark goes away after 24 hours. | If the remaining value is the one you wanted, leave it. Otherwise put the right value back with `Replace value`. |
+| `Only on Vercel, value unreadable` | The variable is stored on Vercel as sensitive. Vercel does not return the value either, so dira only knows the name. | If a session needs it, press `Enter value`, type the value, and press `Add`. It is added to dira and the Vercel value is replaced with it too. If no session needs it, leave it. |
+| `Not imported` | The reason in parentheses keeps this name out of dira. It is one of `Vercel system variable` (a name starting with `VERCEL_`), `name controls execution` (the names that cannot be registered, listed above), or `unusable name` (a name that breaks dira's naming rule). | Usually nothing. If a session needs a value marked `unusable name`, add it to dira separately under a name that follows the rule. |
+
+Besides those five, you may see `Changed on Vercel, re-enter the value`. Someone changed on Vercel a
+variable dira had written, and because it is sensitive dira cannot read the new value. dira does not
+put the old value back on Vercel. Enter the value you want with that row's `Replace value` and both
+sides are matched to it.
+
+#### When login is required
+
+Under `Vercel login required. Paste a personal token.` you get a `Vercel token` field and a
+`Vercel token page` link. Recover with whichever is easier.
+
+- Run `vercel login` again in a terminal, then close and reopen the settings window. dira reads the
+  CLI login fresh every time it uses it, so there is nothing to paste.
+- Create a token on the `Vercel token page`, paste it into the `Vercel token` field, and press
+  `Save token`. dira keeps only a token Vercel accepts, encrypted with the Keychain, and reconnects
+  right away. Like the variable values, the token cannot be viewed again.
+
+If both a CLI login and a pasted token exist, the CLI one is used first. Values you change in dira
+while the login is lapsed are saved in dira and marked `Waiting for Vercel`. After you recover, press
+`Sync now` and they go to Vercel.
+
+If the token cannot be saved, the reason appears under the field.
+
+| On screen | What to do |
+|---|---|
+| `Vercel did not accept the token.` | The token expired or was deleted. Create a new one on the token page. |
+| `The token format is not valid.` | The token was cut off or has spaces in it. Copy the whole token again. |
+| `The OS key storage is locked or unavailable, so the token was not kept.` | Unlock the Keychain and save again. |
+| `Cannot reach the desktop app. Check that it is running.` | Start the dira desktop app and save again. |
+
+If connecting itself fails, the `Vercel` line shows the reason in red with `Retry`. For
+`Could not reach Vercel. Check the network.`, check the network and press `Retry`. The key storage
+and desktop app messages are cleared the same way as in the table above.
+
+#### Changed values apply from the next deployment
+
+When a Vercel variable changes, the site already deployed keeps running with the old value. The
+new value goes in only with another deployment. When dira changes a Vercel variable, the `Vercel`
+line shows `Applies from the next deployment.` and `Redeploy production`.
+
+To apply now, press `Redeploy production`. It creates a new deployment from the latest production
+deployment. Preview is not redeployed. If you do not press it, dira never deploys on its own and the
+new value goes in with your next regular deployment. If you see `Could not redeploy.`, the project
+has no production deployment yet or Vercel could not be reached. Deploy from the Vercel dashboard.
 
 ## The project list
 

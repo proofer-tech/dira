@@ -57,8 +57,7 @@ That said, the places a person touches the queue day to day are covered by the w
 
 > As of 2026-10-10 the commands in this section and the session start notice are still being built.
 > If running `dira env list` in a session fails with a command-not-found error, this section cannot
-> be followed yet. The state of the settings panel is at the top of the `Project environment
-> variables` section of [Screens](/docs/screens).
+> be followed yet.
 
 These commands let a session use the values left in `Environment variables` in settings. How to use
 the screen and what is protected are in the `Project environment variables` section of
