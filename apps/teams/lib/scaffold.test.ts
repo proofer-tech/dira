@@ -39,6 +39,8 @@ const SET = [
   ".dira/protocols/완료-트리거.md",
   ".dira/protocols/cdp.md",
   ".dira/protocols/epics.md",
+  ".dira/protocols/스쿼드-설계.md",
+  ".dira/protocols/스쿼드-점검.md",
   ".dira/protocols/CORE.md",
   ".dira/protocols/CORE-TICKETS.md",
   ".dira/protocols/CORE-MEMORY.md",
@@ -46,6 +48,7 @@ const SET = [
   ".dira/personas/developer/PROFILE.md",
   ".dira/personas/qa/PROFILE.md",
   ".dira/personas/designer/PROFILE.md",
+  ".dira/personas/writer/PROFILE.md",
   ".dira/personas/archive-manager/PROFILE.md",
   ".dira/squads/default/members",
   ".dira/watchdog_gates.py",
@@ -129,7 +132,7 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
 
   // (D1) 기본 스쿼드 default — 이름 넷, 역할 칸 없음, 끝이 개행 하나, rules는 안 만든다
   const members = await readFile(path.join(project, ".dira/squads/default/members"), "utf8");
-  assert.equal(members, "pm\ndeveloper\nqa\ndesigner\n");
+  assert.equal(members, "pm\ndeveloper\nqa\ndesigner\nwriter\n");
   await assert.rejects(() => stat(path.join(project, ".dira/squads/default/rules")));
 
   // ⑤ w1.sh — TICKET_CWD가 표준 자리(§워커는 언제나 자기 워크트리에서 일한다 결정 1),
