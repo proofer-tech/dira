@@ -142,12 +142,22 @@ const envBody = s.slice(envStart, s.indexOf("function ProjectSection(", envStart
 
 test("환경변수 영역: 값 입력은 password뿐이고 보기와 복사 동작이 없다", () => {
   assert.ok(envStart >= 0);
-  assert.equal((envBody.match(/type="password"/g) ?? []).length, 2);
+  // 값 교체, 새 값, Vercel에만 있음 행의 값 입력
+  assert.equal((envBody.match(/type="password"/g) ?? []).length, 3);
   assert.doesNotMatch(envBody, /type="text"|clipboard|Copy|Eye\b|navigator\./);
   assert.match(envBody, /t\("env\.mask"\)/);
 });
 
 test("환경변수 영역: 프로젝트 전환 시 비우고 늦은 응답을 버린다", () => {
   assert.match(envBody, /live\.current !== mine/);
-  assert.match(envBody, /setItems\(null\);\s*discardInput\(\);/);
+  assert.match(envBody, /setItems\(null\);[\s\S]*?discardInput\(\);/);
+  assert.match(envBody, /setOnly\(\[\]\);\s*setMeta\(null\);/);
+});
+
+test("Vercel 줄: 토큰 칸은 password이고 성공하거나 닫히면 비우며 값 보기와 복사가 없다", () => {
+  const v = readFileSync(new URL("./components/vercel-env-line.tsx", import.meta.url), "utf8");
+  assert.equal((v.match(/type="password"/g) ?? []).length, 1);
+  assert.doesNotMatch(v, /type="text"|clipboard|Copy|Eye\b|navigator\./);
+  assert.match(v, /setToken\(""\);\s*setNote\(null\);\s*if \(!open\) return;/); // 닫힘과 프로젝트 전환
+  assert.match(v, /setToken\(""\);\s*await connect\(\)/); // 성공
 });

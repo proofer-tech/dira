@@ -17,6 +17,7 @@ const cipher = {
 };
 type R = { id: string; key: string; type: string; target: string[]; gitBranch?: string; value: string; updatedAt: number };
 
+const x_deploys: Record<string, unknown>[] = [];
 async function setup() {
   let clock = 1_000_000, n = 0;
   const recs: R[] = [];
@@ -33,6 +34,8 @@ async function setup() {
       if (req.headers.authorization !== `Bearer ${TOK}`) return send(403, {});
       const b = body ? JSON.parse(body) : {};
       if (u.pathname === "/v2/user") return send(200, {});
+      if (u.pathname === "/v6/deployments") return send(200, { deployments: [{ uid: "dpl_1", name: "prj" }] });
+      if (u.pathname === "/v13/deployments") { x_deploys.push(b); return send(200, {}); }
       if (u.pathname === "/v9/projects/prj") return send(200, { id: "prj", name: "prj" });
       if (u.pathname === "/v10/projects/prj/env" && req.method === "GET") {
         return send(200, { envs: recs.map((r) => ({ ...r, value: r.type === "plain" ? r.value : "ENC" })) });
@@ -169,5 +172,16 @@ test("VC-5 - Vercel 변경을 가져오고 양쪽 변경은 늦은 쪽을 따르
   // 상태 파일과 응답에 값과 토큰이 없다.
   const sf = readFileSync(path.join(x.dir, readdirSync(x.dir).find((f) => f.startsWith("vercel-sync"))!), "utf8");
   assert.ok(!sf.includes(TOK) && !/a2|b-vercel|s1|s2/.test(sf));
+  x.srv.close();
+});
+
+test("다시 배포 - 마지막 production 배포를 새로 만들고 배포 대기 표시를 지운다", async () => {
+  const x = await setup();
+  await x.store.create(x.root, "R", "r1");
+  await x.sync.afterWrite(x.root, "R", false);
+  assert.strictEqual((await x.sync.info(x.root)).vercel?.deployPending, true);
+  assert.deepStrictEqual(await x.sync.redeploy(x.root), { ok: true });
+  assert.deepStrictEqual(x_deploys.at(-1), { name: "prj", deploymentId: "dpl_1", target: "production" });
+  assert.strictEqual((await x.sync.info(x.root)).vercel?.deployPending, false);
   x.srv.close();
 });

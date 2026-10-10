@@ -281,7 +281,31 @@ export function createVercelSync(opts: { dir: string; store: EnvStore; link: Lin
     return { items: out, vercelOnly, vercel: { lastSyncAt: st.lastSyncAt, deployPending: st.deployPending } };
   }
 
+  /** production 다시 배포 - 가장 최근 production 배포를 새로 만든다. 사용자가 누를 때만 부른다(자동 재배포 없음). */
+  async function redeploy(root: string): Promise<{ ok: true } | { ok: false; error: "login_required" | "unlinked" | "no_deployment" | "io" }> {
+    const { root: real, key } = await resolveProject(root);
+    const s = await opts.link.session(real);
+    if (!("token" in s)) return { ok: false, error: s.state };
+    const c: Ctx = { token: s.token, projectId: s.project.projectId, q: s.project.teamId ? { teamId: s.project.teamId } : {} };
+    try {
+      const l = (await req(c, "GET", "/v6/deployments", undefined, { projectId: c.projectId, target: "production", limit: "1" })) as {
+        deployments?: { uid: string; name: string }[];
+      };
+      const last = l.deployments?.[0];
+      if (!last) return { ok: false, error: "no_deployment" };
+      await req(c, "POST", "/v13/deployments", { name: last.name, deploymentId: last.uid, target: "production" }, { forceNew: "1" });
+      return serial(key, async () => {
+        const st = await load(key);
+        await save(key, { ...st, deployPending: false });
+        return { ok: true as const };
+      });
+    } catch {
+      return { ok: false, error: "io" };
+    }
+  }
+
   return {
+    redeploy,
     sync: async (root: string): Promise<SyncResult> => {
       const { root: real, key } = await resolveProject(root);
       return serial(key, () => runSync(real, key));

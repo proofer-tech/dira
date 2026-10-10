@@ -79,7 +79,7 @@ export function createEnvBridge(opts: {
       send(res, status, body);
     };
     if (req.headers.origin || req.headers.host !== `127.0.0.1:${port}`) return reply(403, { error: "forbidden" });
-    const m = /^\/env\/v1\/(list|create|replace|delete|resolve|vercel\/status|vercel\/sync|vercel\/connect|vercel\/disconnect|vercel\/token)$/.exec(url.pathname);
+    const m = /^\/env\/v1\/(list|create|replace|delete|resolve|vercel\/status|vercel\/sync|vercel\/redeploy|vercel\/connect|vercel\/disconnect|vercel\/token)$/.exec(url.pathname);
     if (!m) return reply(404, { error: "not_found" });
     const op = m[1];
     if ((op === "list" || op === "vercel/status") !== (req.method === "GET") || (op !== "list" && req.method !== "POST")) {
@@ -105,6 +105,7 @@ export function createEnvBridge(opts: {
           if (r.state === "connected") await opts.sync?.sync(root); // 연결 직후 한 번
           return reply(200, r);
         }
+        if (op === "vercel/redeploy") return reply(200, opts.sync ? await opts.sync.redeploy(root) : { ok: false, error: "unlinked" });
         if (op === "vercel/sync") return reply(200, opts.sync ? await opts.sync.sync(root) : { ok: false, error: "unlinked" });
         if (op === "vercel/disconnect") return reply(200, await v.disconnect(root));
         return reply(200, await v.setToken(body.token ?? null));

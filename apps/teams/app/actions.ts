@@ -11,6 +11,13 @@ import path from "node:path";
 import { revalidatePath } from "next/cache";
 import {
   callEnvBridge,
+  callEnvBridgeFull,
+  callVercelBridge,
+  pickVercelView,
+  type VercelMeta,
+  type VercelOnlyItem,
+  type VercelTokenCode,
+  type VercelView,
   validateEnvName,
   validateEnvValue,
   type EnvErrorCode,
@@ -1012,7 +1019,7 @@ export async function saveIntegrationBranchAction(
 // ── 프로젝트 환경변수 (요구 04daa929 · ENV-3) ──
 // 값은 이 액션의 인자로만 들어가고 응답에는 `{name, updatedAt, revision}`과 고정 오류 코드만 나간다.
 
-type EnvListResult = { ok: true; items: EnvItem[] } | { ok: false; code: EnvErrorCode };
+type EnvListResult = { ok: true; items: EnvItem[]; vercelOnly: VercelOnlyItem[]; vercel: VercelMeta | null } | { ok: false; code: EnvErrorCode };
 type EnvChangeResult = { ok: true; item: EnvItem } | { ok: false; code: EnvErrorCode };
 
 async function envRoot(id: string): Promise<string | null> {
@@ -1022,8 +1029,10 @@ async function envRoot(id: string): Promise<string | null> {
 export async function listEnvAction(id: string): Promise<EnvListResult> {
   const root = await envRoot(id);
   if (!root) return { ok: false, code: "unavailable" };
-  const r = await callEnvBridge(root, { op: "list" });
-  return r.ok ? { ok: true, items: r.data as EnvItem[] } : r;
+  const r = await callEnvBridgeFull(root, { op: "list" });
+  if (!r.ok) return r;
+  const d = r.data as { items: EnvItem[]; vercelOnly: VercelOnlyItem[]; vercel: VercelMeta | null };
+  return { ok: true, ...d };
 }
 
 /** ENV-3 순서: 이름 형식 -> 예약 이름 -> 값 -> 브리지(중복 · 충돌 · 잠김). */
@@ -1040,4 +1049,55 @@ export async function changeEnvAction(
   if (!root) return { ok: false, code: "unavailable" };
   const r = await callEnvBridge(root, change);
   return r.ok ? { ok: true, item: r.data as EnvItem } : r;
+}
+
+// ── Vercel 연동 줄 (요구 6f610c77) ── 토큰은 이 액션 인자로 한 번 나가고 어디에도 남기지 않는다.
+
+const vercelErr = (b: unknown): VercelView => {
+  const e = (b as { error?: string } | null)?.error;
+  return { state: "error", code: e === "locked" ? "locked" : e === "io" ? "io" : "unavailable" };
+};
+
+async function vercelCall(id: string, v: Parameters<typeof callVercelBridge>[1]) {
+  const root = await envRoot(id);
+  return root ? callVercelBridge(root, v) : null;
+}
+
+export async function vercelStatusAction(id: string): Promise<VercelView> {
+  const r = await vercelCall(id, { op: "status" });
+  return r && r.status === 200 ? pickVercelView(r.body) : r ? vercelErr(r.body) : { state: "error", code: "unavailable" };
+}
+
+/** `projectId`가 있으면 후보 목록에서 고른 프로젝트로 연결한다. */
+export async function vercelConnectAction(id: string, projectId?: string): Promise<VercelView> {
+  const r = await vercelCall(id, { op: "connect", ...(projectId ? { projectId } : {}) });
+  return r && r.status === 200 ? pickVercelView(r.body) : r ? vercelErr(r.body) : { state: "error", code: "unavailable" };
+}
+
+export async function vercelDisconnectAction(id: string): Promise<{ ok: boolean }> {
+  const r = await vercelCall(id, { op: "disconnect" });
+  return { ok: r?.status === 200 };
+}
+
+export async function vercelSyncAction(id: string): Promise<{ ok: true } | { ok: false; code: "login_required" | "unlinked" | "locked" | "io" | "unavailable" }> {
+  const r = await vercelCall(id, { op: "sync" });
+  const b = r?.body as { ok?: boolean; error?: string } | undefined;
+  if (b?.ok) return { ok: true };
+  const e = b?.error;
+  return { ok: false, code: e === "login_required" || e === "unlinked" || e === "locked" || e === "io" ? e : "unavailable" };
+}
+
+export async function vercelRedeployAction(id: string): Promise<{ ok: boolean }> {
+  const r = await vercelCall(id, { op: "redeploy" });
+  return { ok: (r?.body as { ok?: boolean } | undefined)?.ok === true };
+}
+
+/** `token`이 null이면 보관한 토큰을 지운다. */
+export async function vercelTokenAction(id: string, token: string | null): Promise<{ ok: true } | { ok: false; code: VercelTokenCode }> {
+  if (token !== null && (!token.trim() || token.length > 4096)) return { ok: false, code: "invalid" };
+  const r = await vercelCall(id, { op: "token", token });
+  if (!r) return { ok: false, code: "unavailable" };
+  if (r.status === 200) return { ok: true };
+  const e = (r.body as { error?: string }).error;
+  return { ok: false, code: e === "unauthorized" ? "rejected" : e === "locked" ? "locked" : e === "invalid_value" ? "invalid" : "unavailable" };
 }

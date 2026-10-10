@@ -7,11 +7,11 @@ import path from "node:path";
 // 데스크톱 쪽은 자기 tsconfig로 검사된다 - 정적 import로 이 패키지의 tsc에 끌어들이지 않는다.
 const desk = (f: string) => import(new URL(`../../desktop/${f}`, import.meta.url).href);
 type Cipher = { isEncryptionAvailable(): boolean; encryptString(p: string): Buffer; decryptString(c: Buffer): string };
-import { callEnvBridge, codeAfterList, validateEnvName, validateEnvValue } from "./project-env.ts";
+import { callEnvBridge, callEnvBridgeFull, callVercelBridge, codeAfterList, pickVercelView, rowMarkKey, validateEnvName, validateEnvValue, vercelLineKey } from "./project-env.ts";
 
 const SECRET = "s3cr3t-유니크-값";
 const env = { DIRA_ENV_BRIDGE_URL: "http://x", DIRA_ENV_BRIDGE_SECRET: "tok" };
-const reply = (b: unknown) => (async () => ({ json: async () => b })) as unknown as typeof fetch;
+const reply = (b: unknown) => (async () => ({ ok: true, json: async () => b })) as unknown as typeof fetch;
 
 test("이름 검증", () => {
   assert.equal(validateEnvName("API_KEY"), null);
@@ -92,4 +92,41 @@ test("codeAfterList - 충돌 뒤 재읽기는 안내를 남기고 평소 읽기�
   assert.equal(codeAfterList("not-found", true), "not-found");
   assert.equal(codeAfterList("conflict", false), null);
   assert.equal(codeAfterList(null, false), null);
+});
+
+test("VC-6 - Vercel 줄의 상태 다섯과 후보 선택이 응답에서 정해진다", () => {
+  const key = (b: unknown, busy = false) => vercelLineKey(pickVercelView(b), busy);
+  assert.equal(key({ state: "unlinked", source: "cli" }), "unlinked");
+  assert.equal(key({ state: "unlinked" }, true), "connecting");
+  assert.equal(key({ state: "connected", source: "cli", project: { name: "web", teamId: "team_1", projectId: "p", path: "x" } }), "connected");
+  assert.equal(key({ state: "login_required" }), "login");
+  assert.equal(key({ error: "io" }), "error");
+  assert.equal(key({ state: "choose", candidates: [{ projectId: "a", name: "A", teamId: null }] }), "choose");
+  assert.deepEqual(pickVercelView({ state: "connected", token: SECRET, project: { name: "web", teamId: null, token: SECRET } }), { state: "connected", name: "web", teamId: null });
+  assert.ok(!JSON.stringify(pickVercelView({ state: "choose", candidates: [{ projectId: "a", name: "A", token: SECRET }] })).includes(SECRET));
+});
+
+test("VC-6 - 변수 행의 표시 다섯(맞음 반영 대기 충돌 Vercel에만 있음 가져오지 않음)과 값 없는 목록 파싱", async () => {
+  const item = (kind: string, side?: string) => ({ name: "A", updatedAt: "t", revision: "1", sync: { kind, side }, value: SECRET });
+  const body = {
+    items: [item("synced"), item("pending"), item("conflict", "vercel"), item("reenter")],
+    vercelOnly: [{ name: "S", kind: "vercel_only", value: SECRET }, { name: "VERCEL_URL", kind: "skipped", reason: "vercel_system" }],
+    vercel: { lastSyncAt: "2026-10-11T00:00:00Z", deployPending: true },
+  };
+  const r = await callEnvBridgeFull(tmpdir(), { op: "list" }, reply(body), env) as { ok: true; data: { items: Parameters<typeof rowMarkKey>[0][]; vercelOnly: Parameters<typeof rowMarkKey>[0][] } };
+  assert.equal(r.ok, true);
+  const marks = [...r.data.items, ...r.data.vercelOnly].map(rowMarkKey);
+  assert.deepEqual(marks, ["synced", "pending", "conflict", "reenter", "vercelOnly", "skipped"]);
+  assert.ok(!JSON.stringify(r).includes(SECRET));
+  // 연결 전 응답(sync 필드 없음)은 표시가 없다
+  const plain = await callEnvBridge(tmpdir(), { op: "list" }, reply({ items: [{ name: "A", updatedAt: "t", revision: "1" }] }), env);
+  assert.equal(rowMarkKey((plain as { data: { sync?: never }[] }).data[0] as never), null);
+});
+
+test("Vercel 브리지 호출 - 경로와 본문, 설정이 없으면 null", async () => {
+  assert.equal(await callVercelBridge("/r", { op: "status" }, reply({}), {}), null);
+  let seen = "";
+  const f = (async (u: string, init: RequestInit) => { seen = `${init.method ?? "GET"} ${u} ${init.body ?? ""}`; return { status: 200, json: async () => ({ ok: true }) }; }) as unknown as typeof fetch;
+  await callVercelBridge(tmpdir(), { op: "token", token: null }, f, env);
+  assert.match(seen, /^POST http:\/\/x\/env\/v1\/vercel\/token \{"token":null,"project":/);
 });

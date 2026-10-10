@@ -91,7 +91,8 @@ import { ConfigTable, OntologyMetricsField, OntologyMigration } from "@/componen
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
 import type { AutonomyLevel } from "@/lib/projects";
-import { codeAfterList, type EnvErrorCode, type EnvItem } from "@/lib/project-env";
+import { VercelEnvLine } from "@/components/vercel-env-line";
+import { codeAfterList, rowMarkKey, type EnvErrorCode, type EnvItem, type VercelMeta, type VercelOnlyItem } from "@/lib/project-env";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, actionName, formatCombo, type ActionId } from "@/lib/keymap";
 import { wrap } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -1514,13 +1515,32 @@ function IntegrationBranchField({ projectId, open }: { projectId: string; open: 
  *  길이 없고(브리지가 목록에 값을 안 준다) 입력은 빈 비밀번호 칸으로 시작해 성공이나 닫힘에서
  *  버린다. 목록은 성공 응답으로만 바꾼다(실패한 쓰기는 오류 줄만 남긴다). 프로젝트가 바뀌면
  *  `projectId` 의존 effect가 목록과 입력을 비우고, 늦게 온 이전 프로젝트 응답은 버린다. */
+/** 변수 행의 동기화 표시. 연결 전에는 아무것도 그리지 않는다. 값은 어디에도 없다. */
+function SyncMark({ item }: { item: EnvItem | VercelOnlyItem }) {
+  const t = useT();
+  const k = rowMarkKey(item);
+  if (!k) return null;
+  const side = "sync" in item && item.sync?.side ? t(`env.sync.side.${item.sync.side}`) : "";
+  const reason = "reason" in item && item.reason ? ` (${t(`env.sync.reason.${item.reason}`)})` : "";
+  return (
+    <span data-sync={k} className="text-xs text-muted-foreground">
+      {t(`env.sync.${k}`)}
+      {k === "conflict" ? ` - ${side}` : ""}
+      {reason}
+    </span>
+  );
+}
+
 function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean }) {
   const t = useT();
   const [items, setItems] = useState<EnvItem[] | null>(null);
+  const [only, setOnly] = useState<VercelOnlyItem[]>([]);
+  const [meta, setMeta] = useState<VercelMeta | null>(null);
   const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [replacing, setReplacing] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [filling, setFilling] = useState<string | null>(null);
   const [code, setCode] = useState<EnvErrorCode | null>(null);
   const [pending, start] = useTransition();
   const live = useRef(projectId);
@@ -1530,6 +1550,7 @@ function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean
     setValue("");
     setReplacing(null);
     setDeleting(null);
+    setFilling(null);
   };
 
   // keep: 충돌 뒤 재읽기는 방금 낸 안내를 지우지 않는다(다음 동작이나 닫힘까지 남는다)
@@ -1539,6 +1560,8 @@ function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean
       if (live.current !== mine) return;
       if (r.ok) {
         setItems(r.items);
+        setOnly(r.vercelOnly);
+        setMeta(r.vercel);
         setCode((prev) => codeAfterList(prev, keep));
       } else {
         setCode(r.code);
@@ -1550,6 +1573,8 @@ function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean
     live.current = projectId;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- 프로젝트 전환과 닫힘에서 이전 값을 버리는 한 갈래뿐이다
     setItems(null);
+    setOnly([]);
+    setMeta(null);
     discardInput();
     setCode(null);
     if (open) load();
@@ -1568,6 +1593,7 @@ function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean
       if (r.ok) {
         setCode(null);
         discardInput();
+        load(true);
         setItems((cur) => {
           const rest = (cur ?? []).filter((i) => i.name !== change.name);
           return change.op === "delete" ? rest : [...rest, r.item].sort((a, b) => a.name.localeCompare(b.name));
@@ -1589,6 +1615,7 @@ function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean
     <div data-setting="project.env" className="space-y-2 border-t pt-4">
       <h3 className="text-sm font-medium">{t("env.title")}</h3>
       <p className="text-xs text-muted-foreground">{t("env.note")}</p>
+      <VercelEnvLine projectId={projectId} open={open} meta={meta} onChanged={() => load(true)} />
       {code && (
         <p role="alert" className="text-xs text-status-stale">
           {t(`env.err.${code}`)}
@@ -1605,6 +1632,7 @@ function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-mono">{i.name}</span>
                 <span className="font-mono text-muted-foreground">{t("env.mask")}</span>
+                <SyncMark item={i} />
                 <span className="ml-auto text-xs text-muted-foreground">{i.updatedAt}</span>
                 <Button
                   size="sm"
@@ -1664,6 +1692,46 @@ function ProjectEnvField({ projectId, open }: { projectId: string; open: boolean
                     onClick={() => submit({ op: "delete", name: i.name, expectedRevision: i.revision })}
                   >
                     {pending ? t("env.saving") : t("env.deleteConfirmYes")}
+                  </Button>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {only.length > 0 && (
+        <ul className="space-y-1">
+          {only.map((o) => (
+            <li key={o.name} className="space-y-1">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-mono">{o.name}</span>
+                <SyncMark item={o} />
+                {o.kind === "vercel_only" && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto"
+                    disabled={pending}
+                    onClick={() => {
+                      setFilling(filling === o.name ? null : o.name);
+                      setValue("");
+                    }}
+                  >
+                    {t("env.fillValue")}
+                  </Button>
+                )}
+              </div>
+              {filling === o.name && (
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    autoComplete="new-password"
+                    aria-label={t("env.valueLabel")}
+                    value={value}
+                    onChange={(e) => setValue(e.target.value)}
+                  />
+                  <Button size="sm" disabled={pending || !value} onClick={() => submit({ op: "create", name: o.name, value })}>
+                    {pending ? t("env.saving") : t("env.add")}
                   </Button>
                 </div>
               )}
