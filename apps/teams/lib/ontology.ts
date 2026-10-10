@@ -229,7 +229,7 @@ function parseFrontmatter(fmLines: string[], props: string[], rels: [string, str
  *  `---`) 속성·관계는 거기서 읽는다(P219-6 이행 후 형식 — `parseFrontmatter`). 나머지 본문은
  *  종전대로 훑는다 — 값이 통째로 `[[wikilink]]` 하나인 `- 키: 값` 줄만 관계, 나머지는 속성이다
  *  (구 3층 형식 잔존 대비, ont-check.py `parse_object`와 같은 판정). */
-function parseObject(text: string): ParsedObject {
+export function parseObject(text: string): ParsedObject {
   const prose: string[] = [];
   const rels: [string, string][] = [];
   const props: string[] = [];
