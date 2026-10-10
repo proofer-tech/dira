@@ -10,6 +10,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  anomaliesOf,
   DUE_DEMOTE_MS,
   DUE_ESCALATE_MS,
   HIDE_DONE_STATUSES,
@@ -2378,4 +2379,25 @@ test("보드 담당(assigneeOf) — persona:가 있으면 그 값, 없고 squad:
   assert.deepStrictEqual(assigneeOf(by("bbbb2222")), { name: "frontend", squad: true });
   assert.deepStrictEqual(assigneeOf(by("cccc3333")), { name: "qa", squad: false });
   assert.deepStrictEqual(assigneeOf(by("dddd4444")), { name: "", squad: false });
+});
+
+test("anomaliesOf: frontmatter 없음, 같은 해시 두 상태, 0건", () => {
+  const sfx = { inProgress: ".wip", done: ".done" };
+  assert.deepStrictEqual(anomaliesOf([{ name: "deadbeef.md", noFm: true }], sfx), [
+    { file: "deadbeef.md", reason: "noFrontmatter" },
+  ]);
+  assert.deepStrictEqual(
+    anomaliesOf([{ name: "x.wip.md", noFm: false }, { name: "x.md", noFm: false }], sfx).map((a) => a.reason),
+    ["twoStates", "twoStates"],
+  );
+  assert.deepStrictEqual(
+    anomaliesOf([{ name: "a.md", noFm: false }, { name: "b.wip.md", noFm: false }, { name: "c.done.md", noFm: false }], sfx),
+    [],
+  );
+});
+
+test("boardAnomaly 문구는 English에서 영어다", async () => {
+  const { t } = await import("./i18n.ts");
+  for (const k of ["title", "noFrontmatter", "twoStates"]) assert.ok(!/[가-힣]/.test(t("en", `boardAnomaly.${k}`)));
+  assert.ok(/[가-힣]/.test(t("ko", "boardAnomaly.title")));
 });

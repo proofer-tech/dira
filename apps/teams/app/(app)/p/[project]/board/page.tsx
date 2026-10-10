@@ -41,6 +41,7 @@ import {
   BoardSearch,
   EpicDrag,
 } from "@/components/board-ui";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { EmptyState } from "@/components/empty-state";
 import { EpicSidebar } from "@/components/epic-sidebar";
 import { PersonaBadge, SquadBadge } from "@/components/persona-badge";
@@ -88,6 +89,7 @@ import {
   isPolling,
   lastQuestionOptions,
   listTickets,
+  ticketAnomalies,
   depBadges,
   planOf,
   planProgress,
@@ -328,6 +330,7 @@ export default async function Board({
   // (상세 페이지의 `now`와 같은 자리, §1-4 §계산 시점 관용구).
   const now = new Date();
   const tickets = await listTickets(project.root, config, now);
+  const anomalies = await ticketAnomalies(project.root, config);
   // 위키링크 vault(§비주얼 §10 §위키링크) — 답변 다이얼로그·요구 접수·발행 다이얼로그가 그대로 받는다.
   const ontologyTree = await listTree(config.ontology);
   const vault = buildVault(ontologyTree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
@@ -984,6 +987,25 @@ export default async function Board({
               이미 보드 전체에 대한 사실(티켓 N/M건)을 드는 자리라 같은 높이에 뜬다. 쉼에는
               아무것도 안 그린다 — `EpicDrag`가 실패했을 때만 `<Alert>`를 낸다. */}
           <EpicDrag project={id} />
+
+          {/* 티켓 파일 이상(P474-2) — 0건이면 안 그린다. 고치는 버튼은 없다(사람이 파일을 정리한다) */}
+          {anomalies.length > 0 && (
+            <Alert>
+              <TriangleAlert aria-hidden className="text-status-stale" />
+              <AlertTitle>
+                {locale === "en"
+                  ? `${t(locale, "boardAnomaly.title")}: ${anomalies.length}`
+                  : `${t(locale, "boardAnomaly.title")} ${anomalies.length}${t(locale, "boardAnomaly.unit")}`}
+              </AlertTitle>
+              <AlertDescription className="grid gap-1">
+                {anomalies.map((a) => (
+                  <span key={`${a.file}:${a.reason}`}>
+                    <span className="font-mono">{a.file}</span> - {t(locale, `boardAnomaly.${a.reason}`)}
+                  </span>
+                ))}
+              </AlertDescription>
+            </Alert>
+          )}
 
           {/* 왼쪽 에픽 사이드바 + 오른쪽 뷰(칸반 또는 표) — 툴바 **아래**에서만 갈린다
               (§비주얼 §52 ① — `h1`·툴바는 위에서 이미 폭 전체다). `gap-6`은 레인 사이

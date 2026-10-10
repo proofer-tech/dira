@@ -288,6 +288,46 @@ async function ticketFiles(root: string): Promise<string[]> {
     .map((e) => path.join(dir, e.name));
 }
 
+export type TicketAnomaly = { file: string; reason: "noFrontmatter" | "twoStates" };
+
+/** 보드 경고(P474-2) 판정 — 순수 함수. `noFm`은 `readFm`의 `end < 0`이다.
+ *  같은 stem이 두 상태 이상이면 그 파일 전부를 `twoStates`로 낸다(엔진은 먼저 나온 하나만 본다). */
+export function anomaliesOf(files: { name: string; noFm: boolean }[], sfx: Suffixes): TicketAnomaly[] {
+  const out: TicketAnomaly[] = [];
+  const groups = new Map<string, string[]>();
+  for (const { name, noFm } of files) {
+    if (noFm) out.push({ file: name, reason: "noFrontmatter" });
+    const stem = nfc(name).slice(0, -3);
+    const bare = [sfx.done, sfx.inProgress].map(nfc).find((x) => stem.endsWith(x));
+    const key = bare ? stem.slice(0, -bare.length) : stem;
+    groups.set(key, [...(groups.get(key) ?? []), name]);
+  }
+  for (const names of groups.values()) {
+    if (names.length > 1) for (const file of names) out.push({ file, reason: "twoStates" });
+  }
+  return out;
+}
+
+/** `listTickets`와 같은 파일 목록(`ticketFiles`)에서 이상을 찾는다. fm 판정은 파싱 캐시를 재사용한다. */
+export async function ticketAnomalies(root: string, sfx: Suffixes): Promise<TicketAnomaly[]> {
+  const files = await ticketFiles(root);
+  const rows = await Promise.all(
+    files.map(async (p) => {
+      const st = await stat(p).catch(() => null);
+      const hit = st && parseCache.get(p);
+      let noFm = false;
+      if (hit && st && hit.mtime === st.mtimeMs && hit.size === st.size) noFm = hit.end < 0;
+      else {
+        const text = await readFile(p, "utf8").catch(() => null);
+        if (text === null) return null;
+        noFm = readFm(text).end < 0;
+      }
+      return { name: path.basename(p), noFm };
+    }),
+  );
+  return anomaliesOf(rows.filter((r) => r !== null), sfx);
+}
+
 /** stem(NFC, `.md` 뗀 파일명) → 파일 목록에서 **처음 나온** 위치. 스캔당 한 번 만들어 재사용한다.
  *  `_find_stem`이 파일을 훑다 처음 맞는 것에서 멈추므로 중복 stem은 **먼저 나온 파일이 이긴다**. */
 type StemIndex = { at: Map<string, number>; files: string[] };
