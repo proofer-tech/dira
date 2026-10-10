@@ -59,10 +59,31 @@ export function VercelEnvLine({
     setNote(null);
     if (!open) return;
     const mine = projectId;
-    void vercelStatusAction(mine).then((v) => {
-      if (live.current === mine) setView(v);
-    });
+    void (async () => {
+      const v = await vercelStatusAction(mine);
+      if (live.current !== mine) return;
+      setView(v);
+      // 설정을 열 때 한 번 동기화한다 (DESIGN.md 동기화 규칙 3항). 연결 안 됨-로그인 필요면 부르지 않는다
+      if (v.state !== "connected") return;
+      setBusy(true);
+      try {
+        await syncNow(mine);
+      } finally {
+        if (live.current === mine) setBusy(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- syncNow는 projectId와 open이 바뀔 때만 다시 불러도 된다
   }, [projectId, open]);
+
+  const syncNow = async (mine: string) => {
+    const r = await vercelSyncAction(mine);
+    if (live.current !== mine) return;
+    if (!r.ok) {
+      if (r.code === "login_required") setView({ state: "login_required" });
+      else setNote(t("vercel.syncFailed"));
+    }
+    onChanged();
+  };
 
   const connect = (pick?: string) =>
     run(async () => {
@@ -72,19 +93,11 @@ export function VercelEnvLine({
       setView(v);
       if (v.state === "connected") {
         setToken("");
-        onChanged();
+        await syncNow(mine); // 연결 직후 한 번 동기화한 뒤 목록을 다시 읽는다
       }
     });
 
-  const sync = () =>
-    run(async () => {
-      const r = await vercelSyncAction(projectId);
-      if (!r.ok) {
-        if (r.code === "login_required") setView({ state: "login_required" });
-        else setNote(t("vercel.syncFailed"));
-      }
-      onChanged();
-    });
+  const sync = () => run(() => syncNow(projectId));
 
   const saveToken = () =>
     run(async () => {

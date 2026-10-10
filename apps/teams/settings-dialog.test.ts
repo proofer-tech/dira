@@ -161,3 +161,13 @@ test("Vercel 줄: 토큰 칸은 password이고 성공하거나 닫히면 비우�
   assert.match(v, /setToken\(""\);\s*setNote\(null\);\s*if \(!open\) return;/); // 닫힘과 프로젝트 전환
   assert.match(v, /setToken\(""\);\s*await connect\(\)/); // 성공
 });
+
+test("Vercel 줄: 연결 직후와 설정을 열 때 동기화하고, 연결 안 됨이면 부르지 않으며, live 가드를 지킨다", () => {
+  const v = readFileSync(new URL("./components/vercel-env-line.tsx", import.meta.url), "utf8");
+  // 연결 성공 분기가 onChanged만이 아니라 syncNow를 부른다
+  assert.match(v, /v\.state === "connected"\) \{[^}]*await syncNow\(mine\)/);
+  // 열기 effect: connected가 아니면 return, connected면 syncNow
+  assert.match(v, /if \(v\.state !== "connected"\) return;[\s\S]*?await syncNow\(mine\)/);
+  // 결과 반영 전에 live ref로 프로젝트가 같은지 본다
+  assert.match(v, /const syncNow = async \(mine: string\) => \{\s*const r = await vercelSyncAction\(mine\);\s*if \(live\.current !== mine\) return;/);
+});
