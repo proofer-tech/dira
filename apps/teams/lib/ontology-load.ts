@@ -8,6 +8,7 @@
 import { readTextFile, type ProtocolEntry } from "./protocols.ts";
 import { computeOntologyMetrics, type OntologyMetrics } from "./ontology.ts";
 import type { Locale } from "./i18n.ts";
+import { buildOntologyGraph, type OntologyGraph } from "./ontology-graph.ts";
 
 export async function loadMetrics(base: string, tree: ProtocolEntry[], locale: Locale): Promise<OntologyMetrics> {
   const basename = (rel: string) => rel.split("/").at(-1) ?? rel;
@@ -32,4 +33,15 @@ export async function loadMetrics(base: string, tree: ProtocolEntry[], locale: L
   ]);
 
   return computeOntologyMetrics({ schemaText, objects, views, actionLogs, typeFiles }, locale);
+}
+
+/** 지식 지도(P473)용 그래프 - 트리의 `.md` 전부를 읽어 `buildOntologyGraph`에 넘긴다.
+ *  한 파일을 못 읽으면 그 본문만 빈 채로 둔다(그 파일은 노드로 남고 링크만 없다). */
+export async function loadOntologyGraph(base: string, tree: ProtocolEntry[]): Promise<OntologyGraph> {
+  const files = await Promise.all(
+    tree
+      .filter((e) => !e.isDir && e.rel.endsWith(".md"))
+      .map(async (e) => ({ rel: e.rel, text: (await readTextFile(base, e.rel).catch(() => null))?.text ?? "" })),
+  );
+  return buildOntologyGraph({ tree, files });
 }

@@ -34,7 +34,8 @@ export type OntologyGraph = {
   nodes: GraphNode[];
   edges: GraphEdge[];
   legend: {
-    types: { name: string; meaning: string; count: number }[];
+    /** 노드가 있는 타입만. `order`는 SCHEMA 표 순서(색 배정 기준)이고 표에 없는 타입은 뒤에 붙는다 */
+    types: { name: string; meaning: string; count: number; order: number }[];
     relations: { name: string; meaning: string }[];
     /** `문서` 노드 수 - 한 줄 뜻은 화면의 i18n이 쓴다 */
     docs: number;
@@ -103,6 +104,11 @@ function schemaTypes(text: string): { name: string; meaning: string }[] {
     rows.push({ name: cells[0], meaning: col >= 0 ? (cells[col] ?? "") : "" });
   }
   return rows;
+}
+
+/** 범례 뜻에 실린 마크업을 벗긴다 - `[[이름]]`은 이름만, 백틱은 뺀다. */
+function plain(s: string): string {
+  return s.replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (_, a, b) => b ?? a).replaceAll("`", "");
 }
 
 const WIKILINK = /\[\[([^\]]+)\]\]/g;
@@ -193,9 +199,12 @@ export function buildOntologyGraph(input: { tree: { rel: string; isDir: boolean 
 
   const typeCount = new Map<string, number>();
   for (const n of nodes) if (n.type) typeCount.set(n.type, (typeCount.get(n.type) ?? 0) + 1);
-  const types = schemaTypes(textOf.get("_ontology/SCHEMA.md") ?? "").map((t) => ({ ...t, count: typeCount.get(t.name) ?? 0 }));
-  const known = new Set(types.map((t) => t.name));
-  for (const [name, count] of typeCount) if (!known.has(name)) types.push({ name, meaning: "", count });
+  const all = schemaTypes(textOf.get("_ontology/SCHEMA.md") ?? "").map((t) => ({ ...t, count: typeCount.get(t.name) ?? 0 }));
+  const known = new Set(all.map((t) => t.name));
+  for (const [name, count] of [...typeCount].sort(([a], [b]) => a.localeCompare(b))) {
+    if (!known.has(name)) all.push({ name, meaning: "", count });
+  }
+  const types = all.map((t, order) => ({ ...t, meaning: plain(t.meaning), order })).filter((t) => t.count > 0);
 
   const relNames = [...new Set(edges.flatMap((e) => (e.relation ? [e.relation] : [])))].sort();
   return {
@@ -204,7 +213,7 @@ export function buildOntologyGraph(input: { tree: { rel: string; isDir: boolean 
     edges,
     legend: {
       types,
-      relations: relNames.map((name) => ({ name, meaning: firstParagraph(textOf.get(`_ontology/link-types/${name}.md`) ?? "") })),
+      relations: relNames.map((name) => ({ name, meaning: plain(firstParagraph(textOf.get(`_ontology/link-types/${name}.md`) ?? "")) })),
       docs: nodes.filter((n) => n.kind === "doc").length,
       notes: nodes.filter((n) => n.kind === "note").length,
       mentions: edges.filter((e) => e.kind === "mention").length,
@@ -241,6 +250,7 @@ export function initialLayout(n: number, seed = 1): Point[] {
 export function stepLayout(pos: Point[], edges: [number, number][], alpha: number, pinned?: Set<number>): void {
   const n = pos.length;
   const K = 60; // 이상 간선 길이
+  const CUTOFF2 = (5 * K) * (5 * K);
   const dx = new Float64Array(n);
   const dy = new Float64Array(n);
   for (let i = 0; i < n; i++) {
@@ -253,6 +263,7 @@ export function stepLayout(pos: Point[], edges: [number, number][], alpha: numbe
         ey = 0.1;
         d2 = ex * ex + ey * ey;
       }
+      if (d2 > CUTOFF2) continue; // 멀리 있는 노드끼리는 안 민다 - 안 그러면 전 노드 합이 고립 노드를 바깥으로 밀어낸다
       const f = (K * K) / d2; // 반발 = K^2 / d, 단위벡터 곱하면 / d^2
       dx[i] += ex * f;
       dy[i] += ey * f;
@@ -273,8 +284,8 @@ export function stepLayout(pos: Point[], edges: [number, number][], alpha: numbe
   const maxMove = 30 * alpha + 0.5;
   for (let i = 0; i < n; i++) {
     if (pinned?.has(i)) continue;
-    dx[i] -= pos[i].x * 0.05; // 중심 당김
-    dy[i] -= pos[i].y * 0.05;
+    dx[i] -= pos[i].x * 0.15; // 중심 당김
+    dy[i] -= pos[i].y * 0.15;
     const len = Math.sqrt(dx[i] * dx[i] + dy[i] * dy[i]) || 1;
     const m = Math.min(len, maxMove) / len;
     pos[i].x += dx[i] * m;

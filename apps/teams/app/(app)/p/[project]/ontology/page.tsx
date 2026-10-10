@@ -34,7 +34,8 @@ import { t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { isDiraFormat, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
-import { loadMetrics } from "@/lib/ontology-load";
+import { loadMetrics, loadOntologyGraph } from "@/lib/ontology-load";
+import { OntologyMap } from "@/components/ontology-map";
 import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
 import {
   listTree,
@@ -169,6 +170,12 @@ export default async function Ontology({
     }
   }
 
+  // 결정 1 - `?file=` 없음 + `.md`가 하나 이상이면 지식 지도. 조립이 실패하면 종전 한 줄로 돌아간다.
+  let graph: Awaited<ReturnType<typeof loadOntologyGraph>> | null = null;
+  if (!file && tree.some((e) => !e.isDir && e.rel.endsWith(".md"))) {
+    graph = await loadOntologyGraph(base, tree).catch(() => null);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-4">
@@ -257,6 +264,8 @@ export default async function Ontology({
                   <span className="font-mono text-xs break-all">{rejected}</span>
                 </AlertDescription>
               </Alert>
+            ) : !selected && graph ? (
+              <OntologyMap graph={graph} projectId={id} sidebarOff={!expanded} />
             ) : !selected ? (
               <p className="text-sm text-muted-foreground">
                 {expanded ? t(locale, "ontology.picker.expanded") : t(locale, "ontology.picker.collapsed")}

@@ -7,7 +7,8 @@ const SCHEMA = `## 객체 타입
 | 이름 | 한 줄 뜻 | 정의 |
 |---|---|---|
 | 사람 | 일하는 사람이다 | [[사람]] |
-| 도구 | 쓰는 물건이다 | [[도구]] |
+| 도구 | 쓰는 [[물건]]이다 | [[도구]] |
+| 티켓 | 인스턴스를 \`objects/\`에 안 세운다 | [[티켓]] |
 
 ## 관계 타입
 
@@ -59,8 +60,8 @@ test("dira 형식: 노드 종류와 간선 종류가 결정 2 표대로다", () 
 test("범례는 SCHEMA 표와 link-type 첫 문단에서 오고 예약 폴더 이름이 없다", () => {
   const g = buildOntologyGraph(input);
   assert.deepEqual(g.legend.types, [
-    { name: "사람", meaning: "일하는 사람이다", count: 1 },
-    { name: "도구", meaning: "쓰는 물건이다", count: 1 },
+    { name: "사람", meaning: "일하는 사람이다", count: 1, order: 0 },
+    { name: "도구", meaning: "쓰는 물건이다", count: 1, order: 1 }, // 인스턴스 0인 티켓은 범례에 없다 - 뜻의 [[ ]]-백틱도 벗겨진다
   ]);
   assert.deepEqual(g.legend.relations, [{ name: "쓴다", meaning: "사람이 도구를 쓴다. 두 번째 줄." }]);
   assert.equal(g.legend.docs, 1);
