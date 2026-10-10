@@ -1163,6 +1163,11 @@ async function squadDirPath(dir: string, name: string, locale: Locale = DEFAULT_
   return resolveWithin(dir, name);
 }
 
+/** 이름 규칙 검사만 필요한 호출부(`설명으로 스쿼드 만들기`)가 종전 만들기와 같은 사유를 낸다. */
+export async function checkSquadName(dir: string, name: string): Promise<void> {
+  await squadDirPath(dir, name);
+}
+
 async function squadMembersPath(dir: string, name: string): Promise<string> {
   return path.join(await squadDirPath(dir, name), "members");
 }

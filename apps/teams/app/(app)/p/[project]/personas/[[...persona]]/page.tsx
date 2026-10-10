@@ -197,7 +197,7 @@ export default async function Personas({
               페이지 이동 대신 `MarketDialog`를 연다(티켓 `71c41084`). 이 화면은 서버
               컴포넌트라 트리거 값만 넘긴다(`settings-dialog.tsx`의 `trigger` 값 패턴과 같다). */}
           <MarketDialog trigger="persona" />
-          {personas.length > 0 && <CreatePersonaButton projectId={id} />}
+          {personas.length > 0 && <CreatePersonaButton projectId={id} personas={personas.map((p) => p.name)} squads={squads.map((s) => s.name)} colors={project.personaColors} />}
         </div>
       </div>
 
@@ -269,7 +269,7 @@ export default async function Personas({
         // 둘 다 0개면 2단을 안 그린다(§5, §비주얼 §61 (8)) — 페르소나 0 + 스쿼드 n>0에서
         // 걷으면 방금 만든 스쿼드가 화면에서 사라지고 지울 길이 없어진다(이름이 한
         // 이름공간이라 그 이름의 페르소나도 못 만든다)
-        <EmptyState text={t(locale, "persona.empty.title")} action={<CreatePersonaButton projectId={id} />} />
+        <EmptyState text={t(locale, "persona.empty.title")} action={<CreatePersonaButton projectId={id} squads={squads.map((s) => s.name)} />} />
       ) : (
         // ponytail: 폭 제한 없음 — §5의 §4 예외. 2단만 전체 폭이고 경고 Alert는 문단 폭이다.
         // 색은 큐가 아니라 레지스트리에 있다(§5) — 같은 서버 렌더에 실려서 점 스켈레톤이 없다

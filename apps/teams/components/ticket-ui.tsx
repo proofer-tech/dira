@@ -309,7 +309,7 @@ function assignmentValue(persona: string, squad: string): string | null {
 /** 발행 다이얼로그의 기본 선택 — 복제는 원본이 이긴다(둘 다 비어도 `없음`, 기본값이 덮지
  *  않는다). 새 발행은 `default`라는 스쿼드가 있으면 그것, 없으면 `없음`이다
  *  (§5-5 §기본 스쿼드 `default` §기본 선택). */
-function newTicketAssignmentDefault(
+export function newTicketAssignmentDefault(
   copy: { persona?: string; squad?: string } | undefined,
   squads: string[],
 ): string | null {
@@ -321,7 +321,7 @@ function newTicketAssignmentDefault(
  *  (priority select의 `min-w-64` 주석과 같은 결함), 이 함수 없이는 트리거에 `persona:developer`가
  *  그대로 뜬다. §비주얼 §61 (5) — 스쿼드면 `스쿼드 <이름>`(낱말이 유일한 채널), 페르소나면
  *  이름만(비대칭이 뜻이다 — 기본은 페르소나고 스쿼드가 예외다). */
-function assignmentLabel(value: string | null, t: (key: string) => string): string {
+export function assignmentLabel(value: string | null, t: (key: string) => string): string {
   if (!value) return t("ticketDetail.none");
   const i = value.indexOf(":");
   const name = value.slice(i + 1);
@@ -331,7 +331,7 @@ function assignmentLabel(value: string | null, t: (key: string) => string): stri
 /** §5-5 §할당 입구 둘의 두 select(발행·편집)가 같이 쓰는 옵션 그룹 — 페르소나/스쿼드. 값에
  *  접두사가 붙는다(`lib/paths.ts parseAssignment`와 짝). 스쿼드 항목엔 점을 안 그린다(§비주얼
  *  §12 — 색은 페르소나의 신원 표식이고 스쿼드에 주면 표식이 두 벌이 된다, §5-5 §화면). */
-function AssignmentOptions({
+export function AssignmentOptions({
   personas,
   squads,
   colors,

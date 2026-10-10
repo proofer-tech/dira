@@ -12,6 +12,7 @@ import { revalidatePath } from "next/cache";
 import { DEFAULT_LOCALE, t, wrap, type Locale } from "@/lib/i18n";
 import {
   createPersona,
+  checkSquadName,
   createSquad,
   deletePersona,
   deleteSquad,
@@ -34,7 +35,10 @@ import {
   squadsDir,
   type SquadMember,
 } from "@/lib/projects";
-import { openInApp, type OpenResult } from "@/lib/paths";
+import { openInApp, parseAssignment, type OpenResult } from "@/lib/paths";
+import { issueSquadTicket } from "@/lib/squad-tickets";
+import { engineRepo } from "@/lib/workers";
+import path from "node:path";
 import {
   deletePersonaMemory,
   describeNewSkills,
@@ -458,4 +462,66 @@ export async function purgeTrashAction(
   } catch (e) {
     return fail(e);
   }
+}
+
+export type SquadTicketResult = { ok: boolean; message?: string; hash?: string };
+
+async function issueSquad(
+  projectId: string,
+  kind: "design" | "review",
+  name: string,
+  opts: { description?: string; assignee?: string },
+): Promise<SquadTicketResult> {
+  try {
+    const project = await getProject(projectId);
+    if (!project) throw new Error(wrap(t("ko", "persona.error.unknownProjectPrefix"), projectId, ""));
+    const repo = engineRepo();
+    if ("error" in repo) throw new Error(repo.error);
+    const trimmed = name.trim();
+    const { persona, squad } = parseAssignment(opts.assignee ?? "");
+    const hash = await issueSquadTicket(project.root, path.join(repo.path, "templates"), kind, trimmed, {
+      description: opts.description,
+      persona,
+      squad,
+    });
+    revalidatePath(`/p/${projectId}/board`);
+    return { ok: true, hash };
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
+  }
+}
+
+/** `설명으로 스쿼드 만들기`(P469-3) - 종전 만들기와 같은 이름 검사를 한 뒤 설계 티켓만 발행한다.
+ *  `squads/<이름>/`은 만들지 않는다 - 받는 세션이 만든다. */
+export async function createSquadDesignTicketAction(
+  projectId: string,
+  name: string,
+  description: string,
+  assignee: string,
+): Promise<SquadTicketResult> {
+  try {
+    const trimmed = name.trim();
+    await checkSquadName(await squadsDirFor(projectId), trimmed);
+    if (!description.trim()) throw new Error(t("ko", "persona.create.designDescRequired"));
+    const personas = await personaNames(await personasDir(projectId));
+    if (personas.includes(trimmed))
+      throw new Error(wrap(t("ko", "persona.error.personaNameTakenPrefix"), trimmed, ""));
+    const squads = await squadNames(await squadsDirFor(projectId));
+    if (squads.includes(trimmed))
+      throw new Error(wrap(t("ko", "persona.error.squadNameTakenPrefix"), trimmed, ""));
+  } catch (e) {
+    return fail(e);
+  }
+  return issueSquad(projectId, "design", name, { description: description.replace(/\r\n/g, "\n"), assignee });
+}
+
+/** 스쿼드 칸의 `점검 티켓 발행`(P469-3) - `squad: <이름>` 티켓 한 장. */
+export async function issueSquadReviewTicketAction(projectId: string, name: string): Promise<SquadTicketResult> {
+  try {
+    const squads = await squadNames(await squadsDirFor(projectId));
+    if (!squads.includes(name)) throw new Error(wrap(t("ko", "persona.error.unknownSquadPrefix"), name, ""));
+  } catch (e) {
+    return fail(e);
+  }
+  return issueSquad(projectId, "review", name, { assignee: `squad:${name}` });
 }

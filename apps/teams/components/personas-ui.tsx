@@ -20,6 +20,8 @@ import {
 import {
   createPersonaAction,
   createSquadAction,
+  createSquadDesignTicketAction,
+  issueSquadReviewTicketAction,
   deletePersonaAction,
   hidePersonaAction,
   unhidePersonaAction,
@@ -110,6 +112,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { AssignmentOptions, assignmentLabel, newTicketAssignmentDefault } from "@/components/ticket-ui";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   budgetLabel,
@@ -297,9 +300,47 @@ function ColorPicker({
   );
 }
 
+/** 스쿼드 칸의 `점검 티켓 발행`(P469-3) - 확인 없이 발행하고 성공 문장에 티켓 링크를 건다. */
+function ReviewTicketButton({
+  projectId,
+  name,
+  onError,
+}: {
+  projectId: string;
+  name: string;
+  onError: (message: string | null) => void;
+}) {
+  const t = useT();
+  const [pending, start] = useTransition();
+  const [hash, setHash] = useState<string | null>(null);
+  return (
+    <>
+      {hash && (
+        <Link href={`/p/${projectId}/tickets/${hash}`} className="font-mono text-xs underline">
+          {t("persona.squad.reviewIssuedPrefix")} {hash}
+        </Link>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const r = await issueSquadReviewTicketAction(projectId, name);
+            onError(r.ok ? null : (r.message ?? t("persona.squad.reviewFailTitle")));
+            setHash(r.ok ? (r.hash ?? null) : null);
+          })
+        }
+      >
+        {t("persona.squad.reviewTicket")}
+      </Button>
+    </>
+  );
+}
+
 // ── 생성 ────────────────────────────────────────────────────────────────────
 
-type CreateKind = "persona" | "squad";
+type CreateKind = "persona" | "squad" | "design";
 
 /** 이름 규칙은 **서버가** 판정한다(`tickets.py PERSONA_RE`와 같은 규칙). 여기서 미리 막지 않는
  *  이유: 클라이언트 검증은 검증이 아니고, 규칙이 두 군데 있으면 갈린다. 대신 사유를 그 자리에 띄운다.
@@ -309,12 +350,21 @@ type CreateKind = "persona" | "squad";
 export function CreatePersonaButton({
   projectId,
   variant,
+  personas = [],
+  squads = [],
+  colors,
 }: {
   projectId: string;
   variant?: "default" | "outline";
+  /** 설계 티켓 수행자 select의 선택지(P469-3) */
+  personas?: string[];
+  squads?: string[];
+  colors?: Record<string, string>;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const [description, setDescription] = useState("");
+  const [assignee, setAssignee] = useState<string | null>(newTicketAssignmentDefault(undefined, squads));
   const [kind, setKind] = useState<CreateKind>("persona");
   const [name, setName] = useState("");
   const [result, setResult] = useState<PersonaResult | null>(null);
@@ -328,6 +378,7 @@ export function CreatePersonaButton({
         if (!o) {
           setKind("persona");
           setName("");
+          setDescription("");
           setResult(null);
         }
       }}
@@ -336,10 +387,16 @@ export function CreatePersonaButton({
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>
-            {kind === "persona" ? t("persona.create.personaTitle") : t("persona.create.squadTitle")}
+            {kind === "persona"
+              ? t("persona.create.personaTitle")
+              : kind === "design"
+                ? t("persona.create.designTitle")
+                : t("persona.create.squadTitle")}
           </DialogTitle>
           <DialogDescription>
-            {kind === "persona" ? (
+            {kind === "design" ? (
+              t("persona.create.designDesc")
+            ) : kind === "persona" ? (
               <>
                 {t("persona.create.personaDescPrefix")} <span className="font-mono text-xs">persona:</span>{" "}
                 {t("persona.create.personaDescSuffix")}
@@ -361,6 +418,7 @@ export function CreatePersonaButton({
             <SelectContent>
               <SelectItem value="persona">{t("shell.nav.personas")}</SelectItem>
               <SelectItem value="squad">{t("persona.word.squad")}</SelectItem>
+              <SelectItem value="design">{t("persona.create.designKind")}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -377,32 +435,75 @@ export function CreatePersonaButton({
             {t("persona.create.nameHintPrefix")}{" "}
             {kind === "persona"
               ? t("persona.create.nameHintPersonaFile")
-              : t("persona.create.nameHintSquadFile")}
+              : kind === "squad"
+                ? t("persona.create.nameHintSquadFile")
+                : ""}
             {t("persona.create.nameHintSuffix")}
           </p>
-          {result?.message && (
-            <Failure
-              title={kind === "persona" ? t("persona.create.personaFailTitle") : t("persona.create.squadFailTitle")}
-              message={result.message}
-            />
-          )}
         </div>
+        {kind === "design" && (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="design-desc">{t("persona.create.designDescLabel")}</Label>
+              <Textarea
+                id="design-desc"
+                rows={5}
+                placeholder={t("persona.create.designDescPlaceholder")}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="design-assignee">{t("persona.create.designAssigneeLabel")}</Label>
+              <Select value={assignee} onValueChange={(v) => setAssignee(v)}>
+                <SelectTrigger id="design-assignee" className="w-40">
+                  <SelectValue placeholder={t("ticketDetail.none")}>
+                    {(v: string | null) => assignmentLabel(v, t)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <AssignmentOptions
+                    personas={personas}
+                    squads={squads}
+                    colors={colors}
+                    current={{}}
+                    outOfListLabel={t("ticketDetail.originalValue")}
+                  />
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
+        {result?.message && (
+          <Failure
+            title={
+              kind === "persona"
+                ? t("persona.create.personaFailTitle")
+                : kind === "design"
+                  ? t("persona.create.designFailTitle")
+                  : t("persona.create.squadFailTitle")
+            }
+            message={result.message}
+          />
+        )}
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
-            disabled={pending || !name.trim()}
+            disabled={pending || !name.trim() || (kind === "design" && !description.trim())}
             onClick={() =>
               start(async () => {
                 const r =
                   kind === "persona"
                     ? await createPersonaAction(projectId, name)
-                    : await createSquadAction(projectId, name);
+                    : kind === "design"
+                      ? await createSquadDesignTicketAction(projectId, name, description, assignee ?? "")
+                      : await createSquadAction(projectId, name);
                 setResult(r);
                 if (r.ok) setOpen(false);
               })
             }
           >
-            {pending ? t("common.creating") : t("common.create")}
+            {pending ? t("common.creating") : kind === "design" ? t("persona.create.designSubmit") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -2078,6 +2179,7 @@ function SquadDetail({
           <UpdateBadge projectId={projectId} kind="squad" name={row.name} update={row.market.update} />
         )}
         <span className="ml-auto flex shrink-0 items-center gap-1">
+          <ReviewTicketButton projectId={projectId} name={row.name} onError={setHeadError} />
           <DeployButton projectId={projectId} kind="squad" name={row.name} />
           <DeleteSquadButton
             projectId={projectId}
