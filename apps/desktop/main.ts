@@ -16,6 +16,7 @@ import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSy
 import { randomBytes } from "node:crypto";
 import { createEnvBridge } from "./env-bridge.ts";
 import { createVercelLink } from "./vercel-link.ts";
+import { createVercelSync } from "./vercel-sync.ts";
 import { publishConnections, unpublishConnections } from "./env-connect.ts";
 import { createEnvStore } from "./env-store.ts";
 import { createServer } from "node:net";
@@ -88,12 +89,24 @@ async function startEnvBridge() {
   };
   const store = createEnvStore({ dir, cipher });
   const vercel = createVercelLink({ dir, cipher });
-  const { port } = await createEnvBridge({ store, secret: envBridgeSecret, vercel }).listen();
+  const sync = createVercelSync({ dir, store, link: vercel });
+  const { port } = await createEnvBridge({ store, secret: envBridgeSecret, vercel, sync }).listen();
   envBridgeUrl = `http://127.0.0.1:${port}`;
   // 세션(`dira env`)이 읽는 프로젝트별 연결 파일. 프로젝트 등록이 바뀌면 다시 둔다.
   const local = process.env.TICKET_LOCAL || join(homedir(), ".config", "dira");
   const publish = () => void publishConnections({ local, port, secret: envBridgeSecret }).catch(() => {});
   publish();
+  // 앱이 켜진 동안 5분마다, 그리고 켠 직후 한 번 연결된 프로젝트를 동기화한다(꺼져 있던 동안의 변경 포함).
+  const syncAll = async () => {
+    try {
+      const reg = JSON.parse(readFileSync(join(local, "gui-projects.json"), "utf8"));
+      for (const p of reg.projects ?? []) if (typeof p?.root === "string") await sync.sync(p.root).catch(() => {});
+    } catch {
+      // 레지스트리가 없으면 동기화할 프로젝트도 없다.
+    }
+  };
+  void syncAll();
+  setInterval(() => void syncAll(), 5 * 60 * 1000).unref();
   watchFile(join(local, "gui-projects.json"), { interval: 5000 }, publish);
   app.on("will-quit", () => unpublishConnections(local));
 }

@@ -57,6 +57,13 @@ export async function resolveProject(root: unknown): Promise<{ root: string; key
   return { root: real, key: createHash("sha256").update(real).digest("hex").slice(0, 32) };
 }
 
+/** 가져올 수 없는 이름의 사유. 가져올 수 있으면 null. */
+export function nameProblem(name: string): "invalid_name" | "reserved_name" | "vercel_system" | null {
+  if (!NAME_RE.test(name)) return "invalid_name";
+  if (name.startsWith("VERCEL_")) return "vercel_system";
+  return RESERVED_RE.test(name) ? "reserved_name" : null;
+}
+
 function validateName(name: unknown): void {
   if (typeof name !== "string" || !NAME_RE.test(name)) throw new EnvError("invalid_name");
   if (RESERVED_RE.test(name)) throw new EnvError("reserved_name");

@@ -76,12 +76,16 @@ export function createVercelLink(opts: {
     }
   }
 
-  async function call(token: string, p: string, query: Record<string, string> = {}): Promise<unknown> {
+  async function call(token: string, p: string, query: Record<string, string> = {}, init?: { method: string; body?: unknown }): Promise<unknown> {
     const u = new URL(p, api);
     for (const [k, v] of Object.entries(query)) u.searchParams.set(k, v);
     let r: Response;
     try {
-      r = await fetch(u, { headers: { authorization: `Bearer ${token}` } });
+      r = await fetch(u, {
+        method: init?.method,
+        headers: { authorization: `Bearer ${token}`, ...(init?.body ? { "content-type": "application/json" } : {}) },
+        body: init?.body ? JSON.stringify(init.body) : undefined,
+      });
     } catch {
       throw new EnvError("io", "vercel unreachable");
     }
@@ -204,6 +208,15 @@ export function createVercelLink(opts: {
       if (cands.length === 1) return done(cands[0], "origin");
       return { state: "choose", source: auth.source, candidates: cands.length ? cands : await listAll(auth.token) };
     },
+
+    /** 동기화용: 연결된 프로젝트와 쓸 수 있는 토큰. 토큰은 메인 프로세스 안에서만 돈다. */
+    async session(root: string): Promise<{ token: string; project: VercelLinkState } | { state: "login_required" | "unlinked" }> {
+      const project = await readState(root);
+      if (!project) return { state: "unlinked" };
+      const auth = await pickAuth();
+      return auth ? { token: auth.token, project } : { state: "login_required" };
+    },
+    request: call,
 
     /** 연결 해제 - 상태 파일만 지운다. dira와 Vercel 어느 쪽 변수도 건드리지 않는다. */
     async disconnect(root: string): Promise<{ ok: true }> {

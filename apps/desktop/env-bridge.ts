@@ -11,6 +11,7 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { EnvError, resolveProject, type EnvStore } from "./env-store.ts";
 import type { createVercelLink } from "./vercel-link.ts";
+import type { createVercelSync } from "./vercel-sync.ts";
 
 export function deriveToken(secret: string, projectKey: string): string {
   return createHmac("sha256", secret).update(projectKey).digest("hex");
@@ -65,6 +66,8 @@ export function createEnvBridge(opts: {
   store: EnvStore;
   /** 있으면 `vercel/status|connect|disconnect|token` 경로가 열린다(요구 6f610c77). 같은 인증을 쓴다. */
   vercel?: ReturnType<typeof createVercelLink>;
+  /** 있으면 쓰기 직후 Vercel 반영, list의 sync 필드, `vercel/sync` 경로가 열린다. */
+  sync?: ReturnType<typeof createVercelSync>;
   secret: string;
   /** 경로와 상태 코드만 받는다. 본문과 토큰은 넘기지 않는다. */
   log?: (line: string) => void;
@@ -76,7 +79,7 @@ export function createEnvBridge(opts: {
       send(res, status, body);
     };
     if (req.headers.origin || req.headers.host !== `127.0.0.1:${port}`) return reply(403, { error: "forbidden" });
-    const m = /^\/env\/v1\/(list|create|replace|delete|resolve|vercel\/status|vercel\/connect|vercel\/disconnect|vercel\/token)$/.exec(url.pathname);
+    const m = /^\/env\/v1\/(list|create|replace|delete|resolve|vercel\/status|vercel\/sync|vercel\/connect|vercel\/disconnect|vercel\/token)$/.exec(url.pathname);
     if (!m) return reply(404, { error: "not_found" });
     const op = m[1];
     if ((op === "list" || op === "vercel/status") !== (req.method === "GET") || (op !== "list" && req.method !== "POST")) {
@@ -97,22 +100,31 @@ export function createEnvBridge(opts: {
       if (op.startsWith("vercel/")) {
         if (!v) return reply(404, { error: "not_found" });
         if (op === "vercel/status") return reply(200, await v.status(root));
-        if (op === "vercel/connect") return reply(200, await v.connect(root, body.projectId));
+        if (op === "vercel/connect") {
+          const r = await v.connect(root, body.projectId);
+          if (r.state === "connected") await opts.sync?.sync(root); // 연결 직후 한 번
+          return reply(200, r);
+        }
+        if (op === "vercel/sync") return reply(200, opts.sync ? await opts.sync.sync(root) : { ok: false, error: "unlinked" });
         if (op === "vercel/disconnect") return reply(200, await v.disconnect(root));
         return reply(200, await v.setToken(body.token ?? null));
       }
       const s = opts.store;
-      if (op === "list") return reply(200, { items: await s.list(root) });
-      if (op === "create") return reply(200, await s.create(root, body.name, body.value));
+      const after = async <T>(name: unknown, deleted: boolean, r: T): Promise<T> => {
+        if (typeof name === "string") await opts.sync?.afterWrite(root, name, deleted).catch(() => {});
+        return r;
+      };
+      if (op === "list") return reply(200, opts.sync ? await opts.sync.info(root) : { items: await s.list(root) });
+      if (op === "create") return reply(200, await after(body.name, false, await s.create(root, body.name, body.value)));
       if (op === "replace") {
-        return reply(200, await s.replace(root, body.name, body.value, body.expectedRevision));
+        return reply(200, await after(body.name, false, await s.replace(root, body.name, body.value, body.expectedRevision)));
       }
       if (op === "resolve") {
         const names = body.names;
         if (!Array.isArray(names) || !names.every((n) => typeof n === "string")) throw new EnvError("invalid_name");
         return reply(200, { values: await s.resolveForRun(root, names) });
       }
-      return reply(200, await s.delete(root, body.name, body.expectedRevision));
+      return reply(200, await after(body.name, true, await s.delete(root, body.name, body.expectedRevision)));
     } catch (e) {
       const code = e instanceof EnvError ? e.code : "io";
       // 인증 전 단계의 bad_project는 토큰 없이 경로 존재를 캐는 데 쓰이지 않게 위 bearer 검사 뒤에만 도달한다.
