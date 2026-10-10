@@ -937,8 +937,8 @@ test("readOtherEngineAuth — CLI 탐색은 findExecutable(엔진 실행파일 �
 // ── codex · grok 프로필 — 계정 목록 (DESIGN.md §0-23 §그릇 §잠금 §화면) ────────────
 
 /** `~/.codex` 자리의 픽스처 — `auth.json` 하나(권한 `0600`)를 든 홈 디렉터리다. */
-function makeEngineHome(rel: string): string {
-  const home = mkdtempSync(path.join(tmpdir(), "fst-auth-enginehome-"));
+function makeEngineHome(rel: string, base = tmpdir()): string {
+  const home = mkdtempSync(path.join(base, "fst-auth-enginehome-"));
   process.on("exit", () => rmSync(home, { recursive: true, force: true }));
   mkdirSync(path.join(home, rel), { recursive: true });
   writeFileSync(path.join(home, rel, "auth.json"), '{"ok":true}', { mode: 0o600 });
@@ -968,7 +968,8 @@ test("captureEngineProfile — 원본을 통째로 복사한다. 디렉터리 07
 
 test("captureEngineProfile — Unix 소켓은 빼고 복사하며 일반 파일·하위 디렉터리는 유지한다", async () => {
   process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-sock-"));
-  const home = makeEngineHome(".codex");
+  // macOS 소켓 경로 한도는 104바이트다. 러너의 tmpdir() 아래에 소켓을 만들면 107바이트라서 listen이 EINVAL로 죽는다.
+  const home = makeEngineHome(".codex", "/tmp");
   const src = path.join(home, ".codex");
   writeFileSync(path.join(src, "config.toml"), "model = 'x'\n");
   mkdirSync(path.join(src, "app-server-daemon"));
