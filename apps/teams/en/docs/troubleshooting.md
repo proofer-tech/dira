@@ -38,6 +38,47 @@ If it is in `ls` but not in `list`, the check dropped it. That `WARN` line goes 
 rather than to `runner.log`. Run `list` by hand and it prints straight to the terminal; the one
 cron runs piles up in `cron.log` ([Reading the logs](/docs/logs) §`cron.log`).
 
+## A ticket file warning appears on the board
+
+**Screen**: a warning above the kanban on the board counts the ticket files that have a problem.
+Each line has a filename and a reason, and the reason is one of two.
+
+| Reason | What is wrong with the file |
+|---|---|
+| No frontmatter: the board and the engine do not read this file as a ticket | There is no header wrapped in `---` at the top ([frontmatter](/docs/ref-frontmatter)). It shows up as no card and no worker claims it |
+| The same hash is in two states: the engine sees only one | Files for one hash exist in two states, like `x.md` next to `x.wip.md` |
+
+There is no button that fixes it. Which file is the real one is a call a person has to make.
+
+**Cause**: the common case is an append to the old path of an in-progress ticket. A worker
+claims `<hash>.md` and it becomes `<hash>.wip.md`. If someone then appends a section to
+`<hash>.md` with a shell command, a new `<hash>.md` with no frontmatter appears. What was written
+there never reaches the running session.
+
+**Cleanup**: fix the files by hand.
+
+1. Look at every file for that hash. A state only moves forward, Open to In progress to Done, so
+   the file whose suffix has gone further (`.done` over `.wip`, `.wip` over no suffix) is usually
+   the real one.
+2. Open the file you mean to delete and check for anything the real one lacks. Often a decision
+   someone added lives only in that file.
+3. If something needs carrying over and the real file is in progress, add it as a section at the
+   end and tell the running session with an interject ([Talking to a running
+   session](/docs/barge-in)). If the real file is done, leave it alone and submit a new request
+   ([Submitting a request](/docs/requirements) §Adding a decision to a request that is already
+   being worked on).
+4. Delete the file. Its line leaves the warning, and once nothing is left the warning goes away.
+
+If a single file with no partner is flagged for missing frontmatter, it may be a ticket written by
+hand that lost its header. To keep it as a ticket, add the header ([Writing a ticket
+yourself](/docs/ticket-writing)); otherwise delete it.
+
+```bash
+ls <root>/tickets/<hash>*                    # how many files for that hash
+head -3 <root>/tickets/<hash>.md             # is the first line ---
+rm <root>/tickets/<hash>.md                  # only after carrying over what the real one lacks
+```
+
 ## It is Open and nobody claims it
 
 **Screen**: look for an orange **`deps` tag** on the card. If it is there, a prerequisite ticket
