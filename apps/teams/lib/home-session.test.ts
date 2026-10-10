@@ -446,6 +446,42 @@ test("buildPrompt — 스냅샷이 질문 앞에 오고 경계 문단 둘이 §7
   assert.ok(p.startsWith("SNAP"));
 });
 
+test("buildPrompt — P474 재조회-.wip 결정 전달-Bash 쓰기 금지 문장이 실린다", () => {
+  const p = buildPrompt("", "q", "");
+  assert.ok(p.includes("tickets/<해시>*.md"));
+  assert.ok(p.includes("## 추가 결정 - 홈 대화"));
+  assert.ok(p.includes("O_NONBLOCK"));
+  assert.match(p, /`tickets\/` 아래 경로에는 Bash 리다이렉트로 쓰지 않는다/);
+});
+
+test("buildPrompt — 참견 명령을 FIFO에 돌리면 한 줄이 읽히고 .human이 움직이며, 읽는 쪽이 없으면 ENXIO로 끝난다", async () => {
+  const { execFileSync, spawn, spawnSync } = await import("node:child_process");
+  const { mkdtempSync, statSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const cmd = /`python3 -c ('.*') INBOX MSG`/.exec(buildPrompt("", "q", ""))![1];
+  const code = cmd.slice(1, -1);
+  const dir = mkdtempSync(path.join(tmpdir(), "p474-"));
+  const fifo = path.join(dir, "inbox");
+  execFileSync("mkfifo", [fifo]);
+  // 읽는 쪽 없음 - 블록 없이 실패
+  const r = spawnSync("python3", ["-c", code, fifo, "m"], { encoding: "utf8", timeout: 5000 });
+  assert.notStrictEqual(r.status, 0);
+  assert.match(r.stderr, /Errno 6|ENXIO|No such device/);
+  // 읽는 쪽 있음
+  const rd = spawn("cat", [fifo]);
+  let out = "";
+  rd.stdout.on("data", (d) => (out += d));
+  await new Promise((r) => setTimeout(r, 300));
+  const w = spawnSync("python3", ["-c", code, fifo, "결정 \"x\""], { encoding: "utf8", timeout: 5000 });
+  assert.strictEqual(w.status, 0, w.stderr);
+  await new Promise((r) => setTimeout(r, 300));
+  rd.kill();
+  const msg = JSON.parse(out.trim());
+  assert.strictEqual(msg.type, "user");
+  assert.strictEqual(msg.message.content, '결정 "x"');
+  assert.ok(Date.now() - statSync(`${fifo}.human`).mtimeMs < 10000);
+});
+
 test("buildPrompt — 페르소나 블록이 스냅샷 앞에 뜬다 (§7 §페르소나가 실린다)", () => {
   const p = buildPrompt("SNAP", "질문", "/Users/x/proj/.dira/ontology", "PERSONA");
   assert.ok(p.startsWith("PERSONA\n\n"));
