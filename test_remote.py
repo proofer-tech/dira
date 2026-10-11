@@ -185,6 +185,10 @@ class T(Base, unittest.TestCase):
 
     def setup_jobs(self, jobs):
         self.connect()
+        eng = os.path.join(self.home, ".config", "dira", "bin", "engines")
+        os.makedirs(eng, exist_ok=True)
+        open(os.path.join(eng, "claude"), "w").write("#!/bin/sh\necho 1.0\n")  # 로그인 점검 통과
+        os.chmod(os.path.join(eng, "claude"), 0o755)
         os.makedirs(os.path.join(self.root, "workers"), exist_ok=True)
         for w in ("w1", "w2"):
             open(os.path.join(self.root, "workers", w + ".sh"), "w").write("#!/bin/bash\n")
@@ -362,6 +366,102 @@ class T(Base, unittest.TestCase):
         self.sync()
         self.assertEqual([n for n in os.listdir(tdir) if "answer" in n or n.startswith("ffff")], [])
         self.assertFalse(os.path.exists(os.path.join(self.root, "evil.done.md")))
+
+    # ---- P478-4: tick.sh 연결 ----
+
+    def worker(self, engine="fake"):
+        """<루트>/workers/w1.sh. fake 엔진은 환경과 인자를 파일로 떨군다."""
+        self.local = os.path.join(self.tmp.name, "local")
+        os.makedirs(self.local, exist_ok=True)
+        self.eng = os.path.join(self.tmp.name, "fake-engine.sh")
+        open(self.eng, "w").write('#!/bin/bash\nenv > "%s/env.txt"\nprintf \'%%s\\n\' "$@" > "%s/argv.txt"\n'
+                                  'printf \'{"session_id":"x"}\\n\'\n' % (self.tmp.name, self.tmp.name))
+        os.chmod(self.eng, 0o755)
+        wdir = os.path.join(self.root, "workers")
+        os.makedirs(wdir, exist_ok=True)
+        eng = 'TICKET_ENGINE=("%s" "{prompt}")\n' % self.eng if engine == "fake" else ""
+        w = os.path.join(wdir, "w1.sh")
+        open(w, "w").write('#!/bin/bash\nTICKET_NAME="w1"\nTICKET_CWD="%s"\n%s. "%s"\n'
+                           % (self.tmp.name, eng, os.path.join(HERE, "tick.sh")))
+        os.chmod(w, 0o755)
+        return w
+
+    def wrun(self, w, cmd):
+        # PATH에 진짜 claude가 없어야 tick이 가짜 엔진 자리를 구워 덮지 않는다
+        env = dict(os.environ, HOME=self.home, TICKET_LOCAL=self.local,
+                   PATH=os.path.dirname(sys.executable) + ":/usr/bin:/bin:/usr/sbin:/sbin")
+        r = subprocess.run([w, cmd], capture_output=True, text=True, env=env, timeout=60)
+        return r.stdout + r.stderr
+
+    def test_dryrun_without_remote_json_has_no_remote(self):
+        w = self.worker()
+        open(os.path.join(self.root, "tickets", "aaaa0001.md"), "w").write("---\nticket: aaaa0001\ntitle: t\n---\n\n## Goal\nx\n")
+        out = self.wrun(w, "dryrun")
+        self.assertIn("선정: aaaa0001", out)
+        self.assertNotIn("REMOTE", out)
+        self.wrun(w, "tick")
+        self.assertEqual(self.fake.calls, [])
+        self.assertNotIn("DIRA_REMOTE", open(os.path.join(self.tmp.name, "env.txt")).read())
+
+    def test_tick_syncs_then_dispatches_with_job_token_env(self):
+        self.setup_jobs([[self.job()]])
+        os.makedirs(os.path.join(self.root, "personas", "writer"))
+        open(os.path.join(self.root, "personas", "writer", "mcp.json"), "w").write("{}")
+        w = self.worker()
+        out = self.wrun(w, "tick")
+        env = open(os.path.join(self.tmp.name, "env.txt")).read()
+        self.assertIn("DIRA_REMOTE_TOKEN=SECRET-JT", env)
+        self.assertIn("DIRA_REMOTE_URL=" + self.fake.url + "\n", env)
+        self.assertIn("MCPSKIP", open(os.path.join(self.root, "workers", "runner.log")).read())
+        # 토큰 값은 티켓-로그 어디에도 없다
+        for base, _, files in os.walk(self.tmp.name):
+            for n in files:
+                if n in ("env.txt",) or base.startswith(os.path.join(self.home, ".config", "dira", "run", "remote-jobs")):
+                    continue
+                try:
+                    self.assertNotIn("SECRET-JT", open(os.path.join(base, n), errors="ignore").read(), n)
+                except IsADirectoryError:
+                    pass
+        # remote_job 없는 티켓의 세션에는 두 변수가 없다
+        tdir = os.path.join(self.root, "tickets")
+        for n in os.listdir(tdir):
+            os.rename(os.path.join(tdir, n), os.path.join(tdir, n.replace(".wip", "").replace(".md", ".done.md") if ".done" not in n else n))
+        open(os.path.join(tdir, "bbbb0001.md"), "w").write("---\nticket: bbbb0001\ntitle: t\n---\n\n## Goal\nx\n")
+        self.wrun(w, "tick")
+        self.assertNotIn("DIRA_REMOTE", open(os.path.join(self.tmp.name, "env.txt")).read())
+
+    def test_claude_argv_has_mcp_config_only_for_persona_with_file(self):
+        self.setup_jobs([])
+        os.makedirs(os.path.join(self.root, "personas", "writer"))
+        open(os.path.join(self.root, "personas", "writer", "mcp.json"), "w").write("{}")
+        w = self.worker(engine=None)
+        tdir = os.path.join(self.root, "tickets")
+        for h, per in (("cccc0001", "writer"), ("cccc0002", "plain")):
+            open(os.path.join(tdir, h + ".md"), "w").write("---\nticket: %s\ntitle: t\npersona: %s\n---\n\n## Goal\nx\n" % (h, per))
+        out = self.wrun(w, "dryrun")
+        self.assertIn("--mcp-config " + os.path.join(os.path.realpath(self.root), "personas", "writer", "mcp.json"), out)
+        os.rename(os.path.join(tdir, "cccc0001.md"), os.path.join(tdir, "cccc0001.done.md"))
+        out = self.wrun(w, "dryrun")
+        self.assertIn("선정: cccc0002", out)
+        self.assertNotIn("--mcp-config", out)
+
+    def test_heartbeat_goes_even_when_worker_lock_held(self):
+        self.setup_jobs([])
+        w = self.worker()
+        import hashlib
+        h = hashlib.sha1((os.path.join(os.path.realpath(self.root), "workers")  + "/w1").encode()).hexdigest()[:8]
+        run = os.path.join(self.local, "run")
+        os.makedirs(os.path.join(run, "w1-%s.lock" % h))
+        open(os.path.join(run, "w1-%s.lock" % h, "pid"), "w").write(str(os.getpid()))
+        self.wrun(w, "tick")
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "env.txt")))  # 세션은 안 떴다
+        self.assertTrue([c for c in self.fake.calls if c[1].endswith("/heartbeat")], self.fake.calls)
+
+    def test_launcher_remote_help(self):
+        r = subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), "connect", "--help"],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0)
+        self.assertIn("server", r.stdout)
 
 
 class Tools(Base, unittest.TestCase):

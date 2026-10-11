@@ -358,6 +358,8 @@ def claim_jobs(ctx):
     if free <= 0:
         return
     tools = claim_tools(ctx.ws)
+    if not tools:
+        return  # 로그인 점검을 통과한 도구가 없으면 작업을 안 잡는다
     st, r = ctx.call("POST", "jobs/claim", {"runtime_id": ctx.runtime_id, "tools": tools, "max": free})
     if st != 200 or not r:
         log("claim HTTP %s" % st)
@@ -487,7 +489,6 @@ def cmd_sync(root):
             pass
 
 
-STEPS += [claim_jobs, report_status]
 # ---- 페르소나 묶음 (R9) - 스키마 묶음 (O1) ----
 
 BUNDLE_INTERVAL = 600  # 초. 묶음 확인은 10분마다
@@ -944,7 +945,7 @@ def step_heartbeat(ctx):
              {"tools": tools_payload(ctx.ws, health), "workers": workers_payload(ctx.root)})
 
 
-STEPS.append(step_heartbeat)
+STEPS += [step_heartbeat, claim_jobs, report_status]  # 살아 있음 -> 잡기 -> 상태 올리기
 STEPS += [ontology_push, apply_writes]
 
 
@@ -974,7 +975,13 @@ def ensure_worker(root):
         return False
     os.makedirs(wdir, exist_ok=True)
     sh = os.path.join(wdir, "w1.sh")
-    tick = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tick.sh")
+    here = os.path.dirname(os.path.abspath(__file__))
+    tick = os.path.join(here, "tick.sh")
+    if not os.path.exists(tick):  # 구운 사본(engines/)에서 돌 때: tick.sh가 code-dir에 적어 둔 자리
+        try:
+            tick = os.path.join(open(os.path.join(here, "code-dir"), encoding="utf-8").read().strip(), "tick.sh")
+        except OSError:
+            pass
     with open(sh, "w", encoding="utf-8") as f:
         f.write('#!/bin/bash\n. "%s"\n' % tick)
     os.chmod(sh, 0o755)

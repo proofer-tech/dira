@@ -128,6 +128,12 @@ if [ "${1:-}" = mcp ] && [ "$e" = claude ]; then
   [ -f "$d/engines/mcp_server.py" ] && exec python3 "$d/engines/mcp_server.py" "$@"
   echo "dira mcp: 서버가 설치되지 않았습니다" >&2; exit 69
 fi
+# P478: `dira remote`는 원격 큐 클라이언트다(python3 표준 라이브러리만).
+if [ "${1:-}" = remote ] && [ "$e" = claude ]; then
+  shift
+  [ -f "$d/engines/remote.py" ] && exec python3 "$d/engines/remote.py" "$@"
+  echo "dira remote: 클라이언트가 설치되지 않았습니다" >&2; exit 69
+fi
 [ -x "$d/engines/$e" ] && exec "$d/engines/$e" "$@"
 exec "$e" "$@"'
 refresh_fixed_engine() {
@@ -201,12 +207,14 @@ refresh_fixed_engine() {
       || rm -f "$ENGINES_DIR/dira_env.py.tmp.$$"
   fi
   # P476: MCP 서버와 그것이 부르는 엔진 파일도 같은 자리에 굽는다(내용이 다르면 원자 교체).
-  for f in mcp_server.py mcp_tools.py tickets.py graph.py learn.py; do
+  for f in mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py; do
     [ -f "$CODE/$f" ] && ! cmp -s "$CODE/$f" "$ENGINES_DIR/$f" 2>/dev/null || continue
     cp "$CODE/$f" "$ENGINES_DIR/$f.tmp.$$" 2>/dev/null \
       && python3 -c 'import os,sys;os.replace(sys.argv[1],sys.argv[2])' "$ENGINES_DIR/$f.tmp.$$" "$ENGINES_DIR/$f" \
       || rm -f "$ENGINES_DIR/$f.tmp.$$"
   done
+  # P478: 구운 remote.py가 워커 스크립트의 tick.sh 자리를 찾을 수 있게 코드 디렉터리를 적어 둔다.
+  [ "$(cat "$ENGINES_DIR/code-dir" 2>/dev/null)" = "$CODE" ] || printf '%s\n' "$CODE" > "$ENGINES_DIR/code-dir" 2>/dev/null
   # P468-1: 라우터 본문이 다르면 원자 교체. 옛 dira-<엔진>과 부속 파일은 굽기가 끝난 뒤 지운다.
   if ! cmp -s <(printf '%s\n' "$ROUTER_BODY") "$FIXED_ENGINE" 2>/dev/null; then
     printf '%s\n' "$ROUTER_BODY" > "$FIXED_ENGINE.tmp.$$" 2>/dev/null \
@@ -743,6 +751,15 @@ except Exception:
   *) echo "알 수 없는 명령: $CMD"; exit 2 ;;
 esac
 
+# --- 원격 큐(P478): 워커 락보다 앞이다 - 락 때문에 이번 tick이 빠져도 살아 있음 신호는 간다 ---
+# remote.json이 없으면 이 블록은 아무것도 안 한다. 실패는 tick을 막지 않는다(로그 한 줄).
+if [ "$CMD" = "tick" ] && [ -f "$TICKET_ROOT/remote.json" ]; then
+  _TO=""; command -v timeout >/dev/null 2>&1 && _TO="timeout 20"
+  $_TO python3 "$CODE/remote.py" sync --root "$TICKET_ROOT" 2>&1 | while IFS= read -r line; do
+    [ -n "$line" ] && log "$line"
+  done
+fi
+
 # --- 스테일 수거: 세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌린다 ---
 # 없으면 사람에게 질문하고 rc=0으로 종료한 세션의 티켓이 영구 유실된다(2026-07-28 스트림 실사고 3건).
 # §폴링 대기 결정 5와 같은 이유로 아래 워커 락(SKIP)보다 앞이다 - reap은 이 워커의 바쁨과
@@ -1158,6 +1175,15 @@ EOF
 # 비워야 트랩이 다음 주인의 잠금을 지우지 않는다.
 [ -n "$SLOCK" ] && { rm -rf "$SLOCK"; SLOCK=""; }
 [ -z "$TPATH" ] && exit 0
+
+# P478 R8: personas/<이름>/mcp.json이 있으면 claude 세션에만 붙인다(--strict-mcp-config는 그대로).
+if [ -n "$TPERSONA" ] && [ -f "${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/mcp.json" ]; then
+  if [ "$ENGINE_NAME" = "claude" ]; then
+    TICKET_ENGINE+=(--mcp-config "${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/mcp.json")
+  else
+    log "MCPSKIP $ENGINE_NAME"
+  fi
+fi
 
 # 재무장: 쿨다운이 만료돼서 여기까지 왔으면 나가면서 창을 다시 감는다. 그래야 한 창의 재시도가
 # 이 워커 하나로 고정된다(안 감으면 8워커가 같은 창에서 한꺼번에 나가 헛디스패치가 8회 또 돈다).
@@ -1637,6 +1663,19 @@ if [ -n "$_dirty_now" ]; then
   printf '%s\n' "$_dirty_now" > "$_dirty_fp"
 else
   rm -f -- "$_dirty_fp"
+fi
+
+# P478 R7: 원격 작업 티켓의 세션에만 작업 토큰을 환경변수로 넣는다. 값은 argv-로그에 안 쓴다.
+unset DIRA_REMOTE_URL DIRA_REMOTE_TOKEN
+_RJ="$HOME/.config/dira/run/remote-jobs/$THASH.json"
+if [ -f "$_RJ" ] && [ -f "$TICKET_ROOT/remote.json" ]; then
+  _RE=$(python3 -c 'import json,sys
+print(json.load(open(sys.argv[1]))["server"].rstrip("/"), json.load(open(sys.argv[2]))["job_token"], sep="\n")' \
+    "$TICKET_ROOT/remote.json" "$_RJ" 2>/dev/null)
+  if [ -n "$_RE" ]; then
+    export DIRA_REMOTE_URL="${_RE%%$'\n'*}" DIRA_REMOTE_TOKEN="${_RE#*$'\n'}"
+  fi
+  unset _RE
 fi
 
 cd "$TICKET_CWD" || { log "ERROR cwd 없음 $TICKET_CWD"; OUT=$(reap_silent "$TPATH"); [ -n "$OUT" ] && log "$OUT"; exit 1; }
