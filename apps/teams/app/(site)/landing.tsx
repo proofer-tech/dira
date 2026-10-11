@@ -601,7 +601,7 @@ export default function Landing({
       `.gallery` 밖이라 `figure`는 margin 0이다 — 위 `.body`와 **같은 인라인 24**를 준다
       (새 CSS 규칙 0). `.zoom`은 갤러리 셋과 같은 부품이다(§랜딩 §갤러리 ③ — 라이트박스 0). */}
   <figure style={{ marginTop: 24 }}>
-    <a className="zoom" href="/shots/10-archiving.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/10-archiving.png" loading="lazy" alt={t("landing.archiving.shotAlt")} width="1664" height="664"/></a>
+    <a className="zoom" href="/shots/10-archiving.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/10-archiving.png" loading="lazy" alt={t("landing.archiving.shotAlt")} width="1368" height="300"/></a>
     <figcaption>{t("landing.archiving.shotCaption")}</figcaption>
   </figure>
   <p className="arrows"><a href="/docs/ontology">{t("landing.archiving.arrowLink")}</a></p>
@@ -654,12 +654,12 @@ export default function Landing({
       <p className="arrows"><a href="/docs/barge-in">{t("landing.gallery.bargeArrowLink")}</a></p>
     </figure>
     <figure>
-      <a className="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/07-qa-thread.png" loading="lazy" alt={t("landing.gallery.qaAlt")} width="1440" height="450"/></a>
+      <a className="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/07-qa-thread.png" loading="lazy" alt={t("landing.gallery.qaAlt")} width="1440" height="904"/></a>
       <figcaption>{t("landing.gallery.qaCaption")}</figcaption>
       <p className="arrows"><a href="/docs/requirements#되묻기와-답변-대기">{t("landing.gallery.qaArrowLink")}</a></p>
     </figure>
     <figure>
-      <a className="zoom" href="/shots/04-ticket-running.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/04-ticket-running.png" loading="lazy" alt={t("landing.gallery.runningAlt")} width="1600" height="1000"/></a>
+      <a className="zoom" href="/shots/04-ticket-running.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/04-ticket-running.png" loading="lazy" alt={t("landing.gallery.runningAlt")} width="1600" height="1254"/></a>
       <figcaption>{t("landing.gallery.runningCaption")}</figcaption>
       <p className="arrows"><a href="/docs/screens#티켓-상세">{t("landing.gallery.runningArrowLink")}</a></p>
     </figure>
@@ -670,7 +670,7 @@ export default function Landing({
         ①과 같이 상태가 아닌 것이다. 앞 셋과의 간격 24는 `landing.css` 갤러리 주석 ⑤
         (`.gallery figure:last-child`의 margin-top)가 준다. */}
     <figure style={{ gridColumn: "1 / -1" }}>
-      <a className="zoom" href="/shots/09-ontology.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/09-ontology.png" loading="lazy" alt={t("landing.gallery.ontologyAlt")} width="1600" height="760"/></a>
+      <a className="zoom" href="/shots/09-ontology.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/09-ontology.png" loading="lazy" alt={t("landing.gallery.ontologyAlt")} width="1600" height="912"/></a>
       <figcaption>{t("landing.gallery.ontologyCaption")}</figcaption>
       <p className="arrows"><a href="/docs/ontology">{t("landing.archiving.arrowLink")}</a></p>
     </figure>
