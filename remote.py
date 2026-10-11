@@ -4,6 +4,7 @@
 표준 라이브러리만 쓴다. remote.json이 없는 큐에서는 전부 아무것도 안 하고 rc 0이다.
 """
 import argparse
+import datetime
 import json
 import os
 import shutil
@@ -160,11 +161,120 @@ def cmd_sync(root):
 
 # ---- connect / disconnect ----
 
-def find_tools():
-    d = os.path.join(os.path.expanduser("~"), ".config", "dira", "bin", "engines")
-    # ponytail: 버전-로그인 점검은 P478-2. 여기서는 실재하는 엔진 이름만 올린다
-    return [{"name": n, "version": None, "health": "unknown"}
-            for n in ("claude", "codex", "agy", "grok") if os.path.exists(os.path.join(d, n))]
+def engines_dir():
+    return os.path.join(os.path.expanduser("~"), ".config", "dira", "bin", "engines")
+
+
+def now():
+    return time.time()  # 테스트가 갈아 끼우는 시계
+
+
+def tool_names():
+    d = engines_dir()
+    return [n for n in ("claude", "codex", "agy", "grok") if os.access(os.path.join(d, n), os.X_OK)]
+
+
+def tool_version(name):
+    try:
+        r = subprocess.run([os.path.join(engines_dir(), name), "--version"], capture_output=True,
+                           text=True, timeout=5)
+        lines = r.stdout.strip().splitlines()
+        return lines[0] if r.returncode == 0 and lines else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+# ponytail: agy-grok 최소 프롬프트 형식은 -p로 추정. 틀리면 needs_check로 떠서 드러난다
+LOGIN_ARGS = {"codex": ["exec", "ok"]}
+LOGIN_CHECK_EVERY = 6 * 3600
+
+
+def login_ok(name):
+    cmd = [os.path.join(engines_dir(), name)] + LOGIN_ARGS.get(name, ["-p", "ok"])
+    try:
+        return subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, timeout=60).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def health_path(ws):
+    return os.path.join(ws_dir(ws), "health.json")
+
+
+def mark_auth_error(ws, tool):
+    """인증 오류로 끝난 세션 직후 부른다. 다음 sync가 그 도구를 다시 점검한다."""
+    st = read_json(health_path(ws)) or {}
+    errs = st.setdefault("auth_error", [])
+    if tool not in errs:
+        errs.append(tool)
+    write_json(health_path(ws), st)
+
+
+def refresh_health(ws, force=False):
+    """점검 시점 - 처음(연결 때)-6시간마다-인증 오류 표식. 그 밖에는 안 돌린다."""
+    st = read_json(health_path(ws)) or {}
+    tools, errs, t = st.get("tools", {}), st.get("auth_error", []), now()
+    names = tool_names()
+    for n in names:
+        rec = tools.get(n)
+        if force or n in errs or not rec or t - rec["checked_at"] >= LOGIN_CHECK_EVERY:
+            tools[n] = {"health": "ok" if login_ok(n) else "needs_check", "checked_at": t}
+    st = {"tools": {n: tools[n] for n in names}, "auth_error": []}
+    write_json(health_path(ws), st)
+    return st["tools"]
+
+
+def tools_payload(ws, health):
+    return [{"name": n, "version": tool_version(n), "health": health[n]["health"]} for n in health]
+
+
+def claim_tools(ws):
+    """jobs/claim의 tools - 점검에 실패한 도구는 뺀다."""
+    h = (read_json(health_path(ws)) or {}).get("tools", {})
+    return [n for n in tool_names() if h.get(n, {}).get("health") == "ok"]
+
+
+def ticket_owners(root):
+    """{워커 이름 접두 판정용 owner: 해시} - .wip 티켓의 fm owner."""
+    out = []
+    tdir = os.path.join(root, "tickets")
+    for f in os.listdir(tdir) if os.path.isdir(tdir) else []:
+        if not f.endswith(".wip.md"):
+            continue
+        try:
+            with open(os.path.join(tdir, f), encoding="utf-8") as fh:
+                head = fh.read(4096)
+        except OSError:
+            continue
+        for line in head.splitlines():
+            if line.startswith("owner:"):
+                out.append((line[6:].split("/")[-1].strip(), f[:-len(".wip.md")]))
+    return out
+
+
+def next_dispatch_iso():
+    # ponytail: 크론이 :00과 :30에 뜬다고 가정한 계산. 간격을 바꾸면 여기도 바꾼다
+    t = (int(now()) // 30 + 1) * 30
+    return datetime.datetime.fromtimestamp(t).astimezone().isoformat(timespec="seconds")
+
+
+def workers_payload(root):
+    wdir = os.path.join(root, "workers")
+    names = sorted(f[:-3] for f in os.listdir(wdir) if f.endswith(".sh")) if os.path.isdir(wdir) else []
+    owners = ticket_owners(root)
+    nxt = next_dispatch_iso()
+    return [{"name": n,
+             "busy": next((h for o, h in owners if o == n or o.startswith(n + "-")), None),
+             "next_dispatch_at": nxt} for n in names]
+
+
+def step_heartbeat(ctx):
+    health = refresh_health(ctx.ws)
+    ctx.call("POST", "runtimes/%s/heartbeat" % ctx.runtime_id,
+             {"tools": tools_payload(ctx.ws, health), "workers": workers_payload(ctx.root)})
+
+
+STEPS.append(step_heartbeat)
 
 
 def crontab_rw(new_lines=None):
@@ -234,7 +344,8 @@ def cmd_connect(server, root):
         return 2
     project = os.path.basename(os.path.dirname(os.path.abspath(root)))
     st, reg = http(server, "POST", "runtimes",
-                   {"machine_name": machine, "project": project, "tools": find_tools()}, rt)
+                   {"machine_name": machine, "project": project,
+                    "tools": tools_payload(ws, refresh_health(ws, force=True))}, rt)
     if st != 200 or not reg:
         print("런타임을 등록하지 못했습니다 (HTTP %s)" % st, file=sys.stderr)
         return 1

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """remote.py 테스트. http.server 가짜 서버를 세운다 - 뒤 장들이 이 서버에 라우트를 더한다."""
+import importlib.util
 import json
 import os
 import stat
@@ -64,7 +65,7 @@ class Fake:
         self.srv.shutdown()
 
 
-class T(unittest.TestCase):
+class Base:
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.home = os.path.join(self.tmp.name, "home")
@@ -87,6 +88,8 @@ class T(unittest.TestCase):
     def cred(self, ws="ws1"):
         return os.path.join(self.home, ".config", "dira", "remote", ws, "credentials.json")
 
+
+class T(Base, unittest.TestCase):
     def test_sync_without_config_is_noop(self):
         r = self.run_remote("sync", "--root", self.root)
         self.assertEqual(r.returncode, 0, r.stderr)
@@ -165,6 +168,89 @@ class T(unittest.TestCase):
         self.fake.routes[("GET", "ping")] = (401, None)
         with self.assertRaises(m.Unauthorized):
             m.http(self.fake.url, "GET", "ping", token="bad")
+
+
+class Tools(Base, unittest.TestCase):
+    """가짜 엔진 실행 파일과 가짜 시계로 런타임-로그인 점검-heartbeat를 본다."""
+
+    def setUp(self):
+        super().setUp()
+        d = os.path.join(self.home, ".config", "dira", "bin", "engines")
+        os.makedirs(d)
+        for n in ("claude", "codex"):
+            p = os.path.join(d, n)
+            open(p, "w").write('#!/bin/bash\n[ "$1" = --version ] && { echo "%s 1.2.3"; exit 0; }\n'
+                               'echo "$0" >> "%s/logins.log"; [ -e "%s/fail-%s" ] && exit 1; exit 0\n'
+                               % (n, self.home, self.home, n))
+            os.chmod(p, 0o755)
+        os.makedirs(os.path.join(self.root, "workers"))
+        for w in ("w1", "w2"):
+            open(os.path.join(self.root, "workers", w + ".sh"), "w").write("#!/bin/bash\n")
+        open(os.path.join(self.root, "tickets", "abcd1234.wip.md"), "w").write(
+            "---\nticket: abcd1234\nowner: developer / w2-2124f3e8\n---\n")
+        self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = (200, {"ok": True})
+        os.environ["HOME"] = self.home
+        self.addCleanup(os.environ.__setitem__, "HOME", self.orig_home)
+        spec = importlib.util.spec_from_file_location("remote", os.path.join(HERE, "remote.py"))
+        self.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.m)
+        self.clock = time.time()
+        self.m.now = lambda: self.clock
+
+    orig_home = os.environ["HOME"]
+
+    def logins(self):
+        p = os.path.join(self.home, "logins.log")
+        return len(open(p).read().split()) if os.path.exists(p) else 0
+
+    def hb(self):
+        return [c for c in self.fake.calls if c[1] == "runtimes/rt1/heartbeat"][-1][2]
+
+    def test_connect_reports_tools_with_version(self):
+        self.assertEqual(self.connect().returncode, 0)
+        reg = [c for c in self.fake.calls if c[1] == "runtimes"][0][2]
+        self.assertEqual(reg["tools"], [{"name": "claude", "version": "claude 1.2.3", "health": "ok"},
+                                        {"name": "codex", "version": "codex 1.2.3", "health": "ok"}])
+
+    def test_failed_login_is_needs_check_and_not_claimed(self):
+        open(os.path.join(self.home, "fail-codex"), "w").close()
+        self.connect()
+        reg = [c for c in self.fake.calls if c[1] == "runtimes"][0][2]
+        self.assertEqual({t["name"]: t["health"] for t in reg["tools"]},
+                         {"claude": "ok", "codex": "needs_check"})
+        self.assertEqual(self.m.claim_tools("ws1"), ["claude"])
+
+    def test_heartbeat_workers(self):
+        self.connect()
+        self.run_remote("sync", "--root", self.root)
+        w = {x["name"]: x for x in self.hb()["workers"]}
+        self.assertEqual(w["w2"]["busy"], "abcd1234")
+        self.assertIsNone(w["w1"]["busy"])
+        import datetime
+        t = datetime.datetime.fromisoformat(w["w1"]["next_dispatch_at"])
+        self.assertIn(t.second, (0, 30))
+        self.assertIsNotNone(t.utcoffset())
+
+    def test_login_check_schedule(self):
+        self.connect()
+        self.assertEqual(self.logins(), 2)  # 연결 때
+        h = json.load(open(self.m.health_path("ws1")))["tools"]
+        self.clock = max(v["checked_at"] for v in h.values())  # 가짜 시계를 기록 시각에 맞춘다
+        self.m.refresh_health("ws1")
+        self.assertEqual(self.logins(), 2)  # 곧바로는 안 돈다
+        self.clock += 6 * 3600 - 1
+        self.m.refresh_health("ws1")
+        self.assertEqual(self.logins(), 2)
+        self.clock += 1
+        self.m.refresh_health("ws1")  # 6시간
+        self.assertEqual(self.logins(), 4)
+        self.m.mark_auth_error("ws1", "codex")
+        self.m.refresh_health("ws1")  # 인증 오류 직후 - 그 도구만
+        self.assertEqual(self.logins(), 5)
+        self.m.refresh_health("ws1")
+        self.assertEqual(self.logins(), 5)
+        self.run_remote("sync", "--root", self.root)  # 일반 sync도 점검을 늘리지 않는다
+        self.assertEqual(self.logins(), 5)
 
 
 if __name__ == "__main__":
