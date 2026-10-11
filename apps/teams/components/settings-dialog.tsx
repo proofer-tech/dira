@@ -446,12 +446,13 @@ function McpSection({ className }: { className?: string }) {
           <p className="text-xs text-muted-foreground">{t("settings.mcp.stdio")}</p>
           <CopyCommand cmd={view.stdio} />
           <p className="text-xs text-muted-foreground">{t("settings.mcp.http")}</p>
-          {!view.desktop ? (
-            <p className="text-xs">{t("settings.mcp.appOnly")}</p>
-          ) : view.status.state === "alive" ? (
+          {view.status.state === "alive" ? (
             <CopyCommand cmd={view.status.httpConfig} />
           ) : (
-            <p className="text-xs">{t("settings.mcp.off")}</p>
+            <>
+              <p className="text-xs">{t("settings.mcp.off")}</p>
+              <p className="text-xs text-muted-foreground">{t("settings.mcp.offHint")}</p>
+            </>
           )}
         </div>
       )}

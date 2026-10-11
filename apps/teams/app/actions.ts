@@ -810,9 +810,9 @@ export async function testWebhookAction(): Promise<WebhookTestResult> {
 
 /** 설정 다이얼로그의 숨은 여섯째 노드 `멀티플레잉` (DESIGN.md §0-18 §스위치) — 다이얼로그가
  *  열릴 때 한 줄이 읽는다. `readAnalyticsAction`과 같은 이유로 프롭이 아니라 여기서 읽는다. */
-/** 설정 다이얼로그 `MCP` 절(P476) - 열릴 때 한 번 읽는다. 브라우저 셸이면 HTTP 줄을 못 만든다. */
-export async function readMcpAction(): Promise<{ desktop: boolean; status: McpStatus; stdio: string }> {
-  return { desktop: shellParams().shell === "desktop", status: readMcpStatus(), stdio: MCP_STDIO_CONFIG };
+/** 설정 다이얼로그 `MCP` 절(P476, P480) - 열릴 때 한 번 읽는다. 앱이든 브라우저 셸이든 `mcp.json` 판정 하나다. */
+export async function readMcpAction(): Promise<{ status: McpStatus; stdio: string }> {
+  return { status: readMcpStatus(), stdio: MCP_STDIO_CONFIG };
 }
 
 export async function readMultiplayAction(): Promise<boolean> {

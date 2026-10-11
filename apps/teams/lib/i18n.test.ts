@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -1400,4 +1400,12 @@ test("readLanguage — 파일 없으면 기본값 ko, set 뒤에는 그 값을 �
 
   await setLanguage("en");
   assert.strictEqual(await readLanguage(), "en");
+});
+
+test("설정 MCP 절 - 꺼짐 안내가 두 언어에 있고 앱 전용 문구는 없다", () => {
+  assert.strictEqual(t("ko", "settings.mcp.offHint"), "dira 앱을 한 번 켜면 cron이 띄웁니다");
+  assert.strictEqual(t("en", "settings.mcp.offHint"), "Open the dira app once and cron will start it");
+  assert.ok(!("settings.mcp.appOnly" in ({} as Record<string, string>)));
+  const src = readFileSync(new URL("./i18n.ts", import.meta.url), "utf8");
+  assert.ok(!src.includes("앱에서만 " + "뜹니다") && !src.includes("app" + "Only"));
 });

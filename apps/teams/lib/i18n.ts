@@ -54,8 +54,8 @@ export const ko: Record<string, string> = {
   "settings.mcp.on": "켜짐",
   "settings.mcp.off": "꺼짐",
   "settings.mcp.stdio": "stdio (엔진이 설치돼 있으면 언제나 됩니다)",
-  "settings.mcp.http": "HTTP (앱이 떠 있는 동안만 됩니다)",
-  "settings.mcp.appOnly": "앱에서만 뜹니다",
+  "settings.mcp.http": "HTTP (cron이 상주시키므로 앱을 꺼도 됩니다)",
+  "settings.mcp.offHint": "dira 앱을 한 번 켜면 cron이 띄웁니다",
   // 사이드바 트리에는 안 뜬다(§0-18) — 검색으로만 닿는다. 그래도 이름은 다른 노드와 같은
   // 키 규약(`settings.tree.<node>`)을 쓴다 — 화면 자리가 하나 늘 뿐 이름 짓는 법은 안 갈린다.
   "settings.tree.multiplay": "멀티플레잉",
@@ -2960,8 +2960,8 @@ export const en: Record<string, string> = {
   "settings.mcp.on": "On",
   "settings.mcp.off": "Off",
   "settings.mcp.stdio": "stdio (works whenever the engine is installed)",
-  "settings.mcp.http": "HTTP (only while the app is running)",
-  "settings.mcp.appOnly": "Only available in the app",
+  "settings.mcp.http": "HTTP (kept running by cron, so it works with the app closed)",
+  "settings.mcp.offHint": "Open the dira app once and cron will start it",
   "settings.tree.categoryGroup": "Setting categories",
   "settings.tree.multiplay": "Multiplaying",
   "settings.tree.webhook": "Webhook",
