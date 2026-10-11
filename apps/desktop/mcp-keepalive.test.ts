@@ -26,8 +26,19 @@ function setup(tab: string | null) {
   mkdirSync(engine);
   for (const f of ["mcp_server.py", "mcp_tools.py", "tickets.py", "tick.sh"]) cpSync(join(repo, f), join(engine, f));
   const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` };
-  const run = (arg: string) => spawnSync("bash", [script, arg], { env, encoding: "utf8", timeout: 30_000 });
   const json = join(home, ".config/dira/run/mcp.json");
+  const run = (arg: string) => {
+    const r = spawnSync("bash", [script, arg], { env, encoding: "utf8", timeout: 30_000 });
+    // 서버 stderr는 임시 HOME의 mcp.log에만 남는다 - 실패하면 CI 로그에 꺼내 둔다
+    if (r.status !== 0) {
+      const log = join(home, ".config/dira/run/mcp.log");
+      const ps = spawnSync("ps", ["-axo", "pid,ppid,stat,etime,command"], { encoding: "utf8" }).stdout;
+      console.error(
+        `keepalive exit=${r.status} signal=${r.signal}\nstderr:\n${r.stderr}\nmcp.log:\n${existsSync(log) ? readFileSync(log, "utf8") : "(없음)"}\nps:\n${ps.split("\n").filter((l) => /mcp_server|nohup|setsid/.test(l)).join("\n")}`,
+      );
+    }
+    return r;
+  };
   const read = () => JSON.parse(readFileSync(json, "utf8"));
   const kill = () => {
     try {
