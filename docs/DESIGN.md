@@ -8938,6 +8938,69 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P480. 엔진 MCP를 cron이 상주시킨다 - 앱을 꺼도 HTTP MCP가 떠 있고, dira를 지우면 같이 사라진다 (요구 `bcaf1304`, 왕복 0회)
+
+사람 요구: *"dira가 설치되면 cron 으로 워커들이 뜨듯이 mcp를 위한 상주서버를 띄우도록 해주세요.
+dira가 삭제되면 안뜨고 제거되는거고요. dira 앱을 켜지 않아도 mcp 가 작동하길 원해요"*.
+P476 §값 표의 `앱이 띄운다` - `떠 있음 기록` - `다시 띄우기` - `화면` 행과 §안 하는 것의 "상주는
+앱이 진다"를 이 절이 대체한다. 나머지 P476 값(프로토콜, 토큰-Origin 검사, 도구 표)은 그대로다.
+
+사람이 정하지 않은 것은 주도성 5로 pm이 정했다.
+
+- **무엇이 띄우나.** 워커와 같은 방식이다. crontab에 매분 한 줄을 두고, 그 줄이 부르는 감시
+  스크립트 `keepalive.sh`가 서버가 살아 있으면 아무것도 안 하고 죽어 있으면 띄운다. 서버는
+  cron의 자식이 아니라 떨어져 나간 프로세스(`nohup` + 새 세션)라서 감시 스크립트가 끝나도 남는다.
+- **엔진은 안 고친다.** `tick.sh` - `tickets.py` - `mcp_server.py`는 한 줄도 안 바뀐다. 감시
+  스크립트는 워커의 `self-heal.sh`처럼 엔진 밖 파일이고 앱이 관리한다.
+- **"설치"와 "삭제"의 판정은 워커와 같다.** 앱이 켜질 때마다 줄과 스크립트를 맞춰 둔다(설치).
+  감시 스크립트는 인자로 받은 `<엔진>/tick.sh`가 없으면 dira가 지워졌다고 보고 서버를 내리고
+  자기 줄과 자기 파일을 지운다(제거). 워커 `self-heal.sh`가 cron 줄을 빼는 기준과 같은 파일이라,
+  워커가 물러나는 순간 MCP도 같이 물러난다.
+- **주소와 토큰은 고정한다.** 상주 서버는 클라이언트 설정에 한 번 붙여 넣고 계속 쓰는 것이라,
+  다시 띄울 때마다 바뀌면 안 된다. 토큰은 한 번 만들어 파일에 두고, 포트는 고정값을 먼저 쓴다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 자리 | 머신 하나에 하나다. `~/.config/dira/mcp/` 아래 `keepalive.sh`(0755)와 `token`(0600, 64자 hex, 없을 때만 만든다). 로그는 `~/.config/dira/run/mcp.log`, 떠 있음 기록은 P476 그대로 `~/.config/dira/run/mcp.json` `{url, token, pid, started_at}` 0600 |
+| 원본 | `apps/desktop/mcp-keepalive.sh`(bash, 의존성 0). 패키징은 `apps/desktop/package.json` `extraResources`에 더한다. 앱이 켜질 때 원본과 `~/.config/dira/mcp/keepalive.sh`의 내용이 다르면 원자 교체한다 |
+| cron 줄 | `* * * * * "<홈>/.config/dira/mcp/keepalive.sh" "<엔진>/tick.sh" >> "<홈>/.config/dira/run/mcp.log" 2>&1` 한 줄. `<엔진>`은 워커 줄의 `. tick.sh`가 가리키는 그 자리다(패키징 = userData `engine`, 소스 실행 = 레포 루트). 줄 판정은 `mcp/keepalive.sh` 문자열을 담았는지다 |
+| 설치 | 앱이 켜질 때(`app.whenReady` 뒤) 한 번: 스크립트를 맞추고, crontab에 그 줄이 정확히 하나가 되게 한다 - 없으면 더하고, 인자가 다르면 그 줄만 바꾸고, 같으면 crontab을 쓰지 않는다. 남의 줄은 바이트 그대로 둔다. 그다음 스크립트를 한 번 직접 돌려 cron의 다음 분을 기다리지 않고 띄운다. crontab 쓰기가 실패하면(권한 창 거부 등) 로그 한 줄을 남기고 앱 기동은 계속한다 |
+| 감시 - 살아 있음 | `mcp.json`의 `pid`가 살아 있고 그 프로세스의 명령줄에 `mcp_server.py`가 있으면 끝낸다(아무것도 안 쓴다) |
+| 감시 - 띄우기 | 아니면 `python3 <엔진>/mcp_server.py --http 127.0.0.1:<포트>`를 `DIRA_MCP_TOKEN=<token 파일 값>`으로 떼어 띄운다(토큰은 argv에 안 남는다). 포트는 `47823`을 먼저 쓰고, 그 포트가 이미 쓰이면 빈 포트를 고른다. 서버가 첫 줄로 내는 `{"url": ...}`을 받은 뒤 `mcp.json`을 0600으로 쓴다. 동시에 두 번 돌지 않게 `~/.config/dira/run/mcp.lock` 디렉터리 락을 쓰고, 120초보다 오래된 락은 치운다 |
+| 감시 - 제거 | 인자 `<엔진>/tick.sh`가 없으면: `mcp.json`의 `pid`가 `mcp_server.py`면 SIGTERM, `mcp.json`을 지우고, crontab에서 `mcp/keepalive.sh` 줄만 빼고(`crontab -l`이 실패하거나 비었으면 crontab은 안 쓴다), `~/.config/dira/mcp/`를 지운다. 인자가 비었으면 엔진이 있는지 알 수 없으므로 아무것도 안 뺀다(`self-heal.sh` 규칙 그대로) |
+| 앱 | `main.ts`의 자식 띄우기(`startMcp` - `stopMcp` - `restartMcpByHand`)와 트레이 `MCP 서버가 멈췄습니다` 항목을 걷어낸다. 앱이 닫혀도 서버와 `mcp.json`은 그대로다. 걷어낸 뒤 안 쓰이는 `mcp-child.ts`의 함수-테스트도 같이 지운다 |
+| 화면 | 설정 `MCP` 절은 `mcp.json`으로만 판정한다(앱이든 브라우저 셸이든 같다). `앱에서만 뜹니다` 줄을 없애고, 켜짐이면 브라우저 셸에서도 HTTP 연결 설정 복사를 보인다. 꺼짐 아래에 한 줄 `dira 앱을 한 번 켜면 cron이 띄웁니다`(ko-en) |
+
+#### 안 하는 것
+
+- 엔진(`tick.sh` - `tickets.py` - `mcp_server.py` - `mcp_tools.py`) 수정. 서버는 지금 모양 그대로 띄운다.
+- launchd 에이전트. 워커가 cron이라 같은 장치에 맞춘다(권한 창도 워커와 같은 `앱 관리` 하나다).
+- 원격 접속. `127.0.0.1`에만 묶는 것은 P476 그대로다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P480-1 | 감시 스크립트 - `apps/desktop/mcp-keepalive.sh`(살아 있음-띄우기-제거 세 갈래)와 임시 HOME + 가짜 `crontab`으로 진짜 bash를 돌리는 테스트 | developer | - | 발행 `cafeb1bc` |
+| P480-2 | 앱 - 켜질 때 스크립트-cron 줄 설치와 1회 실행, `main.ts`의 자식 MCP-트레이 항목 걷어내기, `extraResources` + 테스트 | developer | P480-1 | 발행 `1a39ee4c` |
+| P480-3 | 화면 - 설정 `MCP` 절을 `mcp.json` 판정 하나로, `앱에서만 뜹니다` 삭제, 꺼짐 안내 한 줄 ko-en + 테스트 | developer | - | 발행 `59a58375` |
+| P480-4 | 매뉴얼 - `mcp.md`(ko-en)에서 "앱이 꺼지면 HTTP가 내려간다"를 상주-고정 주소-제거 조건으로 바꾼다 | writer | - | 발행 `18e46889` |
+| P480-5 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다. 앱이 필요한 줄은 master로 로컬 빌드한 `dira.app`으로 판정한다 | qa | P480-2, P480-3 | 발행 `c6eb0936` |
+
+P480-2는 설치할 스크립트가 있어야 판정할 것이 생긴다. P480-3은 `mcp.json` 모양이 P476 그대로라
+기다리지 않는다. 에픽 `P480`를 연다(발행 5장).
+
+#### 수용조건
+
+- [ ] `cd apps/desktop && pnpm test`가 통과하고, 그 안에 감시 스크립트를 진짜 bash로 돌리는 테스트 셋(살아 있음이면 `mcp.json`과 crontab을 안 건드린다 / 죽어 있으면 새 `pid`로 `mcp.json`이 생기고 토큰을 붙인 `tools/list`가 `200`이다 / 엔진 경로가 없으면 서버 프로세스가 없고 `mcp.json`-`mcp/` 디렉터리-`mcp/keepalive.sh` 줄이 없고 남의 crontab 줄은 바이트 그대로다)이 있다.
+- [ ] dira.app을 한 번 켜면 `crontab -l | grep -c 'mcp/keepalive.sh'`가 `1`이다. 앱을 닫고 다시 켜도 `1`이다.
+- [ ] dira.app을 닫은 상태에서 `~/.config/dira/run/mcp.json`의 `url`에 `Authorization: Bearer <token>`을 붙여 `tools/list`를 보내면 `200`이고, 토큰이 없거나 틀리면 `401`이다.
+- [ ] 그 상태에서 `mcp.json`의 `pid`를 `kill`하면 70초 안에 새 `pid`로 `mcp.json`이 다시 써지고, `url`과 `token`은 kill 전과 같으며 다시 `200`이다.
+- [ ] 엔진 자리의 `tick.sh`를 다른 이름으로 옮기고 70초를 기다리면 서버 프로세스가 없고, `mcp.json`이 없고, `crontab -l`에 `mcp/keepalive.sh`가 없다. 되돌린 뒤 앱을 켜면 다시 위 둘째 줄 상태가 된다.
+- [ ] 앱을 닫은 채 브라우저 셸(`cd apps/teams && pnpm dev`)의 설정 `MCP` 절이 `켜짐 - http://127.0.0.1:<port>/mcp`와 HTTP 연결 설정 복사를 보이고, `앱에서만 뜹니다`가 없다. English에서 같은 글자가 영어로 나온다.
+- [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과한다.
+- [ ] `git log master --format=%h -E --grep='Ticket: (cafeb1bc|1a39ee4c|59a58375|18e46889)' -- tick.sh tickets.py mcp_server.py mcp_tools.py`가 빈 출력이다.
+
 ### P479. 보드의 `티켓 파일 이상` 경고 옆 버튼이 정리 티켓을 발행한다 (요구 `d33d8f58`, 왕복 0회)
 
 사람 요구: *"이런거 그냥 경고만 띄워주지말고 옆에 버튼 넣어서 누르면 고치는 티켓 발행되도록
