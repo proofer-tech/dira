@@ -28,6 +28,7 @@ import { classifyLink } from "./link.ts";
 import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
 import { describeReadyTimeout, readyTimeoutHint, type ReadyTimeoutState } from "./ready-timeout.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
+import { mcpStoppedLabel, onMcpExit, removeMcpJson, writeMcpJson } from "./mcp-child.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
  *  (package.json `build.extraResources`). 소스에서 돌 때는 `apps/teams` 옆이다. */
@@ -858,6 +859,73 @@ ipcMain.handle("dira:update-action", async (_e, action: unknown) => {
   }
 });
 
+// ── 엔진 MCP (P476-3) ─────────────────────────────────────────────────────
+
+/** 앱이 떠 있는 동안 HTTP MCP 서버(`mcp_server.py --http`)를 자식으로 띄운다. 토큰은 띄울 때마다 새로
+ *  만들어 환경변수로만 넘기고(argv에 안 남는다) `run/mcp.json`(0600)에 적는다. 죽으면 1초 뒤 다시
+ *  띄우고, 60초 안에 5번이면 멈춰 트레이에 다시 시작 항목을 띄운다(판정은 `mcp-child.ts`). */
+let mcpChild: ChildProcess | null = null;
+let mcpKilled: ChildProcess | null = null;
+let mcpHistory: number[] = [];
+let mcpStopped = false;
+const localDir = () => process.env.TICKET_LOCAL || join(homedir(), ".config", "dira");
+
+function mcpScript(): string | null {
+  // 패키징: userData/engine(extractEngine 복사본). 소스 실행: 레포 루트.
+  const f = app.isPackaged
+    ? join(app.getPath("userData"), "engine", "mcp_server.py")
+    : fileURLToPath(new URL("../../mcp_server.py", import.meta.url));
+  return existsSync(f) ? f : null;
+}
+
+async function startMcp() {
+  const script = mcpScript();
+  if (!script || quitting) return;
+  mcpStopped = false;
+  const token = randomBytes(32).toString("hex");
+  const port = await freePort();
+  const proc = spawn("python3", [script, "--http", `127.0.0.1:${port}`], {
+    env: { ...process.env, PATH: userPath(), DIRA_MCP_TOKEN: token },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  mcpChild = proc;
+  let announced = false;
+  proc.stdout?.on("data", (b) => {
+    if (announced) return;
+    try {
+      const { url } = JSON.parse(b.toString().split("\n")[0]);
+      announced = true;
+      if (proc.pid) writeMcpJson(localDir(), { url, token, pid: proc.pid, started_at: new Date().toISOString() });
+    } catch {
+      // 준비 줄이 아니면 다음 청크를 본다.
+    }
+  });
+  proc.on("error", (e) => console.error(`[dira] MCP 서버를 못 띄웠습니다: ${e.message}`));
+  proc.on("exit", (code, signal) => {
+    if (proc.pid) removeMcpJson(localDir(), proc.pid);
+    if (mcpChild === proc) mcpChild = null;
+    if (mcpKilled === proc || quitting) return;
+    const r = onMcpExit(mcpHistory, Date.now());
+    mcpHistory = r.history;
+    console.log(`[dira] MCP 서버가 죽었습니다 (code ${code ?? signal ?? "?"}) - ${r.action === "stop" ? "멈춥니다" : "다시 띄웁니다"}`);
+    if (r.action === "stop") mcpStopped = true;
+    else setTimeout(() => void startMcp().catch(() => {}), r.delayMs);
+  });
+}
+
+function stopMcp() {
+  if (mcpChild && mcpChild.exitCode === null) {
+    mcpKilled = mcpChild;
+    mcpChild.kill("SIGTERM");
+  }
+  removeMcpJson(localDir());
+}
+
+function restartMcpByHand() {
+  mcpHistory = [];
+  void startMcp().catch(() => {});
+}
+
 // ── N1 트레이 ──────────────────────────────────────────────────────────────
 
 /** 트레이 메뉴. **열 때마다 새로 만든다** — 체크 상태의 원본은 OS이고(N4) 앱 안 변수에 담아두면
@@ -890,6 +958,7 @@ function trayMenu(): Menu {
       checked: !existsSync(autoUpdateFlag()),
       click: (item) => setAutoUpdate(item.checked),
     },
+    ...(mcpStopped ? [{ label: mcpStoppedLabel(app.getLocale()), click: restartMcpByHand }] : []),
     { type: "separator" },
     { label: "종료", click: () => app.quit() },
   ]);
@@ -1097,6 +1166,7 @@ async function boot() {
   readyOrigin = origin; // 여기부터 `second-instance`가 창을 열 수 있다
   win = openWindow(origin);
   createTray();
+  void startMcp().catch((e) => console.error(`[dira] MCP 서버를 못 띄웠습니다: ${(e as Error).message}`));
   app.on("activate", () => showWindow()); // 독 아이콘도 `열기`와 같은 자리로 간다
 
   // U2가 켜져 있으면(기본) 켤 때 한 번 검사해 받아둔다. await하지 않는다 — 네트워크가
@@ -1151,6 +1221,7 @@ if (!app.requestSingleInstanceLock()) {
 // ⌘Q · 트레이 `종료` · SIGTERM이 전부 여기로 모인다 — `quitting`이 창의 close 가로채기를 푼다.
 app.on("before-quit", () => {
   quitting = true;
+  stopMcp();
   killServer();
 });
 // 네 번째 경로 — 내장 autoUpdater의 quitAndInstall()은 macOS에서 창을 먼저 닫고 이 이벤트를
@@ -1158,11 +1229,15 @@ app.on("before-quit", () => {
 // quitting도 거짓인 채라 close 가로채기(N1)가 창을 숨겨 앱이 안 죽는다.
 app.on("before-quit-for-update", () => {
   quitting = true;
+  stopMcp();
   killServer();
 });
 // 트레이가 있으면 창이 없어도 앱이 아니다 (N1). 실패 화면은 트레이가 없어서 그대로 끝난다.
 app.on("window-all-closed", () => {
   if (!tray) app.quit();
 });
-process.on("exit", killServer);
+process.on("exit", () => {
+  stopMcp();
+  killServer();
+});
 for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => app.quit());
