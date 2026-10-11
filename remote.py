@@ -6,13 +6,17 @@
 import argparse
 import datetime
 import json
+import datetime
 import os
+import re
+import secrets
 import shutil
 import socket
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 API = "/api/runtime/v1/"
@@ -99,11 +103,200 @@ class Ctx:
 # 단계 함수 f(ctx)를 순서대로 부른다. 뒤 장(P478-2..7)이 여기에 채운다:
 # 살아 있음 신호 -> 작업 잡기 -> 상태-진행 기록-질문 올리기 -> 답 내려받기 ->
 # 온톨로지 올리기 -> 원격 쓰기 적용 -> 페르소나-스키마 묶음 확인
-STEPS = []
+STEPS = []  # 아래 단계 함수 정의 뒤에 채운다
 
 
 def log(msg):
     print("REMOTE " + msg, flush=True)
+
+
+# ---- 작업 잡기 / 상태 보고 (P478-3) ----
+
+TICKET_RE = re.compile(r"^([0-9a-f]{8})(\.wip|\.done)?\.md$")
+
+
+def jobs_dir():
+    return os.path.join(os.path.expanduser("~"), ".config", "dira", "run", "remote-jobs")
+
+
+def split_fm(text):
+    """(fm 줄 목록, 본문). fm이 없으면 ([], text)."""
+    if not text.startswith("---\n"):
+        return [], text
+    end = text.find("\n---\n", 3)
+    if end < 0:
+        return [], text
+    return text[4:end].split("\n"), text[end + 5:]
+
+
+def fm_get(lines, key):
+    for l in lines:
+        if l.startswith(key + ":"):
+            return l[len(key) + 1:].strip()
+    return None
+
+
+def remote_tickets(root):
+    """remote_job 이 있는 티켓: [{job_id, hash, path, suffix, fm, body}]. 상태는 파일명과 fm이 정한다."""
+    tdir = os.path.join(root, "tickets")
+    out = []
+    # ponytail: 매 sync 전체 재스캔. 티켓 수천 건 되면 mtime 캐시
+    for n in os.listdir(tdir):
+        m = TICKET_RE.match(n)
+        if not m:
+            continue
+        path = os.path.join(tdir, n)
+        try:
+            text = open(path, encoding="utf-8").read()
+        except OSError:
+            continue
+        fm, body = split_fm(text)
+        job = fm_get(fm, "remote_job")
+        if job:
+            out.append({"job_id": job, "hash": m.group(1), "path": path,
+                        "suffix": (m.group(2) or "")[1:], "fm": fm, "body": body})
+    return out
+
+
+def one_line(s):
+    return " ".join(str(s if s is not None else "").split())
+
+
+def new_hash(tdir):
+    while True:
+        h = secrets.token_hex(4)
+        if not any(n.startswith(h + ".") for n in os.listdir(tdir)):
+            return h
+
+
+def create_ticket(root, job, token_info):
+    tdir = os.path.join(root, "tickets")
+    h = new_hash(tdir)
+    persona = one_line(job.get("persona"))
+    if not re.fullmatch(r"[\w.-]+", persona):
+        raise ValueError("persona가 올바르지 않습니다: %r" % persona)
+    fm = ["---", "ticket: " + h, "title: " + one_line(job.get("title")), "kind: work",
+          "persona: " + persona]
+    for k in ("priority", "duedate"):
+        if job.get(k) not in (None, ""):
+            fm.append("%s: %s" % (k, one_line(job[k])))
+    fm += ["remote_job: " + one_line(job["job_id"]), "---", ""]
+    text = "\n".join(fm) + "\n" + (job.get("body") or "")
+    if not text.endswith("\n"):
+        text += "\n"
+    # 토큰 파일이 먼저다. 티켓이 보이는 순간 tick.sh가 읽을 수 있어야 한다
+    write_json(os.path.join(jobs_dir(), h + ".json"),
+               {"job_id": job["job_id"], "job_token": token_info[0],
+                "job_token_expires_at": token_info[1]}, 0o600)
+    tmp = os.path.join(root, ".remote-tmp-" + h)
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.link(tmp, os.path.join(tdir, h + ".md"))  # 새 이름만 허용(덮어쓰기 없음)
+    except BaseException:
+        drop_token(h)
+        raise
+    finally:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+    return h
+
+
+def drop_token(h):
+    try:
+        os.unlink(os.path.join(jobs_dir(), h + ".json"))
+    except FileNotFoundError:
+        pass
+
+
+def free_workers(root):
+    wdir = os.path.join(root, "workers")
+    n = len([x for x in os.listdir(wdir) if x.endswith(".sh")]) if os.path.isdir(wdir) else 0
+    wip = len([x for x in os.listdir(os.path.join(root, "tickets")) if x.endswith(".wip.md")])
+    return max(0, n - wip)
+
+
+def claim_jobs(ctx):
+    free = free_workers(ctx.root)
+    if free <= 0:
+        return
+    tools = [t["name"] for t in find_tools()]
+    st, r = ctx.call("POST", "jobs/claim", {"runtime_id": ctx.runtime_id, "tools": tools, "max": free})
+    if st != 200 or not r:
+        log("claim HTTP %s" % st)
+        return
+    have = {t["job_id"] for t in remote_tickets(ctx.root)}
+    for job in r.get("jobs", []):
+        jid = one_line(job.get("job_id"))
+        if not jid or jid in have:
+            continue
+        try:
+            create_ticket(ctx.root, job, (job.get("job_token"), job.get("job_token_expires_at")))
+            have.add(jid)
+        except (ValueError, KeyError, OSError) as e:
+            log("claim-skip %s: %s" % (jid, e))
+
+
+def job_state(root, t):
+    """.done = done, 본문 ## 블록 = failed, awaiting: stem 파일이 없으면 awaiting, .wip = running. 아니면 None."""
+    if t["suffix"] == "done":
+        return "done"
+    if re.search(r"^## 블록\s*$", t["body"], re.M):
+        return "failed"
+    stem = fm_get(t["fm"], "awaiting")
+    if stem and not os.path.exists(os.path.join(root, "tickets", stem + ".done.md")):
+        return "awaiting"
+    if t["suffix"] == "wip":
+        return "running"
+    return None
+
+
+def mark_revoked(t):
+    # 돌고 있는 세션의 편집을 덮지 않도록 쓰기 직전에 다시 읽는다
+    with open(t["path"], encoding="utf-8") as f:
+        text = f.read()
+    fm, _ = split_fm(text)
+    if fm_get(fm, "remote_revoked") is not None:
+        return
+    end = text.find("\n---\n", 3)
+    tmp = "%s.remote-%d" % (t["path"], os.getpid())
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text[:end] + "\nremote_revoked: true" + text[end:])
+    os.replace(tmp, t["path"])
+
+
+def report_status(ctx):
+    sp = os.path.join(ws_dir(ctx.ws), "state.json")
+    state = read_json(sp) or {}
+    changed = False
+    for t in remote_tickets(ctx.root):
+        if fm_get(t["fm"], "remote_revoked") == "true":
+            continue
+        s = job_state(ctx.root, t)
+        if s is None or state.get(t["job_id"]) == s:
+            continue
+        at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+        st, _ = ctx.call("POST", "jobs/%s/status" % urllib.parse.quote(t["job_id"], safe=""),
+                         {"state": s, "hash": t["hash"], "at": at})
+        if st == 410:
+            mark_revoked(t)
+            drop_token(t["hash"])
+            continue
+        if st not in (200, 204):
+            log("status %s HTTP %s" % (t["hash"], st))
+            continue
+        state[t["job_id"]] = s
+        changed = True
+        if s in ("done", "failed"):
+            drop_token(t["hash"])
+    if changed:
+        os.makedirs(os.path.dirname(sp), exist_ok=True)
+        tmp = sp + ".tmp-%d" % os.getpid()
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(state, f, ensure_ascii=False)
+        os.replace(tmp, sp)
 
 
 def take_lock(lock):
@@ -157,6 +350,9 @@ def cmd_sync(root):
             os.rmdir(lock)
         except OSError:
             pass
+
+
+STEPS += [claim_jobs, report_status]
 
 
 # ---- connect / disconnect ----

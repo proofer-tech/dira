@@ -169,6 +169,112 @@ class T(Base, unittest.TestCase):
         with self.assertRaises(m.Unauthorized):
             m.http(self.fake.url, "GET", "ping", token="bad")
 
+    # ---- P478-3: 작업 잡기-상태 보고-작업 토큰 ----
+
+    def sync(self):
+        stamp = os.path.join(os.path.dirname(self.cred()), "last-sync")
+        if os.path.exists(stamp):
+            os.utime(stamp, (1, 1))  # 10초 간격을 건너뛴다
+        r = self.run_remote("sync", "--root", self.root)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r
+
+    def setup_jobs(self, jobs):
+        self.connect()
+        os.makedirs(os.path.join(self.root, "workers"), exist_ok=True)
+        for w in ("w1", "w2"):
+            open(os.path.join(self.root, "workers", w + ".sh"), "w").write("#!/bin/bash\n")
+        self.fake.routes[("POST", "jobs/claim")] = lambda b: (200, {"jobs": jobs.pop(0) if jobs else []})
+        self.fake.routes[("POST", "jobs/J1/status")] = (204, None)
+
+    def statuses(self, job="J1"):
+        return [c[2]["state"] for c in self.fake.calls if c[1] == "jobs/%s/status" % job]
+
+    def job(self):
+        return {"job_id": "J1", "title": "원고 쓰기", "persona": "writer", "priority": 2,
+                "duedate": "2026-12-01", "body": "## Goal\n\n써라\n", "job_token": "SECRET-JT",
+                "job_token_expires_at": "2027-01-01T00:00:00+00:00"}
+
+    def tickets(self):
+        return sorted(os.listdir(os.path.join(self.root, "tickets")))
+
+    def test_claim_creates_ticket_once_with_token_file(self):
+        self.setup_jobs([[self.job()], [self.job()]])
+        self.sync()
+        self.sync()  # 같은 job_id 를 다시 줘도 둘이 되지 않는다
+        names = self.tickets()
+        self.assertEqual(len(names), 1, names)
+        h = names[0][:-3]
+        self.assertRegex(h, r"^[0-9a-f]{8}$")
+        text = open(os.path.join(self.root, "tickets", names[0])).read()
+        for want in ("ticket: " + h, "kind: work", "persona: writer", "remote_job: J1", "duedate: 2026-12-01"):
+            self.assertIn(want, text)
+        self.assertIn("## Goal\n\n써라", text)
+        self.assertNotIn("SECRET-JT", text)
+        tok = os.path.join(self.home, ".config", "dira", "run", "remote-jobs", h + ".json")
+        self.assertEqual(stat.S_IMODE(os.stat(tok).st_mode), 0o600)
+        self.assertEqual(json.load(open(tok))["job_token"], "SECRET-JT")
+        claim = [c for c in self.fake.calls if c[1] == "jobs/claim"][0]
+        self.assertEqual(claim[2]["max"], 2)
+
+    def test_status_transitions_reported_once_and_token_removed(self):
+        self.setup_jobs([[self.job()]])
+        self.sync()
+        tdir = os.path.join(self.root, "tickets")
+        h = self.tickets()[0][:-3]
+        tok = os.path.join(self.home, ".config", "dira", "run", "remote-jobs", h + ".json")
+        self.sync()
+        self.assertEqual(self.statuses(), [])  # 아직 아무도 안 잡았다
+        os.rename(os.path.join(tdir, h + ".md"), os.path.join(tdir, h + ".wip.md"))
+        self.sync()
+        self.sync()
+        self.assertEqual(self.statuses(), ["running"])
+        self.assertTrue(os.path.exists(tok))
+        os.rename(os.path.join(tdir, h + ".wip.md"), os.path.join(tdir, h + ".done.md"))
+        self.sync()
+        self.sync()
+        self.assertEqual(self.statuses(), ["running", "done"])
+        self.assertFalse(os.path.exists(tok))
+        last = [c for c in self.fake.calls if c[1] == "jobs/J1/status"][-1][2]
+        self.assertEqual(last["hash"], h)
+        self.assertIn("at", last)
+
+    def test_failed_and_awaiting(self):
+        self.setup_jobs([[self.job()]])
+        self.sync()
+        tdir = os.path.join(self.root, "tickets")
+        h = self.tickets()[0][:-3]
+        p = os.path.join(tdir, h + ".wip.md")
+        os.rename(os.path.join(tdir, h + ".md"), p)
+        text = open(p).read()
+        open(p, "w").write(text.replace("remote_job: J1", "remote_job: J1\nawaiting: abcd1234"))
+        self.sync()
+        self.assertEqual(self.statuses(), ["awaiting"])
+        open(os.path.join(tdir, "abcd1234.done.md"), "w").write("x")
+        self.sync()
+        self.assertEqual(self.statuses(), ["awaiting", "running"])
+        open(p, "a").write("\n## 블록\n막힘\n")
+        self.sync()
+        self.assertEqual(self.statuses(), ["awaiting", "running", "failed"])
+        tok = os.path.join(self.home, ".config", "dira", "run", "remote-jobs", h + ".json")
+        self.assertFalse(os.path.exists(tok))
+
+    def test_410_marks_revoked_and_stops(self):
+        self.setup_jobs([[self.job()]])
+        self.sync()
+        tdir = os.path.join(self.root, "tickets")
+        h = self.tickets()[0][:-3]
+        os.rename(os.path.join(tdir, h + ".md"), os.path.join(tdir, h + ".wip.md"))
+        self.fake.routes[("POST", "jobs/J1/status")] = (410, None)
+        self.sync()
+        text = open(os.path.join(tdir, h + ".wip.md")).read()
+        self.assertIn("remote_revoked: true", text)
+        self.assertNotIn("## 블록", text)
+        self.sync()
+        os.rename(os.path.join(tdir, h + ".wip.md"), os.path.join(tdir, h + ".done.md"))
+        self.sync()
+        self.assertEqual(len(self.statuses()), 1)
+
 
 class Tools(Base, unittest.TestCase):
     """가짜 엔진 실행 파일과 가짜 시계로 런타임-로그인 점검-heartbeat를 본다."""
