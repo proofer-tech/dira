@@ -12,8 +12,9 @@ import { app, BrowserWindow, Menu, MenuItem, Notification, Tray, dialog, ipcMain
 // ESM 이름 가져오기가 `SyntaxError`로 죽는다. 기본 가져오기는 `module.exports` 그 자체다.
 import updater from "electron-updater";
 import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { accessSync, constants, cpSync, existsSync, readFileSync, rmSync, statSync, watchFile, writeFileSync } from "node:fs";
+import { accessSync, chmodSync, constants, cpSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, watchFile, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
+import { promisify } from "node:util";
 import { createEnvBridge } from "./env-bridge.ts";
 import { createVercelLink } from "./vercel-link.ts";
 import { createVercelSync } from "./vercel-sync.ts";
@@ -28,7 +29,7 @@ import { classifyLink } from "./link.ts";
 import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
 import { describeReadyTimeout, readyTimeoutHint, type ReadyTimeoutState } from "./ready-timeout.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
-import { mcpStoppedLabel, onMcpExit, removeMcpJson, writeMcpJson } from "./mcp-child.ts";
+import { mcpCronEdit } from "./mcp-install.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
  *  (package.json `build.extraResources`). 소스에서 돌 때는 `apps/teams` 옆이다. */
@@ -859,71 +860,45 @@ ipcMain.handle("dira:update-action", async (_e, action: unknown) => {
   }
 });
 
-// ── 엔진 MCP (P476-3) ─────────────────────────────────────────────────────
+// ── 엔진 MCP 감시 설치 (P480-2) ───────────────────────────────────────────
 
-/** 앱이 떠 있는 동안 HTTP MCP 서버(`mcp_server.py --http`)를 자식으로 띄운다. 토큰은 띄울 때마다 새로
- *  만들어 환경변수로만 넘기고(argv에 안 남는다) `run/mcp.json`(0600)에 적는다. 죽으면 1초 뒤 다시
- *  띄우고, 60초 안에 5번이면 멈춰 트레이에 다시 시작 항목을 띄운다(판정은 `mcp-child.ts`). */
-let mcpChild: ChildProcess | null = null;
-let mcpKilled: ChildProcess | null = null;
-let mcpHistory: number[] = [];
-let mcpStopped = false;
-const localDir = () => process.env.TICKET_LOCAL || join(homedir(), ".config", "dira");
-
-function mcpScript(): string | null {
-  // 패키징: userData/engine(extractEngine 복사본). 소스 실행: 레포 루트.
-  const f = app.isPackaged
-    ? join(app.getPath("userData"), "engine", "mcp_server.py")
-    : fileURLToPath(new URL("../../mcp_server.py", import.meta.url));
-  return existsSync(f) ? f : null;
-}
-
-async function startMcp() {
-  const script = mcpScript();
-  if (!script || quitting) return;
-  mcpStopped = false;
-  const token = randomBytes(32).toString("hex");
-  const port = await freePort();
-  const proc = spawn("python3", [script, "--http", `127.0.0.1:${port}`], {
-    env: { ...process.env, PATH: userPath(), DIRA_MCP_TOKEN: token },
-    stdio: ["ignore", "pipe", "inherit"],
-  });
-  mcpChild = proc;
-  let announced = false;
-  proc.stdout?.on("data", (b) => {
-    if (announced) return;
-    try {
-      const { url } = JSON.parse(b.toString().split("\n")[0]);
-      announced = true;
-      if (proc.pid) writeMcpJson(localDir(), { url, token, pid: proc.pid, started_at: new Date().toISOString() });
-    } catch {
-      // 준비 줄이 아니면 다음 청크를 본다.
-    }
-  });
-  proc.on("error", (e) => console.error(`[dira] MCP 서버를 못 띄웠습니다: ${e.message}`));
-  proc.on("exit", (code, signal) => {
-    if (proc.pid) removeMcpJson(localDir(), proc.pid);
-    if (mcpChild === proc) mcpChild = null;
-    if (mcpKilled === proc || quitting) return;
-    const r = onMcpExit(mcpHistory, Date.now());
-    mcpHistory = r.history;
-    console.log(`[dira] MCP 서버가 죽었습니다 (code ${code ?? signal ?? "?"}) - ${r.action === "stop" ? "멈춥니다" : "다시 띄웁니다"}`);
-    if (r.action === "stop") mcpStopped = true;
-    else setTimeout(() => void startMcp().catch(() => {}), r.delayMs);
-  });
-}
-
-function stopMcp() {
-  if (mcpChild && mcpChild.exitCode === null) {
-    mcpKilled = mcpChild;
-    mcpChild.kill("SIGTERM");
+/** MCP 서버는 앱이 아니라 cron이 상주시킨다(`mcp-keepalive.sh`). 앱은 켜질 때 스크립트를 맞추고 crontab에
+ *  그 줄을 하나로 두고 한 번 직접 돌릴 뿐이고, 닫혀도 서버와 `mcp.json`은 그대로다. 실패는 로그만 남긴다. */
+async function installMcpKeepalive() {
+  const home = homedir();
+  const dir = join(home, ".config", "dira", "mcp");
+  const dst = join(dir, "keepalive.sh");
+  const src = app.isPackaged
+    ? join(process.resourcesPath, "mcp-keepalive.sh")
+    : fileURLToPath(new URL("./mcp-keepalive.sh", import.meta.url));
+  const tick = app.isPackaged
+    ? join(app.getPath("userData"), "engine", "tick.sh")
+    : fileURLToPath(new URL("../../tick.sh", import.meta.url));
+  const body = readFileSync(src);
+  if (!existsSync(dst) || !readFileSync(dst).equals(body)) {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const tmp = `${dst}.${process.pid}.tmp`;
+    writeFileSync(tmp, body, { mode: 0o755 });
+    chmodSync(tmp, 0o755);
+    renameSync(tmp, dst);
   }
-  removeMcpJson(localDir());
-}
-
-function restartMcpByHand() {
-  mcpHistory = [];
-  void startMcp().catch(() => {});
+  const run = promisify(execFile);
+  let tab = "";
+  try {
+    tab = (await run("crontab", ["-l"], { timeout: 10_000 })).stdout;
+  } catch (e) {
+    const err = e as { stdout?: string; stderr?: string };
+    if (err.stdout || !/no crontab for/i.test(err.stderr ?? "")) throw e; // 못 읽으면 쓰지 않는다
+  }
+  const next = mcpCronEdit(tab, home, tick);
+  if (next !== null) {
+    // 쓰기는 macOS 권한 창(앱 관리)을 사람이 누를 때까지 기다린다 - workers.ts와 같은 상한
+    await new Promise<void>((resolve, reject) => {
+      const c = execFile("crontab", ["-"], { timeout: 120_000 }, (err) => (err ? reject(err) : resolve()));
+      c.stdin!.end(next);
+    });
+  }
+  await run(dst, [tick], { env: { ...process.env, PATH: userPath() }, timeout: 60_000 });
 }
 
 // ── N1 트레이 ──────────────────────────────────────────────────────────────
@@ -958,7 +933,6 @@ function trayMenu(): Menu {
       checked: !existsSync(autoUpdateFlag()),
       click: (item) => setAutoUpdate(item.checked),
     },
-    ...(mcpStopped ? [{ label: mcpStoppedLabel(app.getLocale()), click: restartMcpByHand }] : []),
     { type: "separator" },
     { label: "종료", click: () => app.quit() },
   ]);
@@ -1166,7 +1140,7 @@ async function boot() {
   readyOrigin = origin; // 여기부터 `second-instance`가 창을 열 수 있다
   win = openWindow(origin);
   createTray();
-  void startMcp().catch((e) => console.error(`[dira] MCP 서버를 못 띄웠습니다: ${(e as Error).message}`));
+  void installMcpKeepalive().catch((e) => console.error(`[dira] MCP 감시를 설치하지 못했습니다: ${(e as Error).message}`));
   app.on("activate", () => showWindow()); // 독 아이콘도 `열기`와 같은 자리로 간다
 
   // U2가 켜져 있으면(기본) 켤 때 한 번 검사해 받아둔다. await하지 않는다 — 네트워크가
@@ -1221,7 +1195,6 @@ if (!app.requestSingleInstanceLock()) {
 // ⌘Q · 트레이 `종료` · SIGTERM이 전부 여기로 모인다 — `quitting`이 창의 close 가로채기를 푼다.
 app.on("before-quit", () => {
   quitting = true;
-  stopMcp();
   killServer();
 });
 // 네 번째 경로 — 내장 autoUpdater의 quitAndInstall()은 macOS에서 창을 먼저 닫고 이 이벤트를
@@ -1229,7 +1202,6 @@ app.on("before-quit", () => {
 // quitting도 거짓인 채라 close 가로채기(N1)가 창을 숨겨 앱이 안 죽는다.
 app.on("before-quit-for-update", () => {
   quitting = true;
-  stopMcp();
   killServer();
 });
 // 트레이가 있으면 창이 없어도 앱이 아니다 (N1). 실패 화면은 트레이가 없어서 그대로 끝난다.
@@ -1237,7 +1209,6 @@ app.on("window-all-closed", () => {
   if (!tray) app.quit();
 });
 process.on("exit", () => {
-  stopMcp();
   killServer();
 });
 for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => app.quit());
