@@ -17,7 +17,7 @@ const b = s.indexOf("\nconst FLAT", a);
 assert.ok(a >= 0 && b > a, "page.tsx: 사이드바 구간을 못 찾았다");
 const tokens = [...s.slice(a, b).matchAll(/\b(textKey|link): "([^"]*)"/g)].map((m) => [m[1], m[2]]);
 
-test("사이드바 링크 28개가 `docs/*.md`와 한 장도 안 어긋난다", () => {
+test("사이드바 링크 29개가 `docs/*.md`와 한 장도 안 어긋난다", () => {
   const linked = tokens.filter(([k]) => k === "link").map(([, v]) => v);
   const files = readdirSync("docs")
     .filter((f) => f.endsWith(".md") && f !== "index.md")
@@ -25,13 +25,13 @@ test("사이드바 링크 28개가 `docs/*.md`와 한 장도 안 어긋난다", 
   assert.deepEqual([...linked].sort(), files.sort());
 });
 
-test("그룹 6 + 링크 28 = 34항목", () => {
+test("그룹 6 + 링크 29 = 35항목", () => {
   // `link`가 없는 `textKey`가 그룹 라벨이다 — 6묶음이 §갈아 끼우는 것의 계약이다.
-  assert.equal(tokens.filter(([k]) => k === "link").length, 28);
-  assert.equal(tokens.filter(([k]) => k === "textKey").length, 34);
+  assert.equal(tokens.filter(([k]) => k === "link").length, 29);
+  assert.equal(tokens.filter(([k]) => k === "textKey").length, 35);
 });
 
-test("사이드바 textKey 34개가 전부 `lib/i18n.ts`의 `ko` 사전에 있다", async () => {
+test("사이드바 textKey 35개가 전부 `lib/i18n.ts`의 `ko` 사전에 있다", async () => {
   const { ko } = await import("./lib/i18n.ts");
   const keys = tokens.filter(([k]) => k === "textKey").map(([, v]) => v);
   const missing = keys.filter((k) => !(k in ko));

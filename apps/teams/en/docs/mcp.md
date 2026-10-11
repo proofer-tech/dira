@@ -115,4 +115,4 @@ stdio runs whether or not the app is up. If you close the app often or use the e
 with stdio. The `env_*` tools are the exception: like `dira env` in [CLI](/docs/ref-cli), they need
 the app running to read or write values.
 
-Next is [Troubleshooting](/docs/troubleshooting).
+Next is [Remote queue](/docs/remote).

@@ -130,4 +130,17 @@ dira env run --keys TEST_API_TOKEN,TEST_DB_URL -- python3 scripts/smoke.py --tar
 직접 부르기보다 MCP 클라이언트 설정에 `{"command":"dira","args":["mcp"]}`로 넣어 클라이언트가
 띄우게 합니다. 쓸 수 있는 도구와 HTTP로 붙이는 법은 [엔진 MCP](/docs/mcp)에 있습니다.
 
+## `dira remote` - 웹 서비스 워크스페이스에 연결하기
+
+> 2026-10-11 현재 이 명령은 아직 구현 중입니다.
+
+| 명령 | 뜻 |
+|---|---|
+| `dira remote connect <server> --root <큐 루트>` | 확인 코드로 그 프로젝트를 워크스페이스에 연결합니다. 런타임을 등록하고, 워커가 없으면 `workers/w1.sh`와 crontab 두 줄을 만듭니다. 코드가 만료되면 rc 1, 이미 다른 워크스페이스에 연결된 프로젝트면 rc 2 |
+| `dira remote disconnect --root <큐 루트>` | 서버에 해제를 알리고 `remote.json`과 그 워크스페이스의 자격 증명을 지웁니다. crontab 줄은 그대로 둡니다 |
+| `dira remote sync --root <큐 루트>` | 서버와 한 번 주고받습니다. 워커가 매번 티켓을 고르기 전에 부르므로 손으로 부를 일은 드뭅니다. `remote.json`이 없으면 아무것도 안 하고 rc 0, 직전 sync 뒤 10초가 안 지났으면 바로 끝납니다 |
+
+무엇이 서버로 가고 무엇이 안 가는지, 웹에서 누른 작업이 늦게 시작하는 이유는
+[원격 큐](/docs/remote)에 있습니다.
+
 다음은 [frontmatter 필드](/docs/ref-frontmatter)입니다.

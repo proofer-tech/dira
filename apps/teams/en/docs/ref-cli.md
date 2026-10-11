@@ -135,4 +135,17 @@ storage is in the table of the `Project environment variables` section of [Scree
 You rarely run it by hand. Put `{"command":"dira","args":["mcp"]}` in your MCP client's config and let
 the client start it. The tools it offers and how to connect over HTTP are in [Engine MCP](/docs/mcp).
 
+## `dira remote` - connecting to a web service workspace
+
+> As of 2026-10-11 this command is still being built.
+
+| Command | Meaning |
+|---|---|
+| `dira remote connect <server> --root <queue root>` | Connects that project to a workspace with a confirmation code. Registers the runtime and, if the queue has no worker, creates `workers/w1.sh` and the two crontab lines. rc 1 if the code expires, rc 2 if the project is already connected to another workspace |
+| `dira remote disconnect --root <queue root>` | Tells the server you are leaving and deletes `remote.json` and that workspace's credentials. Leaves the crontab lines alone |
+| `dira remote sync --root <queue root>` | Exchanges one round with the server. Workers call it before every ticket pick, so you rarely run it by hand. Does nothing and exits rc 0 without `remote.json`; exits at once if the last sync was under 10 seconds ago |
+
+What goes to the server and what does not, and why a job from the web starts late, are in
+[Remote queue](/docs/remote).
+
 Next is [frontmatter fields](/docs/ref-frontmatter).

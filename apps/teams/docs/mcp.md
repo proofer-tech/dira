@@ -111,4 +111,4 @@ MCP를 거쳐도 큐 규칙은 그대로입니다. 티켓을 가져가는(claim)
 stdio는 앱과 상관없이 돕니다. 앱을 자주 끄거나 엔진만 쓴다면 stdio로 붙이세요. 단 `env_*` 도구는
 [CLI](/docs/ref-cli)의 `dira env`처럼 앱이 떠 있어야 값을 읽고 씁니다.
 
-다음은 [트러블슈팅](/docs/troubleshooting)입니다.
+다음은 [원격 큐](/docs/remote)입니다.

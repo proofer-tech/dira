@@ -38,6 +38,7 @@ New here? Read the four below in order. By the time you finish them, dira is alr
 - [Epics](/docs/epics)
 - [Authentication](/docs/auth)
 - [Engine MCP](/docs/mcp)
+- [Remote queue](/docs/remote)
 
 ## Operating
 
