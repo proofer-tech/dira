@@ -45,17 +45,44 @@ Each line has a filename and a reason, and the reason is one of two.
 
 | Reason | What is wrong with the file |
 |---|---|
-| No frontmatter: the board and the engine do not read this file as a ticket | There is no header wrapped in `---` at the top ([frontmatter](/docs/ref-frontmatter)). It shows up as no card and no worker claims it |
-| The same hash is in two states: the engine sees only one | Files for one hash exist in two states, like `x.md` next to `x.wip.md` |
+| `no frontmatter - the board and engine do not read this file as a ticket` | There is no header wrapped in `---` at the top ([frontmatter](/docs/ref-frontmatter)). It shows up as no card and no worker claims it |
+| `same hash in two states - the engine sees only one` | Files for one hash exist in two states, like `x.md` next to `x.wip.md` |
 
-There is no button that fixes it. Which file is the real one is a call a person has to make.
+At the right end of the warning's title line there is one button, `Create cleanup ticket`. There
+are two ways to clean up. Press the button and hand the job to a session in a cleanup ticket, or
+fix the files by hand. The button suits the case where the rules below pick the right file; fix by
+hand when you want to decide yourself which file stays.
 
 **Cause**: the common case is an append to the old path of an in-progress ticket. A worker
 claims `<hash>.md` and it becomes `<hash>.wip.md`. If someone then appends a section to
 `<hash>.md` with a shell command, a new `<hash>.md` with no frontmatter appears. What was written
 there never reaches the running session.
 
-**Cleanup**: fix the files by hand.
+**Cleanup with the button**: press `Create cleanup ticket` and one ticket titled
+`티켓 파일 이상 <n>건 정리` goes to pm, and the screen moves to that ticket. Back on the board, a link
+`Cleanup ticket <hash> <status>` sits where the button was; follow it to see how the cleanup is
+going. While the cleanup ticket is unfinished, pressing the button twice or from another tab makes
+no new ticket. It takes you to the one that already exists.
+
+The cleanup ticket covers every problem listed at the moment you pressed, and handles each reason
+like this.
+
+| Reason | What the cleanup ticket does |
+|---|---|
+| no frontmatter | If another file has the same hash, it appends this file's content to the end of that file as a `## 고아 파일에서 옮김` section and deletes this file. If there is no other file, it reads the body and rebuilds the header. Values it cannot tell are filled with `kind: work` and `persona: pm`, and the filename (the state) stays as it is |
+| same hash in two states | It keeps one file as the real one, in the order `.done`, `.wip`, no suffix. Whatever only the other files hold is appended to the end of the real one as a `## 고아 파일에서 옮김` section, and the other files are deleted. Even if the real one is in progress, it sends the running session no interject and only writes it into the body |
+
+When the cleanup ticket is done, the files it listed leave the warning. Problems that appeared
+after the ticket was created are not its job. So if the warning is still there once the cleanup
+ticket is done, the button comes back, and pressing it creates a new cleanup ticket for what is
+left. If creating the ticket fails, `Couldn't create the cleanup ticket` and the reason appear to
+the left of the button. If every problem went away before the press landed, the reason is
+`No ticket file problems` and no ticket is made.
+
+The ticket's title and body are in Korean whatever the screen language is, because tickets are
+work output.
+
+**Cleanup by hand**: fix the files yourself.
 
 1. Look at every file for that hash. A state only moves forward, Open to In progress to Done, so
    the file whose suffix has gone further (`.done` over `.wip`, `.wip` over no suffix) is usually
