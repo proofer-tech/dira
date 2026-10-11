@@ -101,7 +101,9 @@ test("listCheckouts — 워크트리가 0개인 레포에서도 루트 하나는
 
 test("listCheckouts — 워크트리를 더하면 둘째 줄로 뜨고 id가 디렉터리 이름이다", async () => {
   const repo = makeRepo();
-  const wt = path.join(repo, "..", "wt1");
+  const wtBase = mkdtempSync(path.join(tmpdir(), "scm-wt-"));
+  tmps.push(wtBase);
+  const wt = path.join(wtBase, "wt1");
   execFileSync("git", ["-C", repo, "worktree", "add", "-b", "feature", wt], { encoding: "utf8" });
   tmps.push(wt);
   const list = await listCheckouts(repo);
@@ -279,7 +281,9 @@ test("pushCheckout — 루트는 git push다", async () => {
 
 test("pushCheckout — 워크트리는 .dira/push.sh를 인자 없이 부른다", async () => {
   const repo = makeRepo();
-  const wt = path.join(repo, "..", "wt-push");
+  const wtBase = mkdtempSync(path.join(tmpdir(), "scm-wt-"));
+  tmps.push(wtBase);
+  const wt = path.join(wtBase, "wt-push");
   execFileSync("git", ["-C", repo, "worktree", "add", "-b", "feature", wt], { encoding: "utf8" });
   tmps.push(wt);
   mkdirSync(path.join(wt, ".dira"));
