@@ -1962,6 +1962,8 @@ export const ko: Record<string, string> = {
   // §5-3 §편집 표면이 있는 화면 §결정 3 — `_ontology/SCHEMA.md`도 `objects/`도
   // 없는 폴더를 가리켰을 때. 지표-검사 표 대신 이 한 장이 뜬다.
   "ontology.notDira.title": "dira 형식이 아닙니다",
+  "ontology.object.cites": "인용한 속성 값",
+  "ontology.object.noValue": "(값 없음)",
   "ontology.notDira.body":
     "_ontology/SCHEMA.md도 objects/도 없습니다 — 아직 이 폴더를 dira 형식으로 옮기지 않은 것뿐입니다. 설정의 가져올 폴더로 옮겨오세요.",
   // 티켓 cd662a73이 만들고 c5d51522가 온톨로지 화면으로 옮긴 폼 — 화면에서 TICKET_ONTOLOGY를
@@ -4523,6 +4525,8 @@ export const en: Record<string, string> = {
   "appLayout.description": "Control room for a filesystem ticket queue",
 
   "ontology.notDira.title": "Not dira format",
+  "ontology.object.cites": "Cited property values",
+  "ontology.object.noValue": "(no value)",
   "ontology.notDira.body":
     "No _ontology/SCHEMA.md or objects/ here — this folder just hasn't been moved into dira format yet. Use the folder-to-import field in Settings to bring it in.",
 

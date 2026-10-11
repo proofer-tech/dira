@@ -21,8 +21,62 @@ import { DEFAULT_LOCALE, t, wrap, type Locale } from "./i18n.ts";
  *  안 읽히게. */
 export function isDiraFormat(tree: { rel: string; isDir: boolean }[]): boolean {
   const hasSchema = tree.some((e) => !e.isDir && e.rel === "_ontology/SCHEMA.md");
+  // `versions/`(O3)는 objects/ 밖이라 여기서 세지 않는다 - 그것만 있는 폴더는 형식이 아니다.
   const hasObjects = tree.some((e) => e.rel === "objects" || e.rel.startsWith("objects/"));
   return hasSchema || hasObjects;
+}
+
+/** 첫 번째 `---` 블록의 평평한 `키: 값` 하나. 따옴표는 벗긴다. */
+export function fmScalar(text: string, key: string): string | undefined {
+  const lines = text.split("\n");
+  if (lines[0]?.trim() !== "---") return undefined;
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === "---") return undefined;
+    const m = lines[i].match(/^([^\s:][^:]*):\s*(.*)$/);
+    if (m && m[1].trim() === key) {
+      const v = m[2].trim().replace(/^(["'])(.*)\1$/, "$2");
+      return v || undefined;
+    }
+  }
+  return undefined;
+}
+
+/** `관계 인용한다`의 링크 속성 `property`(P478 O6) - `links:` 아래 항목 줄 밑의 `property: <속성>`. */
+export function parseCitations(text: string): { target: string; property: string }[] {
+  const out: { target: string; property: string }[] = [];
+  const lines = text.split("\n");
+  if (lines[0]?.trim() !== "---") return out;
+  let inLinks = false;
+  let inCite = false;
+  let target: string | null = null;
+  for (let i = 1; i < lines.length; i++) {
+    const raw = lines[i];
+    if (raw.trim() === "---") break;
+    if (!raw.trim()) continue;
+    const indent = raw.length - raw.trimStart().length;
+    const line = raw.trim();
+    if (indent === 0) {
+      inLinks = line.startsWith("links:");
+      inCite = false;
+    } else if (inLinks && !line.startsWith("-") && indent <= 2) {
+      inCite = line.startsWith("인용한다:");
+    } else if (inLinks && inCite && line.startsWith("-")) {
+      target = line.match(WIKILINK_ANY)?.[1].trim() ?? null;
+    } else if (inLinks && inCite && target) {
+      const m = line.match(/^property:\s*(.+)$/);
+      if (m) out.push({ target, property: m[1].trim().replace(/^(["'])(.*)\1$/, "$2") });
+    }
+  }
+  return out;
+}
+
+/** 타입 정의 파일 fm에 `body: document`가 있는 타입 이름들(O2) - 그 타입의 객체는 본문에 `##` 절을 쓸 수 있다. */
+function documentTypes(typeFiles: ObjectInput[]): Set<string> {
+  return new Set(
+    typeFiles
+      .filter((f) => fmScalar(f.text, "body") === "document")
+      .map((f) => f.rel.split("/").pop()?.replace(/\.md$/, "") ?? ""),
+  );
 }
 
 const NORMATIVE = /(해야 한다|하는 게 낫다|하지 않는다|하지 말|권장한다|바람직하다|해야만|짚고 넘어가)/;
@@ -439,6 +493,7 @@ function checkViewLinks(views: ObjectInput[], knownNames: Set<string>, locale: L
 export function computeOntologyMetrics(input: OntologyInput, locale: Locale = DEFAULT_LOCALE): OntologyMetrics {
   const { types, relTypes } = parseSchema(input.schemaText);
   const required = parseRequiredProps(input.typeFiles ?? []);
+  const docTypes = documentTypes(input.typeFiles ?? []);
 
   const parsed = input.objects
     .map((o) => ({ rel: o.rel, ...typeAndName(o.rel), ...parseObject(o.text) }))
@@ -472,7 +527,7 @@ export function computeOntologyMetrics(input: OntologyInput, locale: Locale = DE
         `${t(locale, "ontology.violation.unknownTypePrefix")} ${p.rel} ${t(locale, "ontology.violation.unknownTypeMiddle")}${p.type}${t(locale, "ontology.violation.unknownTypeSuffix")}`,
       );
     }
-    if (p.hasSection) violations.push(wrap(t(locale, "ontology.violation.sectionUsed"), p.rel, ""));
+    if (p.hasSection && !docTypes.has(p.type)) violations.push(wrap(t(locale, "ontology.violation.sectionUsed"), p.rel, ""));
 
     const relTargets = new Set<string>();
     for (const [rname, target] of p.rels) {

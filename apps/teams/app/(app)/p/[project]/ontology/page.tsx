@@ -33,7 +33,7 @@ import { statusLabel } from "@/components/status-badge";
 import { t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
-import { isDiraFormat, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
+import { fmScalar, isDiraFormat, parseCitations, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
 import { loadMetrics, loadOntologyGraph } from "@/lib/ontology-load";
 import { OntologyMap } from "@/components/ontology-map";
 import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
@@ -158,6 +158,18 @@ export default async function Ontology({
     }
   }
 
+  // O7 - 객체 파일에 `title`이 있으면 목록과 머리가 이름 대신 그것을 보인다.
+  // ponytail: 객체 전부를 렌더마다 읽는다. 객체 수천 건 되면 mtime 캐시.
+  const objectRels = tree.filter((e) => !e.isDir && e.rel.startsWith("objects/") && e.rel.endsWith(".md"));
+  const objectTexts = new Map(
+    await Promise.all(objectRels.map(async (e) => [e.rel, (await readTextFile(base, e.rel).catch(() => null))?.text ?? ""] as const)),
+  );
+  const titles = new Map<string, string>();
+  for (const [rel, text] of objectTexts) {
+    const title = fmScalar(text, "title");
+    if (title) titles.set(rel, title);
+  }
+
   // `file`은 사용자 입력이다 — 서버에서 기준 디렉터리 안인지 확인한다. 밖이면 404가 아니라
   // 거부 사유를 그대로 보여준다(§6 에러 3요소).
   let selected: ProtocolFile | null = null;
@@ -247,7 +259,7 @@ export default async function Ontology({
                 {expanded && (
                   <SidebarMenu className="gap-0.5">
                     {nestTree(tree, selected?.rel).map((e) => (
-                      <TreeRow key={e.rel} entry={e} projectId={id} selectedRel={selected?.rel} sidebarQuery={sidebarQuery} />
+                      <TreeRow key={e.rel} entry={e} projectId={id} selectedRel={selected?.rel} sidebarQuery={sidebarQuery} titles={titles} />
                     ))}
                   </SidebarMenu>
                 )}
@@ -279,6 +291,17 @@ export default async function Ontology({
                 <AlertDescription>{selected.reason}</AlertDescription>
               </Alert>
             ) : (
+              <>
+                {selected.rel.startsWith("objects/") && (
+                  <ObjectHead
+                    rel={selected.rel}
+                    text={selected.text}
+                    title={titles.get(selected.rel)}
+                    vault={vault}
+                    base={base}
+                    locale={locale}
+                  />
+                )}
               <OntologyEditor
                 key={selected.rel}
                 projectId={id}
@@ -288,9 +311,52 @@ export default async function Ontology({
                 vault={vault}
                 candidates={candidates}
               />
+              </>
             )}
           </div>
         </SidebarProvider>
+      )}
+    </div>
+  );
+}
+
+/** 객체 화면 머리(O6-O7) - `title`(없으면 이름)과, `property`가 붙은 `인용한다` 대상의 그 속성 값. */
+async function ObjectHead({
+  rel,
+  text,
+  title,
+  vault,
+  base,
+  locale,
+}: {
+  rel: string;
+  text: string;
+  title: string | undefined;
+  vault: Record<string, string>;
+  base: string;
+  locale: Locale;
+}) {
+  const name = rel.split("/").pop()!.replace(/\.md$/, "");
+  const cites = await Promise.all(
+    parseCitations(text).map(async ({ target, property }) => {
+      const href = vault[target.replace(/\.md$/, "")];
+      const targetRel = href ? decodeURIComponent(href.split("file=")[1] ?? "") : "";
+      const targetText = targetRel ? ((await readTextFile(base, targetRel).catch(() => null))?.text ?? "") : "";
+      return { target, property, value: fmScalar(targetText, property) };
+    }),
+  );
+  return (
+    <div className="mb-3 space-y-1">
+      <h2 className="text-base font-semibold">{title ?? name}</h2>
+      {title && <div className="font-mono text-xs text-muted-foreground">{name}</div>}
+      {cites.length > 0 && (
+        <ul className="text-xs text-muted-foreground" aria-label={t(locale, "ontology.object.cites")}>
+          {cites.map((c, i) => (
+            <li key={i}>
+              {c.target} . {c.property}: {c.value ?? t(locale, "ontology.object.noValue")}
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -308,7 +374,9 @@ function TreeRow({
   projectId,
   selectedRel,
   sidebarQuery,
+  titles,
 }: {
+  titles: Map<string, string>;
   entry: NestedEntry;
   projectId: string;
   selectedRel: string | undefined;
@@ -328,7 +396,7 @@ function TreeRow({
           style={style}
         >
           <FileText aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
-          <span className="font-mono break-all">{e.name}</span>
+          <span className="font-mono break-all">{titles.get(e.rel) ?? e.name}</span>
         </SidebarMenuButton>
       </SidebarMenuItem>
     );
@@ -348,7 +416,7 @@ function TreeRow({
         </SidebarMenuButton>
         <SidebarMenu className="gap-0.5">
           {e.children.map((c) => (
-            <TreeRow key={c.rel} entry={c} projectId={projectId} selectedRel={selectedRel} sidebarQuery={sidebarQuery} />
+            <TreeRow key={c.rel} entry={c} projectId={projectId} selectedRel={selectedRel} sidebarQuery={sidebarQuery} titles={titles} />
           ))}
         </SidebarMenu>
       </details>

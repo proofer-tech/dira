@@ -3,7 +3,7 @@
  *  fs를 import하지 않는다. 호출자(서버 페이지)가 트리와 `.md` 본문을 읽어 넘기고, 여기는
  *  노드·간선·범례 문자열만 만든다. 관계 줄 판정은 `parseObject`, 이름 해석은 `buildVault`를
  *  그대로 쓴다 — 두 번째 파서·해석기는 없다. */
-import { isDiraFormat, parseObject } from "./ontology.ts";
+import { fmScalar, isDiraFormat, parseObject } from "./ontology.ts";
 import { buildVault } from "./markdown-wikilinks.ts";
 
 export type GraphNodeKind = "object" | "doc" | "note" | "plain";
@@ -45,21 +45,6 @@ export type OntologyGraph = {
   };
 };
 export type GraphFile = { rel: string; text: string };
-
-/** 첫 번째 `---` 블록의 평평한 `키: 값` 하나. 따옴표는 벗긴다. */
-function fmScalar(text: string, key: string): string | undefined {
-  const lines = text.split("\n");
-  if (lines[0]?.trim() !== "---") return undefined;
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === "---") return undefined;
-    const m = lines[i].match(/^([^\s:][^:]*):\s*(.*)$/);
-    if (m && m[1].trim() === key) {
-      const v = m[2].trim().replace(/^(["'])(.*)\1$/, "$2");
-      return v || undefined;
-    }
-  }
-  return undefined;
-}
 
 function stripFm(text: string): string[] {
   const lines = text.split("\n");
@@ -132,7 +117,7 @@ export function buildOntologyGraph(input: { tree: { rel: string; isDir: boolean 
     let type: string | undefined;
     if (dira) {
       const seg = rel.split("/");
-      if (rel.startsWith("_ontology/") || rel.startsWith("action-log/")) continue;
+      if (rel.startsWith("_ontology/") || rel.startsWith("action-log/") || rel.startsWith("versions/")) continue;
       if (seg[0] === "objects" && seg.length >= 3) {
         kind = "object";
         type = seg[1];
@@ -143,7 +128,7 @@ export function buildOntologyGraph(input: { tree: { rel: string; isDir: boolean 
     nodes.push({
       id: nodes.length,
       file: rel,
-      label: (kind === "object" && fmScalar(text, "name")) || base,
+      label: (kind === "object" && (fmScalar(text, "title") || fmScalar(text, "name"))) || base,
       kind,
       type,
       description: kind === "plain" ? undefined : fmScalar(text, "description"),
