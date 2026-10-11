@@ -740,7 +740,7 @@ export default function Landing({
       <ul className="marks">
         <li>{t("landing.plan.freeItem1")}</li>
         <li>{t("landing.plan.freeItem2")} <span className="soon">{t("landing.plan.soon")}</span></li>
-        <li>{t("landing.plan.freeItem3")} <span className="soon">{t("landing.plan.soon")}</span></li>
+        <li>{t("landing.plan.freeItem3")}</li>
       </ul>
       <p>{t("landing.plan.freeBody")}</p>
       {/* 헤더의 별 버튼과 같은 마크업이다(DESIGN §별 버튼을 우리 버튼으로 §값). */}
