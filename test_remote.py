@@ -79,6 +79,7 @@ class Base:
 
     def run_remote(self, *args):
         env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron)
+        env.pop("TICKET_ONTOLOGY", None)
         return subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), *args],
                               capture_output=True, text=True, env=env, timeout=30)
 
@@ -357,6 +358,87 @@ class Tools(Base, unittest.TestCase):
         self.assertEqual(self.logins(), 5)
         self.run_remote("sync", "--root", self.root)  # 일반 sync도 점검을 늘리지 않는다
         self.assertEqual(self.logins(), 5)
+
+    # ---- 온톨로지 올리기-원격 쓰기 ----
+    def ont_setup(self):
+        self.connect()
+        self.ont = os.path.join(self.root, "ontology")
+        os.makedirs(os.path.join(self.ont, "objects", "t"))
+        self.puts = []
+        self.fake.routes[("PUT", "objects")] = lambda b: (self.puts.append(b) or (204, None))
+        self.stamp = os.path.join(os.path.dirname(self.cred()), "last-sync")
+
+    def osync(self):
+        if os.path.exists(self.stamp):
+            os.utime(self.stamp, (1, 1))
+        r = self.run_remote("sync", "--root", self.root)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("Error", r.stdout)
+
+    def test_push_changed_and_deleted_and_batch(self):
+        self.ont_setup()
+        for i in range(201):
+            open(os.path.join(self.ont, "objects", "t", "o%03d.md" % i), "w").write("a%d" % i)
+        self.osync()
+        self.assertEqual(len(self.puts[0]["changes"]), 200)
+        self.osync()
+        self.assertEqual(len(self.puts[1]["changes"]), 1)
+        self.osync()
+        self.assertEqual(len(self.puts), 2)
+        open(os.path.join(self.ont, "objects", "t", "o000.md"), "w").write("edited")
+        self.osync()
+        self.assertEqual([c["path"] for c in self.puts[2]["changes"]], ["objects/t/o000.md"])
+        self.assertEqual(self.puts[2]["changes"][0]["content"], "edited")
+        os.unlink(os.path.join(self.ont, "objects", "t", "o000.md"))
+        self.osync()
+        self.assertEqual(self.puts[3]["changes"], [{"path": "objects/t/o000.md", "deleted": True}])
+
+    def write_op(self, writes):
+        self.posts = {}
+        self.fake.routes[("GET", "writes?runtime_id=rt1")] = (200, {"writes": writes})
+        for w in writes:
+            self.fake.routes[("POST", "writes/" + w["op_id"])] = \
+                (lambda b, o=w["op_id"]: (self.posts.__setitem__(o, b) or (204, None)))
+        self.osync()
+
+    def actionlog(self):
+        d = os.path.join(self.ont, "action-log")
+        return "".join(open(os.path.join(d, n)).read() for n in os.listdir(d)) if os.path.isdir(d) else ""
+
+    def test_remote_write_apply_and_conflict(self):
+        self.ont_setup()
+        f = os.path.join(self.ont, "objects", "t", "n1.md")
+        self.write_op([{"op_id": "op1", "path": "objects/t/n1.md", "base_sha256": None, "content": "v1"}])
+        self.assertEqual(self.posts["op1"], {"result": "applied"})
+        self.assertEqual(open(f).read(), "v1")
+        self.assertRegex(self.actionlog(), r"- \d\d:\d\d 새객체: n1 - 원격 편집 \(op op1\)\n")
+        import hashlib
+        h = hashlib.sha256(b"v1").hexdigest()
+        self.write_op([{"op_id": "op2", "path": "objects/t/n1.md", "base_sha256": h, "content": "v2"}])
+        self.assertEqual(open(f).read(), "v2")
+        self.assertIn("값갱신: n1 - 원격 편집 (op op2)", self.actionlog())
+        self.write_op([{"op_id": "op3", "path": "objects/t/n1.md", "base_sha256": h, "content": "v3"}])
+        self.assertEqual(self.posts["op3"]["result"], "conflict")
+        self.assertEqual(open(f).read(), "v2")
+        self.assertNotIn("op op3", self.actionlog())
+        self.write_op([{"op_id": "op4", "path": "objects/t/n1.md", "base_sha256": None, "content": "v4"}])
+        self.assertEqual(self.posts["op4"]["result"], "conflict")
+
+    def test_remote_write_rejects_escape(self):
+        self.ont_setup()
+        outside = os.path.join(self.tmp.name, "outside")
+        os.makedirs(outside)
+        os.symlink(outside, os.path.join(self.ont, "objects", "link"))
+        os.symlink(os.path.join(outside, "x.md"), os.path.join(self.ont, "objects", "t", "sl.md"))
+        bad = ["../x.md", "objects/../x.md", "/etc/x.md", "objects/link/x.md", "objects/t/sl.md",
+               "SCHEMA.md", "objects/t/x.txt", "action-log/x.md"]
+        self.write_op([{"op_id": "b%d" % i, "path": p, "base_sha256": None, "content": "z"}
+                       for i, p in enumerate(bad)])
+        for i in range(len(bad)):
+            self.assertEqual(self.posts["b%d" % i]["result"], "conflict", bad[i])
+        self.assertEqual(os.listdir(outside), [])
+        self.assertFalse(os.path.exists(os.path.join(self.ont, "x.md")))
+        self.assertEqual(self.actionlog(), "")
 
 
 if __name__ == "__main__":

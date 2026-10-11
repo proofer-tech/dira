@@ -5,6 +5,7 @@
 """
 import argparse
 import datetime
+import hashlib
 import json
 import datetime
 import os
@@ -98,6 +99,141 @@ class Ctx:
 
     def call(self, method, path, body=None):
         return http(self.server, method, path, body, self.token)
+
+
+
+# ---- 온톨로지 올리기(O4)와 원격 쓰기(O5) ----
+
+PUSH_MAX = 200
+SUBDIRS = ("objects", "versions")
+
+
+def ont_root(root):
+    return os.path.abspath(os.environ.get("TICKET_ONTOLOGY") or os.path.join(root, "ontology"))
+
+
+def sha_of(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def scan_ontology(ont):
+    """{ont 상대경로: sha256}. 심링크는 따라가지 않는다."""
+    out = {}
+    for sub in SUBDIRS:
+        for d, dirs, files in os.walk(os.path.join(ont, sub)):
+            dirs[:] = [x for x in dirs if not os.path.islink(os.path.join(d, x))]
+            for n in files:
+                f = os.path.join(d, n)
+                if n.endswith(".md") and not os.path.islink(f):
+                    with open(f, "rb") as fh:
+                        out[os.path.relpath(f, ont).replace(os.sep, "/")] = sha_of(fh.read())
+    return out
+
+
+def ontology_push(ctx):
+    ont = ont_root(ctx.root)
+    mpath = os.path.join(ws_dir(ctx.ws), "manifest.json")
+    old = read_json(mpath) or {}
+    now = scan_ontology(ont)
+    todo = [p for p in sorted(now) if old.get(p) != now[p]] + [p for p in sorted(old) if p not in now]
+    todo = todo[:PUSH_MAX]  # ponytail: 한 번에 200건. 남은 것은 다음 sync가 올린다
+    if not todo:
+        return
+    changes = []
+    for p in todo:
+        if p in now:
+            with open(os.path.join(ont, p), "rb") as f:
+                data = f.read()
+            changes.append({"path": p, "sha256": sha_of(data), "content": data.decode("utf-8", "replace")})
+        else:
+            changes.append({"path": p, "deleted": True})
+    st, _ = ctx.call("PUT", "objects", {"changes": changes})
+    if st not in (200, 204):
+        log("objects HTTP %s" % st)
+        return
+    for p in todo:
+        if p in now:
+            old[p] = now[p]
+        else:
+            old.pop(p, None)
+    write_json(mpath, old)
+
+
+def safe_target(ont, rel):
+    """objects/-versions/ 안의 .md 절대경로. 밖이면 None(.. 절대경로 심링크 포함)."""
+    if not isinstance(rel, str) or not rel or "\0" in rel or os.path.isabs(rel):
+        return None
+    parts = rel.split("/")
+    if parts[0] not in SUBDIRS or len(parts) < 2 or any(x in ("", ".", "..") for x in parts) \
+            or not rel.endswith(".md"):
+        return None
+    base = os.path.realpath(os.path.join(ont, parts[0]))
+    path = os.path.join(ont, *parts)
+    if os.path.islink(path):
+        return None
+    # 아직 없는 중간 폴더까지 따져 가장 깊은 기존 조상을 확인한다
+    anc = os.path.dirname(path)
+    while not os.path.exists(anc):
+        anc = os.path.dirname(anc)
+    r = os.path.realpath(anc)
+    return path if r == base or r.startswith(base + os.sep) else None
+
+
+def log_action(ont, action, name, op_id):
+    d = os.path.join(ont, "action-log")
+    os.makedirs(d, exist_ok=True)
+    t = time.localtime()
+    line = "- %s %s: %s - 원격 편집 (op %s)\n" % (time.strftime("%H:%M", t), action, name, op_id)
+    fd = os.open(os.path.join(d, time.strftime("%Y-%m-%d", t) + ".md"), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    try:
+        os.write(fd, line.encode("utf-8"))  # O_APPEND 한 번
+    finally:
+        os.close(fd)
+
+
+def apply_write(ont, w):
+    """('applied', None) 또는 ('conflict', 지금 sha256 또는 None)."""
+    path = safe_target(ont, w.get("path"))
+    if not path:
+        return "conflict", None
+    try:
+        with open(path, "rb") as f:
+            cur = sha_of(f.read())
+    except FileNotFoundError:
+        cur = None
+    if cur != w.get("base_sha256"):
+        return "conflict", cur
+    content = w.get("content")
+    if not isinstance(content, str):
+        return "conflict", cur
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.remote-tmp-%d" % (path, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    with os.fdopen(fd, "wb") as f:
+        f.write(content.encode("utf-8"))
+    os.replace(tmp, path)
+    log_action(ont, "새객체" if cur is None else "값갱신", os.path.basename(path)[:-3], w.get("op_id"))
+    return "applied", None
+
+
+def apply_writes(ctx):
+    st, r = ctx.call("GET", "writes?runtime_id=" + str(ctx.runtime_id))
+    if st != 200 or not r:
+        return
+    ont = ont_root(ctx.root)
+    mpath = os.path.join(ws_dir(ctx.ws), "manifest.json")
+    for w in r.get("writes", []):
+        op = w.get("op_id")
+        if not op or "/" in str(op):
+            continue
+        result, sha = apply_write(ont, w)
+        if result == "applied":
+            m = read_json(mpath) or {}
+            m[w["path"]] = sha_of(w["content"].encode("utf-8"))  # 서버가 이미 아는 내용이라 다시 안 올린다
+            write_json(mpath, m)
+            ctx.call("POST", "writes/%s" % op, {"result": "applied"})
+        else:
+            ctx.call("POST", "writes/%s" % op, {"result": "conflict", "sha256": sha})
 
 
 # 단계 함수 f(ctx)를 순서대로 부른다. 뒤 장(P478-2..7)이 여기에 채운다:
@@ -222,7 +358,7 @@ def claim_jobs(ctx):
     free = free_workers(ctx.root)
     if free <= 0:
         return
-    tools = [t["name"] for t in find_tools()]
+    tools = claim_tools(ctx.ws)
     st, r = ctx.call("POST", "jobs/claim", {"runtime_id": ctx.runtime_id, "tools": tools, "max": free})
     if st != 200 or not r:
         log("claim HTTP %s" % st)
@@ -471,6 +607,7 @@ def step_heartbeat(ctx):
 
 
 STEPS.append(step_heartbeat)
+STEPS += [ontology_push, apply_writes]
 
 
 def crontab_rw(new_lines=None):
