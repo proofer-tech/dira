@@ -9047,13 +9047,13 @@ developer 두 장은 그림 파일이 겹치지 않아 나란히 간다. `landin
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P476-1 | 엔진 - `mcp_server.py` 프로토콜 층(stdio + HTTP + 토큰-Origin 검사)과 `mcp_tools.py` 도구 표 전부, `engine_exec` 허용목록 + `test_mcp_server.py` | developer | - | 발행 |
-| P476-2 | 엔진 - `test_mcp_parity.py` 덮기 테스트, 런처 `dira mcp` 갈래, `apps/desktop/package.json` `extraResources`에 두 파일 | developer | P476-1 | 발행 |
-| P476-3 | 앱 - `main.ts`가 HTTP MCP를 자식으로 띄우고, `mcp.json`을 쓰고 지우고, 죽으면 다시 띄우고, 트레이 멈춤 항목 + 테스트 | developer | P476-1 | 발행 |
-| P476-4 | 화면 - 설정의 `MCP` 절(상태 + 연결 설정 두 벌 복사), i18n(ko-en) + 테스트 | developer | - | 발행 |
-| P476-5 | 매뉴얼 - 새 `mcp.md`(무엇을 할 수 있나 - 클라이언트에 붙이는 법 두 가지 - 앱이 꺼지면 HTTP가 내려간다는 것)와 `ref-cli.md`에 `dira mcp`, 영문판 같이 | writer | - | 발행 |
-| P476-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P476-2, P476-3, P476-4 | 발행 |
-| P476-7 | 랜딩 - Free 열 `엔진 MCP`의 `(준비중)`을 뗀다 | developer | P476-6 | 발행 |
+| P476-1 | 엔진 - `mcp_server.py` 프로토콜 층(stdio + HTTP + 토큰-Origin 검사)과 `mcp_tools.py` 도구 표 전부, `engine_exec` 허용목록 + `test_mcp_server.py` | developer | - | 발행 `0325d890` |
+| P476-2 | 엔진 - `test_mcp_parity.py` 덮기 테스트, 런처 `dira mcp` 갈래, `apps/desktop/package.json` `extraResources`에 두 파일 | developer | P476-1 | 발행 `fe0439a3` |
+| P476-3 | 앱 - `main.ts`가 HTTP MCP를 자식으로 띄우고, `mcp.json`을 쓰고 지우고, 죽으면 다시 띄우고, 트레이 멈춤 항목 + 테스트 | developer | P476-1 | 발행 `e99ed469` |
+| P476-4 | 화면 - 설정의 `MCP` 절(상태 + 연결 설정 두 벌 복사), i18n(ko-en) + 테스트 | developer | - | 발행 `4a1735c0` |
+| P476-5 | 매뉴얼 - 새 `mcp.md`(무엇을 할 수 있나 - 클라이언트에 붙이는 법 두 가지 - 앱이 꺼지면 HTTP가 내려간다는 것)와 `ref-cli.md`에 `dira mcp`, 영문판 같이 | writer | - | 발행 `ae28e1eb` |
+| P476-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P476-2, P476-3, P476-4 | 발행 `8a8ede93` |
+| P476-7 | 랜딩 - Free 열 `엔진 MCP`의 `(준비중)`을 뗀다 | developer | P476-6 | 발행 `d2a6f566` |
 
 P476-2와 P476-3은 도구 표와 서버가 있어야 판정할 것이 생긴다. P476-4는 `mcp.json` 모양이 위
 표에 정해져 있어 기다리지 않는다. 랜딩은 QA가 통과한 다음이다 - 안 된 것을 된다고 적지 않는다.
