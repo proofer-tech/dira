@@ -1,6 +1,6 @@
 # Engine MCP
 
-> The `dira mcp` command, the HTTP server the app runs, and the `MCP` section in settings ship
+> The `dira mcp` command, the HTTP server, and the `MCP` section in settings ship
 > in v1.2.19 and later. If `dira mcp` fails with a command-not-found error or settings has no `MCP`
 > section, your app is older than that. Update the app to v1.2.19 or later. If you can't update
 > right now, point your client at the server with `python3` as in
@@ -72,7 +72,7 @@ The client starts `dira mcp` when it needs it and stops it when done. The app ca
 long as the engine is installed, this always starts. To pin the queue root, put `TICKET_ROOT` in the
 environment part of the client's config.
 
-### HTTP - the server the app runs
+### HTTP - the server cron keeps up
 
 ```json
 {"type":"http","url":<url>,"headers":{"Authorization":"Bearer <token>"}}
@@ -82,9 +82,14 @@ The copy in settings already has `<url>` and `<token>` filled in. The server lis
 only and rejects requests with a missing or wrong token with `401`. Browser requests from other
 sites get `403`.
 
-**The token is new every time the app starts.** After restarting the app, copy the HTTP config from
-settings again and paste it into your client. The old token gets `401`. The current values are also
-in `url` and `token` of `~/.config/dira/run/mcp.json`.
+**Paste it once and keep using it.** The token is created once, stored in
+`~/.config/dira/mcp/token`, and reused every time the server starts again. The server tries port
+`47823` first. If another program holds that port it picks a free one, and then the URL changes, so
+copy the HTTP config from settings again. The current values are also in `url` and `token` of
+`~/.config/dira/run/mcp.json`.
+
+In v1.2.20 and earlier the app ran the HTTP server itself and made a new token on every start. If
+you're coming from one of those versions, copy the HTTP config once more after updating.
 
 ### Connecting without the app
 
@@ -95,25 +100,64 @@ repo. Replace the path with wherever you cloned it.
 {"command":"python3","args":["/Users/<you>/Projects/dira/mcp_server.py"]}
 ```
 
-## When the app closes, HTTP goes with it
+## HTTP stays up with the app closed
 
-The engine has no resident process. cron starts a worker once a minute and it exits. The desktop app
-is the only thing that stays up, so the app owns the HTTP server.
+cron keeps the HTTP server up, the same way it runs workers. Open the dira app once and it sets up
+two things.
 
-- When the app starts, the HTTP server starts and `~/.config/dira/run/mcp.json` gets
-  `{url, token, pid, started_at}`.
-- If the server dies before the app, the app starts it again one second later and rewrites
-  `mcp.json` with the new values.
-- If it dies 5 times within 60 seconds, the app stops restarting it and the tray menu shows an
-  item saying the MCP server stopped, with a restart option. Clicking it starts the server again.
-- When you quit the app, the server stops and `mcp.json` is deleted.
+- It puts a watcher script at `~/.config/dira/mcp/keepalive.sh`.
+- It adds one crontab line that calls that script every minute. If the line is already there it
+  leaves it alone, and it never touches other lines.
 
-The status line in the settings `MCP` section shows where things stand. On, followed by the URL,
-means you can connect over HTTP. Off means no app-run server is up. Opened in a browser, the page
-shows a note that HTTP is available in the app only, instead of the HTTP config.
+```
+* * * * * "<home>/.config/dira/mcp/keepalive.sh" "<engine>/tick.sh" >> "<home>/.config/dira/run/mcp.log" 2>&1
+```
 
-stdio runs whether or not the app is up. If you close the app often or use the engine alone, connect
-with stdio. The `env_*` tools are the exception: like `dira env` in [CLI](/docs/ref-cli), they need
-the app running to read or write values.
+`<engine>` is the same place as the `tick.sh` your worker cron lines call. Right after adding the
+line, the app runs the script once itself, so the server starts without waiting for the next
+minute.
+
+From then on cron calls the script every minute, app or no app. If the `pid` in `mcp.json` is a
+live `mcp_server.py`, the script exits without doing anything. If the server is down, it starts it
+again with the same token and rewrites `mcp.json` with the new `pid`. A dead server is back within a
+minute at the same URL with the same token, so your client config doesn't need to change.
+
+The status line in the settings `MCP` section reads `mcp.json` and shows where things stand. The app
+window and the page opened in a browser see the same value. On, followed by the URL, means you can
+connect over HTTP. Off means no server is up, and a line under it says that opening the dira app once
+lets cron start it.
+
+### When the server won't start
+
+If it stays Off for more than a minute, check two places.
+
+```bash
+crontab -l | grep 'mcp/keepalive.sh'
+tail -n 20 ~/.config/dira/run/mcp.log
+```
+
+- No line in `crontab -l` means the app couldn't write to crontab. macOS asks for the
+  `App Management` permission when the app edits crontab, and denying that prompt ends here. Approve
+  dira under `System Settings › Privacy & Security › App Management` and open the app again.
+- If the line is there but no server is, read `mcp.log` from the bottom. Every time cron calls the
+  script, whatever the script and the server print lands in this file.
+
+### Removing dira takes it down too
+
+Every minute the watcher first checks that the `<engine>/tick.sh` it was given exists. If that file
+is gone, it takes dira as removed and cleans up.
+
+- It stops the running `mcp_server.py`.
+- It deletes `~/.config/dira/run/mcp.json`.
+- It removes only the `mcp/keepalive.sh` line from crontab. Other lines stay byte for byte.
+- It deletes `~/.config/dira/mcp/`, token included.
+
+Workers drop their cron lines on the same `tick.sh`, so the MCP server goes down at the moment the
+workers stop. Reinstall dira and open the app, and the line and script come back. The token is new,
+so copy the HTTP config into your client again.
+
+stdio doesn't depend on cron: the client starts it only when it needs it. If you'd rather not keep a
+port open, connect with stdio. The `env_*` tools are the exception: like `dira env` in
+[CLI](/docs/ref-cli), they need the app running to read or write values.
 
 Next is [Remote queue](/docs/remote).
