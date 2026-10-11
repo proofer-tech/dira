@@ -6,6 +6,7 @@
  *
  *  검증은 `lib/projects.ts`에 있고 여기서 다시 하지 않는다 — 실패 문구도 거기 있다. 이 파일이
  *  하는 일은 Error를 **직렬화 가능한 결과로 바꾸는 것**뿐이다(클라이언트로 Error는 못 넘어간다). */
+import { MCP_STDIO_CONFIG, readMcpStatus, type McpStatus } from "@/lib/mcp-status";
 import { homedir } from "node:os";
 import path from "node:path";
 import { revalidatePath } from "next/cache";
@@ -809,6 +810,11 @@ export async function testWebhookAction(): Promise<WebhookTestResult> {
 
 /** 설정 다이얼로그의 숨은 여섯째 노드 `멀티플레잉` (DESIGN.md §0-18 §스위치) — 다이얼로그가
  *  열릴 때 한 줄이 읽는다. `readAnalyticsAction`과 같은 이유로 프롭이 아니라 여기서 읽는다. */
+/** 설정 다이얼로그 `MCP` 절(P476) - 열릴 때 한 번 읽는다. 브라우저 셸이면 HTTP 줄을 못 만든다. */
+export async function readMcpAction(): Promise<{ desktop: boolean; status: McpStatus; stdio: string }> {
+  return { desktop: shellParams().shell === "desktop", status: readMcpStatus(), stdio: MCP_STDIO_CONFIG };
+}
+
 export async function readMultiplayAction(): Promise<boolean> {
   return readMultiplay();
 }

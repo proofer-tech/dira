@@ -14,6 +14,7 @@
  *  URL 파라미터도 만들지 않는다 — 동시에 열릴 수 없고, 상태는 어느 쪽이든 서버가 준 같은
  *  props에서 온다(§0-4). 트리거를 JSX로 받지 않고 두 값 중 하나로 받는 이유는 부르는 쪽이
  *  **서버 컴포넌트**라서다: 넘길 수 있는 것은 값이고, 모양은 두 가지뿐이다. */
+import { CopyCommand } from "@/components/copy-command";
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
@@ -39,6 +40,7 @@ import {
   deleteEngineProfileAction,
   deleteTokenAction,
   readAnalyticsAction,
+  readMcpAction,
   readAutonomyAction,
   readEngineProfileRowsAction,
   readIntegrationBranchAction,
@@ -151,6 +153,7 @@ type SettingsNode =
   | OtherEngine
   | "keymap"
   | "stats"
+  | "mcp"
   | "language"
   | "autonomy"
   | "webhook"
@@ -410,6 +413,45 @@ function AnalyticsSection({ className }: { className?: string }) {
             >
               {pending ? t("common.saving") : view.enabled ? t("settings.stats.turnOff") : t("settings.stats.turnOn")}
             </Button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** P476 `MCP` 절 - 상태 한 줄과 복사 버튼이 붙은 연결 설정 두 벌. 값은 다이얼로그가 열릴 때 읽는다
+ *  (`AnalyticsSection`과 같은 이유). 상태는 `mcp.json`의 `pid`가 살아 있는지로 판정한다(서버). */
+function McpSection({ className }: { className?: string }) {
+  const [view, setView] = useState<Awaited<ReturnType<typeof readMcpAction>> | null>(null);
+  const t = useT();
+
+  useEffect(() => {
+    void readMcpAction().then(setView);
+  }, []);
+
+  return (
+    <section className={cn("space-y-2 border-t pt-4 md:border-t-0 md:pt-0", className)}>
+      <h3 data-setting="mcp" className="text-sm font-medium">
+        {t("settings.tree.mcp")}
+      </h3>
+      <p className="text-xs text-muted-foreground">{t("settings.mcp.description")}</p>
+      {view && (
+        <div className="space-y-2">
+          <p data-setting="mcp.status" className="text-sm">
+            {view.status.state === "alive"
+              ? `${t("settings.mcp.on")} - ${view.status.url}`
+              : t("settings.mcp.off")}
+          </p>
+          <p className="text-xs text-muted-foreground">{t("settings.mcp.stdio")}</p>
+          <CopyCommand cmd={view.stdio} />
+          <p className="text-xs text-muted-foreground">{t("settings.mcp.http")}</p>
+          {!view.desktop ? (
+            <p className="text-xs">{t("settings.mcp.appOnly")}</p>
+          ) : view.status.state === "alive" ? (
+            <CopyCommand cmd={view.status.httpConfig} />
+          ) : (
+            <p className="text-xs">{t("settings.mcp.off")}</p>
           )}
         </div>
       )}
@@ -2019,6 +2061,7 @@ export function SettingsDialog({
   const claudeCrumb = "claude";
   const keymapCrumb = t("settings.tree.keymap");
   const statsCrumb = t("settings.tree.stats");
+  const mcpCrumb = t("settings.tree.mcp");
   const webhookCrumb = t("settings.tree.webhook");
   const workersCrumb = t("settings.tree.workers");
   const multiplayCrumb = t("settings.tree.multiplay");
@@ -2113,6 +2156,8 @@ export function SettingsDialog({
       name: t("settings.search.statsToggle"),
       anchor: "stats.toggle",
     },
+    { node: "mcp", crumbs: "", name: mcpCrumb, anchor: "mcp" },
+    { node: "mcp", crumbs: mcpCrumb, name: t("settings.mcp.on"), anchor: "mcp.status" },
     { node: "language", crumbs: "", name: languageLabel, anchor: "language" },
     {
       node: "language",
@@ -2471,6 +2516,15 @@ export function SettingsDialog({
                       <span>{statsCrumb}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton
+                      isActive={activeNode === "mcp"}
+                      aria-current={activeNode === "mcp" ? "true" : undefined}
+                      onClick={() => selectNode("mcp")}
+                    >
+                      <span>{mcpCrumb}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                   {/* §0-16 다섯째 노드 — 넷과 같은 그릇, 같은 헤더 없는 그룹(§45 ③ 판정 그대로) */}
                   <SidebarMenuItem>
                     <SidebarMenuButton
@@ -2765,6 +2819,7 @@ export function SettingsDialog({
 
             <KeymapSection className={cn(activeNode !== "keymap" && "md:hidden")} />
             <AnalyticsSection className={cn(activeNode !== "stats" && "md:hidden")} />
+            <McpSection className={cn(activeNode !== "mcp" && "md:hidden")} />
             <LanguageSection className={cn(activeNode !== "language" && "md:hidden")} />
             <AutonomySection className={cn(activeNode !== "autonomy" && "md:hidden")} />
             <WebhookSection className={cn(activeNode !== "webhook" && "md:hidden")} />
