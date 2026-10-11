@@ -11,6 +11,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   anomaliesOf,
+  TICKET_FILES_FIX_MARKER,
+  ticketFilesFixBody,
   DUE_DEMOTE_MS,
   DUE_ESCALATE_MS,
   HIDE_DONE_STATUSES,
@@ -2400,4 +2402,21 @@ test("boardAnomaly 문구는 English에서 영어다", async () => {
   const { t } = await import("./i18n.ts");
   for (const k of ["title", "noFrontmatter", "twoStates"]) assert.ok(!/[가-힣]/.test(t("en", `boardAnomaly.${k}`)));
   assert.ok(/[가-힣]/.test(t("ko", "boardAnomaly.title")));
+});
+
+test("ticketFilesFixBody: 이상 목록 · 정리 규칙 두 갈래 · Done when (§P479)", () => {
+  const b = ticketFilesFixBody("2026-10-11T00:00:00Z", [{ file: "deadbeef.md", reason: "frontmatter 없음" }]);
+  for (const h of ["## Goal", "## 이상 목록", "## 정리 규칙", "## Done when"]) assert.ok(b.includes(h), h);
+  assert.ok(b.includes("이상 1건을 정리한다"));
+  assert.ok(b.includes("- deadbeef.md - frontmatter 없음"));
+  assert.ok(b.includes("- (a) frontmatter 없음") && b.includes("- (b) 같은 해시가 두 상태로 있음"));
+  assert.strictEqual((b.match(/- \[ \]/g) ?? []).length, 2);
+});
+
+test("정리 티켓이 열려 있으면 openFixTicket이 잡는다, .done이면 놓는다 (§P479)", async () => {
+  const mk = (state: string) => ({ fm: { fixes: TICKET_FILES_FIX_MARKER }, state, hash: "aaaa1111" }) as unknown as Ticket;
+  assert.strictEqual(openFixTicket([mk("wip")], TICKET_FILES_FIX_MARKER)?.hash, "aaaa1111");
+  assert.strictEqual(openFixTicket([mk("done")], TICKET_FILES_FIX_MARKER), null);
+  const { t } = await import("./i18n.ts");
+  for (const k of ["fix", "fixTicket", "failTitle", "none"]) assert.ok(!/[가-힣]/.test(t("en", `boardAnomaly.${k}`)));
 });

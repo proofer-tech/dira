@@ -23,7 +23,19 @@ import { findTicket } from "@/lib/engine";
 import { kickIdleWorker } from "@/lib/kick";
 import { screenComment } from "@/lib/screen-comment";
 import { isHash, parseAssignment } from "@/lib/paths";
-import { PRIORITY_DEFAULT, PRIORITY_MAX, PRIORITY_MIN, reqTitle, stateOf, stemOf } from "@/lib/queue";
+import {
+  PRIORITY_DEFAULT,
+  PRIORITY_MAX,
+  PRIORITY_MIN,
+  TICKET_FILES_FIX_MARKER,
+  listTickets,
+  openFixTicket,
+  reqTitle,
+  stateOf,
+  stemOf,
+  ticketAnomalies,
+  ticketFilesFixBody,
+} from "@/lib/queue";
 import { epicTitle } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
 import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
@@ -246,5 +258,67 @@ export async function dropTicketToWip(
     return r;
   } catch (e) {
     return { ok: false, reason: "other", error: (e as Error).message };
+  }
+}
+
+/** 보드 `티켓 파일 이상` 경고의 `정리 티켓 발행`(§P479). 화면이 넘긴 값을 믿지 않고 발행 직전에
+ *  이상 목록과 열린 정리 티켓을 다시 읽는다. 열린 티켓이 있으면 새로 만들지 않고 그 stem을 돌려준다. */
+export async function fixTicketFilesAction(
+  projectId: string,
+): Promise<{ ok: true; stem: string } | { ok: false; message: string }> {
+  try {
+    const locale = await readLanguage();
+    const project = await getProject(projectId);
+    if (!project) throw new Error(`${t(locale, "ontology.action.unknownProjectPrefix")} ${projectId}`);
+    const config = await resolveConfig(project);
+
+    const existing = openFixTicket(await listTickets(project.root, config), TICKET_FILES_FIX_MARKER);
+    if (existing) return { ok: true, stem: existing.stem };
+
+    const anomalies = await ticketAnomalies(project.root, config);
+    if (anomalies.length === 0) return { ok: false, message: t(locale, "boardAnomaly.none") };
+
+    // 산출물이라 로케일 무관 한국어 고정이다(§P479).
+    const body = ticketFilesFixBody(
+      new Date().toISOString(),
+      anomalies.map((a) => ({ file: a.file, reason: t("ko", `boardAnomaly.${a.reason}`) })),
+    );
+    const dir = path.join(project.root, "tickets");
+    const stems = new Set((await readdir(dir)).filter((n) => n.endsWith(".md")).map((n) => stemOf(n, config)));
+    for (let i = 0; i < 10; i++) {
+      const h = randomUUID().slice(0, 8);
+      if (stems.has(h)) continue;
+      const fh = await open(path.join(dir, `${h}.md`), "wx").catch((e) => {
+        if ((e as NodeJS.ErrnoException).code === "EEXIST") return null;
+        throw e;
+      });
+      if (!fh) continue;
+      try {
+        await fh.writeFile(
+          [
+            "---",
+            `ticket: ${h}`,
+            `title: 티켓 파일 이상 ${anomalies.length}건 정리`,
+            "kind: work",
+            "persona: pm",
+            `fixes: ${TICKET_FILES_FIX_MARKER}`,
+            "---",
+            "",
+            body,
+            "",
+          ].join("\n"),
+          "utf8",
+        );
+      } finally {
+        await fh.close();
+      }
+      void track("ticket_create", { kind: "work" });
+      await kickIdleWorker(project.root);
+      revalidatePath(`/p/${projectId}/board`);
+      return { ok: true, stem: h };
+    }
+    throw new Error(t(locale, "ontology.action.hashExhausted"));
+  } catch (e) {
+    return { ok: false, message: (e as Error).message };
   }
 }

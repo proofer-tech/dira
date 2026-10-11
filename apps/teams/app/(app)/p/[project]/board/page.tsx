@@ -40,6 +40,7 @@ import {
   BoardRows,
   BoardSearch,
   EpicDrag,
+  FixTicketFilesButton,
 } from "@/components/board-ui";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { EmptyState } from "@/components/empty-state";
@@ -90,6 +91,8 @@ import {
   lastQuestionOptions,
   listTickets,
   ticketAnomalies,
+  openFixTicket,
+  TICKET_FILES_FIX_MARKER,
   depBadges,
   planOf,
   planProgress,
@@ -331,6 +334,7 @@ export default async function Board({
   const now = new Date();
   const tickets = await listTickets(project.root, config, now);
   const anomalies = await ticketAnomalies(project.root, config);
+  const fixTicket = anomalies.length > 0 ? openFixTicket(tickets, TICKET_FILES_FIX_MARKER) : null;
   // 위키링크 vault(§비주얼 §10 §위키링크) — 답변 다이얼로그·요구 접수·발행 다이얼로그가 그대로 받는다.
   const ontologyTree = await listTree(config.ontology);
   const vault = buildVault(ontologyTree, (rel) => `/p/${id}/ontology?file=${encodeURIComponent(rel)}`);
@@ -988,14 +992,23 @@ export default async function Board({
               아무것도 안 그린다 — `EpicDrag`가 실패했을 때만 `<Alert>`를 낸다. */}
           <EpicDrag project={id} />
 
-          {/* 티켓 파일 이상(P474-2) — 0건이면 안 그린다. 고치는 버튼은 없다(사람이 파일을 정리한다) */}
+          {/* 티켓 파일 이상(P474-2) — 0건이면 안 그린다. 제목 줄 오른쪽 버튼이 정리 티켓 한 장을 발행한다(§P479) */}
           {anomalies.length > 0 && (
             <Alert>
               <TriangleAlert aria-hidden className="text-status-stale" />
-              <AlertTitle>
-                {locale === "en"
-                  ? `${t(locale, "boardAnomaly.title")}: ${anomalies.length}`
-                  : `${t(locale, "boardAnomaly.title")} ${anomalies.length}${t(locale, "boardAnomaly.unit")}`}
+              <AlertTitle className="flex items-center justify-between gap-2 overflow-visible">
+                <span>
+                  {locale === "en"
+                    ? `${t(locale, "boardAnomaly.title")}: ${anomalies.length}`
+                    : `${t(locale, "boardAnomaly.title")} ${anomalies.length}${t(locale, "boardAnomaly.unit")}`}
+                </span>
+                {fixTicket ? (
+                  <Link href={`/p/${id}/tickets/${fixTicket.stem}`} className="text-xs font-normal underline underline-offset-2">
+                    {t(locale, "boardAnomaly.fixTicket")} {fixTicket.stem} {statusLabel(statusOf(fixTicket), locale)}
+                  </Link>
+                ) : (
+                  <FixTicketFilesButton projectId={id} />
+                )}
               </AlertTitle>
               <AlertDescription className="grid gap-1">
                 {anomalies.map((a) => (

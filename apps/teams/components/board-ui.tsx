@@ -12,7 +12,7 @@ import { Children, useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useTrackedRouter } from "@/lib/route-pending";
 import { Check, ChevronsUpDown, ListFilter, Search, TriangleAlert } from "lucide-react";
-import { dropTicketToWip } from "@/app/(app)/p/[project]/board/actions";
+import { dropTicketToWip, fixTicketFilesAction } from "@/app/(app)/p/[project]/board/actions";
 import { setTicketEpic, unassignTicket } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import { EarlyRefreshPolling } from "@/components/early-refresh";
 import { useHotkey } from "@/components/keymap-provider";
@@ -848,5 +848,36 @@ export function EpicDrag({ project }: { project: string }) {
         </AlertDialogContent>
       </AlertDialog>
     </>
+  );
+}
+
+/** 보드 `티켓 파일 이상` 경고의 `정리 티켓 발행`(§P479). 발행되면 그 티켓 화면으로 간다. */
+export function FixTicketFilesButton({ projectId }: { projectId: string }) {
+  const t = useT();
+  const router = useTrackedRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <span className="flex items-center gap-2">
+      {error && (
+        <span role="alert" className="text-xs text-destructive">
+          {t("boardAnomaly.failTitle")}: {error}
+        </span>
+      )}
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            const r = await fixTicketFilesAction(projectId);
+            if (r.ok) router.push(`/p/${projectId}/tickets/${r.stem}`);
+            else setError(r.message);
+          })
+        }
+      >
+        {pending ? t("ontology.publishing") : t("boardAnomaly.fix")}
+      </Button>
+    </span>
   );
 }

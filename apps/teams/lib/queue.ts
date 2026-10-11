@@ -1280,6 +1280,35 @@ export function openFixTicket(tickets: Ticket[], marker: string): Ticket | null 
 /** 온톨로지 스키마 위반 정리 티켓의 마커 값(§P230). 화면·액션이 같은 리터럴을 쓰게 하는 자리. */
 export const ONTOLOGY_FIX_MARKER = "ontology-schema";
 
+/** 보드 `티켓 파일 이상` 정정 티켓의 마커(§P479). 큐당 한 장. */
+export const TICKET_FILES_FIX_MARKER = "ticket-files";
+
+/** 정리 티켓 본문(§P479 §값 표). 산출물이라 로케일과 무관하게 한국어다. 사유 글자는 호출자가 ko로 넘긴다. */
+export function ticketFilesFixBody(now: string, anomalies: { file: string; reason: string }[]): string {
+  const lines = anomalies.map((a) => `- ${a.file} - ${a.reason}`);
+  return [
+    "## Goal",
+    "",
+    `보드가 찾은 티켓 파일 이상 ${anomalies.length}건을 정리한다. 이 티켓은 아래 목록의 파일에 한해 남의 티켓 파일을 고치고 지우는 것을 허락한다.`,
+    "",
+    "## 이상 목록",
+    "",
+    `측정 시각: ${now}`,
+    "",
+    ...lines,
+    "",
+    "## 정리 규칙",
+    "",
+    "- (a) frontmatter 없음 - 같은 해시의 다른 파일이 있으면 이 파일 내용을 그 파일 끝 `## 고아 파일에서 옮김` 절로 붙이고 이 파일을 지운다. 없으면 본문에서 `ticket` `title` `kind` `persona`를 추론해 frontmatter를 되살리고(모르면 `kind: work` `persona: pm`) 파일명(상태)은 바꾸지 않는다.",
+    "- (b) 같은 해시가 두 상태로 있음 - `.done` > `.wip` > 접미사 없음 순으로 앞선 하나를 정본으로 남기고, 나머지에만 있는 내용을 정본 끝 `## 고아 파일에서 옮김` 절로 붙인 뒤 나머지를 지운다. 정본이 `.wip`이면 그 fm `inbox:`로 참견을 보내지 않는다(본문 기록만).",
+    "",
+    "## Done when",
+    "",
+    "- [ ] 목록의 줄마다 무엇을 했는지 ## 결과에 적는다",
+    "- [ ] 보드 경고에서 목록의 파일이 모두 사라졌다(이 티켓이 연 뒤 새로 생긴 이상은 대상이 아니다)",
+  ].join("\n");
+}
+
 /** 온톨로지 마이그레이션 발행 티켓의 마커(§5-3). 프로젝트당 한 장 — `마이그레이션 시작`과
  *  첫 채움이 같은 값을 써서 같은 티켓을 가리킨다. */
 export const ONTOLOGY_MIGRATION_MARKER = "ontology-migration";
