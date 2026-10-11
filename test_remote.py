@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """remote.py 테스트. http.server 가짜 서버를 세운다 - 뒤 장들이 이 서버에 라우트를 더한다."""
 import importlib.util
+import hashlib
 import json
 import os
 import stat
@@ -80,6 +81,8 @@ class Base:
     def run_remote(self, *args):
         env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron)
         env.pop("TICKET_ONTOLOGY", None)
+
+        env.pop("TICKET_ONTOLOGY", None)  # 실제 온톨로지를 건드리지 않는다
         return subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), *args],
                               capture_output=True, text=True, env=env, timeout=30)
 
@@ -523,6 +526,96 @@ class Tools(Base, unittest.TestCase):
         self.assertEqual(os.listdir(outside), [])
         self.assertFalse(os.path.exists(os.path.join(self.ont, "x.md")))
         self.assertEqual(self.actionlog(), "")
+
+    # ---- 묶음 설치 (P478-6) ----
+
+    def serve(self, route, bundle, good=True):
+        raw = json.dumps(bundle, ensure_ascii=False)
+        sha = hashlib.sha256(raw.encode()).hexdigest()
+        self.fake.routes[("GET", route)] = (200, {"version": bundle["version"], "sha256": sha if good else "0" * 64, "bundle": raw})
+
+    def tree(self, d):
+        out = {}
+        for r, _, fs in os.walk(d):
+            for f in fs:
+                p = os.path.join(r, f)
+                out[p] = open(p, "rb").read()
+        return out
+
+    def test_persona_bundle(self):
+        self.connect()
+        pd = os.path.join(self.root, "personas")
+        os.makedirs(os.path.join(pd, "mine"))
+        open(os.path.join(pd, "mine", "PROFILE.md"), "w").write("내 것")
+        os.makedirs(os.path.join(pd, "rem"))
+        open(os.path.join(pd, "rem", ".remote"), "w").write("{}")
+        open(os.path.join(pd, "rem", "PROFILE.md"), "w").write("옛 판")
+        b = {"version": "3", "personas": {"mine": {"PROFILE.md": "새"}, "rem": {"PROFILE.md": "새 판"},
+                                           "fresh": {"PROFILE.md": "신규", "skills.md": "s"}}}
+        self.serve("personas/bundle", b)
+        r = self.run_remote("persona-install", "--root", self.root)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("REMOTE persona-skip mine", r.stdout)
+        self.assertEqual(open(os.path.join(pd, "mine", "PROFILE.md")).read(), "내 것")
+        self.assertEqual(open(os.path.join(pd, "rem", "PROFILE.md")).read(), "새 판")
+        mark = json.load(open(os.path.join(pd, "fresh", ".remote")))
+        self.assertEqual((mark["workspace_id"], mark["version"]), ("ws1", "3"))
+
+    def test_persona_bundle_rejected(self):
+        self.connect()
+        base = {"version": "3", "personas": {"a": {"PROFILE.md": "x"}}}
+        bad_paths = [{"a": {"../x": "x"}}, {"a": {"/etc/x": "x"}}, {"a": {"b/../../x": "x"}}, {"..": {"x": "x"}}]
+        cases = [(base, False)] + [({"version": "3", "personas": p}, True) for p in bad_paths]
+        for bundle, good in cases:
+            self.serve("personas/bundle", bundle, good)
+            r = self.run_remote("persona-install", "--root", self.root)
+            self.assertEqual(r.returncode, 1, bundle)
+            self.assertFalse(os.path.exists(os.path.join(self.root, "personas")), bundle)
+            self.assertFalse(os.path.exists(os.path.join(self.root, "..", "x")))
+
+    SCHEMA = {"version": "5", "files": {"object-types/글.md": "글 정의\n"},
+              "schema_lines": ["| 글 | 한 줄 뜻 | [[글]] |", "| 인용한다 | 글 -> 글 | [[인용한다]] |"]}
+
+    def test_schema_install(self):
+        self.connect()
+        ont = os.path.join(self.root, "ontology", "_ontology")
+        os.makedirs(ont)
+        open(os.path.join(ont, "SCHEMA.md"), "w").write("# 지도\n")
+        self.serve("schema/bundle", self.SCHEMA)
+        r = self.run_remote("schema-install", "--root", self.root)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(open(os.path.join(ont, "object-types", "글.md")).read(), "글 정의\n")
+        self.assertIn("| 인용한다 | 글 -> 글 | [[인용한다]] |", open(os.path.join(ont, "SCHEMA.md")).read())
+        logd = os.path.join(self.root, "ontology", "action-log")
+        text = open(os.path.join(logd, os.listdir(logd)[0])).read()
+        lines = [l for l in text.splitlines() if "스키마개정:" in l]
+        self.assertEqual(len(lines), 2)
+        self.assertIn("스키마개정: 인용한다(중량, 글 -> 글) - 원격 스키마 묶음 v5", text)
+        self.run_remote("schema-install", "--root", self.root)  # 두 번째는 변화 없음
+        self.assertEqual(open(os.path.join(logd, os.listdir(logd)[0])).read(), text)
+
+    def test_schema_conflict_changes_nothing(self):
+        self.connect()
+        ont = os.path.join(self.root, "ontology", "_ontology")
+        os.makedirs(os.path.join(ont, "object-types"))
+        open(os.path.join(ont, "object-types", "글.md"), "w").write("다른 내용")
+        open(os.path.join(ont, "SCHEMA.md"), "w").write("# 지도\n")
+        bundle = dict(self.SCHEMA, files={"link-types/새.md": "n", "object-types/글.md": "글 정의\n"})
+        self.serve("schema/bundle", bundle)
+        before = self.tree(os.path.join(self.root, "ontology"))
+        r = self.run_remote("schema-install", "--root", self.root)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("object-types/글.md", r.stderr)
+        self.assertEqual(self.tree(os.path.join(self.root, "ontology")), before)
+
+    def test_schema_rejects_bad_sha_and_dotdot(self):
+        self.connect()
+        ont = os.path.join(self.root, "ontology")
+        self.serve("schema/bundle", self.SCHEMA, good=False)
+        self.assertEqual(self.run_remote("schema-install", "--root", self.root).returncode, 1)
+        self.serve("schema/bundle", dict(self.SCHEMA, files={"../../evil.md": "x"}))
+        self.assertEqual(self.run_remote("schema-install", "--root", self.root).returncode, 1)
+        self.assertFalse(os.path.exists(ont))
 
 
 if __name__ == "__main__":

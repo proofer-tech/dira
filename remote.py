@@ -488,6 +488,190 @@ def cmd_sync(root):
 
 
 STEPS += [claim_jobs, report_status]
+# ---- 페르소나 묶음 (R9) - 스키마 묶음 (O1) ----
+
+BUNDLE_INTERVAL = 600  # 초. 묶음 확인은 10분마다
+
+
+class Rejected(Exception):
+    pass
+
+
+def safe_rel(rel):
+    """묶음이 준 상대경로. 절대경로-'..'-NUL이면 묶음 전체를 거절한다."""
+    if (not isinstance(rel, str) or not rel or "\0" in rel or "\\" in rel
+            or rel.startswith("/") or ".." in rel.split("/")):
+        raise Rejected("경로가 올바르지 않습니다: %r" % (rel,))
+    return rel
+
+
+def inside(base, path):
+    # 심링크를 풀고도 base 안이어야 한다
+    b, p = os.path.realpath(base), os.path.realpath(path)
+    return p == b or p.startswith(b + os.sep)
+
+
+def fetch_bundle(ctx, path):
+    """GET <path> -> (version, sha256, 파싱한 묶음). sha256이 틀리면 Rejected.
+    bundle은 JSON 문자열이고 sha256은 그 UTF-8 바이트에 건다(객체로 오면 정렬-압축 직렬화)."""
+    st, r = ctx.call("GET", path)
+    if st != 200 or not r:
+        raise Rejected("HTTP %s" % st)
+    raw = r.get("bundle")
+    if not isinstance(raw, str):
+        raw = json.dumps(raw, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    if hashlib.sha256(raw.encode("utf-8")).hexdigest() != r.get("sha256"):
+        raise Rejected("sha256이 맞지 않습니다")
+    try:
+        b = json.loads(raw)
+    except ValueError:
+        raise Rejected("묶음이 JSON이 아닙니다")
+    if not isinstance(b, dict):
+        raise Rejected("묶음 형식이 올바르지 않습니다")
+    return str(r.get("version", b.get("version"))), r["sha256"], b
+
+
+def write_new(path, text):
+    """임시 파일(O_EXCL)에 쓴 뒤 replace."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.remote-tmp-%d" % (path, os.getpid())
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def install_personas(ctx):
+    ver, sha, b = fetch_bundle(ctx, "personas/bundle")
+    state = os.path.join(ws_dir(ctx.ws), "personas-version")
+    if (read_json(state) or {}).get("sha256") == sha:
+        return
+    pers = b.get("personas")
+    if not isinstance(pers, dict):
+        raise Rejected("personas가 없습니다")
+    # 쓰기 전에 전부 검증한다 - 하나라도 나쁘면 아무것도 안 바꾼다
+    for name, files in pers.items():
+        safe_rel(name)
+        if "/" in name or not isinstance(files, dict):
+            raise Rejected("페르소나 이름이 올바르지 않습니다: %r" % (name,))
+        for rel, body in files.items():
+            safe_rel(rel)
+            if not isinstance(body, str):
+                raise Rejected("본문이 문자열이 아닙니다: %s/%s" % (name, rel))
+    pdir = os.path.join(ctx.root, "personas")
+    for name, files in pers.items():
+        d = os.path.join(pdir, name)
+        mark = os.path.join(d, ".remote")
+        if os.path.exists(d) and not os.path.exists(mark):
+            log("persona-skip " + name)  # 사용자 것이라 덮지 않는다
+            continue
+        # ponytail: 묶음에 든 파일만 덮는다(memory/ 같은 사용자 파일은 남는다). 옛 판에만 있던 파일은 안 지운다
+        for rel, body in files.items():
+            if not inside(pdir, os.path.join(d, rel)):
+                raise Rejected("페르소나 밖으로 나가는 경로: %s/%s" % (name, rel))
+        for rel, body in files.items():
+            write_new(os.path.join(d, rel), body)
+        write_json(mark, {"workspace_id": ctx.ws, "version": ver, "sha256": sha})
+    write_json(state, {"version": ver, "sha256": sha})
+
+
+def install_schema(ctx):
+    """충돌이 있으면 [경로...]를 담은 Rejected 대신 (2, 경로들)을 돌려준다. 성공은 (0, [])."""
+    ver, sha, b = fetch_bundle(ctx, "schema/bundle")
+    files, lines = b.get("files"), b.get("schema_lines", [])
+    if not isinstance(files, dict) or not isinstance(lines, list):
+        raise Rejected("files/schema_lines 형식이 올바르지 않습니다")
+    ont = os.environ.get("TICKET_ONTOLOGY") or os.path.join(ctx.root, "ontology")
+    base = os.path.join(ont, "_ontology")
+    todo, conflicts = [], []
+    for rel, body in files.items():
+        safe_rel(rel)
+        if not isinstance(body, str):
+            raise Rejected("본문이 문자열이 아닙니다: " + rel)
+        path = os.path.join(base, rel)
+        if not inside(base, path):
+            raise Rejected("_ontology 밖으로 나가는 경로: " + rel)
+        if os.path.lexists(path):
+            try:
+                same = open(path, "rb").read() == body.encode("utf-8")
+            except OSError:
+                same = False
+            if not same:
+                conflicts.append(rel)
+                continue
+        else:
+            todo.append((path, body))
+    if conflicts:
+        return 2, conflicts
+    schema = os.path.join(base, "SCHEMA.md")
+    cur = open(schema, encoding="utf-8").read() if os.path.exists(schema) else ""
+    have = set(cur.splitlines())
+    add = [l for l in lines if isinstance(l, str) and l.strip() and l not in have]
+    for path, body in todo:
+        write_new(path, body)
+    if add:
+        write_new(schema, cur + ("" if cur == "" or cur.endswith("\n") else "\n") + "\n".join(add) + "\n")
+    if todo or add:
+        now = datetime.datetime.now()
+        d = os.path.join(ont, "action-log")
+        os.makedirs(d, exist_ok=True)
+        out = ""
+        for l in add:
+            cells = [c.strip() for c in l.strip().strip("|").split("|")]
+            rng = cells[1] if len(cells) > 1 and "->" in cells[1] else "타입"
+            out += ("- %s 스키마개정: %s(중량, %s) - 원격 스키마 묶음 v%s - 버린 대안: 사용자마다 시딩\n"
+                    % (now.strftime("%H:%M"), cells[0], rng, ver))
+        if out:
+            fd = os.open(os.path.join(d, now.strftime("%Y-%m-%d") + ".md"),
+                         os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+            try:
+                os.write(fd, out.encode("utf-8"))  # O_APPEND 한 번
+            finally:
+                os.close(fd)
+    return 0, []
+
+
+def step_bundles(ctx):
+    stamp = os.path.join(ws_dir(ctx.ws), "bundles-checked")
+    try:
+        if time.time() - os.stat(stamp).st_mtime < BUNDLE_INTERVAL:
+            return
+    except OSError:
+        pass
+    with open(stamp, "w") as f:
+        f.write(str(time.time()))
+    for fn in (install_personas, install_schema):
+        try:
+            rc, bad = (fn(ctx) or (0, []))
+            if rc:
+                log("schema-conflict " + ", ".join(bad))
+        except Rejected as e:
+            log("%s rejected: %s" % (fn.__name__, e))
+
+
+STEPS.append(step_bundles)
+
+
+def bundle_cmd(root, which):
+    cfg = load_config(root)
+    if not cfg:
+        return 0
+    token = load_token(cfg["workspace_id"])
+    if not token:
+        log("no-credentials")
+        return 0
+    ctx = Ctx(root, cfg, token)
+    try:
+        rc, bad = (install_personas(ctx) or (0, [])) if which == "persona-install" else install_schema(ctx)
+    except Rejected as e:
+        print("거절: %s" % e, file=sys.stderr)
+        return 1
+    except Unauthorized:
+        log("unauthorized")
+        return 0
+    for p in bad:
+        print("충돌: " + p, file=sys.stderr)
+    return rc
 
 # ---- 진행 기록(R4)과 사람 결정(R5) ----
 
@@ -870,7 +1054,7 @@ def cmd_disconnect(root):
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="remote.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("connect", "disconnect", "sync"):
+    for name in ("connect", "disconnect", "sync", "persona-install", "schema-install"):
         p = sub.add_parser(name)
         if name == "connect":
             p.add_argument("server")
@@ -883,6 +1067,8 @@ def main(argv=None):
         return cmd_connect(a.server, root)
     if a.cmd == "disconnect":
         return cmd_disconnect(root)
+    if a.cmd in ("persona-install", "schema-install"):
+        return bundle_cmd(root, a.cmd)
     return cmd_sync(root)
 
 

@@ -8975,7 +8975,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 | 페르소나 MCP (R8) | `personas/<이름>/mcp.json`(claude `--mcp-config` 형식)이 있으면 claude 세션에 `--mcp-config <그 파일>`을 붙인다. P461의 `--strict-mcp-config`는 그대로라 그 페르소나 세션에만 그 서버가 붙는다. 토큰은 파일에 `${DIRA_REMOTE_TOKEN}`으로 적고 값은 환경변수로만 들어간다. claude가 아닌 엔진은 붙이지 않고 로그 한 줄 `MCPSKIP <엔진>` |
 | 진행 기록 (R4) | 세션 로그(stream-json)에서 단계와 명령만 뽑아 올린다. 단계는 `read`(Read-Grep-Glob 도구 첫 사용), `wrote`(Write-Edit 첫 사용), `handoff`(그 세션이 `tickets/`에 새 티켓을 만듦), `awaiting`(fm `awaiting:`이 생김). 명령은 Bash 도구의 `command` 문자열이다(한 줄 2,000 B에서 자른다). 모델 출력 본문-도구 결과-사고 내용은 안 보낸다 |
 | 사람 결정 (R5) | `awaiting:`이 걸린 티켓의 마지막 `## 질문 n` 절을 그대로 올린다(형식 `protocols/질문-형식.md`). 서버가 준 답은 `tickets/<awaiting stem>.done.md`로 쓴다 - fm `kind: answer`, `ticket: <stem>`, 본문은 서버가 준 Markdown. 그 stem 파일이 이미 있으면 덮지 않는다(로컬에서 사람이 먼저 답한 것이다) |
-| 페르소나 묶음 (R9) | `GET personas/bundle`의 `version`이 설치본과 다르면 받는다. 묶음은 JSON `{version, personas: {<이름>: {<상대경로>: <본문>}}}`이고 `sha256`이 맞아야 한다. `<root>/personas/<이름>/`에 쓰고 `.remote` 파일(`{workspace_id, version, sha256}`)을 둔다. `.remote`가 없는 같은 이름 페르소나는 사용자 것이라 덮지 않고 그 이름만 건너뛴다(`REMOTE persona-skip <이름>`). 상대경로에 `..`-절대경로가 있으면 묶음 전체를 거절한다 |
+| 페르소나 묶음 (R9) | `GET personas/bundle`의 `version`이 설치본과 다르면 받는다. 묶음은 JSON `{version, personas: {<이름>: {<상대경로>: <본문>}}}`이고 `sha256`이 맞아야 한다. `<root>/personas/<이름>/`에 쓰고 `.remote` 파일(`{workspace_id, version, sha256}`)을 둔다. `.remote`가 없는 같은 이름 페르소나는 사용자 것이라 덮지 않고 그 이름만 건너뛴다(`REMOTE persona-skip <이름>`). 상대경로에 `..`-절대경로가 있으면 묶음 전체를 거절한다. `bundle`은 JSON 문자열이고 `sha256`은 그 UTF-8 바이트에 건다(스키마 묶음도 같다). `remote.py persona-install`로 손으로도 부른다 |
 | 클라우드 (R11) | 다음 - 이번 범위 밖 |
 
 #### API - 갈래 서버가 구현한다
