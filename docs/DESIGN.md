@@ -8938,6 +8938,59 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P479. 보드의 `티켓 파일 이상` 경고 옆 버튼이 정리 티켓을 발행한다 (요구 `d33d8f58`, 왕복 0회)
+
+사람 요구: *"이런거 그냥 경고만 띄워주지말고 옆에 버튼 넣어서 누르면 고치는 티켓 발행되도록
+해주세요"*. 첨부 화면은 보드 칸반 위 P474-2 경고(`티켓 파일 이상 1건` - `eab16852.done.md -
+frontmatter 없음`)다. P474 §값 `보드 경고 - 모양` 행의 "고치는 버튼은 없다"를 이 절이 대체한다.
+
+같은 모양의 선례가 이미 있다 - 온톨로지 화면 위반 카드의 `문제해결`(§P230,
+`fixOntologySchemaAction` + `openFixTicket` + `fixes:` 마커)이다. 그 선례를 그대로 따르므로
+되묻지 않았다. 사람이 정하지 않은 것(버튼 개수, 정리 티켓 페르소나, 정리 규칙)은 주도성 5로
+pm이 정했다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 버튼 개수와 자리 | 경고 한 장에 버튼 하나다(줄마다가 아니다). `AlertTitle` 줄 오른쪽 끝에 둔다. 정리 티켓 한 장이 그 시점의 이상 전부를 다룬다 |
+| 버튼 글자 | ko `정리 티켓 발행` / en `Create cleanup ticket`. 실패하면 온톨로지 `ontology.fix.failTitle`과 같은 모양으로 ko `정리 티켓을 만들지 못했습니다` / en `Couldn't create the cleanup ticket` |
+| 마커 | `fixes: ticket-files`. 상수 `TICKET_FILES_FIX_MARKER`를 `lib/queue.ts`의 `ONTOLOGY_FIX_MARKER` 옆에 둔다 |
+| 이미 열린 정리 티켓 | `openFixTicket(tickets, TICKET_FILES_FIX_MARKER)`가 티켓을 내면 버튼 대신 링크 `정리 티켓 <stem> <상태>`(en `Cleanup ticket <stem> <status>`)를 그린다 - 온톨로지 카드와 같은 모양이다. 액션도 발행 직전에 같은 함수로 다시 확인하고, 있으면 새로 만들지 않고 그 stem을 돌려준다 |
+| 액션 | `board/actions.ts`에 `fixTicketFilesAction(projectId)`. 발행 직전 `ticketAnomalies`를 다시 불러 목록을 만든다(화면이 넘긴 값을 믿지 않는다). 0건이면 발행하지 않고 `{ ok: false }`로 `이상이 없습니다`(en `No ticket file problems`)를 돌려준다. 발행 뒤 `track("ticket_create", { kind: "work" })`, `kickIdleWorker`, `revalidatePath`는 `fixOntologySchemaAction`과 같다 |
+| 티켓 frontmatter | `ticket` `title: 티켓 파일 이상 <n>건 정리` `kind: work` `persona: pm` `fixes: ticket-files`. `deps` `priority` 없음 |
+| 티켓 본문 | 산출물이라 로케일과 무관하게 한국어다. 아래 세 절을 그대로 쓴다 |
+| 본문 - `## Goal` | `보드가 찾은 티켓 파일 이상 <n>건을 정리한다. 이 티켓은 아래 목록의 파일에 한해 남의 티켓 파일을 고치고 지우는 것을 허락한다.` |
+| 본문 - `## 이상 목록` | `측정 시각: <ISO>` 다음 줄마다 `- <파일명> - <사유>`. 사유 글자는 경고와 같다(ko) |
+| 본문 - `## 정리 규칙` | (a) frontmatter 없음 - 같은 해시의 다른 파일이 있으면 이 파일 내용을 그 파일 끝 `## 고아 파일에서 옮김` 절로 붙이고 이 파일을 지운다. 없으면 본문에서 `ticket` `title` `kind` `persona`를 추론해 frontmatter를 되살리고(모르면 `kind: work` `persona: pm`) 파일명(상태)은 바꾸지 않는다. (b) 같은 해시가 두 상태로 있음 - `.done` > `.wip` > 접미사 없음 순으로 앞선 하나를 정본으로 남기고, 나머지에만 있는 내용을 정본 끝 `## 고아 파일에서 옮김` 절로 붙인 뒤 나머지를 지운다. 정본이 `.wip`이면 그 fm `inbox:`로 참견을 보내지 않는다(본문 기록만) |
+| 본문 - `## Done when` | `- [ ] 목록의 줄마다 무엇을 했는지 ## 결과에 적는다` / `- [ ] 보드 경고에서 목록의 파일이 모두 사라졌다(이 티켓이 연 뒤 새로 생긴 이상은 대상이 아니다)` |
+| ko-en | 위 화면 글자 전부를 `lib/i18n.ts` 두 언어에 단다 |
+
+#### 안 하는 것
+
+- 버튼이 파일을 바로 고치기 - 무엇이 정본인지 판단이 필요해 세션에 맡긴다(P474 §안 하는 것 유지).
+- 줄마다 버튼 - 이상은 대개 한두 건이고 한 장이 다 다룬다. 마커가 하나라 두 번 눌러도 한 장이다.
+- 엔진 수정 - 0줄이다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P479-1 | 보드 경고 버튼 - `fixTicketFilesAction`, 마커, 열린 티켓 링크, 본문 생성, i18n(ko-en) + 테스트 | developer | - | 발행 `3a491419` |
+| P479-2 | 매뉴얼 - `troubleshooting.md`의 `티켓 파일 이상` 항목에 `정리 티켓 발행` 버튼으로 정리를 맡기는 길을 더한다(영문판이 있으면 같이) | writer | - | 발행 `a4919ab5` |
+| P479-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P479-1 | 발행 `8a13f954` |
+
+writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다. designer 0장 - 기존 `Alert`와
+온톨로지 카드의 버튼-링크 모양을 쓴다. 에픽을 안 연다.
+
+#### 수용조건
+
+- [ ] `tickets/`에 frontmatter 없는 `deadbeef.md`를 두면 보드의 `티켓 파일 이상 1건` 경고 제목 줄 오른쪽에 `정리 티켓 발행` 버튼이 보인다.
+- [ ] 버튼을 누르면 `tickets/`에 `fixes: ticket-files`, `kind: work`, `persona: pm`인 새 티켓이 한 장 생기고, 본문 `## 이상 목록`에 `deadbeef.md - frontmatter 없음` 줄이, `## 정리 규칙`에 (a)(b) 두 갈래가 들어 있다.
+- [ ] 발행 뒤 버튼 자리에 `정리 티켓 <stem> <상태>` 링크가 뜨고, 누르면 그 티켓 화면으로 간다. 탭 둘에서 각각 눌러도(또는 액션을 두 번 불러도) 정리 티켓은 한 장이다 - `grep -l '^fixes: ticket-files' tickets/*.md | wc -l`이 1이다.
+- [ ] 정리 티켓이 `.done`이 된 뒤에도 이상이 남아 있으면 버튼이 다시 나온다.
+- [ ] 이상이 0건일 때 액션을 직접 부르면 티켓을 만들지 않고 `ok: false`를 돌려준다.
+- [ ] 언어를 English로 바꾸면 버튼과 링크 글자가 영어로 나오고, 발행된 티켓 본문은 한국어 그대로다.
+- [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff master -- tick.sh tickets.py`가 0줄이다.
+
 ### P478. 원격 큐 - 갈래 같은 웹 서비스가 dira를 런타임과 온톨로지 저장소로 쓴다 (요구 `7f443697`, 왕복 0회)
 
 사람 요구: 갈래(글감 하나로 채널마다 원고를 쓰고 발행하는 서비스)가 dira를 런타임과 온톨로지
@@ -9278,7 +9331,7 @@ stdio-도구 표-덮기 테스트가 통과했고, 앱 쪽은 단위 테스트�
 | 완료(`.done`) | 고치지 않는다. 종전 규칙의 새 `kind: request` 티켓을 만들고 `## 맥락`에 원래 해시를 적는다 |
 | Bash 쓰기 금지 | `tickets/` 아래 경로로 `>` `>>` `tee` `cat <<` 등 Bash 리다이렉트로 쓰지 않는다. 새 티켓은 `Write`, 있는 티켓은 `Edit`뿐이다 - `Edit`는 파일이 없으면 오류로 멈추므로 옛 경로에 새 파일이 생기지 않는다 |
 | 보드 경고 - 감지 대상 | 두 가지다. (a) `tickets/` 바로 아래 `*.md` 중 frontmatter가 없는 파일(`readFm`의 `end < 0`). (b) 같은 stem의 파일이 두 상태 이상으로 있는 것(예: `x.md`와 `x.wip.md`). 판정은 `listTickets`와 같은 파일 목록에서 한다. 새 순회를 더하지 않는다 |
-| 보드 경고 - 모양 | 보드 칸반 위에 `Alert` 한 장(티켓 화면 해시 불일치 경고와 같은 `TriangleAlert` + `text-status-stale`). 0건이면 안 그린다. 제목 `티켓 파일 이상 <n>건`, 본문은 줄마다 파일명(mono) + 사유 - (a) `frontmatter 없음 - 보드와 엔진이 이 파일을 티켓으로 읽지 않습니다` (b) `같은 해시가 두 상태로 있음 - 엔진은 하나만 봅니다`. 고치는 버튼은 없다 - 사람이 파일을 직접 정리한다 |
+| 보드 경고 - 모양 | 보드 칸반 위에 `Alert` 한 장(티켓 화면 해시 불일치 경고와 같은 `TriangleAlert` + `text-status-stale`). 0건이면 안 그린다. 제목 `티켓 파일 이상 <n>건`, 본문은 줄마다 파일명(mono) + 사유 - (a) `frontmatter 없음 - 보드와 엔진이 이 파일을 티켓으로 읽지 않습니다` (b) `같은 해시가 두 상태로 있음 - 엔진은 하나만 봅니다`. 고치는 버튼은 없다 - 사람이 파일을 직접 정리한다(P479가 이 줄을 대체한다 - 정리 티켓 발행 버튼) |
 | ko-en | 위 글자 전부를 `lib/i18n.ts` 두 언어에 단다 |
 
 #### 안 하는 것
