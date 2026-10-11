@@ -290,6 +290,25 @@ try:
     assert not any(n["id"] == "밖개념" for n in og2["nodes"]), \
         "TICKET_ONTOLOGY 없이도 밖 온톨로지 객체가 남았다: {}".format(og2["nodes"])
 
+    # ---- P478-8: versions/는 노드를 안 만들고, links: 항목 아래 property가 간선에 실린다 ----
+    proot = os.path.join(tmp, "prop")
+    write(os.path.join(proot, "ontology", "objects", "사람", "갑.md"),
+          "---\ntype: 사람\nname: 갑\ndescription: 갑\n"
+          "links:\n  인용한다:\n    - 을: \"[[을]]\"\n      property: affiliation\n    - 병: \"[[병]]\"\n---\n\n본문\n")
+    write(os.path.join(proot, "ontology", "objects", "사람", "을.md"),
+          "---\ntype: 사람\nname: 을\ndescription: 을\n---\n\n본문\n")
+    build(proot, force=True)
+    pg = load(proot)
+    n0 = len(pg["nodes"])
+    cite = {e["target"]: e for e in pg["links"] if e["rel"] == "인용한다"}
+    assert cite["을"].get("property") == "affiliation", cite
+    assert "property" not in cite["병"], cite
+    write(os.path.join(proot, "ontology", "versions", "사람", "갑", "v1.md"),
+          "---\ntype: 사람\nname: 갑\ndescription: 옛 판\n---\n\n옛 본문\n")
+    build(proot, force=True)
+    assert len(load(proot)["nodes"]) == n0, "versions/ 파일이 노드로 들어갔다"
+    print("PASS P478-8 versions/ 제외-property 간선")
+
     print("PASS 노드6종-간선(deps-req-archives-awaiting-인용-위키링크-절참조-evidence-impl-links)-"
           "중복제목#N-검증①(표준라이브러리)-검증⑦(큐 무수정)-증분(무변경 0-1장 수정 1-삭제 반영)-"
           "검증⑧(graph.json 없어도 tick.sh 무WARN)-시드매칭(exact우선-무관어배제-빈결과)-"

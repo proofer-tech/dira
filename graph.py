@@ -253,14 +253,18 @@ def extract_ontology(path, text, title_index):
         src_path = nfc(src_path)
         nodes.append({"id": src_path, "type": "소스 파일", "path": src_path, "excerpt": excerpt_of(desc)})
         links.append({"source": name, "target": src_path, "rel": "impl"})
-    for rel, target in ontology_links(lines, end):
-        links.append({"source": name, "target": target, "rel": rel})
+    for rel, target, prop in ontology_links(lines, end):
+        link = {"source": name, "target": target, "rel": rel}
+        if prop:
+            link["property"] = prop
+        links.append(link)
     links += [{"source": src, "target": tgt, "rel": rel} for src, tgt, rel in generic_edges(name, text, title_index)]
     return nodes, links
 
 
 def ontology_links(lines, end):
-    """`links:\\n  <관계>:\\n    - <표시명>: "[[<대상>]]"` 블록 -> [(관계, 대상), ...].
+    """`links:\\n  <관계>:\\n    - <표시명>: "[[<대상>]]"` 블록 -> [(관계, 대상, 속성), ...].
+    항목 아래 들여쓴 `property: <속성>` 한 줄이 있으면 속성에 싣는다(없으면 "").
     관계 이름은 고정 목록이 아니라 파일마다 자유(돌린다-불러온다-검증한다... 실측 5종+).
     """
     out = []
@@ -279,9 +283,15 @@ def ontology_links(lines, end):
         i += 1
         while i < end and re.match(r"^\s{4,}-\s", lines[i]):
             wm = WIKILINK_RE.search(lines[i])
-            if wm:
-                out.append((rel, nfc(wm.group(1).strip())))
             i += 1
+            prop = ""
+            while i < end and re.match(r"^\s{5,}\S", lines[i]):
+                pm = re.match(r"^\s+property:\s*(.+?)\s*$", lines[i])
+                if pm:
+                    prop = nfc(strip_quotes(pm.group(1)))
+                i += 1
+            if wm:
+                out.append((rel, nfc(wm.group(1).strip()), prop))
     return out
 
 
