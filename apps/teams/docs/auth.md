@@ -153,4 +153,4 @@ printf %s '<토큰>' > ~/.config/dira/oauth-token && chmod 600 ~/.config/dira/oa
 동기되지 않는 이 머신만의 자리입니다. 큐를 옮기거나 공유해도 토큰이 같이 퍼지지 않는 까닭이
 여기 있습니다. 워커를 여러 머신에서 돌린다면 머신마다 따로 받으셔야 합니다.
 
-다음은 [트러블슈팅](/docs/troubleshooting)입니다.
+다음은 [엔진 MCP](/docs/mcp)입니다.

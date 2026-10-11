@@ -118,4 +118,16 @@ dira env run --keys TEST_API_TOKEN,TEST_DB_URL -- python3 scripts/smoke.py --tar
 변수가 없다는 뜻이 아니니 앱을 띄우고 다시 실행하세요. OS 키 저장소가 잠겼을 때 푸는 법은
 [화면 소개](/docs/screens)의 `프로젝트 환경변수` 절 표에 있습니다.
 
+## `dira mcp` - MCP 클라이언트에 엔진 붙이기
+
+> 2026-10-11 현재 이 명령은 아직 구현 중입니다. 명령을 찾지 못한다는 오류가 나면 엔진 레포의
+> `python3 mcp_server.py`를 대신 쓰세요.
+
+| 명령 | 뜻 |
+|---|---|
+| `dira mcp` | 엔진 MCP 서버를 stdio로 띄웁니다. 줄 단위 JSON-RPC입니다. 앱이 꺼져 있어도 뜹니다 |
+
+직접 부르기보다 MCP 클라이언트 설정에 `{"command":"dira","args":["mcp"]}`로 넣어 클라이언트가
+띄우게 합니다. 쓸 수 있는 도구와 HTTP로 붙이는 법은 [엔진 MCP](/docs/mcp)에 있습니다.
+
 다음은 [frontmatter 필드](/docs/ref-frontmatter)입니다.

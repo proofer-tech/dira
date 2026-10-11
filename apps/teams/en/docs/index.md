@@ -37,6 +37,7 @@ New here? Read the four below in order. By the time you finish them, dira is alr
 - [Archiving and the ontology](/docs/ontology)
 - [Epics](/docs/epics)
 - [Authentication](/docs/auth)
+- [Engine MCP](/docs/mcp)
 
 ## Operating
 

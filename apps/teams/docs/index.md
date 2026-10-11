@@ -37,6 +37,7 @@
 - [아카이빙과 온톨로지](/docs/ontology)
 - [에픽](/docs/epics)
 - [인증](/docs/auth)
+- [엔진 MCP](/docs/mcp)
 
 ## 운영
 

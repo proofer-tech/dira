@@ -144,4 +144,4 @@ drive, `~/.config/dira` is a place local to this machine that does not sync. Tha
 sharing the queue does not spread the secret with it. If you run workers on several machines, you
 have to get one on each.
 
-Next is [Troubleshooting](/docs/troubleshooting).
+Next is [Engine MCP](/docs/mcp).

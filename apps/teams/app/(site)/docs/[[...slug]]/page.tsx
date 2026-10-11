@@ -57,6 +57,7 @@ const SIDEBAR: { textKey: string; items: { textKey: string; link: string }[] }[]
       { textKey: "manualSidebar.item.ontology", link: "/docs/ontology" },
       { textKey: "manualSidebar.item.epics", link: "/docs/epics" },
       { textKey: "manualSidebar.item.auth", link: "/docs/auth" },
+      { textKey: "manualSidebar.item.mcp", link: "/docs/mcp" },
     ],
   },
   {

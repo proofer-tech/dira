@@ -123,4 +123,16 @@ If the desktop app is closed or the connection drops, every `dira env` command e
 does not mean there are no variables; start the app and run it again. How to unlock the OS key
 storage is in the table of the `Project environment variables` section of [Screens](/docs/screens).
 
+## `dira mcp` - connecting the engine to an MCP client
+
+> As of 2026-10-11 this command is still being built. If it fails with a command-not-found error,
+> use `python3 mcp_server.py` from the engine repo instead.
+
+| Command | Meaning |
+|---|---|
+| `dira mcp` | Starts the engine MCP server over stdio, as line-delimited JSON-RPC. Works with the app closed |
+
+You rarely run it by hand. Put `{"command":"dira","args":["mcp"]}` in your MCP client's config and let
+the client start it. The tools it offers and how to connect over HTTP are in [Engine MCP](/docs/mcp).
+
 Next is [frontmatter fields](/docs/ref-frontmatter).
