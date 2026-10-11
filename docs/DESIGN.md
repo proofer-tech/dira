@@ -8938,6 +8938,127 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P478. 원격 큐 - 갈래 같은 웹 서비스가 dira를 런타임과 온톨로지 저장소로 쓴다 (요구 `7f443697`, 왕복 0회)
+
+사람 요구: 갈래(글감 하나로 채널마다 원고를 쓰고 발행하는 서비스)가 dira를 런타임과 온톨로지
+저장소로 쓰려고 요구 R1-R11, O1-O8을 냈다. 갈래 서버는 모델을 돌리지 않고 작업을 만들어 나눠 주기만
+하며, 실행과 원본 보관은 사용자 컴퓨터의 dira가 맡는다. 요구 문서에 사람이 미리 답한 것이 넷이다.
+
+- 원격 큐는 **dira 엔진 안에 넣는다**(별도 어댑터가 아니다).
+- 네트워크 기능도 의존성 0 안에서 한다. 네트워크가 있어야 dira가 도는 것이 아니라, dira가 있으면
+  네트워크도 쓸 수 있는 방향이다 - 원격 설정이 없는 큐는 지금과 똑같이 돈다.
+- 큐 루트는 런타임을 연결할 때 프로젝트를 고르는 것으로 정한다. 온톨로지도 그 프로젝트를 따라간다.
+- 크론 30초 간극은 갈래 화면이 자연스럽게 풀어낸다. dira는 상주 데몬을 만들지 않는다.
+
+사람이 정하지 않은 것은 주도성 5로 pm이 정했다. 핵심은 둘이다. (1) **API 계약은 dira가 정한다** -
+아래 §API 표가 정본이고 갈래 서버가 그것을 구현한다. 엔진 코드에 `갈래`라는 이름을 넣지 않는다(이름은
+`remote`). (2) **원격 동작은 전부 `remote.py sync` 한 번에 모인다** - 워커가 크론으로 뜰 때마다
+디스패치보다 먼저 한 번 부르므로, 서버에서 잡은 작업은 같은 tick에서 바로 디스패치된다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 파일 | 레포 루트 `remote.py`(`tickets.py` 옆), 테스트 `test_remote.py`. python3 표준 라이브러리만(`urllib.request`-`json`-`hashlib`-`http.server`는 테스트의 가짜 서버). 런처에 `dira remote` 갈래(`dira mcp`와 같은 방식) |
+| 연결 설정 | 큐 루트 `<root>/remote.json` - `{server, workspace_id, runtime_id, project}`. 이 파일이 없으면 원격 동작은 전부 아무것도 안 하고 rc 0으로 끝난다 |
+| 자격 증명 | `~/.config/dira/remote/<workspace_id>/credentials.json`(`0600`) - `{runtime_token}`. 큐 루트-티켓-로그 어디에도 안 쓴다 |
+| 워크스페이스 분리 (R10) | 큐 루트 하나에 워크스페이스 하나다. 이미 `remote.json`이 있는 루트에 다른 `workspace_id`로 연결하면 rc 2, `이 프로젝트는 이미 다른 워크스페이스에 연결돼 있습니다`. 자격 증명-작업 토큰-매니페스트는 전부 `workspace_id` 디렉터리 아래에 둔다 |
+| 연결 절차 (R6) | `dira remote connect <server> --root <큐 루트>` - 기기 코드 방식. `user_code`와 `verification_uri`를 찍고 `interval`초마다 토큰을 묻는다(`expires_in`이 지나면 rc 1). 받으면 자격 증명과 `remote.json`을 쓰고, 런타임을 등록하고, 그 큐에 워커가 없으면 `workers/w1.sh`를 만들고 크론 두 줄(README §cron 등록)을 넣는다. 끝에 전체 디스크 접근 권한과 `claude setup-token` 안내 두 줄을 찍는다. `dira remote disconnect --root`는 서버에 해제를 알리고 `remote.json`과 그 워크스페이스 자격 증명을 지운다(크론 줄은 안 건드린다) |
+| sync 시점 | 워커 진입(`tick.sh`)에서 **워커 락을 잡기 전에** `timeout 20 python3 remote.py sync --root <root>`를 부른다. 락이 잡혀 있어 이번 tick이 빠지는 경우에도 sync는 돈다 - 그래서 세션이 도는 동안에도 살아 있음 신호가 끊기지 않는다. 같은 루트의 워커 여럿이 겹치면 `mkdir <root>/.remote-sync.lock` 락으로 하나만 돌고 나머지는 바로 빠진다. 직전 sync 뒤 10초가 안 지났으면 빠진다. sync의 실패는 tick을 막지 않는다(로그 한 줄 `REMOTE <사유>`) |
+| sync 순서 | 살아 있음 신호 -> 작업 잡기 -> 상태-진행 기록-질문 올리기 -> 답 내려받기 -> 온톨로지 올리기 -> 원격 쓰기 적용 -> (10분마다) 페르소나-스키마 묶음 확인 |
+| 런타임 (R2) | 등록 단위는 컴퓨터 하나 x AI 도구 하나다. 도구는 `~/.config/dira/bin/engines/`의 엔진(`claude` `codex` `agy` `grok`) 중 실재하는 것이다. 버전은 sync마다 `<도구> --version`(시간 상한 5초). 로그인 점검은 연결 때, 6시간마다, 그리고 그 도구로 돈 세션이 인증 오류(`token-rotate.sh`가 이미 판정하는 그 오류)로 끝난 직후에 최소 프롬프트 한 번(시간 상한 60초)으로 한다. 실패한 도구는 `needs_check`로 보고하고 그 도구로는 작업을 안 잡는다 |
+| 살아 있음 (R3) | 신호 주기는 크론과 같은 30초다(sync 1회 = 신호 1회). 서버의 끊김 기준은 300초를 권한다 - 30초 신호 열 번 연속 실패다. 끊긴 런타임의 작업을 서버가 돌려받은 뒤 런타임이 그 작업의 상태를 올리면 서버는 `410`으로 답하고, 런타임은 그 로컬 티켓에 `## 블록` 없이 fm `remote_revoked: true`만 달고 더는 올리지 않는다 |
+| 30초 간극 | 신호 본문에 워커마다 `next_dispatch_at`(다음 크론 시각, ISO 8601)과 `busy`(지금 쥔 해시 또는 null)를 싣는다. 갈래 화면은 이 값으로 `N초 뒤 시작` 같은 상태를 그린다. dira는 상주 프로세스를 띄우지 않는다 |
+| 작업 잡기 (R1) | `POST jobs/claim`이 준 작업마다 로컬 티켓 `tickets/<새 8자 해시>.md`를 만든다(`<root>/.remote-tmp-<hash>`에 쓴 뒤 rename - 새 파일이라 claim이 아니다). fm은 `ticket`-`title`-`kind: work`-`persona`-`priority`-`duedate`-`remote_job: <job_id>`, 본문은 서버가 준 Markdown 그대로다. 같은 `job_id`의 티켓이 이미 있으면 안 만든다. 한 번에 잡는 수는 그 루트의 빈 워커 수다 |
+| 상태 보고 (R1) | `remote_job:`이 있는 티켓만 본다. 파일명과 fm으로 판정한다 - `.wip` = `running`, `.done` = `done`, fm `awaiting:`이 걸려 있고 그 stem이 아직 없으면 `awaiting`, 본문에 `## 블록`이 있으면 `failed`. 바뀐 것만 올린다(마지막으로 올린 값은 `~/.config/dira/remote/<ws>/state.json`) |
+| 작업 토큰 (R7) | 잡기 응답의 `job_token`을 `~/.config/dira/run/remote-jobs/<hash>.json`(`0600`)에 둔다. `tick.sh`가 그 해시를 디스패치할 때만 세션 환경에 `DIRA_REMOTE_URL`-`DIRA_REMOTE_TOKEN`을 넣는다. 티켓 파일-`cron.log`-세션 로그에 값이 안 남는다. `done`-`failed`를 올린 뒤 파일을 지운다 |
+| 페르소나 MCP (R8) | `personas/<이름>/mcp.json`(claude `--mcp-config` 형식)이 있으면 claude 세션에 `--mcp-config <그 파일>`을 붙인다. P461의 `--strict-mcp-config`는 그대로라 그 페르소나 세션에만 그 서버가 붙는다. 토큰은 파일에 `${DIRA_REMOTE_TOKEN}`으로 적고 값은 환경변수로만 들어간다. claude가 아닌 엔진은 붙이지 않고 로그 한 줄 `MCPSKIP <엔진>` |
+| 진행 기록 (R4) | 세션 로그(stream-json)에서 단계와 명령만 뽑아 올린다. 단계는 `read`(Read-Grep-Glob 도구 첫 사용), `wrote`(Write-Edit 첫 사용), `handoff`(그 세션이 `tickets/`에 새 티켓을 만듦), `awaiting`(fm `awaiting:`이 생김). 명령은 Bash 도구의 `command` 문자열이다(한 줄 2,000 B에서 자른다). 모델 출력 본문-도구 결과-사고 내용은 안 보낸다 |
+| 사람 결정 (R5) | `awaiting:`이 걸린 티켓의 마지막 `## 질문 n` 절을 그대로 올린다(형식 `protocols/질문-형식.md`). 서버가 준 답은 `tickets/<awaiting stem>.done.md`로 쓴다 - fm `kind: answer`, `ticket: <stem>`, 본문은 서버가 준 Markdown. 그 stem 파일이 이미 있으면 덮지 않는다(로컬에서 사람이 먼저 답한 것이다) |
+| 페르소나 묶음 (R9) | `GET personas/bundle`의 `version`이 설치본과 다르면 받는다. 묶음은 JSON `{version, personas: {<이름>: {<상대경로>: <본문>}}}`이고 `sha256`이 맞아야 한다. `<root>/personas/<이름>/`에 쓰고 `.remote` 파일(`{workspace_id, version, sha256}`)을 둔다. `.remote`가 없는 같은 이름 페르소나는 사용자 것이라 덮지 않고 그 이름만 건너뛴다(`REMOTE persona-skip <이름>`). 상대경로에 `..`-절대경로가 있으면 묶음 전체를 거절한다 |
+| 클라우드 (R11) | 다음 - 이번 범위 밖 |
+
+#### API - 갈래 서버가 구현한다
+
+모든 경로는 `<server>/api/runtime/v1/` 아래다. 요청과 응답은 JSON이고, 연결 뒤의 요청은
+`Authorization: Bearer <runtime_token>`을 단다. 런타임 토큰이 무효면 `401`이고, 런타임은 sync를
+멈추고 `REMOTE unauthorized`를 찍는다(재연결은 사람이 한다).
+
+| 메서드-경로 | 요청 | 응답 |
+|---|---|---|
+| `POST device/code` | `{machine_name}` | `{device_code, user_code, verification_uri, interval, expires_in}` |
+| `POST device/token` | `{device_code}` | 대기 중 `428`, 끝나면 `{workspace_id, runtime_token}` |
+| `POST runtimes` | `{machine_name, project, tools: [{name, version, health}]}` | `{runtime_id}` |
+| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` | `{ok: true}` |
+| `DELETE runtimes/<id>` | - | `204` |
+| `POST jobs/claim` | `{runtime_id, tools: [이름], max}` | `{jobs: [{job_id, title, persona, priority, duedate, body, job_token, job_token_expires_at}]}` |
+| `POST jobs/<job_id>/status` | `{state, hash, at}` | `204`, 돌려받은 작업은 `410` |
+| `POST jobs/<job_id>/events` | `{events: [{at, step, command}]}` | `204` |
+| `POST jobs/<job_id>/questions` | `{stem, markdown}` | `204` |
+| `GET answers?runtime_id=` | - | `{answers: [{job_id, stem, markdown}]}` |
+| `PUT objects` | `{changes: [{path, sha256, content}` 또는 `{path, deleted: true}]}` | `204` |
+| `GET writes?runtime_id=` | - | `{writes: [{op_id, path, base_sha256, content}]}` |
+| `POST writes/<op_id>` | `{result: applied` 또는 `conflict, sha256}` | `204` |
+| `GET personas/bundle` | - | `{version, sha256, bundle}` |
+| `GET schema/bundle` | - | `{version, sha256, bundle}` |
+
+#### 온톨로지 - O1-O8
+
+| 항목 | 값 |
+|---|---|
+| 스키마 묶음 (O1) | `remote.py schema-install --root <root>`(sync가 10분마다 부르고, 손으로도 부른다). 묶음 `{version, files: {<_ontology 아래 상대경로>: <본문>}, schema_lines: [<SCHEMA.md에 더할 줄>]}`. 같은 경로에 내용이 다른 파일이 이미 있으면 **묶음 전체를 거절**하고 rc 2로 충돌한 경로를 찍는다(부분 설치 없음). 설치는 중량 개정이고 **이 스펙이 pm의 중량 판정이다** - 3단계 게이트는 묶음을 만든 쪽이 이미 지났다고 본다. 타입-관계마다 action-log에 `스키마개정: <이름>(중량, <정의역> -> <치역>) - 원격 스키마 묶음 v<version> - 버린 대안: 사용자마다 시딩` 한 줄을 쓴다 |
+| 본문 규칙 (O2) | 객체 타입 정의 파일 fm에 `body: document`가 있으면 그 타입의 객체 파일은 본문에 `#`-`##` 제목과 절을 쓸 수 있다. 키가 없으면 종전대로 `##` 금지다. `protocols/ontology.md` §공통에 이 예외 한 줄, 앱 검사(`lib/ontology.ts`)가 이 키를 존중한다 |
+| 판 보관 (O3) | 온톨로지 루트 `versions/<타입>/<이름>/<판>.md`. `objects/` 밖이고, `graph.py` 노드-앱 스키마 검사-`dira 형식이 아닙니다` 판정에서 전부 뺀다. `versions/`만 있는 폴더는 dira 형식이 아니다 |
+| 올리기 (O4) | 감시 프로세스 없이 sync마다 `objects/**/*.md`와 `versions/**/*.md`의 sha256 목록을 `~/.config/dira/remote/<ws>/manifest.json`과 비교해 바뀐 것-지운 것만 `PUT objects`로 올린다. 사람이 손으로 고친 것도 같은 방식으로 잡힌다. 한 번에 200건까지, 남으면 다음 sync |
+| 원격 쓰기 (O5) | `GET writes`의 각 항목을 쓰기 직전에 지금 파일의 sha256과 `base_sha256`을 비교한다(새 파일은 `base_sha256: null`이고 파일이 없어야 한다). 다르면 쓰지 않고 `conflict`. 같으면 임시 파일에 쓴 뒤 `os.replace`, action-log에 `- HH:MM <새객체 또는 값갱신>: <이름> - 원격 편집 (op <op_id>)` 한 줄을 `O_APPEND` 한 번으로 더한다. 경로는 `objects/`-`versions/` 아래만이고 `..`-심링크 밖은 거절이다 |
+| 속성 인용 (O6) | 제안대로 관계 `인용한다`의 링크 속성 `property`로 적는다 - `links:` 블록의 그 항목 아래 `property: affiliation` 한 줄이다. `graph.py`는 이 속성을 간선에 싣고, 앱 객체 화면은 대상 객체의 그 속성 값을 같이 보여 준다 |
+| 이름 규칙 (O7) | `<짧은ID>-<첫 제목 슬러그>`는 `이름은 vault 전체에서 유일` 규칙과 맞는다(짧은ID가 유일하다). 보이는 제목은 타입별 속성 `title`로 두고, 앱은 `title`이 있으면 이름 대신 그것을 표시한다. 이름은 제목이 바뀌어도 안 바꾼다 |
+| 폴더 판별 (O8) | 다음 - 이번 범위 밖. 지금은 `lib/ontology.ts` `isDiraFormat` 판정(`_ontology/SCHEMA.md` 또는 `objects/`)을 갈래가 그대로 옮겨 쓴다 |
+
+#### 안 하는 것
+
+- 상주 데몬 - 엔진 계약은 크론 1회 실행이다. 간극은 `next_dispatch_at`으로 화면이 푼다.
+- 구독 로그인 토큰(`claude setup-token`)을 읽거나 서버로 보내는 것.
+- 세션 전문-모델 출력 본문을 서버로 보내는 것.
+- 원격 설정이 없는 큐의 동작 변화 - `remote.json`이 없으면 `tick.sh`에 더한 줄은 아무것도 안 한다.
+- 큐 불변 변경 - 원격 작업도 로컬 티켓이 되어 같은 claim 락으로 잡힌다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P478-1 | 엔진 - `remote.py` 뼈대: 설정-자격 증명-워크스페이스 분리, `connect`-`disconnect`(기기 코드), HTTP 클라이언트, `sync` 락-간격, `test_remote.py` 가짜 서버 | developer | - | 발행 |
+| P478-2 | 엔진 - 런타임 등록-버전-로그인 점검-살아 있음 신호(`next_dispatch_at`-`busy`) | developer | P478-1 | 발행 |
+| P478-3 | 엔진 - 작업 잡기 -> 로컬 티켓, 상태 보고, 작업 토큰 보관-삭제, `410` 처리 | developer | P478-1 | 발행 |
+| P478-4 | 엔진 - `tick.sh`: 락 전 sync 호출, 디스패치 때 작업 토큰 환경변수, 페르소나 `mcp.json`, 런처 `dira remote` 갈래 | developer | P478-3 | 발행 |
+| P478-5 | 엔진 - 진행 기록 추출-보고, 질문 올리기, 답 내려받기 | developer | P478-3 | 발행 |
+| P478-6 | 엔진 - 페르소나 묶음과 스키마 묶음 설치(검증-거절-action-log) | developer | P478-1 | 발행 |
+| P478-7 | 엔진 - 온톨로지 올리기(매니페스트)와 원격 쓰기 적용(해시 대조-action-log) | developer | P478-1 | 발행 |
+| P478-8 | 온톨로지 형식 - `graph.py`의 `versions/` 제외와 `property` 간선, `protocols/ontology.md`의 `body: document`-`versions/`-`title` 규칙 | developer | - | 발행 |
+| P478-9 | 앱 - `lib/ontology.ts` 검사가 `body: document`-`versions/`를 존중하고, 객체 화면이 `title`과 인용 속성 값을 보인다 + 테스트 | developer | - | 발행 |
+| P478-10 | 매뉴얼 - 새 `remote.md`(연결-끊기-무엇이 서버로 가고 안 가나-30초 간극) + `ref-cli.md`에 `dira remote`, 영문판 같이 | writer | - | 발행 |
+| P478-11 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P478-2, P478-4, P478-5, P478-6, P478-7, P478-9 | 발행 |
+| P478-12 | 클라우드 실행(R11) - 같은 엔진과 페르소나를 컨테이너에서 API 키로 | developer | - | 다음 |
+| P478-13 | 폴더 판별 함수(O8) | developer | - | 다음 |
+
+P478-1이 설정과 HTTP 클라이언트를 정해야 나머지 엔진 장이 그 위에 선다. P478-4는 잡기가 만든 작업
+토큰 파일을 읽으므로 P478-3을 기다린다. P478-8-9는 `remote.py`와 무관해 바로 간다. 매뉴얼은 위 표에
+글이 다 있어 기다리지 않는다. 에픽 `P478`을 연다(발행 11장).
+
+#### 수용조건
+
+- [ ] `remote.json`이 없는 큐에서 `workers/w1.sh dryrun`의 출력과 `cron.log`가 이 변경 전과 같고, `REMOTE`로 시작하는 줄이 없다.
+- [ ] `python3 test_remote.py`가 통과한다. 이 테스트는 `http.server` 가짜 서버로 위 §API 표의 경로를 전부 한 번 이상 부른다.
+- [ ] 가짜 서버로 `dira remote connect`를 돌리면 `user_code`가 찍히고, 승인 뒤 `remote.json`과 `0600` 자격 증명이 생긴다. 같은 루트에 다른 `workspace_id`로 다시 연결하면 rc 2다.
+- [ ] 가짜 서버에 작업 하나를 넣고 `workers/w1.sh`를 한 번 돌리면 같은 실행 안에서 `remote_job:`이 달린 티켓이 생기고 디스패치된다. 서버가 받은 상태가 `running` 다음 `done` 순서다.
+- [ ] 그 세션 환경에 `DIRA_REMOTE_TOKEN`이 있고, `grep -r <토큰 값>`이 `tickets/`-`workers/cron.log`-세션 로그에서 아무것도 못 찾는다. `done` 뒤 `run/remote-jobs/<hash>.json`이 없다.
+- [ ] 워커 락이 잡힌 동안 돌린 `workers/w1.sh`도 살아 있음 신호를 보내고, 그 본문에 `busy`와 `next_dispatch_at`이 있다.
+- [ ] `personas/<이름>/mcp.json`이 있는 페르소나의 claude argv에 `--mcp-config <그 파일>`이 있고, 없는 페르소나의 argv에는 없다.
+- [ ] 서버가 받은 진행 기록에 `step`과 Bash `command`만 있고 모델 출력 본문이 없다.
+- [ ] `awaiting:`이 걸린 티켓의 `## 질문 1` 절이 서버로 가고, 서버가 답을 주면 `tickets/<stem>.done.md`(`kind: answer`)가 생겨 원 티켓이 다시 잡힌다.
+- [ ] 페르소나 묶음이 `.remote` 없는 같은 이름 페르소나를 덮지 않는다. 스키마 묶음에 내용이 다른 같은 경로가 있으면 아무 파일도 안 바뀌고 rc 2다. 설치하면 action-log에 `스키마개정:` 줄이 타입-관계 수만큼 생긴다.
+- [ ] 객체 파일 하나를 손으로 고치고 sync하면 그 경로 하나만 `PUT objects`로 간다. 원격 쓰기의 `base_sha256`이 지금 파일과 다르면 파일이 그대로고 `conflict`가 올라간다. 맞으면 파일이 바뀌고 action-log에 `(op <op_id>)` 줄이 생긴다.
+- [ ] `versions/`에만 파일을 더해도 `graph.py` 노드 수와 앱 스키마 위반 수가 그대로다. `body: document` 타입 객체의 `##` 절은 위반이 아니고, 키가 없는 타입의 `##` 절은 여전히 위반이다.
+- [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, 고친 엔진 파일이 든 `test_*.py`가 통과한다.
+
 ### P477. 랜딩에 걸린 스크린샷 일곱 장을 지금 화면으로 다시 찍는다 (요구 `46ac964a`, 왕복 0회)
 
 사람 요구: *"랜딩페이지에 스크린샷중에 예전버전인 스크린샷을 업데이트해주세요"*.
