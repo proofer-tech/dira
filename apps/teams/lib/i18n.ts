@@ -2733,6 +2733,7 @@ export const ko: Record<string, string> = {
   "landing.plan.enterpriseItem1": "엔터프라이즈 전용 커스텀",
   "landing.plan.enterpriseItem2": "사내툴과 연동",
   "landing.plan.personaMarket": "페르소나 마켓",
+  "landing.plan.personaMarketLocal": "내 PC의 프로젝트끼리 페르소나와 스쿼드를 배포하고 가져다 쓰기",
   "landing.plan.personaMarketItem": "생태계도 같이 만듭니다",
   "landing.plan.ctaBody": "가입도 결제도 없습니다. 안 맞으면 지우면 그만이니 일단 깔아보세요.",
 
@@ -5590,6 +5591,7 @@ export const en: Record<string, string> = {
   "landing.plan.enterpriseItem1": "Enterprise-only customization",
   "landing.plan.enterpriseItem2": "Hooks into your internal tools",
   "landing.plan.personaMarket": "Persona market",
+  "landing.plan.personaMarketLocal": "Deploy personas and squads, then pull them into other projects on your machine",
   "landing.plan.personaMarketItem": "We build the ecosystem together too",
   "landing.plan.ctaBody": "No sign-up, no payment. Delete it if it doesn't suit you, so install it and see.",
 

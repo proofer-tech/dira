@@ -772,9 +772,10 @@ export default function Landing({
     </li>
     {/* 열이 아니라 행이 는다 — 이 카드는 유료 열 셋과 같은 열에 안 뜨고 전 열을 잡는다. */}
     <li className="wide">
-      <b>{t("landing.plan.personaMarket")} <span className="soon">{t("landing.plan.soon")}</span></b>
+      <b>{t("landing.plan.personaMarket")}</b>
       <ul className="marks">
-        <li>{t("landing.plan.personaMarketItem")}</li>
+        <li>{t("landing.plan.personaMarketLocal")}</li>
+        <li>{t("landing.plan.personaMarketItem")} <span className="soon">{t("landing.plan.soon")}</span></li>
       </ul>
     </li>
   </ul>
