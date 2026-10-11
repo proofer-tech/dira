@@ -106,7 +106,7 @@ try:
 finally:
     srv.kill()
 
-diff = subprocess.run(["git", "diff", "master", "--", "tick.sh", "tickets.py"], cwd=HERE, capture_output=True,
+diff = subprocess.run(["git", "diff", "master", "--", "tickets.py"], cwd=HERE, capture_output=True,
                       text=True).stdout
-assert diff == "", "엔진 파일이 바뀌었다"
+assert diff == "", "tickets.py가 바뀌었다"
 print("OK")

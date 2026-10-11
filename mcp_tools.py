@@ -359,3 +359,19 @@ def call_tool(name, args):
     if name not in TOOLS:
         raise ToolError("모르는 도구: %s" % name)
     return TOOLS[name][2](args or {})
+
+
+# 엔진 서브커맨드 -> 그것에 닿는 도구. test_mcp_parity.py가 소스에서 긁은 이름과 이 표를 맞춘다.
+# 엔진에 서브커맨드가 늘면 여기에 한 줄 더해야 테스트가 통과한다(닿는 도구가 없으면 engine_exec).
+_X = "engine_exec"
+COVERS = {
+    "tickets.py": {"select": _X, "wips": _X, "list": "queue_list", "reap": "reap", "find": "ticket_find",
+                   "claim": _X, "handclaim": _X, "release": _X, "reapclear": _X, "assign": _X,
+                   "setpid": _X, "setpersona": _X, "setinbox": _X, "askhuman": _X, "pollrows": _X,
+                   "pollstart": _X, "pollplan": _X, "pollresult": _X, "clear": _X},
+    "tick.sh": {"list": "queue_list", "unassign": "unassign", "reap": "reap", "poll": _X, "preempt": _X,
+                "dryrun": "dryrun", "tick": "dispatch"},
+    "graph.py": {"build": _X, "query": "graph_query", "path": _X, "explain": _X},
+    "dira_env.py": {"list": "env_list", "create": "env_create", "replace": "env_replace",
+                    "delete": "env_delete", "run": _X, "context": _X},
+}

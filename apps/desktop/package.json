@@ -61,6 +61,22 @@
         "to": "engine/dira_env.py"
       },
       {
+        "from": "../../mcp_server.py",
+        "to": "engine/mcp_server.py"
+      },
+      {
+        "from": "../../mcp_tools.py",
+        "to": "engine/mcp_tools.py"
+      },
+      {
+        "from": "../../graph.py",
+        "to": "engine/graph.py"
+      },
+      {
+        "from": "../../learn.py",
+        "to": "engine/learn.py"
+      },
+      {
         "from": "../../agy-gui.sh",
         "to": "engine/agy-gui.sh"
       },

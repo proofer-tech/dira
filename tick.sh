@@ -122,6 +122,12 @@ if [ "${1:-}" = env ] && [ "$e" = claude ]; then
   [ -f "$d/engines/dira_env.py" ] && exec python3 "$d/engines/dira_env.py" "$@"
   echo "dira env: 클라이언트가 설치되지 않았습니다" >&2; exit 69
 fi
+# P476: `dira mcp`는 엔진 MCP 서버다(stdio, python3 표준 라이브러리만).
+if [ "${1:-}" = mcp ] && [ "$e" = claude ]; then
+  shift
+  [ -f "$d/engines/mcp_server.py" ] && exec python3 "$d/engines/mcp_server.py" "$@"
+  echo "dira mcp: 서버가 설치되지 않았습니다" >&2; exit 69
+fi
 [ -x "$d/engines/$e" ] && exec "$d/engines/$e" "$@"
 exec "$e" "$@"'
 refresh_fixed_engine() {
@@ -194,6 +200,13 @@ refresh_fixed_engine() {
       && python3 -c 'import os,sys;os.replace(sys.argv[1],sys.argv[2])' "$ENGINES_DIR/dira_env.py.tmp.$$" "$ENGINES_DIR/dira_env.py" \
       || rm -f "$ENGINES_DIR/dira_env.py.tmp.$$"
   fi
+  # P476: MCP 서버와 그것이 부르는 엔진 파일도 같은 자리에 굽는다(내용이 다르면 원자 교체).
+  for f in mcp_server.py mcp_tools.py tickets.py graph.py learn.py; do
+    [ -f "$CODE/$f" ] && ! cmp -s "$CODE/$f" "$ENGINES_DIR/$f" 2>/dev/null || continue
+    cp "$CODE/$f" "$ENGINES_DIR/$f.tmp.$$" 2>/dev/null \
+      && python3 -c 'import os,sys;os.replace(sys.argv[1],sys.argv[2])' "$ENGINES_DIR/$f.tmp.$$" "$ENGINES_DIR/$f" \
+      || rm -f "$ENGINES_DIR/$f.tmp.$$"
+  done
   # P468-1: 라우터 본문이 다르면 원자 교체. 옛 dira-<엔진>과 부속 파일은 굽기가 끝난 뒤 지운다.
   if ! cmp -s <(printf '%s\n' "$ROUTER_BODY") "$FIXED_ENGINE" 2>/dev/null; then
     printf '%s\n' "$ROUTER_BODY" > "$FIXED_ENGINE.tmp.$$" 2>/dev/null \
