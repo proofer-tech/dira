@@ -546,7 +546,7 @@ export default function Landing({
   )}
 
   <figure>
-    <img className="shot" src="/shots/board.gif" alt={t("landing.hero.shotAlt")} width="1600" height="1000"/>
+    <img className="shot" src="/shots/board.gif" alt={t("landing.hero.shotAlt")} width="1600" height="952"/>
     <figcaption>{t("landing.hero.shotCaption")}</figcaption>
   </figure>
 </div>
@@ -647,7 +647,7 @@ export default function Landing({
 <section className="wrap reveal no-hi">
   <div className="gallery">
     <figure>
-      <a className="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/barge.gif" loading="lazy" alt={t("landing.gallery.bargeAlt")} width="1760" height="1408"/></a>
+      <a className="zoom" href="/shots/barge.gif" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/barge.gif" loading="lazy" alt={t("landing.gallery.bargeAlt")} width="928" height="672"/></a>
       <figcaption>
         {t("landing.gallery.bargeCaption")}
       </figcaption>
