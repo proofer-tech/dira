@@ -55,7 +55,7 @@ so there is nowhere for you to put a card.
 
 ## The ticket page
 
-![A running ticket's page. The body and the Done when checklist on the left, the frontmatter table and relations on the right.](/shots/04-ticket-running.png)
+![A running ticket's page. Top left is the lock notice with an Unassign button; below it the progress record with four plan steps and the box for talking to the running session; below that the body's Goal and Done when checklist. The right column holds the frontmatter table, relations and the requirement.](/shots/04-ticket-running.png)
 
 Press a card and the page for that one ticket opens. The left side is what you read and write,
 the right side is what you glance at.
@@ -510,7 +510,7 @@ already fully visible as bubbles and prose, so there is nothing to press.
 
 ## Progress record
 
-![Questions and answers on a ticket page. Under the question the session left, an answer bubble written by a person, with the frontmatter table on the right.](/shots/07-qa-thread.png)
+![The progress record on a finished ticket page. Below the session's log lines, an `Answer 1` bubble written by a person (1.(a)) sits on the right, and the right column holds the frontmatter table, relations and the requirement.](/shots/07-qa-thread.png)
 
 Stream lines and question-and-answer bubbles sit in one box in time order. That is why the section
 is called `Progress record`. This place answers one question. What has happened to this ticket so

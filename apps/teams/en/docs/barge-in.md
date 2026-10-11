@@ -7,11 +7,11 @@ what it was doing and follows it. stdin is the channel a running program takes t
 outside. The stream dialog on the worker screen has the same field; that one is not split by
 step, so it sits at the bottom of the box.
 
-![While the session stream grows a line per tool call, a sentence goes into the input box below and Send is pressed, and that sentence shows up in the stream as an interject line before the session changes direction and carries on.](/shots/barge.gif)
+![While the progress record grows a line per tool call, a line asking to sort newest first is typed into the input box below and Send is pressed, and that sentence enters the record as a `Person` bubble. The session replies that it will change the sort order, then goes on to fix the code with an Edit call.](/shots/barge.gif)
 
-That is a real round trip. The interject lands just after the session read `notes/a.md`: "Wrap up
-with what you have read so far, and cut summary.md down to one line in Korean." Thirteen seconds
-later the `summary.md` the session left behind is one line.
+A session reading search code gets one line: "sort newest first". The sentence stays in the record
+as a `Person` bubble on the right, and the session says it will change the sort order, then edits
+`src/search/query.ts`.
 
 - The entrance is one FIFO per session. A FIFO is a special file made for programs to pass text
   to each other, and the line that goes in first comes out first. The dispatcher that hands a

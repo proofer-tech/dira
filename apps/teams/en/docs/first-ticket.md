@@ -11,7 +11,7 @@ line is `No projects registered yet. Make one and you're started.` Below it,
 `Already have a .dira? Register it.` and a `Register project` button run across in one row, and
 after that comes the `New project` card. Its form is already open.
 
-![Home with zero projects. Under the line saying there are no projects, the new project card is unfolded, with fields for name, project folder, integration branch, and spec document, plus a create project button. A separate row above it holds the button for registering a .dira you already made.](/shots/08-onboarding.png)
+![Home with zero projects. Under the line saying there are no projects, a separate row holds the button for registering a .dira you already made, and below it the new project card is unfolded, with fields for name, project folder, integration branch, and spec document in order.](/shots/08-onboarding.png)
 
 That form is what this chapter fills in. The header has no `New project` button. When the form
 is already unfolded in front of you, there is no reason to put a button that opens it on the same

@@ -2649,25 +2649,25 @@ export const ko: Record<string, string> = {
   "landing.archiving.promiseBody":
     "일을 시킬수록 워커는 이 프로젝트에 능숙해집니다. 어제 누가 무엇을 정했는지 읽고 시작하니, 같은 이야기를 두 번 하지 않아도 됩니다.",
   "landing.archiving.shotAlt":
-    "dira 보드의 진행중·완료 두 레인. 완료 레인 둘째 카드 a732ce19의 아래 칸에 서류함 아이콘과 «아카이빙중» 한 줄이 붙어 있고, 그 위 카드에는 그 줄이 없습니다.",
+    "dira 보드의 대기·진행중·완료 세 레인. 대기와 진행중은 비어 있고, 완료 레인 둘째 카드 a732ce19의 아래 칸에 서류함 아이콘과 «아카이빙중» 한 줄, 오른쪽 끝에 워커 칩 w2가 붙어 있습니다. 그 위 카드 3f81d0c4에는 그 줄이 없습니다.",
   "landing.archiving.shotCaption": "이 한 줄은 링크입니다. 누르면 아카이빙을 맡은 티켓으로 건너가, 그 워커가 지금 어디까지 갔는지가 보입니다.",
   "landing.archiving.arrowLink": "아카이빙과 온톨로지",
 
   "landing.gallery.openOriginal": "원본 크기로 열기",
   "landing.gallery.bargeAlt":
-    "세션 스트림이 도구 호출을 한 줄씩 늘려 가는 동안, 아래 입력창에 문장을 넣고 보내기를 누르자 그 문장이 참견 줄로 스트림에 나타나고 세션이 이어서 방향을 바꿉니다.",
+    "진행 기록이 도구 호출을 한 줄씩 늘려 가는 동안 아래 입력창에 «정렬은 최신순으로 해 줘»를 치고 보내기를 누르자, 그 문장이 «사람» 말풍선으로 기록에 들어갑니다. 세션이 정렬 기준을 바꾸겠다고 답하고, 이어서 Edit 호출로 코드를 고칩니다.",
   "landing.gallery.bargeCaption":
     '"그럴 수 있죠 이해해요, 어떻게 사람이 완벽할까요?" 반드시 완벽한 요구사항을 줄 필요가 없습니다. 가볍게 요구하고 작업 중에도 참견할 수 있습니다.',
   "landing.gallery.bargeArrowLink": "도는 세션에 말 걸기",
-  "landing.gallery.qaAlt": "요구 티켓의 질문·답변 스레드. 질문 아래에 답변 말풍선이 오른쪽으로 붙어 있고, frontmatter에 awaiting 해시가 있습니다.",
+  "landing.gallery.qaAlt": "완료된 티켓 상세의 진행 기록. 세션 기록 로그 아래 오른쪽에 사람이 쓴 «답변 1» 말풍선(1.(a))이 붙어 있고, 오른쪽 단에는 frontmatter 표와 관계, 요구사항이 있습니다.",
   "landing.gallery.qaCaption": "어련히 모르면 물어보지 않겠어요? 에이전트들도 일하다 모르는 게 생기면 물어봅니다. 질문에 대답해주세요. 그럼 또 알아서 하러 갑니다.",
   "landing.gallery.qaArrowLink": "문의 · 답변",
-  "landing.gallery.runningAlt": "진행중 티켓 상세. 왼쪽에 본문과 Done when 체크리스트, 오른쪽에 frontmatter 표와 관계.",
+  "landing.gallery.runningAlt": "진행중 티켓 상세. 왼쪽 위에 할당 해제 버튼이 달린 잠금 안내, 그 아래 계획 단계 네 줄이 선 진행 기록과 도는 세션에 말 거는 입력창, 다시 그 아래 본문의 Goal과 Done when 체크리스트가 있습니다. 오른쪽 단에는 frontmatter 표와 관계, 요구사항이 있습니다.",
   "landing.gallery.runningCaption":
     "일이 어떻게 흘러가는지 티켓 단위로 들여다볼 수 있습니다. 생각과 다른 방향으로 가고 있으면 티켓을 할당 해제해 중단시킵니다. 아직 시작하지 않은 티켓은 본문을 고쳐 원하는 방향을 자세히 적어 둘 수도 있습니다.",
   "landing.gallery.runningArrowLink": "업무 투명성",
   "landing.gallery.ontologyAlt":
-    "온톨로지 화면. 제목 아래에 카드가 든 폴더 경로가 있고, 그 밑 지표 판에 객체 · 관계 96 · 184를 비롯한 칸이 열두 개 있습니다. 아래는 왼쪽이 카드 파일트리, 오른쪽이 고른 파일 _ontology/SCHEMA.md를 위지윅으로 연 편집기입니다.",
+    "온톨로지 화면. 제목 아래에 카드가 든 폴더 경로가 회색 한 줄로 있고, 그 아래는 왼쪽이 카드 파일트리, 오른쪽이 고른 파일 _ontology/SCHEMA.md를 위지윅으로 연 편집기입니다. 트리에서는 그 파일이 든 _ontology만 펴져 있습니다.",
   "landing.gallery.ontologyCaption": "티켓이 끝날 때마다 그 일에서 추린 사실이 한 장씩 여기 쌓입니다. 프로젝트 폴더 안에 마크다운으로 남아서 다음 세션도 사람도 같은 자리를 열어 봅니다.",
 
   "landing.noAccount.title": "계정을 만들 필요가 없습니다",
@@ -2684,7 +2684,7 @@ export const ko: Record<string, string> = {
     "화면에서 무엇을 눌렀는지 여덟 가지만 셉니다. 티켓 제목·본문·파일 경로·프롬프트는 실리지 않습니다. 설정에서 끄면 그때부터 아무것도 나가지 않고 남은 것까지 지우시려면",
   "landing.noAccount.item4Suffix": "한 개를 지우면 됩니다",
   "landing.noAccount.shotAlt":
-    "프로젝트가 0건일 때의 첫 화면. 등록된 프로젝트가 없다는 한 줄 아래에 새 프로젝트 카드가 펼쳐져 있고, 이름·프로젝트 폴더·통합 브랜치·스펙 문서 칸과 프로젝트 만들기 버튼이 있습니다.",
+    "프로젝트가 0건일 때의 첫 화면. 등록된 프로젝트가 없다는 한 줄 아래에 이미 만든 .dira를 등록하는 버튼이 있고, 그 밑에 새 프로젝트 카드가 펼쳐져 이름·프로젝트 폴더·통합 브랜치·스펙 문서 칸이 차례로 놓여 있습니다.",
   "landing.noAccount.shotCaption": "설치하고 처음 열면 이 화면입니다. 적는 것은 이름과 프로젝트 폴더뿐이고 계정을 넣는 칸이 없습니다.",
   "landing.noAccount.arrowLink": "사용 통계와 끄는 법",
 
@@ -5513,25 +5513,25 @@ export const en: Record<string, string> = {
   "landing.archiving.promiseBody":
     "The more you hand over, the better the workers know this project. They start by reading who decided what yesterday, so you never say the same thing twice.",
   "landing.archiving.shotAlt":
-    "The In progress and Done lanes of the dira board. The second card in Done, a732ce19, carries a filing-cabinet icon and an «Archiving» line in its bottom row, and the card above it has no such line.",
+    "The Open, In progress and Done lanes of the dira board. Open and In progress are empty. The second card in Done, a732ce19, carries a filing-cabinet icon and an «Archiving» line in its bottom row, with the worker chip w2 at the far right. The card above it, 3f81d0c4, has no such line.",
   "landing.archiving.shotCaption": "That line is a link. Press it and you land on the archive ticket, where you can see how far its worker has got.",
   "landing.archiving.arrowLink": "Archiving and the ontology",
 
   "landing.gallery.openOriginal": "Open at full size",
   "landing.gallery.bargeAlt":
-    "While the session stream adds one tool call after another, a sentence typed into the box below and sent shows up in the stream as an interject line, and the session changes course from there.",
+    "While the progress record adds one tool call after another, a line asking to sort newest first is typed into the box below and Send is pressed, and that sentence enters the record as a «Person» bubble. The session replies that it will change the sort order, then goes on to fix the code with an Edit call.",
   "landing.gallery.bargeCaption":
     "\"Fair enough, nobody's perfect.\" Your request doesn't have to be perfect. Ask loosely, and interject while the work is running.",
   "landing.gallery.bargeArrowLink": "Talking to a running session",
-  "landing.gallery.qaAlt": "The question and answer thread on a request ticket. An answer bubble sits to the right under the question, and the frontmatter carries an awaiting hash.",
+  "landing.gallery.qaAlt": "The progress record on a finished ticket page. Below the session's log lines, an «Answer 1» bubble written by a person (1.(a)) sits on the right, and the right column holds the frontmatter table, relations and the requirement.",
   "landing.gallery.qaCaption": "Of course they ask when they don't know. Agents run into things they can't decide, and then they ask. Answer the question and they go straight back to work.",
   "landing.gallery.qaArrowLink": "Asking back and answering",
-  "landing.gallery.runningAlt": "An in-progress ticket page. The body and the Done when checklist on the left, the frontmatter table and relations on the right.",
+  "landing.gallery.runningAlt": "An in-progress ticket page. Top left is the lock notice with an Unassign button; below it the progress record with four plan steps and the box for talking to the running session; below that the body's Goal and Done when checklist. The right column holds the frontmatter table, relations and the requirement.",
   "landing.gallery.runningCaption":
     "You can look into the work one ticket at a time. If it's heading somewhere you didn't mean, unassign the ticket and it stops. On a ticket that hasn't started yet, edit the body and spell out the direction you want.",
   "landing.gallery.runningArrowLink": "Work you can see",
   "landing.gallery.ontologyAlt":
-    "The ontology screen. Under the title sits the path of the folder holding the cards, and below it a metrics panel of twelve cells, object · relation 96 · 184 among them. Beneath that the card file tree is on the left, and on the right an editor has the selected file _ontology/SCHEMA.md open in rich text.",
+    "The ontology screen. Under the title, one grey line gives the path of the folder holding the cards. Below it the card file tree is on the left, and on the right an editor has the selected file _ontology/SCHEMA.md open in rich text. In the tree only the _ontology directory holding that file is open.",
   "landing.gallery.ontologyCaption": "Every time a ticket ends, the facts picked out of that job pile up here, one card at a time. They stay as markdown inside the project folder, so the next session and you open the same place.",
 
   "landing.noAccount.title": "You don't need an account",
@@ -5548,7 +5548,7 @@ export const en: Record<string, string> = {
     "We count eight things about what you press on screen. Ticket titles, ticket bodies, file paths and prompts are not carried. Turn it off in settings and nothing goes out from that moment on, and to wipe what is left, delete the one file",
   "landing.noAccount.item4Suffix": "and you are done",
   "landing.noAccount.shotAlt":
-    "The first screen when no project is registered. Under the line saying there are none, the New project card is open, with the Name, Project folder, Integration branch and Spec document fields and a Create project button.",
+    "The first screen when no project is registered. Under the line saying there are none sits a button for registering a .dira you already made, and below it the New project card is open, with the Name, Project folder, Integration branch and Spec document fields in order.",
   "landing.noAccount.shotCaption": "This is the screen the first time you open it after installing. You fill in a name and a project folder, and there is no field for an account.",
   "landing.noAccount.arrowLink": "Usage analytics, and how to turn them off",
 
