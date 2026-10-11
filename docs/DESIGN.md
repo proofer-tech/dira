@@ -8938,6 +8938,80 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P476. 엔진 MCP - 엔진이 하는 일을 전부 MCP 도구로 하고, 앱이 떠 있는 동안 MCP도 떠 있다 (요구 `3d8944fd`, 왕복 0회)
+
+사람 요구: 로드맵에 있는 dira 엔진 MCP를 만든다. dira 엔진이 할 수 있는 모든 작업은 MCP로도
+할 수 있어야 한다. 그리고 dira 엔진이 떠 있다면 MCP도 떠 있다는 것이 보장되어야 한다. 가리키는
+로드맵 항목은 랜딩 플랜 Free 열의 `(준비중) 엔진 MCP`다(`landing.plan.freeItem3`, 요구 `1c513231`).
+
+사람이 정하지 않은 것은 주도성 5로 pm이 정했다. 갈림길은 두 가지였다.
+
+- **"모든 작업"의 범위.** 엔진의 표면은 CLI다 - 워커 명령(`<w>.sh` 무인자-`list`-`dryrun`-`reap`-
+  `unassign`-`poll`-`preempt`), `tickets.py` 서브커맨드, `graph.py`, `learn.py`, `dira_env.py`, 큐
+  훅(`push.sh`-`token-rotate.sh`), 그리고 프로토콜이 손으로 하라는 파일 조작(티켓 만들기-읽기-절
+  덧붙이기-`.wip`->`.done` rename-참견)이다. 자주 쓰는 것은 이름 붙은 도구로 주고, 나머지까지
+  빠짐없이 닿도록 허용목록 기반 통과 도구 `engine_exec` 하나를 둔다. **"모든"의 판정은 사람이
+  아니라 테스트가 한다** - 엔진 소스에서 서브커맨드를 긁어 각 이름이 도구나 `engine_exec`
+  허용목록에 있는지 본다. 엔진에 서브커맨드가 늘었는데 MCP가 안 따라오면 테스트가 깨진다.
+- **"떠 있다"의 기준.** 엔진에는 상주 프로세스가 없다 - cron이 매분 워커를 한 번 띄우고 끝난다.
+  상주하는 것은 데스크톱 앱(dira.app)뿐이다. 그래서 보장을 두 층으로 둔다. (1) stdio - 엔진이
+  설치돼 있으면 `dira mcp`가 언제나 뜬다. MCP 클라이언트가 필요할 때 띄우므로 따로 떠 있을 필요가
+  없다. (2) HTTP - 앱이 떠 있는 동안 앱이 MCP 서버를 자식으로 띄우고, 죽으면 다시 띄우고, 앱이
+  닫히면 같이 내린다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 파일 | 레포 루트 `mcp_server.py`(프로토콜 층)와 `mcp_tools.py`(도구 표). `tickets.py`-`graph.py`와 같은 자리다. 의존성 0 - python3 표준 라이브러리만 |
+| 프로토콜 | MCP JSON-RPC 2.0, `protocolVersion` `2025-06-18`. `initialize`-`notifications/initialized`-`tools/list`-`tools/call`-`ping`을 받는다. 모르는 메서드는 `-32601` |
+| stdio | `python3 mcp_server.py` - 줄 단위 JSON. 런처에 `dira mcp`를 더한다(`dira env`와 같은 갈래 - `exec python3 "$d/engines/mcp_server.py" "$@"`). 앱이 `dira_env.py`를 싣는 자리(`apps/desktop/package.json` `extraResources`)에 두 파일을 더한다 |
+| HTTP | `python3 mcp_server.py --http 127.0.0.1:<port>` - Streamable HTTP, `POST /mcp` 한 길, 응답은 `application/json`(SSE 안 씀). `127.0.0.1`에만 묶는다. 요청마다 `Authorization: Bearer <token>`이 맞아야 하고, `Origin`이 있으면 `http://127.0.0.1`-`http://localhost`만 받는다. 틀리면 `401`-`403` |
+| 큐 고르기 | 모든 도구가 `root`(큐 루트 = `<프로젝트>/.dira`) 인자를 받는다. 없으면 환경변수 `TICKET_ROOT`, 그것도 없으면 오류 `root가 필요합니다`. `projects` 도구가 `~/.config/dira/gui-projects.json`의 프로젝트와 큐 루트를 돌려준다 |
+| 이름 붙은 도구 | `projects` - `queue_list`(`<w>.sh list`) - `dispatch`(`<w>.sh` 1회, `worker` 인자) - `dryrun` - `reap` - `unassign`(`hash`, `force`) - `ticket_find`(`tickets.py find`) - `ticket_read`(본문 전문) - `ticket_create`(fm + 본문으로 새 `<8자 해시>.md`, `Write` 의미 - 이미 있으면 실패) - `ticket_append`(현재 파일명을 다시 찾아 끝에 절을 더한다 - P474 재조회 규칙 그대로, 0개-2개 이상이면 실패) - `ticket_done`(`.wip`->`.done` rename만, 다른 rename 없음) - `interject`(fm `inbox:`로 참견 한 줄, `O_NONBLOCK`, `lib/interject.ts`와 같은 JSON + `<inbox>.human`) - `graph_query`(`graph.py query`) - `env_list`-`env_create`-`env_replace`-`env_delete`(`dira_env.py`, 값은 자식 stdin으로만 넘기고 응답에 값을 싣지 않는다) |
+| `engine_exec` | 인자 `program`(허용목록 하나)과 `args`(문자열 배열). 셸을 안 거친다(`subprocess.run(argv)`). 허용목록: `tickets.py` - `graph.py` - `learn.py` - `dira_env.py` - `workers/<w>.sh`(큐 루트 안 실재 파일만) - `push.sh` - `token-rotate.sh`. `push.sh`는 `cwd`(큐 루트 `worktrees/` 아래 실재 디렉터리만)를 받는다. 결과는 `{rc, stdout, stderr}`, 시간 상한 `timeout`(기본 600초) |
+| 쓰기의 한계 | 큐 불변을 MCP가 깨지 않는다. claim은 `tickets.py`가 하는 원자적 link뿐이고 MCP에 다른 claim 경로가 없다. 티켓 rename은 `ticket_done` 하나다. 금지 명령(`push --force`-`reset --hard`-`stash`-원격 push)을 실행하는 도구는 없다 |
+| 덮기 테스트 | `test_mcp_parity.py` - `tickets.py`의 `if cmd == "..."`, `tick.sh`의 워커 갈래(`list)`-`unassign)`-`reap)`-`poll)`-`preempt)`-`dryrun|tick)`), `graph.py`-`dira_env.py`의 `cmd ==`를 소스에서 긁어 이름마다 이름 붙은 도구나 `engine_exec` 허용목록에 닿는지 본다. 하나라도 안 닿으면 실패하고 그 이름을 찍는다 |
+| 앱이 띄운다 | `apps/desktop/main.ts`가 서버를 띄우는 자리(`startServer`) 옆에서 `python3 <엔진>/mcp_server.py --http 127.0.0.1:<빈 포트>`를 자식으로 띄운다. 토큰은 띄울 때마다 새로 만든다(`crypto.randomBytes(32)` hex) |
+| 떠 있음 기록 | 뜬 뒤 `~/.config/dira/run/mcp.json`에 `{url, token, pid, started_at}`를 `0600`으로 쓴다. 앱이 닫힐 때(`before-quit`) 자식을 내리고 파일을 지운다 - `env-connect.ts`가 브리지 파일을 다루는 방식 그대로다 |
+| 다시 띄우기 | 자식이 앱보다 먼저 죽으면 1초 뒤 다시 띄우고 `mcp.json`을 새 값으로 다시 쓴다. 60초 안에 5번 죽으면 멈추고 트레이 메뉴에 `MCP 서버가 멈췄습니다 - 다시 시작` 항목을 띄운다. 누르면 횟수를 비우고 다시 띄운다 |
+| 화면 | 설정 화면에 `MCP` 절 하나: 상태(`켜짐 - <url>` / `꺼짐`), 그리고 복사 버튼이 붙은 연결 설정 두 벌 - stdio `{"command":"dira","args":["mcp"]}`와 HTTP `{"type":"http","url":<url>,"headers":{"Authorization":"Bearer <token>"}}`. 상태는 `mcp.json`의 `pid`가 살아 있는지로 판정한다. 브라우저 셸(앱 아님)에서는 HTTP 줄 대신 `앱에서만 뜹니다` 한 줄 |
+| 랜딩 | QA 통과 뒤 `landing.tsx` Free 열 `freeItem3` 옆 `(준비중)`을 뗀다. 문자열 `엔진 MCP`-`Engine MCP`는 그대로 |
+| ko-en | 화면-트레이 글자 전부를 `lib/i18n.ts` 두 언어에 단다(트레이는 `apps/desktop`의 기존 문구 방식) |
+
+#### 안 하는 것
+
+- 엔진에 상주 데몬을 만드는 것 - cron 1회 실행 모델이 엔진 계약이다. 상주는 앱이 진다.
+- MCP 리소스-프롬프트-SSE 알림 - 도구만으로 "모든 작업"이 닫힌다.
+- 원격(다른 머신) 접속 - `127.0.0.1`에만 묶는다. Free 열의 `(준비중) 동료들과 P2P 협업`은 별개다.
+- `tick.sh`-`tickets.py` 수정 - MCP는 그것들을 부르기만 한다. 엔진 기존 파일 0줄이다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P476-1 | 엔진 - `mcp_server.py` 프로토콜 층(stdio + HTTP + 토큰-Origin 검사)과 `mcp_tools.py` 도구 표 전부, `engine_exec` 허용목록 + `test_mcp_server.py` | developer | - | 발행 |
+| P476-2 | 엔진 - `test_mcp_parity.py` 덮기 테스트, 런처 `dira mcp` 갈래, `apps/desktop/package.json` `extraResources`에 두 파일 | developer | P476-1 | 발행 |
+| P476-3 | 앱 - `main.ts`가 HTTP MCP를 자식으로 띄우고, `mcp.json`을 쓰고 지우고, 죽으면 다시 띄우고, 트레이 멈춤 항목 + 테스트 | developer | P476-1 | 발행 |
+| P476-4 | 화면 - 설정의 `MCP` 절(상태 + 연결 설정 두 벌 복사), i18n(ko-en) + 테스트 | developer | - | 발행 |
+| P476-5 | 매뉴얼 - 새 `mcp.md`(무엇을 할 수 있나 - 클라이언트에 붙이는 법 두 가지 - 앱이 꺼지면 HTTP가 내려간다는 것)와 `ref-cli.md`에 `dira mcp`, 영문판 같이 | writer | - | 발행 |
+| P476-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P476-2, P476-3, P476-4 | 발행 |
+| P476-7 | 랜딩 - Free 열 `엔진 MCP`의 `(준비중)`을 뗀다 | developer | P476-6 | 발행 |
+
+P476-2와 P476-3은 도구 표와 서버가 있어야 판정할 것이 생긴다. P476-4는 `mcp.json` 모양이 위
+표에 정해져 있어 기다리지 않는다. 랜딩은 QA가 통과한 다음이다 - 안 된 것을 된다고 적지 않는다.
+에픽 `P476`를 연다(발행 7장).
+
+#### 수용조건
+
+- [ ] `printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"0"}}}' '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | python3 mcp_server.py`가 줄 둘을 내고, 둘째 줄 `tools`에 위 이름 붙은 도구 전부와 `engine_exec`가 있다.
+- [ ] 임시 큐에서 MCP 도구만으로 티켓을 만들고(`ticket_create`) - `queue_list`에 뜨고 - `tickets.py handclaim`을 `engine_exec`로 불러 `.wip`이 되고 - `ticket_append`로 절이 붙고 - `ticket_done`으로 `.done`이 된다. 각 단계 뒤 `tickets/`에 그 해시의 파일이 정확히 하나다.
+- [ ] `engine_exec`에 허용목록 밖 `program`(예: `/bin/sh`)이나 큐 루트 밖 `workers/../x.sh`를 주면 실행 없이 오류를 돌려준다.
+- [ ] `env_create`로 값을 넣은 뒤 그 호출과 `env_list`의 응답 어디에도 값 문자열이 없다.
+- [ ] `python3 test_mcp_parity.py`가 통과한다. `tickets.py`에 가짜 `if cmd == "zzz":`를 더하면 실패하고 `zzz`를 찍는다.
+- [ ] `dira mcp`가 위 첫 줄과 같은 응답을 낸다.
+- [ ] dira.app을 켜면 `~/.config/dira/run/mcp.json`이 생기고, 그 `url`로 토큰을 붙여 `tools/list`를 보내면 `200`이다. 토큰이 없거나 틀리면 `401`이다.
+- [ ] `mcp.json`의 `pid`를 `kill`하면 몇 초 안에 새 `pid`로 파일이 다시 써지고 다시 `200`이다. 앱을 닫으면 그 프로세스가 없고 `mcp.json`도 없다.
+- [ ] 설정 화면 `MCP` 절이 앱에서는 `켜짐 - http://127.0.0.1:<port>/mcp`를, 앱이 닫혀 있거나 브라우저 셸이면 `꺼짐`/`앱에서만 뜹니다`를 보인다. English에서 같은 글자가 영어로 나온다.
+- [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff master -- tick.sh tickets.py`가 0줄이다.
 ### P475. 랜딩의 페르소나 마켓 카드가 로컬 마켓이 이미 된다고 말한다 (요구 `bc6472be`, 왕복 0회)
 
 사람 요구: 로드맵에 있던 페르소나 마켓 중 일부가 로컬로 완성되었으니 그 사실을 랜딩에 반영한다.
