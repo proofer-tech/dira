@@ -276,6 +276,90 @@ class T(Base, unittest.TestCase):
         self.sync()
         self.assertEqual(len(self.statuses()), 1)
 
+    # ---- P478-5: 진행 기록-질문-답 ----
+
+    def wip_job(self, extra=""):
+        self.setup_jobs([[self.job()]])
+        self.fake.routes[("POST", "jobs/J1/events")] = (204, None)
+        self.fake.routes[("POST", "jobs/J1/questions")] = (204, None)
+        self.sync()
+        tdir = os.path.join(self.root, "tickets")
+        h = self.tickets()[0][:-3]
+        p = os.path.join(tdir, h + ".wip.md")
+        os.rename(os.path.join(tdir, h + ".md"), p)
+        if extra:
+            text = open(p).read()
+            open(p, "w").write(text.replace("remote_job: J1", "remote_job: J1\n" + extra))
+        return tdir, h, p
+
+    def events(self):
+        return [e for c in self.fake.calls if c[1] == "jobs/J1/events" for e in c[2]["events"]]
+
+    def test_events_from_session_log(self):
+        tdir, h, p = self.wip_job()
+        logs = os.path.join(self.root, "workers", "logs")
+        os.makedirs(logs)
+
+        def tu(name, **inp):
+            return {"type": "assistant", "message": {"content": [
+                {"type": "text", "text": "SECRET-MODEL-TEXT"},
+                {"type": "tool_use", "name": name, "input": inp}]}}
+        lines = [tu("Read", file_path="/x"), tu("Grep", pattern="p"), tu("Edit", file_path="/y"),
+                 tu("Bash", command="ls -la"), tu("Bash", command="é" * 1500),
+                 tu("Write", file_path="/r/tickets/deadbeef.md"),
+                 {"type": "user", "message": {"content": [{"type": "tool_result", "content": "SECRET-RESULT"}]}}]
+        lp = os.path.join(logs, "20261011-000000-w1-%s.log" % h)
+        with open(lp, "w") as f:
+            for l in lines:
+                f.write(json.dumps(l) + "\n")
+            f.write('{"type":"assistant","mess')  # 덜 쓰인 끝줄은 다음에
+        self.sync()
+        evs = self.events()
+        self.assertEqual([e["step"] for e in evs if e["step"]], ["read", "wrote", "handoff"])
+        cmds = [e["command"] for e in evs if e["command"]]
+        self.assertEqual(cmds[0], "ls -la")
+        self.assertEqual(len(cmds[1].encode()), 2000)
+        raw = json.dumps([c[2] for c in self.fake.calls if c[1] == "jobs/J1/events"])
+        self.assertNotIn("SECRET", raw)
+        n = len(evs)
+        self.sync()
+        self.assertEqual(len(self.events()), n)  # 같은 줄을 두 번 안 올린다
+        with open(lp, "a") as f:
+            f.write(json.dumps(tu("Read", file_path="/z")) + "\n")
+        self.sync()
+        self.assertEqual(len(self.events()), n)  # read는 첫 사용만
+
+    def test_question_once_and_answer_written_not_overwritten(self):
+        tdir, h, p = self.wip_job("awaiting: abcd1234")
+        with open(p, "a") as f:
+            f.write("\n## 질문 1\n\n### 1. 뭐부터\n\n- (a) 이거\n- (b) 저거\n\n## 질문 2\n\n### 1. 둘째\n\n- (a) 예\n")
+        self.sync()
+        self.sync()
+        qs = [c[2] for c in self.fake.calls if c[1] == "jobs/J1/questions"]
+        self.assertEqual(len(qs), 1)
+        self.assertEqual(qs[0]["stem"], "abcd1234")
+        self.assertTrue(qs[0]["markdown"].startswith("## 질문 2"))
+        self.assertNotIn("질문 1", qs[0]["markdown"])
+        self.assertIn("awaiting", [e["step"] for e in self.events()])
+        ans = {"job_id": "J1", "stem": "abcd1234", "markdown": "(a)로 가세요"}
+        self.fake.routes[("GET", "answers?runtime_id=rt1")] = (200, {"answers": [ans]})
+        self.sync()
+        text = open(os.path.join(tdir, "abcd1234.done.md")).read()
+        self.assertTrue(text.startswith("---\nkind: answer\nticket: abcd1234\n---\n"))
+        self.assertIn("(a)로 가세요", text)
+        open(os.path.join(tdir, "abcd1234.done.md"), "w").write("사람이 먼저")
+        self.sync()
+        self.assertEqual(open(os.path.join(tdir, "abcd1234.done.md")).read(), "사람이 먼저")
+
+    def test_answer_for_unknown_stem_rejected(self):
+        tdir, h, p = self.wip_job("awaiting: abcd1234")
+        bad = [{"job_id": "J1", "stem": "../evil", "markdown": "x"},
+               {"job_id": "J1", "stem": "ffffffff", "markdown": "x"}]
+        self.fake.routes[("GET", "answers?runtime_id=rt1")] = (200, {"answers": bad})
+        self.sync()
+        self.assertEqual([n for n in os.listdir(tdir) if "answer" in n or n.startswith("ffff")], [])
+        self.assertFalse(os.path.exists(os.path.join(self.root, "evil.done.md")))
+
 
 class Tools(Base, unittest.TestCase):
     """가짜 엔진 실행 파일과 가짜 시계로 런타임-로그인 점검-heartbeat를 본다."""

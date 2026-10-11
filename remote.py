@@ -7,7 +7,6 @@ import argparse
 import datetime
 import hashlib
 import json
-import datetime
 import os
 import re
 import secrets
@@ -489,6 +488,161 @@ def cmd_sync(root):
 
 
 STEPS += [claim_jobs, report_status]
+
+# ---- 진행 기록(R4)과 사람 결정(R5) ----
+
+CMD_MAX = 2000
+READ_TOOLS = ("Read", "Grep", "Glob")
+WRITE_TOOLS = ("Write", "Edit")
+NEW_TICKET = re.compile(r"tickets/[0-9a-f]{8}\.md\b")
+
+
+def step_of(name, inp, own_hash):
+    """도구 사용 하나의 단계 이름 또는 None. handoff는 tickets/ 아래 새 티켓 파일을 만드는 쓰기다."""
+    inp = inp if isinstance(inp, dict) else {}
+    if name in READ_TOOLS:
+        return "read"
+    if name in WRITE_TOOLS:
+        m = NEW_TICKET.search(str(inp.get("file_path", "")))
+        return "handoff" if m and own_hash not in m.group(0) else "wrote"
+    if name == "Bash":
+        for m in re.finditer(r">\s*\S*(tickets/[0-9a-f]{8}\.md)\b", str(inp.get("command", ""))):
+            if own_hash not in m.group(1):
+                return "handoff"
+    return None
+
+
+def trim(cmd):
+    b = str(cmd).encode("utf-8")
+    return cmd if len(b) <= CMD_MAX else b[:CMD_MAX].decode("utf-8", "ignore")
+
+
+def session_events(path, offset, seen, own_hash):
+    """(이벤트 목록, 새 offset, 새로 본 단계). 완결된 줄까지만 읽는다. 모델 본문-도구 결과는 만지지 않는다."""
+    with open(path, "rb") as f:
+        f.seek(offset)
+        raw = f.read()
+    end = raw.rfind(b"\n") + 1
+    events, seen = [], set(seen)
+    for line in raw[:end].split(b"\n"):
+        try:
+            o = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(o, dict) or o.get("type") != "assistant":
+            continue
+        at = o.get("timestamp") or datetime.datetime.now().astimezone().isoformat(timespec="seconds")
+        content = (o.get("message") or {}).get("content")
+        for c in content if isinstance(content, list) else []:
+            if not isinstance(c, dict) or c.get("type") != "tool_use":
+                continue
+            step = step_of(c.get("name"), c.get("input"), own_hash)
+            if step and (step not in seen or step == "handoff"):
+                seen.add(step)
+                events.append({"at": at, "step": step, "command": None})
+            if c.get("name") == "Bash" and isinstance(c.get("input"), dict) and c["input"].get("command"):
+                events.append({"at": at, "step": None, "command": trim(c["input"]["command"])})
+    return events, offset + end, seen
+
+
+def load_prog(ws):
+    return read_json(os.path.join(ws_dir(ws), "progress.json")) or {}
+
+
+def save_prog(ws, prog):
+    write_json(os.path.join(ws_dir(ws), "progress.json"), prog)
+
+
+def report_events(ctx):
+    import glob
+    prog = load_prog(ctx.ws)
+    logs = os.path.join(ctx.root, "workers", "logs")
+    for t in remote_tickets(ctx.root):
+        if fm_get(t["fm"], "remote_revoked") == "true":
+            continue
+        p = prog.setdefault(t["job_id"], {})
+        offs, seen = p.setdefault("offsets", {}), p.setdefault("seen", [])
+        evs, newoffs, newseen = [], {}, set(seen)
+        for lp in sorted(glob.glob(os.path.join(logs, "*-%s.log" % t["hash"]))):
+            k = os.path.basename(lp)
+            e, newoffs[k], newseen = session_events(lp, offs.get(k, 0), newseen, t["hash"])
+            evs += e
+        if t["suffix"] != "done" and job_state(ctx.root, t) == "awaiting" and "awaiting" not in newseen:
+            newseen.add("awaiting")
+            evs.append({"at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+                        "step": "awaiting", "command": None})
+        if evs:
+            st, _ = ctx.call("POST", "jobs/%s/events" % urllib.parse.quote(t["job_id"], safe=""), {"events": evs})
+            if st == 410:
+                mark_revoked(t)
+                drop_token(t["hash"])
+                continue
+            if st not in (200, 204):
+                log("events %s HTTP %s" % (t["hash"], st))
+                continue
+        offs.update(newoffs)
+        p["seen"] = sorted(newseen)
+    save_prog(ctx.ws, prog)
+
+
+def last_question(body):
+    """마지막 `## 질문 n` 절 전문(다음 `## ` 앞까지). 없으면 None."""
+    ms = list(re.finditer(r"^## 질문 \d+.*$", body, re.M))
+    if not ms:
+        return None
+    rest = body[ms[-1].start():]
+    nxt = re.search(r"^## (?!질문 \d)", rest[3:], re.M)
+    return (rest[:nxt.start() + 3] if nxt else rest).strip() + "\n"
+
+
+def report_questions(ctx):
+    prog = load_prog(ctx.ws)
+    for t in remote_tickets(ctx.root):
+        stem = fm_get(t["fm"], "awaiting")
+        if not stem or job_state(ctx.root, t) != "awaiting" or fm_get(t["fm"], "remote_revoked") == "true":
+            continue
+        p = prog.setdefault(t["job_id"], {})
+        md = last_question(t["body"])
+        if not md or p.get("asked") == [stem, len(md)]:
+            continue
+        st, _ = ctx.call("POST", "jobs/%s/questions" % urllib.parse.quote(t["job_id"], safe=""),
+                         {"stem": stem, "markdown": md})
+        if st in (200, 204):
+            p["asked"] = [stem, len(md)]  # ponytail: 같은 stem에 질문 절이 늘면 길이가 달라져 다시 간다
+        else:
+            log("questions %s HTTP %s" % (t["hash"], st))
+    save_prog(ctx.ws, prog)
+
+
+def fetch_answers(ctx):
+    st, r = ctx.call("GET", "answers?runtime_id=" + urllib.parse.quote(str(ctx.runtime_id), safe=""))
+    if st != 200 or not r:
+        return
+    # 서버가 준 stem은 그 작업 티켓이 실제로 기다리는 stem일 때만 쓴다(경로 이탈 방지)
+    waiting = {(t["job_id"], fm_get(t["fm"], "awaiting")) for t in remote_tickets(ctx.root)}
+    tdir = os.path.join(ctx.root, "tickets")
+    for a in r.get("answers", []):
+        stem, md = a.get("stem"), a.get("markdown")
+        if (a.get("job_id"), stem) not in waiting or not isinstance(md, str) \
+                or not re.fullmatch(r"[\w-]+", stem):
+            log("answer-skip %s" % one_line(stem))
+            continue
+        text = "---\nkind: answer\nticket: %s\n---\n\n%s" % (stem, md if md.endswith("\n") else md + "\n")
+        tmp = os.path.join(ctx.root, ".remote-tmp-ans-%s-%d" % (stem, os.getpid()))
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(text)
+            os.link(tmp, os.path.join(tdir, stem + ".done.md"))  # 이미 있으면 FileExistsError - 덮지 않는다
+        except FileExistsError:
+            pass
+        finally:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+
+STEPS += [report_events, report_questions, fetch_answers]
 
 
 # ---- connect / disconnect ----
