@@ -9025,17 +9025,17 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P478-1 | 엔진 - `remote.py` 뼈대: 설정-자격 증명-워크스페이스 분리, `connect`-`disconnect`(기기 코드), HTTP 클라이언트, `sync` 락-간격, `test_remote.py` 가짜 서버 | developer | - | 발행 |
-| P478-2 | 엔진 - 런타임 등록-버전-로그인 점검-살아 있음 신호(`next_dispatch_at`-`busy`) | developer | P478-1 | 발행 |
-| P478-3 | 엔진 - 작업 잡기 -> 로컬 티켓, 상태 보고, 작업 토큰 보관-삭제, `410` 처리 | developer | P478-1 | 발행 |
-| P478-4 | 엔진 - `tick.sh`: 락 전 sync 호출, 디스패치 때 작업 토큰 환경변수, 페르소나 `mcp.json`, 런처 `dira remote` 갈래 | developer | P478-3 | 발행 |
-| P478-5 | 엔진 - 진행 기록 추출-보고, 질문 올리기, 답 내려받기 | developer | P478-3 | 발행 |
-| P478-6 | 엔진 - 페르소나 묶음과 스키마 묶음 설치(검증-거절-action-log) | developer | P478-1 | 발행 |
-| P478-7 | 엔진 - 온톨로지 올리기(매니페스트)와 원격 쓰기 적용(해시 대조-action-log) | developer | P478-1 | 발행 |
-| P478-8 | 온톨로지 형식 - `graph.py`의 `versions/` 제외와 `property` 간선, `protocols/ontology.md`의 `body: document`-`versions/`-`title` 규칙 | developer | - | 발행 |
-| P478-9 | 앱 - `lib/ontology.ts` 검사가 `body: document`-`versions/`를 존중하고, 객체 화면이 `title`과 인용 속성 값을 보인다 + 테스트 | developer | - | 발행 |
-| P478-10 | 매뉴얼 - 새 `remote.md`(연결-끊기-무엇이 서버로 가고 안 가나-30초 간극) + `ref-cli.md`에 `dira remote`, 영문판 같이 | writer | - | 발행 |
-| P478-11 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P478-2, P478-4, P478-5, P478-6, P478-7, P478-9 | 발행 |
+| P478-1 | 엔진 - `remote.py` 뼈대: 설정-자격 증명-워크스페이스 분리, `connect`-`disconnect`(기기 코드), HTTP 클라이언트, `sync` 락-간격, `test_remote.py` 가짜 서버 | developer | - | 발행 `691e6265` |
+| P478-2 | 엔진 - 런타임 등록-버전-로그인 점검-살아 있음 신호(`next_dispatch_at`-`busy`) | developer | P478-1 | 발행 `7383434a` |
+| P478-3 | 엔진 - 작업 잡기 -> 로컬 티켓, 상태 보고, 작업 토큰 보관-삭제, `410` 처리 | developer | P478-1 | 발행 `c56b54d8` |
+| P478-4 | 엔진 - `tick.sh`: 락 전 sync 호출, 디스패치 때 작업 토큰 환경변수, 페르소나 `mcp.json`, 런처 `dira remote` 갈래 | developer | P478-3 | 발행 `9e2ba338` |
+| P478-5 | 엔진 - 진행 기록 추출-보고, 질문 올리기, 답 내려받기 | developer | P478-3 | 발행 `a09b55a0` |
+| P478-6 | 엔진 - 페르소나 묶음과 스키마 묶음 설치(검증-거절-action-log) | developer | P478-1 | 발행 `404a2cb6` |
+| P478-7 | 엔진 - 온톨로지 올리기(매니페스트)와 원격 쓰기 적용(해시 대조-action-log) | developer | P478-1 | 발행 `2b0c1dbd` |
+| P478-8 | 온톨로지 형식 - `graph.py`의 `versions/` 제외와 `property` 간선, `protocols/ontology.md`의 `body: document`-`versions/`-`title` 규칙 | developer | - | 발행 `7b447b26` |
+| P478-9 | 앱 - `lib/ontology.ts` 검사가 `body: document`-`versions/`를 존중하고, 객체 화면이 `title`과 인용 속성 값을 보인다 + 테스트 | developer | - | 발행 `43e932fd` |
+| P478-10 | 매뉴얼 - 새 `remote.md`(연결-끊기-무엇이 서버로 가고 안 가나-30초 간극) + `ref-cli.md`에 `dira remote`, 영문판 같이 | writer | - | 발행 `f325cc6e` |
+| P478-11 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P478-2, P478-4, P478-5, P478-6, P478-7, P478-9 | 발행 `8861c006` |
 | P478-12 | 클라우드 실행(R11) - 같은 엔진과 페르소나를 컨테이너에서 API 키로 | developer | - | 다음 |
 | P478-13 | 폴더 판별 함수(O8) | developer | - | 다음 |
 
