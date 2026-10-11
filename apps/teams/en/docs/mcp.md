@@ -1,9 +1,10 @@
 # Engine MCP
 
-> As of 2026-10-11 the engine ships the MCP server (`mcp_server.py`). The `dira mcp` command, the
-> app starting the HTTP server, and the `MCP` section in settings are still being built. If
-> `dira mcp` fails with a command-not-found error or settings has no `MCP` section, point your
-> client at the server with `python3` as in [Connecting without the app](#connecting-without-the-app).
+> The `dira mcp` command, the HTTP server the app runs, and the `MCP` section in settings ship
+> in v1.2.19 and later. If `dira mcp` fails with a command-not-found error or settings has no `MCP`
+> section, your app is older than that. Update the app to v1.2.19 or later. If you can't update
+> right now, point your client at the server with `python3` as in
+> [Connecting without the app](#connecting-without-the-app).
 
 Any client that speaks MCP (Claude Code, Claude Desktop, Cursor, and so on) can work a dira queue.
 You create tickets, read them, append sections, run workers, and interject in running sessions from
