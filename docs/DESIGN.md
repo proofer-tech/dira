@@ -8938,6 +8938,58 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P482. 앱이 띄운 터미널과 세션에 앱 서버의 환경변수가 새지 않는다 (요구 `9754a1e0`, 왕복 0회)
+
+사람 요구: *"dira 앱이 띄운 터미널에서 `next dev`를 돌리면 `__NEXT_PRIVATE_STANDALONE_CONFIG` 때문에
+next.config.ts를 안 읽고 Turbopack이 `Missing field turbopackMemoryEviction`을 냅니다. NODE_ENV
+경고와 포트 63016도 같이 따라옵니다. 이런 경우가 있나요?"*
+
+있다. 코드로 확인했다. 데스크톱 앱(`apps/desktop/main.ts` `startServer`)이 Next 서버를
+`{ ...process.env, ELECTRON_RUN_AS_NODE: "1", PORT, HOSTNAME, DIRA_ENV_BRIDGE_SECRET, GA_API_SECRET, ... }`로
+띄우고, standalone `server.js`가 그 위에 `NODE_ENV=production`, `__NEXT_PRIVATE_STANDALONE_CONFIG`,
+`__NEXT_PRIVATE_ORIGIN`, `TURBOPACK`을 얹는다. 그 서버가 자식을 띄우는 자리 셋이 `process.env`를
+통째로 물려준다.
+
+- `apps/teams/lib/pty.ts` `spawnInto` - 터미널 표면의 셸. 요구가 본 자리다.
+- `apps/teams/lib/home-session.ts` 홈 대화의 `claude` spawn(`const env = { ...process.env }`).
+- `apps/teams/lib/kick.ts` - `tick` 호출(env 미지정이라 전부 물려준다). 여기서 뜬 워커 세션이
+  `pnpm test` - `next dev`를 돌리면 같은 오류를 만난다.
+
+Next 오류 말고도 두 가지가 더 샌다. `ELECTRON_RUN_AS_NODE=1`이 남으면 그 셸에서 띄운 Electron
+앱(`code` 등)이 창 없이 노드로 돈다. `DIRA_ENV_BRIDGE_SECRET` - `GA_API_SECRET`은 비밀값인데
+사람이 `env`를 치면 화면에 나온다.
+
+사람이 정하지 않은 것은 주도성 5로 pm이 정했다.
+
+- **어디서 거르나.** 엔진(`tick.sh`)은 읽기 전용이라 GUI 쪽에서 자식에게 넘기기 직전에 거른다.
+  Electron이 서버에 넘기는 값은 서버가 써야 하니 그대로 둔다.
+- **허용 목록이 아니라 차단 목록이다.** 사람 셸의 `PATH` - `HOME` - `LANG` - `SSH_AUTH_SOCK` 등을
+  예측해서 고를 수 없다. 앱 서버가 얹은 것만 정확히 걷는다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 자리 | 새 파일 `apps/teams/lib/child-env.ts`, 함수 `childEnv(extra?: Record<string, string>): NodeJS.ProcessEnv`. `process.env`를 복사하고 아래 키를 지운 뒤 `extra`를 얹어 돌려준다 |
+| 지우는 키 (정확히 일치) | `NODE_ENV` `PORT` `HOSTNAME` `TURBOPACK` `ELECTRON_RUN_AS_NODE` `DIRA_ENV_BRIDGE_URL` `DIRA_ENV_BRIDGE_SECRET` `GA_MEASUREMENT_ID` `GA_API_SECRET` `DIRA_APP_VERSION` |
+| 지우는 키 (접두) | `__NEXT_` `NEXT_PRIVATE_` `TURBOPACK_` |
+| 부르는 자리 | `pty.ts` `spawnInto`의 `env`를 `childEnv({ TERM: "xterm-256color" })`로. `home-session.ts`의 `const env = { ...process.env }`를 `childEnv()`로. `kick.ts`의 두 `spawn`에 `env: childEnv()`를 준다 |
+| 남기는 것 | `PATH`(Electron이 사람 로그인 셸에서 읽어 넣은 값이다) - `DIRA_ENGINE` - `TICKET_*` - `CLAUDE_*` 등 위 목록에 없는 키는 전부 그대로다 |
+
+#### 안 하는 것
+
+- `apps/desktop/main.ts`가 서버에 넘기는 env 변경. 서버가 그 값으로 돈다.
+- 엔진 `tick.sh`에서 거르기. 엔진은 읽기 전용이다.
+- 이미 떠 있는 터미널 - 세션. 새로 여는 것부터 적용된다.
+
+#### 수용조건
+
+- [ ] `cd apps/teams && pnpm exec vitest run lib/child-env.test.ts`가 통과하고, 그 테스트는 `process.env`에 `NODE_ENV=production` - `__NEXT_PRIVATE_STANDALONE_CONFIG=x` - `TURBOPACK=1` - `ELECTRON_RUN_AS_NODE=1` - `DIRA_ENV_BRIDGE_SECRET=s` - `PATH=/a` - `HOME=/h`를 넣고 `childEnv({ TERM: "xterm-256color" })`가 앞의 다섯을 빼고 `PATH` - `HOME` - `TERM`을 돌려주는지 본다.
+- [ ] `grep -n "\.\.\.process\.env" apps/teams/lib/pty.ts apps/teams/lib/home-session.ts`에서 `spawnInto`와 홈 대화 `claude` spawn 자리가 더 나오지 않는다.
+- [ ] `grep -n "childEnv" apps/teams/lib/kick.ts`가 두 줄 나온다.
+- [ ] 데스크톱 앱에서 터미널 표면을 새로 열고 `env | grep -E '^(NODE_ENV|PORT|TURBOPACK|ELECTRON_RUN_AS_NODE|__NEXT|DIRA_ENV_BRIDGE|GA_)'`를 치면 아무것도 안 나온다.
+- [ ] `cd apps/teams && pnpm test`가 통과한다.
+
 ### P481. 대화가 0건인 새 프로젝트에서도 홈 좌측 패널이 뜬다 (요구 `29596df6`, 왕복 0회)
 
 사람 요구: *"프로젝트를 만들고 아무것도 하지 않았을 때 홈에서 좌측 사이드바가 안보입니다"*.
