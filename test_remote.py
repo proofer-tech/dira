@@ -627,6 +627,35 @@ class Tools(Base, unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.ont, "x.md")))
         self.assertEqual(self.actionlog(), "")
 
+    def test_remote_write_creates_missing_parents_and_quotes_op(self):
+        # 새 프로젝트: objects/-versions/ 가 아예 없다. 한글 op_id 는 quote 해서 보고한다
+        self.connect()
+        self.ont = os.path.join(self.root, "ontology")
+        self.fake.routes[("PUT", "objects")] = (204, None)
+        self.stamp = os.path.join(os.path.dirname(self.cred()), "last-sync")
+        import urllib.parse
+        ws = [{"op_id": "글감-1", "path": "objects/글감/a1-첫글.md", "base_sha256": None, "content": "본"},
+              {"op_id": "판-1", "path": "versions/글감/a1-첫글/1.md", "base_sha256": None, "content": "지난"}]
+        self.posts = {}
+        self.fake.routes[("GET", "writes?runtime_id=rt1")] = (200, {"writes": ws})
+        for w in ws:
+            self.fake.routes[("POST", "writes/" + urllib.parse.quote(w["op_id"], safe=""))] = \
+                (lambda b, o=w["op_id"]: (self.posts.__setitem__(o, b) or (204, None)))
+        self.osync()
+        self.assertEqual(self.posts, {"글감-1": {"result": "applied"}, "판-1": {"result": "applied"}})
+        self.assertEqual(open(os.path.join(self.ont, "objects", "글감", "a1-첫글.md")).read(), "본")
+        self.assertEqual(open(os.path.join(self.ont, "versions", "글감", "a1-첫글", "1.md")).read(), "지난")
+        # objects/ 가 있어도 처음 생기는 하위 폴더(새 타입, 판 폴더)는 만든다
+        self.write_op([{"op_id": "o2", "path": "objects/시리즈/s1.md", "base_sha256": None, "content": "s"},
+                       {"op_id": "o3", "path": "versions/원고/b1-x/1.md", "base_sha256": None, "content": "v"}])
+        self.assertEqual(self.posts, {"o2": {"result": "applied"}, "o3": {"result": "applied"}})
+        # 깨진 심링크 폴더를 거쳐 밖으로 나가는 경로는 막는다
+        outside = os.path.join(self.tmp.name, "outside2")
+        os.symlink(os.path.join(outside, "gone"), os.path.join(self.ont, "objects", "dl"))
+        self.write_op([{"op_id": "o4", "path": "objects/dl/x.md", "base_sha256": None, "content": "z"}])
+        self.assertEqual(self.posts["o4"]["result"], "conflict")
+        self.assertFalse(os.path.exists(outside))
+
     # ---- 묶음 설치 (P478-6) ----
 
     def serve(self, route, bundle, good=True):

@@ -170,9 +170,12 @@ def safe_target(ont, rel):
     path = os.path.join(ont, *parts)
     if os.path.islink(path):
         return None
-    # 아직 없는 중간 폴더까지 따져 가장 깊은 기존 조상을 확인한다
+    # objects/-versions/ 자체가 없으면(새 프로젝트) 아래가 전부 새로 만들 폴더라 심링크가 끼어들 수 없다
+    if not os.path.lexists(os.path.join(ont, parts[0])):
+        return path
+    # 아직 없는 중간 폴더까지 따져 가장 깊은 기존 조상을 확인한다(깨진 심링크도 조상으로 잡아 밖이면 막는다)
     anc = os.path.dirname(path)
-    while not os.path.exists(anc):
+    while not os.path.lexists(anc):
         anc = os.path.dirname(anc)
     r = os.path.realpath(anc)
     return path if r == base or r.startswith(base + os.sep) else None
@@ -230,9 +233,9 @@ def apply_writes(ctx):
             m = read_json(mpath) or {}
             m[w["path"]] = sha_of(w["content"].encode("utf-8"))  # 서버가 이미 아는 내용이라 다시 안 올린다
             write_json(mpath, m)
-            ctx.call("POST", "writes/%s" % op, {"result": "applied"})
+            ctx.call("POST", "writes/%s" % urllib.parse.quote(str(op), safe=""), {"result": "applied"})
         else:
-            ctx.call("POST", "writes/%s" % op, {"result": "conflict", "sha256": sha})
+            ctx.call("POST", "writes/%s" % urllib.parse.quote(str(op), safe=""), {"result": "conflict", "sha256": sha})
 
 
 # 단계 함수 f(ctx)를 순서대로 부른다. 뒤 장(P478-2..7)이 여기에 채운다:
