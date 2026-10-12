@@ -8938,6 +8938,49 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P483. 새 프로젝트 만들기에서 한국어 체크 칸을 없애고, 화면 언어가 noslop 셋 설치를 정한다 (요구 `7588cf7f`, 왕복 0회)
+
+사람 요구: *"체크해서 받는건 너무 ux에 적절하지 않아요. 차라리 언어설정을 보고 한국어인데 없으면
+설치하고 있으면 쓰고 다른언어면 안쓰던지"*. 대상은 §새 프로젝트가 한국어 갈래를 고르면 noslop 셋을
+같이 받는다(`docs/design/요구-절.md`, P413)가 만든 `한국어로 일하는 프로젝트` 체크 칸이다.
+
+사람이 정하지 않은 세 가지는 주도성 5로 pm이 정했다.
+
+- **"언어설정"은 앱 화면 언어(`ko`/`en`)다.** 앱에 언어 설정은 그것 하나뿐이고, 체크 칸의 기본값도
+  이미 그 값에서 왔다. 서버 `createProject`가 `readLanguage()`로 이미 읽고 있다.
+- **"없으면 설치하고 있으면 쓰고"의 대상은 noslop 스킬 셋이다. 린터는 앱이 설치하지 않는다.**
+  린터 설치는 사람의 Python 환경에 `pip install`을 하는 일이라(Homebrew python은 PEP 668로
+  거부한다) 만들기 버튼 하나가 할 일이 아니다. 답 `25a6ef7c`의 `2.(b)`(린터가 없으면 세 줄을
+  안 쓴다)는 그대로 둔다. "있으면 쓰고"는 이미 지금 동작이다 - 같은 이름이 깔려 있으면
+  `installSkill`이 건너뛰고 `defaultSkillsFor`가 그 스킬로 줄을 쓴다.
+- **영어 화면에서 한국어 프로젝트를 만드는 사람은 `스킬 추가` 다이얼로그로 붙인다.** 종전 결정 4
+  (`판정은 만들 때 한 번`)가 든 경로 그대로다. 그 사람을 위해 칸을 남기면 요구가 지우라고 한
+  칸이 다시 생긴다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 폼 | `apps/teams/components/projects-ui.tsx`의 `korean` state와 체크 칸 `<label>` 한 벌을 지운다. `createProject` 호출에서 마지막 인자 `korean`을 뺀다 |
+| 서버 | `apps/teams/app/actions.ts` `createProject`의 매개변수 `korean?: boolean`을 지우고, 함수 안에서 `const korean = locale === "ko";`로 정한다(`locale`은 이미 `await readLanguage()`다) |
+| 문구 | `apps/teams/lib/i18n.ts`의 `project.create.koreanLabel` 두 언어 키를 지운다 |
+| 그대로 두는 것 | `hasNoslopLinter` 판정, `DEFAULT_SKILLS`의 `requiresKorean`, `defaultSkillsFor(persona, installed, korean)` 시그니처, 이름 충돌을 건너뜀으로 세는 처분 |
+| 주석 | 두 파일에서 `§결정 6` `§결정 8`(체크 칸 기본값과 네이티브 체크박스)을 가리키던 주석은 `P483`을 가리키도록 고친다 |
+
+#### 안 하는 것
+
+- 린터(`python3 -m noslop`) 자동 설치.
+- 이미 만든 프로젝트를 화면 언어가 바뀔 때 다시 훑기. 판정은 만들 때 한 번이다.
+- 화면 언어 말고 다른 신호(OS 로캘, 프로젝트 폴더의 글)로 한국어를 추정하기.
+
+#### 수용조건
+
+- [ ] `grep -rn "koreanLabel" apps/teams`가 아무것도 내지 않는다.
+- [ ] `grep -n 'type="checkbox"' apps/teams/components/projects-ui.tsx`가 아무것도 내지 않는다.
+- [ ] `grep -n "korean?: boolean" apps/teams/app/actions.ts`가 아무것도 내지 않고, `grep -n 'locale === "ko"' apps/teams/app/actions.ts`가 `createProject` 안에서 한 줄 나온다.
+- [ ] 화면 언어 `ko`이고 `python3 -m noslop --help`가 도는 머신에서 새 프로젝트를 만들면 다섯 페르소나 `skills.md`에 `noslop-write` `noslop-review` `noslop-fix`가 다 있다. 화면 언어를 `en`으로 바꾸고 하나 더 만들면 세 이름이 어느 `skills.md`에도 없고 `find-skills` `stop-slop`은 있다.
+- [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
+
 ### P482. 앱이 띄운 터미널과 세션에 앱 서버의 환경변수가 새지 않는다 (요구 `9754a1e0`, 왕복 0회)
 
 사람 요구: *"dira 앱이 띄운 터미널에서 `next dev`를 돌리면 `__NEXT_PRIVATE_STANDALONE_CONFIG` 때문에
