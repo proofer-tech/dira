@@ -581,7 +581,9 @@ export function HomeUI({
       try {
         const r = await pollHomeAnswer(project, target, offset.current);
         if (stop) return;
-        if (r.sessionId !== target) {
+        // 대화 0건에서 첫 질문을 보내면 `target`이 null이다(P481) - 서버가 만든 첫 세션을 이 응답이 처음
+        // 알려 주므로 버리지 않고 받는다. 버리면 폴링이 영원히 재시도만 하고 패널도 답도 안 갱신된다.
+        if (target !== null && r.sessionId !== target) {
           timer = setTimeout(poll, FAST_MS);
           return;
         }
