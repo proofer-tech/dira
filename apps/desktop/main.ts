@@ -30,6 +30,7 @@ import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-
 import { describeReadyTimeout, readyTimeoutHint, type ReadyTimeoutState } from "./ready-timeout.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
 import { mcpCronEdit } from "./mcp-install.ts";
+import { installShellPath } from "./shell-path.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
  *  (package.json `build.extraResources`). 소스에서 돌 때는 `apps/teams` 옆이다. */
@@ -1140,6 +1141,7 @@ async function boot() {
   readyOrigin = origin; // 여기부터 `second-instance`가 창을 열 수 있다
   win = openWindow(origin);
   createTray();
+  void installShellPath(homedir(), process.env.SHELL ?? "").catch((e) => console.error(`[dira] 셸 PATH 설정을 못 했습니다: ${(e as Error).message}`));
   void installMcpKeepalive().catch((e) => console.error(`[dira] MCP 감시를 설치하지 못했습니다: ${(e as Error).message}`));
   app.on("activate", () => showWindow()); // 독 아이콘도 `열기`와 같은 자리로 간다
 
