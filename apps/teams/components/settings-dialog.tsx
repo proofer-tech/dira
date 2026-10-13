@@ -54,6 +54,11 @@ import {
   resolveProjectAction,
   saveIntegrationBranchAction,
   saveSessionLimitAction,
+  previewSelfishAction,
+  readSelfishPanelAction,
+  saveSelfishSettingsAction,
+  startSelfishAction,
+  stopSelfishAction,
   saveTokenAction,
   sendSetupCodeAction,
   setActiveEngineProfileAction,
@@ -867,6 +872,151 @@ function WorkersFilterAxis({
   );
 }
 
+/** P487 이기적 모드 섹션. `지금 켜기`는 60초 카운트다운과 종료될 앱 목록을 먼저 보여 주고, 그 안에
+ *  `취소`하면 아무것도 안 바뀐다. 예약 저장은 서버가 권한 확인을 먼저 하고 거절되면 저장하지 않는다. */
+const fmt = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));
+const hhmm = (cron: string | undefined, fallback: string) => {
+  const m = /^(\d+) (\d+) \* \* \*$/.exec(cron ?? "");
+  return m ? `${m[2]!.padStart(2, "0")}:${m[1]!.padStart(2, "0")}` : fallback;
+};
+const toCron = (v: string) => {
+  const [h, m] = v.split(":").map(Number);
+  return `${m} ${h} * * *`;
+};
+
+function SelfishModeSection() {
+  const t = useT();
+  const k = (key: string) => t(`settings.workers.selfish.${key}`);
+  const [data, setData] = useState<Awaited<ReturnType<typeof readSelfishPanelAction>> | null>(null);
+  const [countdown, setCountdown] = useState<{ left: number; targets: string[] } | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [sched, setSched] = useState(false);
+  const [startT, setStartT] = useState("23:00");
+  const [endT, setEndT] = useState("07:00");
+  const [cap, setCap] = useState("");
+  const [exclude, setExclude] = useState("");
+  const [pending, run] = useTransition();
+  const load = () =>
+    void readSelfishPanelAction().then((d) => {
+      setData(d);
+      setSched(d.config.schedule !== null);
+      setStartT(hhmm(d.config.schedule?.start, "23:00"));
+      setEndT(hhmm(d.config.schedule?.end, "07:00"));
+      setCap(d.config.cap === null ? "" : String(d.config.cap));
+      setExclude(d.config.exclude.join("\n"));
+    });
+  useEffect(load, []);
+
+  const left = countdown?.left;
+  useEffect(() => {
+    if (left === undefined) return;
+    const id = setTimeout(() => {
+      if (left > 1) return setCountdown((c) => (c ? { ...c, left: c.left - 1 } : c));
+      setCountdown(null);
+      run(async () => {
+        const r = await startSelfishAction();
+        setMsg(r.ok ? null : (r.message ?? k("permission")));
+        load();
+      });
+    }, 1000);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [left]);
+
+  if (!data) return null;
+  const { config, lastRun } = data;
+  const a = config.active;
+
+  const begin = () =>
+    run(async () => {
+      const p = await previewSelfishAction();
+      if (!p.ok) return setMsg(k("permission"));
+      setMsg(null);
+      setCountdown({ left: 60, targets: p.targets });
+    });
+  const save = () =>
+    run(async () => {
+      const capN = cap.trim() === "" ? null : Number(cap);
+      if (capN !== null && !Number.isInteger(capN)) return setMsg(k("cap"));
+      const r = await saveSelfishSettingsAction({
+        schedule: sched ? { start: toCron(startT), end: toCron(endT) } : null,
+        cap: capN,
+        exclude: exclude.split("\n").map((x) => x.trim()).filter(Boolean),
+      });
+      setMsg(r.ok ? k("saved") : k("permission"));
+      load();
+    });
+
+  return (
+    <div data-setting="workers.selfish" className="space-y-2">
+      <h4 className="text-sm font-medium">{k("heading")}</h4>
+      <p className="text-xs text-muted-foreground">{k("hint")}</p>
+      {a ? (
+        <div className="flex items-center gap-2 text-xs">
+          <span>{fmt(k("on"), { n: a.quit.length, left: a.left.length })}</span>
+          <Button size="sm" variant="outline" disabled={pending} onClick={() => run(async () => { await stopSelfishAction(); load(); })}>
+            {k("stop")}
+          </Button>
+        </div>
+      ) : countdown ? (
+        <div className="space-y-1 text-xs">
+          <p>{fmt(k("countdown"), { s: countdown.left })}</p>
+          <p className="text-muted-foreground">{countdown.targets.length ? countdown.targets.join(", ") : k("noTargets")}</p>
+          <Button size="sm" variant="outline" onClick={() => setCountdown(null)}>{k("cancel")}</Button>
+        </div>
+      ) : (
+        <Button size="sm" variant="outline" disabled={pending} onClick={begin}>{k("start")}</Button>
+      )}
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <label className="flex items-center gap-1">
+          <input type="checkbox" checked={sched} onChange={(e) => setSched(e.target.checked)} />
+          {k("scheduleOn")}
+        </label>
+        <Label>{k("startTime")}<Input type="time" className="h-7 w-28" value={startT} disabled={!sched} onChange={(e) => setStartT(e.target.value)} /></Label>
+        <Label>{k("endTime")}<Input type="time" className="h-7 w-28" value={endT} disabled={!sched} onChange={(e) => setEndT(e.target.value)} /></Label>
+      </div>
+      <Label className="flex-col items-start text-xs">
+        {k("cap")}
+        <Input className="h-7 w-28" inputMode="numeric" value={cap} onChange={(e) => setCap(e.target.value)} />
+      </Label>
+      <Label className="flex-col items-start text-xs">
+        {k("exclude")}
+        <textarea className="w-full rounded-md border bg-transparent p-1 text-xs" rows={4} value={exclude} onChange={(e) => setExclude(e.target.value)} />
+      </Label>
+      <div className="flex items-center gap-2">
+        <Button size="sm" disabled={pending} onClick={save}>{k("save")}</Button>
+        {msg && <span className="text-xs text-status-stale">{msg}</span>}
+      </div>
+      <div className="space-y-1 text-xs">
+        <h5 className="font-medium">{k("lastRun")}</h5>
+        {lastRun ? (
+          <>
+            <p>
+              {fmt(k("lastRunLine"), {
+                since: new Date(lastRun.since).toLocaleString(),
+                until: new Date(lastRun.until_actual).toLocaleString(),
+                n: lastRun.quit.length,
+                left: lastRun.left.join(", ") || k("none"),
+              })}
+            </p>
+            {lastRun.per_project.map((p) => (
+              <p key={p.project} className="text-muted-foreground">
+                {fmt(k("project"), {
+                  p: p.project, d: p.dispatch, done: p.done, stall: p.stall,
+                  ratio: p.dispatch ? Math.round((p.stall / p.dispatch) * 100) : 0,
+                  cap: p.cap_skip, lim: p.limit_reap, last: p.last_dispatch ?? k("none"),
+                })}
+              </p>
+            ))}
+          </>
+        ) : (
+          <p className="text-muted-foreground">{k("lastRunNone")}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** 머신 전체 세션 상한 칸(§세션이 120초 안에 못 뜬다 §개정 결정 2-3) — 관용구는 값이 곧 트리거,
  *  팝오버 안 세로 스택, 닫는 것이 취소다. 빈 값 저장은 `0`이 아니라 **파일 삭제**다(결정 2) —
  *  `saved`가 빈 문자열이면
@@ -1015,6 +1165,7 @@ function WorkersSection({ className, closeDialog }: { className?: string; closeD
           />
         </div>
       )}
+      {view && <SelfishModeSection />}
 
       <div data-setting="workers.filter" className="flex flex-wrap items-center gap-2">
         <WorkersFilterAxis

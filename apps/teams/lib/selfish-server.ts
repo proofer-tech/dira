@@ -5,6 +5,7 @@ import path from "node:path";
 import { localDir } from "./paths.ts";
 import { readProjects } from "./projects.ts";
 import { writeSessionLimit } from "./session-cap.ts";
+import { isValidWhen } from "./urls.ts";
 import {
   buildReport, filterQuitTargets, judgeSelfish, parseSelfishConfig, type SelfishConfig, type SelfishReport,
 } from "./selfish-mode.ts";
@@ -150,4 +151,53 @@ export async function selfishHeartbeat(nowMs: number, deps: SelfishDeps = {}): P
   });
   if (d.action === "start") await startSelfish({ now: nowMs }, deps);
   else if (d.action === "end") await stopSelfish({ now: nowMs }, deps);
+}
+
+/** 지금 켜면 내려갈 앱 목록(미리보기). 첫 호출이 macOS 자동화 권한 창을 띄운다. */
+export async function previewTargets(run: OsaRunner = realRunner): Promise<{ ok: boolean; targets: string[]; error?: string }> {
+  try {
+    return { ok: true, targets: filterQuitTargets(await listApps(run), (await readSelfish()).exclude) };
+  } catch (e) {
+    return { ok: false, targets: [], error: (e as Error).message };
+  }
+}
+
+export type SelfishSettingsInput = { schedule: { start: string; end: string } | null; cap: number | null; exclude: string[] };
+
+/** 설정 저장. 예약이 있으면 권한 확인이 먼저고, 거절되면 아무것도 저장하지 않는다. */
+export async function saveSelfishSettings(
+  input: SelfishSettingsInput,
+  run: OsaRunner = realRunner,
+  nowMs: number = Date.now(),
+): Promise<{ ok: boolean; error?: string }> {
+  const { schedule, cap, exclude } = input;
+  if (schedule && !(isValidWhen(schedule.start) && isValidWhen(schedule.end))) return { ok: false, error: "invalid schedule" };
+  if (cap !== null && !(Number.isInteger(cap) && cap >= 0)) return { ok: false, error: "invalid cap" };
+  if (!exclude.every((n) => typeof n === "string")) return { ok: false, error: "invalid exclude" };
+  if (schedule) {
+    const perm = await checkPermission(run);
+    if (!perm.ok) return perm;
+  }
+  const cfg = await readSelfish();
+  const changed = JSON.stringify(cfg.schedule) !== JSON.stringify(schedule);
+  // 예약이 새로 생기거나 바뀌면 그 시점이 기준이다: 저장 전에 지난 회차가 소급해서 돌지 않는다.
+  await writeSelfish({
+    ...cfg,
+    schedule,
+    cap,
+    exclude: exclude.map((n) => n.trim()).filter(Boolean),
+    last_start_due: changed ? nowMs : cfg.last_start_due,
+    last_end_due: changed ? nowMs : cfg.last_end_due,
+  });
+  return { ok: true };
+}
+
+export async function readLastRun(): Promise<SelfishReport | null> {
+  const text = await readFile(logPath(), "utf8").catch(() => "");
+  const last = text.trim().split("\n").pop();
+  try {
+    return last ? (JSON.parse(last) as SelfishReport) : null;
+  } catch {
+    return null;
+  }
 }

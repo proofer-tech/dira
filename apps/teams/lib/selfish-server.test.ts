@@ -71,3 +71,20 @@ test("until이 지난 active는 하트비트 한 번에 꺼지고 selfish-log.js
   assert.equal(lines.length, 1);
   assert.deepEqual(JSON.parse(lines[0]!).quit, ["Slack"]);
 });
+
+test("예약 저장은 권한 확인이 먼저고, 거절되면 저장되지 않는다", async () => {
+  const dir = await setup();
+  const { saveSelfishSettings } = await import("./selfish-server.ts");
+  const deny: OsaRunner = async () => {
+    throw new Error("Not authorized to send Apple events (-1743)");
+  };
+  const r = await saveSelfishSettings({ schedule: { start: "0 23 * * *", end: "0 7 * * *" }, cap: null, exclude: [] }, deny);
+  assert.equal(r.ok, false);
+  assert.match(r.error!, /-1743/);
+  assert.equal(await read(path.join(dir, "selfish.json")), null);
+  const ok = await saveSelfishSettings({ schedule: { start: "0 23 * * *", end: "0 7 * * *" }, cap: 3, exclude: ["Foo"] }, fake([]).run, 1000);
+  assert.equal(ok.ok, true);
+  const cfg = await readSelfish();
+  assert.equal(cfg.cap, 3);
+  assert.equal(cfg.last_start_due, 1000);
+});

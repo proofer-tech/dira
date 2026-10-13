@@ -131,7 +131,8 @@ import {
   type WebhookTestResult,
 } from "@/lib/webhook";
 import {
-  checkPermission, readSelfish, startSelfish, stopSelfish,
+  checkPermission, previewTargets, readLastRun, readSelfish, saveSelfishSettings, startSelfish, stopSelfish,
+  type SelfishSettingsInput,
 } from "@/lib/selfish-server";
 import { liveSessionCount, readSessionLimit, writeSessionLimit } from "@/lib/session-cap";
 import {
@@ -1127,4 +1128,13 @@ export async function stopSelfishAction() {
 }
 export async function checkSelfishPermissionAction() {
   return checkPermission();
+}
+export async function readSelfishPanelAction() {
+  return { config: await readSelfish(), lastRun: await readLastRun() };
+}
+export async function previewSelfishAction() {
+  return previewTargets();
+}
+export async function saveSelfishSettingsAction(input: SelfishSettingsInput) {
+  return saveSelfishSettings(input);
 }
