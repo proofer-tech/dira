@@ -49,8 +49,9 @@ fish_add_path ~/.config/dira/bin
 
 승인된 뒤 명령이 하는 일은 넷입니다.
 
-- 자격 증명을 `~/.config/dira/remote/<workspace_id>/credentials.json`(권한 `0600`)에, 연결
-  설정을 큐 루트의 `remote.json`에 씁니다.
+- 자격 증명을 `~/.config/dira/remote/<workspace_id>/roots/<루트 키>/credentials.json`(권한
+  `0600`)에, 연결 설정을 큐 루트의 `remote.json`에 씁니다. 루트 키는 큐 루트의 실제 경로로
+  계산한 16자 값이라, 큐 루트마다 디렉터리가 따로 생깁니다.
 - 이 컴퓨터를 런타임으로 등록합니다. 런타임은 컴퓨터 하나와 AI 도구 하나의 짝입니다.
   `~/.config/dira/bin/engines/`에 있는 도구(`claude` `codex` `agy` `grok`)마다 따로 잡히고,
   로그인을 한 번 점검합니다.
@@ -63,13 +64,24 @@ fish_add_path ~/.config/dira/bin
 연결하면 `이 프로젝트는 이미 다른 워크스페이스에 연결돼 있습니다`로 거절하고 rc 2로 끝납니다.
 워크스페이스를 바꾸려면 먼저 끊으세요.
 
+반대로 한 컴퓨터에서 같은 워크스페이스에 프로젝트 여럿을 연결하는 것은 괜찮습니다. 프로젝트마다
+`--root`를 바꿔 `dira remote connect`를 한 번씩 실행하면 됩니다. 자격 증명, 직전 sync 시각,
+온톨로지 매니페스트가 모두 큐 루트별 디렉터리에 따로 저장되므로, 나중에 연결한 프로젝트가 먼저
+연결한 프로젝트의 토큰을 덮지 않습니다. 도구 버전과 로그인 점검 결과(`health.json`)만 컴퓨터의
+사실이라 워크스페이스 디렉터리에 하나를 두고 같이 씁니다.
+
+큐 루트를 다른 경로로 옮기면 루트 키가 바뀌어 자격 증명을 찾지 못합니다. 새 경로에서 다시
+연결하세요.
+
 ## 끊기
 
 ```sh
 dira remote disconnect --root ~/Projects/myproject/.dira
 ```
 
-서버에 해제를 알리고, `remote.json`과 그 워크스페이스의 자격 증명을 지웁니다. crontab 줄은
+서버에 해제를 알리고, `remote.json`과 그 프로젝트의 루트 디렉터리(`roots/<루트 키>/`)를 통째로
+지웁니다. 같은 워크스페이스에 연결된 다른 프로젝트의 자격 증명과 `health.json`은 건드리지 않으니,
+그 프로젝트들은 계속 sync합니다. crontab 줄은
 그대로 둡니다. 워커는 계속 돌지만 이제 로컬 티켓만 처리합니다. 워커까지 멈추려면
 [cron](/docs/cron) 장대로 crontab의 두 줄을 지우세요.
 

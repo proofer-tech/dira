@@ -50,8 +50,10 @@ You are ready when `command -v dira` in a new terminal window prints a path endi
 
 After approval the command does four things.
 
-- It writes the credentials to `~/.config/dira/remote/<workspace_id>/credentials.json` (mode `0600`)
-  and the connection settings to `remote.json` in the queue root.
+- It writes the credentials to
+  `~/.config/dira/remote/<workspace_id>/roots/<root key>/credentials.json` (mode `0600`) and the
+  connection settings to `remote.json` in the queue root. The root key is a 16-character value
+  computed from the queue root's real path, so each queue root gets its own directory.
 - It registers this computer as a runtime. A runtime is one computer paired with one AI tool, so
   each tool in `~/.config/dira/bin/engines/` (`claude` `codex` `agy` `grok`) is registered
   separately, and its login is checked once.
@@ -65,14 +67,25 @@ A project connects to one workspace only. Connecting an already-connected projec
 workspace is refused with `이 프로젝트는 이미 다른 워크스페이스에 연결돼 있습니다` ("this project is
 already connected to another workspace") and rc 2. To switch workspaces, disconnect first.
 
+The other direction is fine: one computer can connect several projects to the same workspace. Run
+`dira remote connect` once per project, each with its own `--root`. Credentials, the last sync time,
+and the ontology manifest are stored per queue root, so a project you connect later does not
+overwrite the token of one you connected earlier. Only the tool versions and login check results
+(`health.json`) describe the computer itself, so the workspace directory keeps one copy that all its
+projects share.
+
+If you move a queue root to a different path, its root key changes and the credentials are no longer
+found. Connect again from the new path.
+
 ## Disconnecting
 
 ```sh
 dira remote disconnect --root ~/Projects/myproject/.dira
 ```
 
-This tells the server you are leaving, then deletes `remote.json` and that workspace's credentials.
-It leaves the crontab lines alone. The worker keeps running, but now handles local tickets only. To
+This tells the server you are leaving, then deletes `remote.json` and that project's whole root
+directory (`roots/<root key>/`). Other projects connected to the same workspace keep their
+credentials and `health.json`, and they keep syncing. It leaves the crontab lines alone. The worker keeps running, but now handles local tickets only. To
 stop the worker too, remove the two crontab lines as described in [cron](/docs/cron).
 
 ## Why a job from the web starts late
