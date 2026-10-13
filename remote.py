@@ -62,8 +62,31 @@ def load_config(root):
     return read_json(os.path.join(root, "remote.json"))
 
 
-def load_token(ws):
-    c = read_json(os.path.join(ws_dir(ws), "credentials.json"))
+ROOT_FILES = ("credentials.json", "last-sync", "manifest.json", "state.json", "progress.json",
+              "personas-version", "bundles-checked")
+
+
+def root_dir(ws, root):
+    key = hashlib.sha256(os.path.realpath(root).encode()).hexdigest()[:16]
+    return os.path.join(ws_dir(ws), "roots", key)
+
+
+def migrate_legacy(ws, root):
+    # 옛 배치(워크스페이스 한 곳)의 루트 소유 파일을 먼저 sync한 루트가 옮겨 간다
+    rd, old = root_dir(ws, root), ws_dir(ws)
+    if os.path.exists(os.path.join(rd, "credentials.json")) or not os.path.exists(os.path.join(old, "credentials.json")):
+        return
+    os.makedirs(rd, exist_ok=True)
+    for n in ROOT_FILES:
+        try:
+            os.replace(os.path.join(old, n), os.path.join(rd, n))
+        except OSError:
+            pass
+
+
+def load_token(ws, root):
+    migrate_legacy(ws, root)
+    c = read_json(os.path.join(root_dir(ws, root), "credentials.json"))
     return c.get("runtime_token") if c else None
 
 
@@ -131,7 +154,7 @@ def scan_ontology(ont):
 
 def ontology_push(ctx):
     ont = ont_root(ctx.root)
-    mpath = os.path.join(ws_dir(ctx.ws), "manifest.json")
+    mpath = os.path.join(root_dir(ctx.ws, ctx.root), "manifest.json")
     old = read_json(mpath) or {}
     now = scan_ontology(ont)
     todo = [p for p in sorted(now) if old.get(p) != now[p]] + [p for p in sorted(old) if p not in now]
@@ -223,7 +246,7 @@ def apply_writes(ctx):
     if st != 200 or not r:
         return
     ont = ont_root(ctx.root)
-    mpath = os.path.join(ws_dir(ctx.ws), "manifest.json")
+    mpath = os.path.join(root_dir(ctx.ws, ctx.root), "manifest.json")
     for w in r.get("writes", []):
         op = w.get("op_id")
         if not op or "/" in str(op):
@@ -408,7 +431,7 @@ def mark_revoked(t):
 
 
 def report_status(ctx):
-    sp = os.path.join(ws_dir(ctx.ws), "state.json")
+    sp = os.path.join(root_dir(ctx.ws, ctx.root), "state.json")
     state = read_json(sp) or {}
     changed = False
     for t in remote_tickets(ctx.root):
@@ -462,7 +485,8 @@ def cmd_sync(root):
     if not take_lock(lock):
         return 0
     try:
-        stamp = os.path.join(ws_dir(cfg["workspace_id"]), "last-sync")
+        migrate_legacy(cfg["workspace_id"], root)
+        stamp = os.path.join(root_dir(cfg["workspace_id"], root), "last-sync")
         try:
             if time.time() - os.stat(stamp).st_mtime < SYNC_INTERVAL:
                 return 0
@@ -471,7 +495,7 @@ def cmd_sync(root):
         os.makedirs(os.path.dirname(stamp), exist_ok=True)
         with open(stamp, "w") as f:
             f.write(str(time.time()))
-        token = load_token(cfg["workspace_id"])
+        token = load_token(cfg["workspace_id"], root)
         if not token:
             log("no-credentials")
             return 0
@@ -547,7 +571,7 @@ def write_new(path, text):
 
 def install_personas(ctx):
     ver, sha, b = fetch_bundle(ctx, "personas/bundle")
-    state = os.path.join(ws_dir(ctx.ws), "personas-version")
+    state = os.path.join(root_dir(ctx.ws, ctx.root), "personas-version")
     if (read_json(state) or {}).get("sha256") == sha:
         return
     pers = b.get("personas")
@@ -636,7 +660,7 @@ def install_schema(ctx):
 
 
 def step_bundles(ctx):
-    stamp = os.path.join(ws_dir(ctx.ws), "bundles-checked")
+    stamp = os.path.join(root_dir(ctx.ws, ctx.root), "bundles-checked")
     try:
         if time.time() - os.stat(stamp).st_mtime < BUNDLE_INTERVAL:
             return
@@ -660,7 +684,7 @@ def bundle_cmd(root, which):
     cfg = load_config(root)
     if not cfg:
         return 0
-    token = load_token(cfg["workspace_id"])
+    token = load_token(cfg["workspace_id"], root)
     if not token:
         log("no-credentials")
         return 0
@@ -733,17 +757,17 @@ def session_events(path, offset, seen, own_hash):
     return events, offset + end, seen
 
 
-def load_prog(ws):
-    return read_json(os.path.join(ws_dir(ws), "progress.json")) or {}
+def load_prog(ctx):
+    return read_json(os.path.join(root_dir(ctx.ws, ctx.root), "progress.json")) or {}
 
 
-def save_prog(ws, prog):
-    write_json(os.path.join(ws_dir(ws), "progress.json"), prog)
+def save_prog(ctx, prog):
+    write_json(os.path.join(root_dir(ctx.ws, ctx.root), "progress.json"), prog)
 
 
 def report_events(ctx):
     import glob
-    prog = load_prog(ctx.ws)
+    prog = load_prog(ctx)
     logs = os.path.join(ctx.root, "workers", "logs")
     for t in remote_tickets(ctx.root):
         if fm_get(t["fm"], "remote_revoked") == "true":
@@ -770,7 +794,7 @@ def report_events(ctx):
                 continue
         offs.update(newoffs)
         p["seen"] = sorted(newseen)
-    save_prog(ctx.ws, prog)
+    save_prog(ctx, prog)
 
 
 def last_question(body):
@@ -784,7 +808,7 @@ def last_question(body):
 
 
 def report_questions(ctx):
-    prog = load_prog(ctx.ws)
+    prog = load_prog(ctx)
     for t in remote_tickets(ctx.root):
         stem = fm_get(t["fm"], "awaiting")
         if not stem or job_state(ctx.root, t) != "awaiting" or fm_get(t["fm"], "remote_revoked") == "true":
@@ -799,7 +823,7 @@ def report_questions(ctx):
             p["asked"] = [stem, len(md)]  # ponytail: 같은 stem에 질문 절이 늘면 길이가 달라져 다시 간다
         else:
             log("questions %s HTTP %s" % (t["hash"], st))
-    save_prog(ctx.ws, prog)
+    save_prog(ctx, prog)
 
 
 def fetch_answers(ctx):
@@ -998,7 +1022,15 @@ def cmd_connect(server, root):
     server = server.rstrip("/")
     old = load_config(root)
     machine = socket.gethostname()
-    st, r = http(server, "POST", "device/code", {"machine_name": machine})
+    project = os.path.basename(os.path.dirname(os.path.abspath(root)))
+    body = {"machine_name": machine}
+    if 1 <= len(project) <= 200:
+        body["project"] = project
+    qr = os.path.realpath(root)
+    if 1 <= len(qr) <= 1000:
+        body["queue_root"] = qr
+    body["tools"] = [str(n) for n in tool_names()][:20]
+    st, r = http(server, "POST", "device/code", body)
     if st != 200 or not r:
         print("기기 코드를 받지 못했습니다 (HTTP %s)" % st, file=sys.stderr)
         return 1
@@ -1023,14 +1055,14 @@ def cmd_connect(server, root):
     if old and old.get("workspace_id") != ws:
         print(ALREADY, file=sys.stderr)
         return 2
-    project = os.path.basename(os.path.dirname(os.path.abspath(root)))
     st, reg = http(server, "POST", "runtimes",
                    {"machine_name": machine, "project": project,
                     "tools": tools_payload(ws, refresh_health(ws, force=True))}, rt)
     if st != 200 or not reg:
         print("런타임을 등록하지 못했습니다 (HTTP %s)" % st, file=sys.stderr)
         return 1
-    write_json(os.path.join(ws_dir(ws), "credentials.json"), {"runtime_token": rt}, 0o600)
+    write_json(os.path.join(root_dir(ws, root), "credentials.json"),
+               {"runtime_token": rt, "root": os.path.realpath(root)}, 0o600)
     write_json(os.path.join(root, "remote.json"),
                {"server": server, "workspace_id": ws, "runtime_id": reg["runtime_id"], "project": project})
     if ensure_worker(root):
@@ -1046,17 +1078,17 @@ def cmd_disconnect(root):
         print("연결돼 있지 않습니다")
         return 0
     ws = cfg["workspace_id"]
-    token = load_token(ws)
+    token = load_token(ws, root)
     if token:
         try:
             http(cfg["server"], "DELETE", "runtimes/" + str(cfg["runtime_id"]), None, token)
         except (Unauthorized, OSError) as e:
             log("disconnect %s" % e)  # 서버에 못 알려도 로컬 연결은 끊는다
-    for p in (os.path.join(root, "remote.json"), os.path.join(ws_dir(ws), "credentials.json")):
-        try:
-            os.unlink(p)
-        except FileNotFoundError:
-            pass
+    try:
+        os.unlink(os.path.join(root, "remote.json"))
+    except FileNotFoundError:
+        pass
+    shutil.rmtree(root_dir(ws, root), ignore_errors=True)
     print("연결을 해제했습니다")
     return 0
 

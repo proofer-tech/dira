@@ -89,8 +89,9 @@ class Base:
     def connect(self):
         return self.run_remote("connect", self.fake.url, "--root", self.root)
 
-    def cred(self, ws="ws1"):
-        return os.path.join(self.home, ".config", "dira", "remote", ws, "credentials.json")
+    def cred(self, ws="ws1", root=None):
+        key = hashlib.sha256(os.path.realpath(root or self.root).encode()).hexdigest()[:16]
+        return os.path.join(self.home, ".config", "dira", "remote", ws, "roots", key, "credentials.json")
 
 
 class T(Base, unittest.TestCase):
@@ -107,7 +108,8 @@ class T(Base, unittest.TestCase):
         self.assertEqual(cfg, {"server": self.fake.url, "workspace_id": "ws1",
                                "runtime_id": "rt1", "project": "proj"})
         self.assertEqual(stat.S_IMODE(os.stat(self.cred()).st_mode), 0o600)
-        self.assertEqual(json.load(open(self.cred())), {"runtime_token": "tok-ws1"})
+        self.assertEqual(json.load(open(self.cred())),
+                         {"runtime_token": "tok-ws1", "root": os.path.realpath(self.root)})
         self.assertNotIn("tok-ws1", open(os.path.join(self.root, "remote.json")).read())
         self.assertTrue(os.access(os.path.join(self.root, "workers", "w1.sh"), os.X_OK))
         self.assertEqual(len([l for l in open(self.cron) if l.strip()]), 2)
@@ -143,6 +145,53 @@ class T(Base, unittest.TestCase):
         self.assertIn(("DELETE", "runtimes/rt1", None, "Bearer tok-ws1"), self.fake.calls)
         self.assertFalse(os.path.exists(os.path.join(self.root, "remote.json")))
         self.assertFalse(os.path.exists(self.cred()))
+
+    def second_root(self):
+        r2 = os.path.join(self.tmp.name, "proj2", ".dira")
+        os.makedirs(os.path.join(r2, "tickets"))
+        return r2
+
+    def test_device_code_body(self):
+        self.connect()
+        body = [c for c in self.fake.calls if c[1] == "device/code"][0][2]
+        self.assertEqual(set(body), {"machine_name", "project", "queue_root", "tools"})
+        self.assertEqual(body["project"], "proj")
+        self.assertEqual(body["queue_root"], os.path.realpath(self.root))
+        self.assertEqual(body["tools"], [])
+
+    def test_two_roots_same_workspace_isolated(self):
+        r2 = self.second_root()
+        self.connect()
+        self.fake.routes[("POST", "device/token")] = (200, {"workspace_id": "ws1", "runtime_token": "tok-2"})
+        self.assertEqual(self.run_remote("connect", self.fake.url, "--root", r2).returncode, 0)
+        self.assertNotEqual(self.cred(), self.cred(root=r2))
+        self.assertEqual(json.load(open(self.cred()))["runtime_token"], "tok-ws1")
+        self.assertEqual(json.load(open(self.cred(root=r2)))["runtime_token"], "tok-2")
+        stamp1 = os.path.join(os.path.dirname(self.cred()), "last-sync")
+        self.run_remote("sync", "--root", self.root)
+        self.assertTrue(os.path.exists(stamp1))
+        self.assertFalse(os.path.exists(os.path.join(os.path.dirname(self.cred(root=r2)), "last-sync")))
+        self.assertTrue(self.run_remote("sync", "--root", r2).returncode == 0)
+        self.assertTrue(os.path.exists(os.path.join(os.path.dirname(self.cred(root=r2)), "last-sync")))
+        # disconnect는 그 루트 디렉터리만 지운다
+        self.assertEqual(self.run_remote("disconnect", "--root", r2).returncode, 0)
+        self.assertFalse(os.path.exists(os.path.dirname(self.cred(root=r2))))
+        self.assertTrue(os.path.exists(self.cred()))
+        self.assertTrue(os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(self.cred()))), "health.json")))
+
+    def test_legacy_layout_migrates_on_sync(self):
+        self.connect()
+        new = os.path.dirname(self.cred())
+        old = os.path.dirname(os.path.dirname(os.path.dirname(self.cred())))
+        for n in os.listdir(new):
+            os.replace(os.path.join(new, n), os.path.join(old, n))
+        os.rmdir(new)
+        open(os.path.join(old, "manifest.json"), "w").write("{}")
+        self.assertEqual(self.run_remote("sync", "--root", self.root).returncode, 0)
+        self.assertEqual(json.load(open(self.cred()))["runtime_token"], "tok-ws1")
+        self.assertTrue(os.path.exists(os.path.join(new, "manifest.json")))
+        self.assertFalse(os.path.exists(os.path.join(old, "credentials.json")))
+        self.assertFalse(os.path.exists(os.path.join(old, "manifest.json")))
 
     def test_sync_interval_and_lock(self):
         self.connect()
