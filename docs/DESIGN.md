@@ -8938,6 +8938,74 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P487. 이기적 모드 - 사람의 앱을 내리고 그 시간 동안 머신을 큐에 몰아준다 (요구 `55ee4613`, 왕복 0회)
+
+사람 요구: *"지금 워커 상한을 dira가 아닌 다른 프로세스들을 모두 종료하여 리소스를 dira에 강제로
+집중하는 모드입니다. 평소에 업무시간에 켠다면 문제겠지만 취침 전 활성화시키는 등의 옵션을 사용자에게
+제공할 수 있을겁니다."* 홈 에이전트가 낸 기획안(요구 본문 §맥락)에 사람이 *"좋네요! 오려주세요"*라고
+답했다. 이 스펙은 그 기획안을 받되, 아래 실측과 어긋나는 곳은 고쳐서 확정한다.
+
+#### 실측 (2026-10-13)
+
+- 머신 상한 `~/.config/dira/session-limit`을 읽고 지키는 것은 이 큐의 훅 `.dira/session-cap.sh`
+  하나다(엔진 `tick.sh`는 안 읽는다). 이 머신에서 그 훅을 source하는 큐는 dira 하나이고 `gallae` 워커는
+  안 한다. 화면은 `lib/session-cap.ts`로 그 값을 읽고 쓴다. 그래서 상한 교체가 실제 동시 수를 바꾸는
+  것은 훅을 단 큐뿐이다 - 앱 정리는 모든 큐에 효과가 있다.
+- 시각 판정은 이미 있다. 홈 스케줄(§7-2)이 `lib/urls.ts`의 `judgeSchedule`-`nextScheduleDue`로
+  5필드 cron을 판정하고, 서버의 15초 하트비트(`lib/machine-state.ts`)가 그것을 부른다. 앱이 꺼져 있으면
+  안 돌고 켜지면 늦은 회차를 한 번 돈다 - 이 모드도 같은 계약을 따른다.
+- `runner.log` 줄 머리는 `<날짜> <시각> [<워커>] <표식>`이다. 아침 보고가 셀 표식은 `DISPATCH`
+  `DONE` `STALL` `상한`(머신 상한으로 tick을 건너뜀)과, `REAP` 중 `(한도라`가 붙은 줄(계정 한도로 세션이
+  죽음)이다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 이름 | 화면 이름은 `이기적 모드`(영문 `Selfish mode`), 코드 이름은 `selfish` |
+| 자리 | 설정 > 워커의 머신 스코프, `머신 전체 세션 상한` 섹션 바로 아래 새 섹션. 상한과 같은 머신 값이라 프로젝트 설정에 두지 않는다 |
+| 설정 파일 | `~/.config/dira/selfish.json` `{schedule: {start, end} 또는 null, cap: 정수 또는 null, exclude: [앱 이름], active: 아래 또는 null, last_start_due, last_end_due}`. `start`-`end`는 5필드 cron이고 화면은 매일 시각 둘만 만든다(기본 `0 23 * * *` - `0 7 * * *`). 쓰기는 임시 파일 다음 `rename` |
+| `active` | `{since, until, saved_limit, cap, quit: [이름], left: [이름]}`. `saved_limit`은 켤 때의 `session-limit` 내용이고 파일이 없었으면 `null`. 수동으로 켰으면 `until`은 `null` |
+| 종료 대상 | `osascript -e 'tell application "System Events" to get name of every application process whose background only is false'`가 돌려준 이름 중 `exclude`에 없는 것 전부 |
+| 기본 제외 | dira 앱 자신, `Finder`, `Terminal`, `iTerm2`, `Google Drive`, `Amphetamine`, `1Password`, `1Password 7`, 그리고 이름에 `VPN`이 들어간 앱. 사람이 목록에서 더하고 뺄 수 있다 |
+| 종료 방법 | 앱마다 `osascript -e 'quit app "<이름>"'`, 앱 하나당 10초 상한. 상한 안에 프로세스가 안 사라지면 그대로 두고 `left`에 이름을 적는다. **강제 종료(`kill`-`force quit`)는 없다** - 저장 안 한 문서가 사라진다. Chrome을 내리면 그 자식 `1PasswordSLSNativeMessageHost`도 같이 내려간다(2026-09-28 load 400 사건의 원인) |
+| 상한 교체 | `cap`이 정수면 켤 때 `session-limit`에 쓰고, 끌 때 `saved_limit`으로 되돌린다(`null`이면 파일을 지운다). `cap`이 `null`이면 상한은 건드리지 않고 앱만 내린다 - **기본값은 `null`이다.** 측정 전에는 앱 정리만의 효과를 먼저 본다 |
+| 수동으로 켜기 | 섹션의 `지금 켜기`를 누르면 60초 카운트다운과 종료될 앱 목록이 뜬다. 그 안에 `취소`를 누르면 아무것도 안 바뀐다. 끝나면 켜진다. 켜진 동안 같은 자리 버튼은 `끄기`이고, 누르면 바로 복원한다(앱을 다시 띄우지는 않는다) |
+| 예약 | `schedule`이 있으면 하트비트가 `judgeSchedule`로 `start`와 `end`를 각각 판정한다. `start` 회차에 이미 켜져 있으면 건너뛴다. `end` 회차에 켜져 있으면 끈다. 늦은 회차는 §7-2대로 한 번만 돈다 - 앱이 07:00에 꺼져 있었다면 다음 기동의 첫 하트비트가 끈다 |
+| 권한 | 첫 `System Events` 호출에 macOS 자동화 권한 창이 뜬다. 사람이 자는 23:00에 처음 뜨면 안 되므로, 예약을 저장하는 순간과 `지금 켜기`를 누르는 순간 목록 조회를 한 번 해 둔다. 거절되면 섹션에 그 사실을 글자로 띄우고 예약을 저장하지 않는다 |
+| 아침 보고 | 끌 때 `~/.config/dira/selfish-log.jsonl`에 한 줄 `{since, until_actual, cap, quit, left, per_project: [{project, dispatch, done, stall, cap_skip, limit_reap, last_dispatch}]}`을 더한다. 숫자는 등록 프로젝트(`gui-projects.json`)마다 `<root>/workers/runner.log`에서 `since` 이후 줄을 위 표식으로 센다. 섹션은 마지막 한 줄을 "지난 실행" 칸으로 보여 준다 - 몇 시부터 몇 시까지, 내린 앱 수와 못 내린 앱 이름, 프로젝트마다 디스패치-완료-STALL 비율-상한 건너뜀-한도 사망, 마지막 디스패치 시각 |
+| 판정 함수 | `lib/selfish-mode.ts`의 순수 함수다 - 파일 읽기 검증, 예약 판정(`judgeSchedule` 재사용), 제외 필터, 로그 줄 세기, 보고 만들기. `osascript`와 파일 쓰기는 서버 라우트 쪽이다 |
+
+#### 안 하는 것
+
+- 엔진(`tick.sh`-`tickets.py`)과 `session-cap.sh` 수정. 상한은 파일 하나를 바꿀 뿐이다.
+- 아침에 앱을 다시 띄우는 것, 상한 자동 측정, 키보드 입력을 감지해 바로 해제하는 것 - 첫 주 보고를 보고 정한다.
+- 앱이 꺼져 있을 때도 도는 데몬. 뒤집는 조건은 §7-2와 같다 - 사람이 *"앱을 껐는데 아침에 상한이 안 돌아왔다"*고 말하는 날 본다.
+- 백그라운드 전용 프로세스(데몬-에이전트-입력기)를 내리는 것.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P487-1 | 앱 - `lib/selfish-mode.ts` 순수 함수(설정 파일 검증-예약 판정-제외 필터-`runner.log` 세기-보고) + 테스트 | developer | - | 발행 `-` |
+| P487-2 | 앱 - 서버: 켜기(목록-`quit`-상한 교체)-끄기(복원-보고 기록)-하트비트 예약 판정-권한 확인 라우트 + 테스트 | developer | P487-1 | 발행 `-` |
+| P487-3 | 앱 - 설정 > 워커 `이기적 모드` 섹션(지금 켜기와 60초 카운트다운, 예약 시각 둘, 상한, 제외 목록, 지난 실행) | developer | P487-2 | 발행 `-` |
+| P487-4 | 매뉴얼 - `concurrency.md`에 이기적 모드 절, 영문판 같이 | writer | - | 발행 `-` |
+| P487-5 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P487-2, P487-3 | 발행 `-` |
+
+P487-2가 P487-1의 판정 함수를 부르고, P487-3이 P487-2의 라우트를 부르므로 셋은 차례대로 간다.
+매뉴얼은 위 표에 글이 다 있어 기다리지 않는다. designer 0장 - 기존 설정 섹션과 확인 다이얼로그의
+모양을 그대로 쓴다. 에픽 `P487`을 연다.
+
+#### 수용조건
+
+- [ ] `TextEdit`과 `Preview`를 띄우고 `지금 켜기`를 누르면 60초 카운트다운과 두 앱 이름이 뜬다. 그 안에 `취소`하면 두 앱이 그대로이고 `selfish.json`의 `active`가 `null`이다.
+- [ ] 카운트다운이 끝나면 두 앱이 내려가고, `Finder`-`Terminal`-dira 앱과 제외 목록의 앱은 그대로 떠 있다.
+- [ ] `TextEdit`에 저장 안 한 문서를 둔 채 켜면 `TextEdit`이 그대로 떠 있고, 끈 뒤 지난 실행 칸의 못 내린 앱에 `TextEdit`이 있다.
+- [ ] `cap`을 9로 두고 켜면 `cat ~/.config/dira/session-limit`이 `9`이고, 끄면 켜기 전 값이다. 켜기 전에 파일이 없었으면 끈 뒤에도 없다. `cap`이 비어 있으면 켜고 끄는 동안 파일이 안 바뀐다.
+- [ ] 예약 끝 시각을 지금으로부터 2분 뒤로 두고 켜 두면 2분 안팎에 저절로 꺼지고 상한이 돌아온다. 끝 시각이 지난 뒤에 앱을 켜면 첫 하트비트에 꺼진다.
+- [ ] 끄면 `selfish-log.jsonl`에 줄이 하나 늘고, 프로젝트마다 `dispatch`가 그 시간대 `runner.log`의 `DISPATCH` 줄 수와 같다.
+- [ ] 예약을 저장하는 순간 자동화 권한 창이 뜬다(처음 한 번). 거절하면 섹션에 거절 안내가 뜨고 예약이 저장되지 않는다.
+- [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py` - `.dira/`가 없다.
+
 ### P486. 온톨로지 화면이 객체 본문의 `##` 절을 스키마 위반으로 세지 않는다 (요구 `3967b17b`, 왕복 0회)
 
 사람 요구: *"실제로 마크다운 문서를 쓰면 ## 를 쓰기마련인데 이게 다 위반이라고 뜨는건 곤란합니다"*.
