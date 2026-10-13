@@ -80,6 +80,7 @@
  *  허용목록(`ef1e8c89` 실측)으로만 열었지만, §7-5(요구 `ea5e6f4d`)가 그 목록과 경로 스코프를
  *  통째로 없애고 `--dangerously-skip-permissions`로 바꿨다 — 셸에 쓰기 제한이 없다(`TOOLS`
  *  주석). */
+import { childEnv } from "./child-env.ts";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -1709,7 +1710,7 @@ export async function runClaudeAt(
 
   // tick.sh 57~59행과 **같은 한 줄**: claude 엔진일 때만 헤드리스 OAuth 토큰을 넣는다.
   // GUI가 Finder에서 뜬 `.app`이면 사람 셸의 환경을 못 물려받는다 — 그때 이 파일이 유일한 인증이다.
-  const env = { ...process.env };
+  const env = childEnv();
   const tok = await readFile(tokenPath(), "utf8").catch(() => null);
   if (tok?.trim()) env.CLAUDE_CODE_OAUTH_TOKEN = tok.replace(/[\r\n]/g, "");
   // §11-13 결정 1 — 브라우저 슬롯의 owner 판정 셋 중 홈 세션을 가르는 유일한 값.

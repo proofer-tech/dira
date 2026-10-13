@@ -11,6 +11,7 @@
  *
  *  **raw는 escape를 안 걷어낸다** — 화면(`@xterm/xterm`)이 ANSI를 직접 그리므로 `auth.ts`의
  *  `ptyLines`(Ink TUI 로그 한 줄용) 같은 후처리가 필요 없다. */
+import { childEnv } from "./child-env.ts";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
@@ -67,7 +68,7 @@ function spawnInto(id: string, cwd: string, shell: string): void {
     // **`TERM`을 명시한다.** Next 서버 프로세스가 어떻게 떠 있느냐(런처·크론·Electron)에 따라
     // `TERM`이 아예 없을 수 있고, 그러면 셸이 `dumb`으로 물러난다(실측) — `vim`이 전체 화면
     // 모드를 거부하고 `ls --color`가 색을 죽인다. `@xterm/xterm`이 아는 값을 준다.
-    env: { ...process.env, TERM: "xterm-256color" },
+    env: childEnv({ TERM: "xterm-256color" }),
   });
   const entry: PtyEntry = { child, cwd, backlog: "", listeners: new Set(), exited: false, lastCommand: "" };
   ptys.set(id, entry);

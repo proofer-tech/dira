@@ -10,6 +10,7 @@
  *  **던지지 않는다.** 티켓은 이미 파일에 써졌고 spawn이 실패해도 cron이 ≤60초 뒤에 같은 일을
  *  한다 — 즉시 디스패치는 지연을 줄이는 최적화지 정확성의 일부가 아니다(§4-5 마지막 항).
  *  그래서 호출자는 결과를 보지 않고 화면에도 성공·실패를 그리는 자리가 없다. */
+import { childEnv } from "./child-env.ts";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { isHash, NAME_RE, resolveWithin } from "./paths.ts";
@@ -29,7 +30,7 @@ export async function kickIdleWorker(root: string): Promise<string | null> {
     // 같은 방어를 지난다(§경로 방어). 조립한 문자열을 믿지 않고 workers/ 안인지 확인한다.
     if (!idle || !NAME_RE.test(idle.name)) return null;
     const file = await resolveWithin(path.join(root, "workers"), `${idle.name}.sh`);
-    spawn(file, [], { detached: true, stdio: "ignore" }).unref();
+    spawn(file, [], { detached: true, stdio: "ignore", env: childEnv() }).unref();
     return idle.name;
   } catch {
     return null; // 액션은 kick 실패로 실패하지 않는다
@@ -49,7 +50,7 @@ export async function kickTicket(root: string, hash: string): Promise<string | n
     const idle = (await listWorkers(root)).find((w) => w.status === "idle");
     if (!idle || !NAME_RE.test(idle.name)) return null;
     const file = await resolveWithin(path.join(root, "workers"), `${idle.name}.sh`);
-    spawn(file, ["tick", hash], { detached: true, stdio: "ignore" }).unref();
+    spawn(file, ["tick", hash], { detached: true, stdio: "ignore", env: childEnv() }).unref();
     return idle.name;
   } catch {
     return null; // 액션은 kick 실패로 실패하지 않는다
