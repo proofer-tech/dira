@@ -8938,6 +8938,64 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P485. 원격 큐 - 한 컴퓨터에서 같은 워크스페이스에 큐 루트 여럿을 연결하고, `device/code`에 선택 필드를 싣는다 (요구 `612e3b83`, 왕복 0회)
+
+사람 요구: 갈래 큐가 갈래 정본 `서비스/아키텍처/dira협의요구사항.md`의 R12, R13을 넘겼다(갈래 티켓
+`e4ad580d`). 둘 다 P478 `remote.py` 변경이다.
+
+- (R12) 지금 `remote.py`는 런타임 토큰(`credentials.json`), 직전 sync 시각(`last-sync`), 온톨로지
+  매니페스트(`manifest.json`)를 `~/.config/dira/remote/<workspace_id>/` 한 곳에 둔다. 같은 워크스페이스에
+  둘째 큐 루트를 연결하면 첫째 루트의 토큰을 덮어 첫째의 sync가 거절되고 서버에서 끊긴다. 두 sync가
+  `last-sync`를 같이 써서 10초 검사로 서로를 건너뛰고, 한 루트의 객체 목록이 다른 루트의 매니페스트와
+  비교돼 지우기가 올라갈 수 있다. 갈래 실측 근거는 갈래 TC `b2ce991b`의 TC5다.
+- (R13) `POST device/code`에 선택 필드 `project`-`queue_root`-`tools`를 싣는다. 갈래 서버는 이미 받는다.
+
+둘 다 받는다. P478 §워크스페이스 분리(R10)는 "큐 루트 하나에 워크스페이스 하나"만 정했고, 그 반대
+방향(워크스페이스 하나에 큐 루트 여럿)을 막지 않았다. 런타임 등록이 이미 루트마다 따로(`remote.json`의
+`runtime_id`)라 그 아래 상태도 루트마다 나누는 것이 맞다. 엔진 수정이지만 P478이 이미 사람 승인을 받은
+`remote.py` 안에서 끝나고 `tick.sh`-`tickets.py`는 안 건드린다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 루트 키 | `sha256(os.path.realpath(root).encode()).hexdigest()[:16]` |
+| 루트 디렉터리 | `~/.config/dira/remote/<workspace_id>/roots/<루트 키>/`. 함수 하나(`root_dir(ws, root)`)로 만든다 |
+| 루트 디렉터리로 옮기는 것 | `credentials.json` `last-sync` `manifest.json` `state.json` `progress.json` `personas-version` `bundles-checked` - 지금 `ws_dir(ws)` 아래에 두는 파일 중 `health.json`을 뺀 전부 |
+| 워크스페이스에 남는 것 | `health.json` - 도구 버전과 로그인 점검은 컴퓨터의 사실이라 루트끼리 나눠 쓴다(6시간 점검이 루트 수만큼 늘지 않는다) |
+| 자격 증명 | `{runtime_token, root}` - `root`는 `os.path.realpath(root)`. 진단용이고 읽을 때 검사하지 않는다. 권한 `0600`은 그대로 |
+| 옛 배치 이전 | sync-disconnect가 루트 디렉터리에 `credentials.json`이 없고 `<workspace_id>/credentials.json`이 있으면, 위 일곱 파일 중 있는 것을 그 루트 디렉터리로 `os.replace`한다(복사가 아니다). 먼저 sync한 루트가 가져간다. 옛 배치에서 루트가 둘이었다면 토큰은 마지막에 연결한 루트 것이라 다른 루트는 어차피 이미 깨져 있다 - 이전 뒤 토큰이 없는 루트는 종전대로 `REMOTE` 한 줄을 찍고 rc 0이며, 사람이 `dira remote connect`로 다시 잇는다 |
+| disconnect | 서버에 해제를 알린 뒤 `remote.json`과 **그 루트 디렉터리 전체**를 지운다. 같은 워크스페이스의 다른 루트 디렉터리와 `health.json`은 안 건드린다 |
+| sync 락 | `<root>/.remote-sync.lock`은 그대로다(이미 루트마다다) |
+| `device/code` 본문 (R13) | `{machine_name, project, queue_root, tools}`. `project`는 `POST runtimes`와 같은 값(지금 `cmd_connect`의 `project` 계산을 `device/code` 앞으로 올린다), `queue_root`는 `os.path.realpath(root)`, `tools`는 `tool_names()`의 이름 문자열 배열이다(워크스페이스를 모르는 시점이라 health를 싣지 않는다). 서버 제약은 `project` 1-200자, `queue_root` 1-1000자, `tools` 최대 20개다 - 넘으면 그 필드만 빼고 보낸다(`project`-`queue_root`는 생략, `tools`는 앞 20개). 셋 다 선택 필드라 받지 않는 서버도 종전대로 돈다 |
+| §API 표 | P478 §API의 `POST device/code` 요청 칸은 이 스펙과 함께 고쳤다 |
+| 매뉴얼 | `apps/teams/docs/remote.md`와 영문판의 자격 증명 경로를 `~/.config/dira/remote/<workspace_id>/roots/<루트 키>/credentials.json`으로 고치고, 한 컴퓨터에서 같은 워크스페이스에 프로젝트 여럿을 연결할 수 있다는 것과 끊기가 그 프로젝트의 자격 증명만 지운다는 것을 더한다 |
+
+#### 안 하는 것
+
+- `remote.json` 형식 변경 - 루트 키는 경로에서 계산하므로 새 키가 필요 없다.
+- 큐 루트를 옮겼을 때(경로가 바뀜) 자격 증명을 따라가게 하는 것 - 새 경로에서 다시 연결한다.
+- 서버의 `404`-`400`을 재연결로 자동 복구하는 것.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P485-1 | 엔진 - `remote.py` 루트 디렉터리 분리-옛 배치 이전-disconnect, `device/code` 선택 필드 + `test_remote.py` | developer | - | 발행 |
+| P485-2 | 매뉴얼 - `remote.md` 자격 증명 경로와 여러 프로젝트 연결, 영문판 같이 | writer | - | 발행 |
+
+두 장이다. 매뉴얼은 위 표에 글이 다 있어 기다리지 않는다. R12와 R13은 같은 `cmd_connect`를 고치므로
+한 장으로 묶는다. 에픽 `P478`에 붙인다.
+
+#### 수용조건
+
+- [ ] `python3 test_remote.py`가 통과한다.
+- [ ] 가짜 서버로 같은 `workspace_id`에 큐 루트 A, B를 차례로 연결하면 `~/.config/dira/remote/<ws>/roots/` 아래에 디렉터리가 둘 생기고, 각 `credentials.json`의 `runtime_token`이 서로 다르다. 그 뒤 A, B를 각각 sync하면 가짜 서버가 받은 heartbeat의 `Authorization` 토큰이 각 루트의 토큰과 일치한다.
+- [ ] A를 sync한 직후 B를 sync해도 B가 10초 검사로 빠지지 않는다(가짜 서버가 B의 heartbeat를 받는다).
+- [ ] A와 B의 `objects/`가 서로 다를 때 둘을 sync해도 가짜 서버의 `PUT objects`에 `deleted: true`가 없다.
+- [ ] B를 disconnect하면 B의 루트 디렉터리만 사라지고 A의 `credentials.json`과 `<ws>/health.json`은 남는다.
+- [ ] 옛 배치(`<ws>/credentials.json`-`last-sync`-`manifest.json`)를 둔 채 sync하면 세 파일이 그 루트 디렉터리로 옮겨지고 `<ws>/` 바로 아래에서 사라진다.
+- [ ] `connect`가 보낸 `device/code` 본문에 `project`-`queue_root`-`tools`가 있고, `queue_root`가 큐 루트의 realpath다.
+- [ ] `git diff --stat`에 `tick.sh`-`tickets.py`가 없다.
+
 ### P484. 앱이 켜질 때 `~/.config/dira/bin`을 사람의 셸 PATH에 한 번 넣는다 (요구 `824be940`, 왕복 0회)
 
 사람 요구: *"dira 엔진 설치할때 이것도 세팅하도록 해주세요"*. "이것"은 다른 프로젝트의 세션이
@@ -9292,7 +9350,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 
 | 메서드-경로 | 요청 | 응답 |
 |---|---|---|
-| `POST device/code` | `{machine_name}` | `{device_code, user_code, verification_uri, interval, expires_in}` |
+| `POST device/code` | `{machine_name, project?, queue_root?, tools?}` (선택 필드 P485) | `{device_code, user_code, verification_uri, interval, expires_in}` |
 | `POST device/token` | `{device_code}` | 대기 중 `428`, 끝나면 `{workspace_id, runtime_token}` |
 | `POST runtimes` | `{machine_name, project, tools: [{name, version, health}]}` | `{runtime_id}` |
 | `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` | `{ok: true}` |
