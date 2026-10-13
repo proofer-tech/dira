@@ -8938,6 +8938,62 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P484. 앱이 켜질 때 `~/.config/dira/bin`을 사람의 셸 PATH에 한 번 넣는다 (요구 `824be940`, 왕복 0회)
+
+사람 요구: *"dira 엔진 설치할때 이것도 세팅하도록 해주세요"*. "이것"은 다른 프로젝트의 세션이
+안내한 설정, 곧 `~/.config/dira/bin`을 셸 PATH에 넣는 줄이다. 라우터 `dira`는 그 자리에 구워져
+있지만 PATH에 없어서, 사람이 터미널에서 `dira remote connect ...`를 치면 `command not found`가
+난다. 안내받은 `echo ... >> ~/.zshrc`는 두 번 돌리면 같은 줄이 두 번 들어간다.
+
+사람이 정하지 않은 것은 주도성 5로 pm이 정했다.
+
+- **"설치"는 앱이 켜질 때다.** P480이 cron 줄을 맞추는 시점과 같다. 라우터는 `tick.sh`가 굽지만
+  엔진이 사람의 셸 설정 파일을 매 tick 열어 보는 것은 엔진 밖의 일이고, 앱 없이 엔진만 쓰는
+  사람은 `README.md` §설치를 직접 읽는 사람이라 줄 하나를 스스로 넣는다. 그래서 엔진은 안 고친다.
+- **줄은 한 번만 넣고, 다시 쓰지 않는다.** 설정 파일에 `.config/dira/bin` 문자열이 이미 있으면
+  (사람이 손으로 넣었든 앞서 앱이 넣었든) 아무것도 안 한다. 넣을 때는 파일 끝에 덧붙이기만
+  한다 - 파일을 새로 써서 바꾸면 심링크로 관리하는 dotfiles가 끊기고 남의 줄이 흔들린다.
+- **dira를 지워도 줄은 남지만 해가 없다.** 블록이 디렉터리가 있을 때만 PATH에 더하므로, 지운 뒤
+  남은 블록은 아무 일도 안 한다. 설정 파일에서 줄을 빼는 일은 하지 않는다.
+- **이번 기동부터 바로 쓴다.** 앱은 로그인 셸에서 PATH를 읽어 자식에게 넘긴다(`userPath()`).
+  처음 줄을 넣은 기동에서는 그 값에 아직 없으므로, 앱 프로세스 PATH 앞에도 같은 자리를 더해 앱
+  안의 터미널과 세션이 재시작 없이 `dira`를 찾게 한다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 자리 | `apps/desktop/shell-path.ts`(함수 `installShellPath(home, shell)`)와 `shell-path.test.ts`. `main.ts`는 `app.whenReady` 뒤 `installMcpKeepalive()` 옆에서 한 번 부른다. 실패하면 `[dira] 셸 PATH 설정을 못 했습니다: <사유>` 로그 한 줄을 남기고 기동은 계속한다 |
+| 대상 파일 | `basename($SHELL)`이 `zsh`면 `${ZDOTDIR:-$HOME}/.zshrc`, `bash`면 `$HOME/.bash_profile`. 그 밖의 셸(fish 등)이나 `$SHELL`이 비었으면 아무것도 안 하고 `[dira] 셸 PATH: <셸>은 자동 설정하지 않습니다` 로그 한 줄. 대상 파일이 없으면 만든다(0644) |
+| 이미 있음 판정 | 대상 파일 내용에 `.config/dira/bin` 문자열이 있으면 끝낸다(파일을 열기만 하고 쓰지 않는다) |
+| 덧붙이는 블록 | 파일 끝이 개행이 아니면 개행 하나를 먼저 붙이고, 아래 블록 본문을 `appendFile`로 덧붙인다(파일을 다시 쓰지 않는다). 심링크면 링크가 가리키는 파일에 덧붙는다 |
+| 블록 본문 | `# >>> dira >>>` / `if [ -d "$HOME/.config/dira/bin" ]; then case ":$PATH:" in *":$HOME/.config/dira/bin:"*) ;; *) export PATH="$HOME/.config/dira/bin:$PATH" ;; esac; fi` / `# <<< dira <<<` - 세 줄 그대로, 마지막에 개행 |
+| 이번 기동 | 함수가 끝난 뒤 `process.env.PATH`를 `:`로 나눠 `<홈>/.config/dira/bin`이 없으면 맨 앞에 더한다. 블록을 새로 넣었는지와 무관하게 한다(앱이 자식에게 넘기는 PATH의 정본은 이 값이다) |
+
+#### 안 하는 것
+
+- 엔진(`tick.sh` - `tickets.py`) 수정, `README.md` §설치 변경.
+- `.zprofile` - `.zshenv` - `.bashrc` - fish 설정 파일 수정. 대상은 위 두 파일 중 하나뿐이다.
+- dira를 지울 때 블록 빼기, 설정 화면의 켜고 끄기.
+- `/usr/local/bin` 같은 시스템 자리에 심링크 만들기(관리자 권한이 필요하다).
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P484-1 | 앱 - `shell-path.ts`(대상 파일 고르기-판정-덧붙이기)와 `main.ts` 호출, 이번 기동 PATH 앞 더하기 + 임시 HOME 테스트 | developer | - | 발행 |
+| P484-2 | 매뉴얼 - `remote.md`(ko-en) `연결하기`에 "앱을 한 번 켜면 새 터미널부터 `dira`가 잡힌다, 앱 없이 엔진만 쓰면 줄 하나를 넣는다"를 더한다 | writer | - | 발행 |
+| P484-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다. 앱이 필요한 줄은 master로 로컬 빌드한 `dira.app`으로 판정한다 | qa | P484-1 | 발행 |
+
+**세 장이다.** designer 0장 - 화면이 없다. 에픽을 안 연다.
+
+#### 수용조건
+
+- [ ] `cd apps/desktop && pnpm test`가 통과하고, 그 안에 임시 HOME으로 도는 테스트 다섯(zsh에 `.zshrc`가 없으면 만들고 블록 하나 / 두 번 불러도 `grep -c '>>> dira >>>'`가 `1` / 사람이 미리 넣은 `export PATH="$HOME/.config/dira/bin:$PATH"` 한 줄이 있으면 파일 바이트가 그대로 / 끝에 개행이 없는 파일은 기존 줄이 그대로 남고 블록이 새 줄에서 시작 / `SHELL=/usr/local/bin/fish`면 아무 파일도 안 생긴다)이 있다.
+- [ ] 블록이 없는 머신에서 dira.app을 한 번 켜면 `grep -c '>>> dira >>>' ~/.zshrc`가 `1`이고, 앱을 닫고 다시 켜도 `1`이다.
+- [ ] 그 뒤 새 터미널 창에서 `command -v dira`가 `~/.config/dira/bin/dira`를 내고 `dira remote --help`가 `command not found`를 내지 않는다.
+- [ ] 같은 첫 기동에서(앱 재시작 없이) 앱 안 터미널의 `echo $PATH`에 `.config/dira/bin`이 있다.
+- [ ] `~/.config/dira/bin`을 다른 이름으로 옮긴 뒤 새 터미널에서 `zsh -ic 'echo ok'`가 오류 없이 `ok`를 내고 PATH에 `.config/dira/bin`이 없다.
+- [ ] P484-1 커밋의 `git show --stat <해시>`에 `tick.sh` - `tickets.py`가 없다.
+
 ### P483. 새 프로젝트 만들기에서 한국어 체크 칸을 없애고, 화면 언어가 noslop 셋 설치를 정한다 (요구 `7588cf7f`, 왕복 0회)
 
 사람 요구: *"체크해서 받는건 너무 ux에 적절하지 않아요. 차라리 언어설정을 보고 한국어인데 없으면
