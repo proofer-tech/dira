@@ -373,10 +373,11 @@ export async function createProject(
   specDoc: string,
   ontology?: string,
   id?: string,
-  korean?: boolean,
 ): Promise<CreateState> {
   let created: CreateState["created"] | undefined;
   const locale = await readLanguage();
+  // 한국어 갈래는 화면 언어가 정한다(P483) — 만들기 폼에 체크 칸이 없다.
+  const korean = locale === "ko";
   try {
     if (!branch.trim()) {
       // 비면 push 절차가 자리표시자로 남아 세션이 추측한다(§0-3 자리표시자 표).
@@ -443,7 +444,7 @@ export async function createProject(
     }
 
     // 새 프로젝트는 스킬을 받아서 태어난다(§새 프로젝트가 스킬을 갖고 태어난다, 결정 8-9 +
-    // §새 프로젝트가 한국어 갈래를 고르면 noslop 셋을 같이 받는다, 결정 3-4) — 실패해도 생성
+    // §새 프로젝트가 한국어 갈래를 고르면 noslop 셋을 같이 받는다, 결정 3-4, P483) — 실패해도 생성
     // 자체는 막지 않는다. `.gitignore` 한 줄과 같은 처분이다. 동시에 받는다(결정 8) — 직렬이면
     // 최악이 §5-1 타임아웃 곱하기 행 수다.
     try {
@@ -471,7 +472,7 @@ export async function createProject(
         await writePersonaSkills(
           path.join(made.root, "personas"),
           persona,
-          defaultSkillsFor(persona, installed, !!korean),
+          defaultSkillsFor(persona, installed, korean),
         );
       }
     } catch {
