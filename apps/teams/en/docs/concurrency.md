@@ -133,6 +133,91 @@ whenever another project has work and nothing up.
 - **Each project's own workers make this call.** No table of turns is kept anywhere, so adding or
   removing a project leaves nothing to reconcile.
 
+## Selfish mode - giving this computer to the queue while you sleep
+
+This is the mode you switch on before you leave for the day or go to bed. It quits the apps you
+have open and hands the CPU and memory they were using to the sessions. Turn it on while you are
+working with a browser and a chat app open and whatever you were doing closes, so leave it off
+during working hours.
+
+It lives in `Settings` › `Workers`, in the `Selfish mode` section right below
+`Machine-wide session limit`. Like the limit, it is a value for this computer, so project
+settings do not have it.
+
+### Turning it on now, and a daily schedule
+
+To turn it on right away, press `Turn on now`. A 60-second countdown appears with the list of apps
+that will be quit. If you see one in the list that must stay up, press `Cancel` before the countdown
+ends. Nothing changes. Once the 60 seconds pass the mode is on, and the button in the same spot
+becomes `Turn off`. Press `Turn off` and it switches off on the spot, but the apps it quit do not
+come back up.
+
+To switch it on and off at the same times every day, set a start time and an end time in the same
+section and save. The default is on at 23:00 and off at 07:00. If it is already on at the start
+time, that run is skipped. If it is on at the end time, it is switched off.
+
+The moment you save a schedule, and the moment you press `Turn on now`, macOS asks once whether the
+dira app may control other apps. If that prompt first showed up at 11 p.m. on a screen nobody is
+watching, the mode would not switch on, so the question is asked up front. Allow it. If you deny
+it, the section says so and the schedule is not saved.
+
+### Which apps go down and which stay
+
+What gets quit is the ordinary apps, the ones with an icon in the Dock. Daemons and input methods
+running in the background with no window are left alone.
+
+These are on the exclusion list by default and stay up.
+
+- The dira app itself, `Finder`, `Terminal`, `iTerm2`
+- `Google Drive`, `Amphetamine`, `1Password`, `1Password 7`
+- Any app with `VPN` in its name
+
+If there is an app that has to keep running overnight, add its name to the exclusion list in the
+section. To let one of the defaults be quit, remove it from the list.
+
+**Nothing is force-quit.** Each app gets one ordinary quit request and 10 seconds. An app holding a
+document you have not saved stays up with its "save changes?" prompt on screen, and the mode notes
+it as one it could not quit. This is so you do not lose the document. If you want an app down
+overnight, save your work in it before you turn the mode on.
+
+### Leave the limit empty
+
+The section has a field for a limit. Put an integer in it and, while the mode is on, the
+machine-wide session limit from §This computer's ceiling above is changed to that value, then put
+back to what it was when the mode switches off. If there was no limit before, there is none after.
+**Leave it empty and the limit stays as it is; only the apps are quit. Empty is the default.**
+
+The reason to leave it empty is that nobody has measured a number yet. First see how much more gets
+done with the apps out of the way, then decide whether to raise the limit. If the last-run box shows
+a lot of runs skipped because of the limit, that is the time to try a higher one.
+
+Changing the limit only raises how many sessions actually run in projects carrying the hook that
+reads the machine limit (`.dira/session-cap.sh`). Quitting apps helps every registered project.
+
+### In the morning - the last-run box
+
+Each time the mode switches off, the section's `Last run` box is filled in again. It shows only the
+most recent run.
+
+- **From when to when** it was on
+- **How many apps it quit, and the names of the ones it could not.** A name here most likely means
+  a document is still unsaved. Open that app and look.
+- **One line per project.** Dispatches, completions, the STALL ratio, runs skipped because of the
+  limit, sessions killed by the account limit, and the time of the last dispatch.
+
+The numbers are counts of lines written to each project's `<root>/workers/runner.log` during that
+window. If many sessions died on the account limit, the account ran dry before the computer did;
+see [Authentication](/docs/auth) §Multiplaying - the switches for keeping several accounts. If the last dispatch stopped early in the night,
+the queue ran out of tickets or something else held it up.
+
+### With the app closed, the schedule does not run
+
+**The schedule only runs while the dira app is open.** The clock it keeps is a heartbeat inside the
+app, so with the app closed the mode does not switch on when 23:00 comes. If you closed the app
+with the mode on, it does not switch off at 07:00 either. In that case, the next time you open the
+app its first heartbeat runs the missed slot once, switches the mode off, and puts the limit back.
+To use it overnight, leave the dira app open.
+
 ## The worker lock - one ticket at a time
 
 A worker is a synchronous process. That means it does one thing at a time, so it does not claim
