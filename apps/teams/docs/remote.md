@@ -1,7 +1,9 @@
 # 원격 큐
 
-> 2026-10-11 현재 원격 큐(`remote.py`와 `dira remote` 명령)는 구현 중입니다. 명령을 찾지 못한다는
-> 오류가 나면 아직 설치본에 들어오지 않은 것입니다. 이 장은 완성된 동작을 기준으로 씁니다.
+> 2026-10-11 현재 원격 큐(`remote.py`와 `dira remote` 명령)는 구현 중입니다. 이 장은 완성된
+> 동작을 기준으로 씁니다. 터미널이 `command not found: dira`를 내면 셸이 `dira`를 찾지 못한
+> 것이니 아래 [연결하기](#연결하기)의 PATH 안내를 보세요. `dira remote: 클라이언트가 설치되지
+> 않았습니다`가 나오면 원격 큐가 아직 설치본에 들어오지 않은 것입니다.
 
 웹 서비스에서 누른 작업을 내 컴퓨터의 dira가 받아서 돌립니다. 서버는 작업을 만들어 나눠 주기만
 하고 모델을 돌리지 않습니다. 세션은 이 컴퓨터에서 돌고, 결과물과 온톨로지 원본도 이 컴퓨터의
@@ -18,6 +20,26 @@
 ```sh
 dira remote connect <server> --root ~/Projects/myproject/.dira
 ```
+
+`dira` 명령은 `~/.config/dira/bin`에 있습니다. 셸이 zsh나 bash라면 dira 앱을 한 번 켜는
+것으로 충분합니다. 앱은 켜질 때 이 디렉터리를 PATH에 더하는 블록(`# >>> dira >>>`로
+시작합니다)을 zsh면 `~/.zshrc`, bash면 `~/.bash_profile` 끝에 한 번 덧붙입니다. 이미 열려 있던
+터미널 창은 이 블록을 읽지 않았으니, 앱을 켠 뒤 새 창을 열어서 실행하세요. 파일에 `.config/dira/bin`이 이미
+있으면 앱은 그 파일을 건드리지 않습니다.
+
+앱 없이 엔진만 쓰거나 fish 같은 다른 셸을 쓰면 줄 하나를 직접 넣어야 합니다. 아래 명령은 줄이
+이미 있으면 아무것도 하지 않으므로 두 번 실행해도 됩니다.
+
+```sh
+# zsh (bash라면 ~/.zshrc 대신 ~/.bash_profile)
+grep -qs '.config/dira/bin' ~/.zshrc || echo 'export PATH="$HOME/.config/dira/bin:$PATH"' >> ~/.zshrc
+
+# fish
+fish_add_path ~/.config/dira/bin
+```
+
+새 터미널 창에서 `command -v dira`를 실행해 `/.config/dira/bin/dira`로 끝나는 경로가 나오면
+준비가 끝난 것입니다.
 
 1. 명령이 확인 코드(`user_code`)와 주소(`verification_uri`)를 찍습니다.
 2. 브라우저에서 그 주소를 열고 확인 코드를 넣어 승인합니다. 승인한 워크스페이스에 이 컴퓨터가

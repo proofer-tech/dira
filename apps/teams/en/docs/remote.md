@@ -1,8 +1,10 @@
 # Remote queue
 
 > As of 2026-10-11 the remote queue (`remote.py` and the `dira remote` command) is still being built.
-> If you get a command-not-found error, it has not reached your install yet. This chapter describes
-> the finished behavior.
+> This chapter describes the finished behavior. If the terminal says `command not found: dira`, your
+> shell cannot find `dira`; see the PATH note under [Connecting](#connecting). If you get
+> `dira remote: 클라이언트가 설치되지 않았습니다` ("the client is not installed"), the remote queue has
+> not reached your install yet.
 
 A web service hands out jobs, and dira on your computer picks them up and runs them. The server only
 creates and distributes jobs; it never runs a model. Sessions run on this computer, and the results
@@ -19,6 +21,26 @@ address the web service gives you.
 ```sh
 dira remote connect <server> --root ~/Projects/myproject/.dira
 ```
+
+The `dira` command lives in `~/.config/dira/bin`. If your shell is zsh or bash, opening the dira app
+once is enough. On launch the app appends a block that adds this directory to PATH (it starts with
+`# >>> dira >>>`) to the end of `~/.zshrc` for zsh or `~/.bash_profile` for bash, once. Terminal
+windows that were already open have not read that block, so open a new window after starting the
+app. If the file already mentions `.config/dira/bin`, the app leaves it alone.
+
+If you use the engine without the app, or another shell such as fish, add one line yourself. The
+commands below do nothing when the line is already there, so running them twice is safe.
+
+```sh
+# zsh (for bash, use ~/.bash_profile instead of ~/.zshrc)
+grep -qs '.config/dira/bin' ~/.zshrc || echo 'export PATH="$HOME/.config/dira/bin:$PATH"' >> ~/.zshrc
+
+# fish
+fish_add_path ~/.config/dira/bin
+```
+
+You are ready when `command -v dira` in a new terminal window prints a path ending in
+`/.config/dira/bin/dira`.
 
 1. The command prints a confirmation code (`user_code`) and an address (`verification_uri`).
 2. Open that address in a browser and enter the code to approve. This computer joins the workspace
