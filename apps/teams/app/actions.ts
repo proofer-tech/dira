@@ -130,6 +130,9 @@ import {
   testSendWebhook,
   type WebhookTestResult,
 } from "@/lib/webhook";
+import {
+  checkPermission, readSelfish, startSelfish, stopSelfish,
+} from "@/lib/selfish-server";
 import { liveSessionCount, readSessionLimit, writeSessionLimit } from "@/lib/session-cap";
 import {
   buildWorkersPanel,
@@ -1107,4 +1110,21 @@ export async function vercelTokenAction(id: string, token: string | null): Promi
   if (r.status === 200) return { ok: true };
   const e = (r.body as { error?: string }).error;
   return { ok: false, code: e === "unauthorized" ? "rejected" : e === "locked" ? "locked" : e === "invalid_value" ? "invalid" : "unavailable" };
+}
+
+/** P487 이기적 모드: 상태 읽기, 켜기, 끄기, 자동화 권한 확인. */
+export async function readSelfishAction() {
+  return readSelfish();
+}
+export async function startSelfishAction(): Promise<{ ok: boolean; message?: string }> {
+  const perm = await checkPermission();
+  if (!perm.ok) return { ok: false, message: perm.error };
+  await startSelfish();
+  return { ok: true };
+}
+export async function stopSelfishAction() {
+  return stopSelfish();
+}
+export async function checkSelfishPermissionAction() {
+  return checkPermission();
 }
