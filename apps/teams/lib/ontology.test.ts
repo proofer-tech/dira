@@ -513,7 +513,7 @@ test("isDiraFormat — 둘 다 있으면 뜬다", () => {
   );
 });
 
-test("P478 O2 body: document 타입의 ## 절은 위반이 아니고 키 없는 타입은 여전히 위반이다", () => {
+test("P486 body: 키가 있든 없든 ## 절은 위반이 아니다", () => {
   const withSection = "---\ntype: 사람\nname: a\n---\n## 절\n본문이다.\n";
   const run = (typeText: string) =>
     computeOntologyMetrics({
@@ -523,7 +523,7 @@ test("P478 O2 body: document 타입의 ## 절은 위반이 아니고 키 없는 
       typeFiles: [{ rel: "_ontology/object-types/사람.md", text: typeText }],
     }).schemaViolations.filter((v) => v.includes("절"));
   assert.equal(run("---\nbody: document\n---\n").length, 0);
-  assert.equal(run("---\nname: 사람\n---\n").length, 1);
+  assert.equal(run("---\nname: 사람\n---\n").length, 0);
 });
 
 test("P478 O3 versions/만 있는 폴더는 dira 형식이 아니다", () => {

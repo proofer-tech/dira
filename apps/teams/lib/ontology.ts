@@ -70,15 +70,6 @@ export function parseCitations(text: string): { target: string; property: string
   return out;
 }
 
-/** 타입 정의 파일 fm에 `body: document`가 있는 타입 이름들(O2) - 그 타입의 객체는 본문에 `##` 절을 쓸 수 있다. */
-function documentTypes(typeFiles: ObjectInput[]): Set<string> {
-  return new Set(
-    typeFiles
-      .filter((f) => fmScalar(f.text, "body") === "document")
-      .map((f) => f.rel.split("/").pop()?.replace(/\.md$/, "") ?? ""),
-  );
-}
-
 const NORMATIVE = /(해야 한다|하는 게 낫다|하지 않는다|하지 말|권장한다|바람직하다|해야만|짚고 넘어가)/;
 
 /** 문장 경계를 `.!?` 뒤 공백·문자열 끝으로 어림한다 — 규범 문장 검출과 같은 정밀도(§5-3 §형식
@@ -222,7 +213,7 @@ export function parseTypeProperties(typeFiles: ObjectInput[]): Map<string, strin
   return props;
 }
 
-type ParsedObject = { prose: string[]; rels: [string, string][]; props: string[]; hasSection: boolean };
+type ParsedObject = { prose: string[]; rels: [string, string][]; props: string[] };
 
 const ATTR_LINE = /^-\s*([^:]+):\s*(.*)$/;
 const WIKILINK_ONLY = /^\[\[([^\]]+)\]\]$/;
@@ -287,7 +278,6 @@ export function parseObject(text: string): ParsedObject {
   const prose: string[] = [];
   const rels: [string, string][] = [];
   const props: string[] = [];
-  let hasSection = false;
 
   const lines = text.split("\n");
   let bodyStart = 0;
@@ -303,7 +293,6 @@ export function parseObject(text: string): ParsedObject {
     const s = raw.trim();
     if (!s) continue;
     if (s.startsWith("## ")) {
-      hasSection = true;
       continue;
     }
     const m = s.match(ATTR_LINE);
@@ -320,7 +309,7 @@ export function parseObject(text: string): ParsedObject {
       prose.push(s);
     }
   }
-  return { prose, rels, props, hasSection };
+  return { prose, rels, props };
 }
 
 /** `objects/<타입>/<이름>.md` 상대경로(listTree 기준)에서 타입·이름을 뽑는다. */
@@ -493,7 +482,6 @@ function checkViewLinks(views: ObjectInput[], knownNames: Set<string>, locale: L
 export function computeOntologyMetrics(input: OntologyInput, locale: Locale = DEFAULT_LOCALE): OntologyMetrics {
   const { types, relTypes } = parseSchema(input.schemaText);
   const required = parseRequiredProps(input.typeFiles ?? []);
-  const docTypes = documentTypes(input.typeFiles ?? []);
 
   const parsed = input.objects
     .map((o) => ({ rel: o.rel, ...typeAndName(o.rel), ...parseObject(o.text) }))
@@ -527,7 +515,6 @@ export function computeOntologyMetrics(input: OntologyInput, locale: Locale = DE
         `${t(locale, "ontology.violation.unknownTypePrefix")} ${p.rel} ${t(locale, "ontology.violation.unknownTypeMiddle")}${p.type}${t(locale, "ontology.violation.unknownTypeSuffix")}`,
       );
     }
-    if (p.hasSection && !docTypes.has(p.type)) violations.push(wrap(t(locale, "ontology.violation.sectionUsed"), p.rel, ""));
 
     const relTargets = new Set<string>();
     for (const [rname, target] of p.rels) {
