@@ -8979,8 +8979,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P485-1 | 엔진 - `remote.py` 루트 디렉터리 분리-옛 배치 이전-disconnect, `device/code` 선택 필드 + `test_remote.py` | developer | - | 발행 |
-| P485-2 | 매뉴얼 - `remote.md` 자격 증명 경로와 여러 프로젝트 연결, 영문판 같이 | writer | - | 발행 |
+| P485-1 | 엔진 - `remote.py` 루트 디렉터리 분리-옛 배치 이전-disconnect, `device/code` 선택 필드 + `test_remote.py` | developer | - | 발행 `5940128e` |
+| P485-2 | 매뉴얼 - `remote.md` 자격 증명 경로와 여러 프로젝트 연결, 영문판 같이 | writer | - | 발행 `72d4670e` |
 
 두 장이다. 매뉴얼은 위 표에 글이 다 있어 기다리지 않는다. R12와 R13은 같은 `cmd_connect`를 고치므로
 한 장으로 묶는다. 에픽 `P478`에 붙인다.
