@@ -10,7 +10,7 @@
  *  때 직접 읽는다. */
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, FileText, PanelLeft, TriangleAlert } from "lucide-react";
+import { ChevronRight, FileText, Network, PanelLeft, TriangleAlert } from "lucide-react";
 import {
   FixSchemaViolationsButton,
   NewOntologyFileButton,
@@ -33,7 +33,7 @@ import { statusLabel } from "@/components/status-badge";
 import { t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
-import { fmScalar, isDiraFormat, parseCitations, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
+import { fmScalar, isDiraFormat, nodeViewLink, parseCitations, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
 import { loadMetrics, loadOntologyGraph } from "@/lib/ontology-load";
 import { OntologyMap } from "@/components/ontology-map";
 import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
@@ -102,6 +102,29 @@ export default async function Ontology({
         }
       />
       <TooltipContent side="right">{toggleLabel}</TooltipContent>
+    </Tooltip>
+  );
+
+  const nodeView = nodeViewLink(id, file, !expanded);
+  const nodeViewLabel = t(locale, "ontology.sidebar.nodeView");
+  const nodeViewButton = (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            nativeButton={false}
+            aria-current={nodeView.current ? "page" : undefined}
+            className={`text-muted-foreground ${nodeView.current ? "bg-sidebar-accent text-sidebar-accent-foreground" : ""}`}
+            render={<Link href={nodeView.href} />}
+          >
+            <Network aria-hidden className="size-4" />
+            <span className="sr-only">{nodeViewLabel}</span>
+          </Button>
+        }
+      />
+      <TooltipContent side="right">{nodeViewLabel}</TooltipContent>
     </Tooltip>
   );
 
@@ -255,7 +278,10 @@ export default async function Ontology({
             <SidebarContent className="py-2">
               <SidebarGroup className="p-0">
                 {/* 머리 행 — 접힘·펼침 공통(§비주얼 §53). 낱말은 원래 0개라 접혀도 잃을 게 없다. */}
-                <div className="flex h-6 items-center pr-2">{toggle}</div>
+                <div className={expanded ? "flex h-6 items-center px-2" : "flex flex-col items-end gap-1 pr-2"}>
+                  {nodeViewButton}
+                  {toggle}
+                </div>
                 {expanded && (
                   <SidebarMenu className="gap-0.5">
                     {nestTree(tree, selected?.rel).map((e) => (

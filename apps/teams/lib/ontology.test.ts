@@ -3,7 +3,8 @@ import assert from "node:assert";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { computeOntologyMetrics, isDiraFormat, parseCitations, fmScalar, parseTypeProperties } from "./ontology.ts";
+import { computeOntologyMetrics,
+  nodeViewLink, isDiraFormat, parseCitations, fmScalar, parseTypeProperties } from "./ontology.ts";
 import { listTree } from "./protocols.ts";
 import { loadMetrics } from "./ontology-load.ts";
 
@@ -534,4 +535,10 @@ test("P478 O6-O7 인용 property와 title을 읽는다", () => {
   const text = '---\ntitle: "제목"\nlinks:\n  인용한다:\n    - 저자: "[[kim]]"\n      property: affiliation\n    - 다른: "[[lee]]"\n---\n';
   assert.equal(fmScalar(text, "title"), "제목");
   assert.deepEqual(parseCitations(text), [{ target: "kim", property: "affiliation" }]);
+});
+
+test("P488 노드 뷰 링크는 file을 버리고 sidebar=off만 남기며 file이 없을 때만 현재다", () => {
+  assert.deepEqual(nodeViewLink("p1", "objects/a.md", false), { href: "/p/p1/ontology", current: false });
+  assert.deepEqual(nodeViewLink("p1", "objects/a.md", true), { href: "/p/p1/ontology?sidebar=off", current: false });
+  assert.deepEqual(nodeViewLink("p1", undefined, true), { href: "/p/p1/ontology?sidebar=off", current: true });
 });

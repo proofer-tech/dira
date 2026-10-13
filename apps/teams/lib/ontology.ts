@@ -642,3 +642,8 @@ function parseActionLogs(
     lastUpdated: last ? `${last.date} ${last.time}` : null,
   };
 }
+
+/** 파일 목록 머리 행의 노드 뷰 버튼(P488) - `?file=`은 버리고 `sidebar=off`만 잇는다. `file`이 없을 때만 지금이 노드 뷰다. */
+export function nodeViewLink(projectId: string, file: string | undefined, sidebarOff: boolean): { href: string; current: boolean } {
+  return { href: `/p/${projectId}/ontology${sidebarOff ? "?sidebar=off" : ""}`, current: !file };
+}

@@ -2072,6 +2072,7 @@ export const ko: Record<string, string> = {
 
   // ontology/page.tsx 나머지(사이드바 · 위반 판 라벨 · 빈 트리 설문 안내).
   "ontology.sidebar.collapse": "파일 목록 접기",
+  "ontology.sidebar.nodeView": "노드 뷰 보기",
   "ontology.sidebar.expand": "파일 목록 펴기",
   "ontology.usingDefault": "기본값 가정",
   "ontology.sidebar.ariaLabel": "온톨로지 파일",
@@ -4955,6 +4956,7 @@ export const en: Record<string, string> = {
   "ontology.violation.missingRequiredPrefix": "Missing required property:",
 
   "ontology.sidebar.collapse": "Collapse the file list",
+  "ontology.sidebar.nodeView": "Show node view",
   "ontology.sidebar.expand": "Expand the file list",
   "ontology.usingDefault": "assumed default",
   "ontology.sidebar.ariaLabel": "Ontology files",
