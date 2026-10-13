@@ -54,3 +54,17 @@ test("덧붙인 블록은 디렉터리가 있으면 PATH 맨 앞에 한 번, 없
   assert.equal(run(), `${h}/.config/dira/bin:/usr/bin:/bin`);
   assert.ok(existsSync(join(h, ".zshrc")));
 });
+
+test("첫 기동: installShellPath 뒤에 띄운 자식 PATH에 .config/dira/bin이 있다", async () => {
+  const h = tmp();
+  const e = env();
+  await installShellPath(h, "/bin/zsh", e); // main.ts가 process.env로 하는 일과 같다
+  const out = execFileSync("/bin/sh", ["-c", "echo $PATH"], { env: { ...e } }).toString().trim();
+  assert.ok(out.split(":").includes(`${h}/.config/dira/bin`));
+});
+
+test("main.ts boot()는 installShellPath를 startServer보다 먼저 부른다", () => {
+  const boot = readFileSync(new URL("./main.ts", import.meta.url), "utf8").split("async function boot()")[1];
+  const i = boot.indexOf("await installShellPath(");
+  assert.ok(i >= 0 && i < boot.indexOf("child = startServer("));
+});

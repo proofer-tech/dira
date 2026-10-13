@@ -1129,6 +1129,8 @@ async function boot() {
   await startEnvBridge().catch((e) => console.error(`[dira] 환경변수 브리지를 못 열었습니다: ${(e as Error).message}`));
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
+  // startServer가 process.env.PATH를 물려주므로 그보다 먼저 끝나야 첫 기동 서버 자식도 dira를 찾는다 (P484)
+  await installShellPath(homedir(), process.env.SHELL ?? "").catch((e) => console.error(`[dira] 셸 PATH 설정을 못 했습니다: ${(e as Error).message}`));
   child = startServer(port);
   console.log(`[dira] ${SERVER} → ${origin}`);
 
@@ -1141,7 +1143,6 @@ async function boot() {
   readyOrigin = origin; // 여기부터 `second-instance`가 창을 열 수 있다
   win = openWindow(origin);
   createTray();
-  void installShellPath(homedir(), process.env.SHELL ?? "").catch((e) => console.error(`[dira] 셸 PATH 설정을 못 했습니다: ${(e as Error).message}`));
   void installMcpKeepalive().catch((e) => console.error(`[dira] MCP 감시를 설치하지 못했습니다: ${(e as Error).message}`));
   app.on("activate", () => showWindow()); // 독 아이콘도 `열기`와 같은 자리로 간다
 
