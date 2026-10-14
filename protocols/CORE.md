@@ -43,6 +43,7 @@ skip. Format: `CORE-MEMORY.md`.
 Someone else's area -> **new ticket**, never edit theirs, noted in `## 결과`
 (`-> <new hash> (persona) what`). `deps` only if start needs it
 (syntax: `CORE-TICKETS.md`).
+Someone waits on it or it unblocks a `deps`: dispatch now, `CORE-DISPATCH.md`.
 
 ## When blocked
 
@@ -64,15 +65,13 @@ punctuation only - not code under `apps/**`. Allowed set:
 
 `` ` ~ ! @ # $ % ^ & * ( ) - _ = + [ ] { } \ | ; : ' " , . < > / ? ``
 
-Outside it, never invent a substitute - decided list, exemptions:
-`CORE-TICKETS.md` - Characters.
+Outside it, never invent a substitute; exemptions: `CORE-TICKETS.md` - Characters.
 
-Name a ticket by its bare 8-char hash (`547b7b98`), never a path or filename -
-the GUI renders a known hash as a linked ticket chip.
+Name a ticket by its bare 8-char hash (`547b7b98`), never a path or filename.
 
 ## Queue invariants
 
-Never break these; convinced one must break -> `## 블록`. **State is the filename**
+Never break these; must break -> `## 블록`. **State is the filename**
 (none / `.wip` / `.done`), never frontmatter. **Claim is an atomic link**, never
 `os.rename`. **Queue is flat, single-copy** - no subdirectories under `tickets/`,
 never in git.
