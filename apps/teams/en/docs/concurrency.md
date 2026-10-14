@@ -235,6 +235,104 @@ A session holding on forever is blocked too. Past 5400 seconds by default, the s
 the ticket goes back to `Open`. The next call picks it up again, by the same worker or another.
 The value to change is `TICKET_MAXRUN` in [Worker environment variables](/docs/ref-env).
 
+## Immediate dispatch - starting a worker now instead of waiting for cron
+
+Cron calls the workers every 30 seconds, so a ticket you make and leave alone gets picked up within
+30 seconds. Immediate dispatch shortens that wait. If it does not start a worker, nothing is lost:
+the next cron round does the same work.
+
+Whether to start a worker, and which one, is decided in one place: the engine's `dispatch.py`.
+Cron, the screens, MCP, and sessions all call it, and none of them picks a worker on its own. Once
+a worker is up, `tick.sh` still decides which ticket it takes, as before.
+
+### The four reasons - who calls, and when a worker starts
+
+Every caller attaches a reason. Each reason checks different conditions.
+
+| Reason | Called from | Starts a worker when |
+|---|---|---|
+| `cron` | Each worker's crontab line | That worker is idle. Load and other candidates are not checked. With no candidate, `tick.sh` simply ends |
+| `request` | The moment a request (`kind: request`) ticket is made: the ticket-creation action on screen and MCP `ticket_create` | All four hold: load is at or under the limit, an idle worker exists, there are zero candidates other than that ticket, and that ticket is a candidate |
+| `direct` | MCP `dispatch_now`, the kicks on screen, a command a person runs | With a hash, that ticket is a candidate and an idle worker exists. Without one, an idle worker is enough. Load and other candidates are not checked |
+| `judge` | A session, on its own, following the engine guidance | The same four conditions as `request` |
+
+`request` and `judge` start nothing while the queue holds even one other candidate. The new ticket
+does not jump ahead of tickets already waiting; it waits for its cron turn. `direct`, on the other
+hand, means a person or a screen said "now," so it skips the load and other-candidate checks.
+
+A session calls with `judge` in three cases: a person in the current conversation is waiting on a
+ticket it just made, the ticket it is closing clears another ticket's `deps`, or its own handoff
+has to finish before its continuation can go. For any other new ticket it does not call and leaves
+the pickup to cron.
+
+An idle worker is one whose worker file is registered in crontab and whose worker lock is not
+held. When several are idle, the first by name in ascending order is picked. The worker lock is
+covered in §The worker lock above.
+
+### Changing the load limit - `~/.config/dira/dispatch.json`
+
+Only `request` and `judge` check load. If this computer's one-minute load average (the first
+number `uptime` shows) is above the limit, no worker starts. The default limit is this computer's
+CPU core count.
+
+To change it, create `~/.config/dira/dispatch.json` and put a number in `load_max`.
+
+```json
+{ "load_max": 6.0 }
+```
+
+With no file, or no `load_max` key, the limit goes back to the core count. No screen edits this
+value. Watch the `KICK-SKIP` lines below for a few days, and raise it if many of them were skipped
+for load.
+
+### Why a worker did not start - the `KICK` lines in `runner.log`
+
+Every immediate-dispatch decision leaves one line in `<root>/workers/runner.log`.
+
+```
+<date> <time> [dispatch] KICK <reason> <hash or -> <worker>
+<date> <time> [dispatch] KICK-SKIP <reason> <hash or -> <why it did not start>
+```
+
+- **A `KICK` line** means that worker was started. A `-` in the hash slot means it started without
+  a hash, so the worker takes the ticket at the head of the queue. Whether it actually took a
+  ticket shows in that worker's `DISPATCH` line.
+- **A `KICK-SKIP` line** means nothing started, and the last field says in a sentence which
+  condition failed: load over the limit, no idle worker, another candidate waiting, or the ticket
+  not being a candidate.
+- **The `cron` reason writes no line at all.** It would pile up a line every 30 seconds. For cron
+  rounds, read the worker-named `DISPATCH` and `SKIP` lines as before (see [Logs](/docs/logs)).
+
+If you made a request ticket, nothing started for more than 30 seconds, and there is no
+`KICK-SKIP` line either, immediate dispatch was never called. Look at cron instead.
+
+To see the decision without starting anything, call it yourself with `--dryrun`. The engine
+directory is the one that holds `tick.sh`.
+
+```
+python3 <engine>/dispatch.py run <root> --reason request --hash <hash> --dryrun
+```
+
+The result is one line of JSON. `go` is `true` if it would start a worker; if `false`, the reason is
+in `why`. `--dryrun` starts no worker, writes no log, and does not change a single character of the
+queue.
+
+### Starting one now - MCP `dispatch_now`
+
+To start a worker now from an MCP client, call `dispatch_now`. Both arguments are optional.
+
+| Argument | Given | Omitted |
+|---|---|---|
+| `hash` | Starts a worker on that ticket. The ticket has to be a candidate | The worker takes the ticket at the head of the queue |
+| `worker` | Only that worker is considered | The first idle worker by name is picked |
+
+The reason is `direct`, so load and other candidates are not checked. The response is the same JSON
+as `--dryrun` above; if nothing started, read `why`. The older `dispatch` tool requires a worker
+name, runs that worker once, and does not look for an idle worker.
+
+When you make a request ticket through MCP `ticket_create`, the `request` reason is called along
+with it, and its decision JSON comes back under the `dispatch` key of the response.
+
 ## Three places where fewer run than you have workers
 
 If you have five workers and only three are running, either the queue has no candidates or one of
