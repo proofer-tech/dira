@@ -8938,6 +8938,87 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P491. 원격 큐 - 런타임을 (컴퓨터, 워크스페이스)마다 하나로 두고, 신호를 큐별 워커에서 떼어 컴퓨터 단위 시계가 보낸다 (요구 `0f1e855b`, 왕복 0회)
+
+사람 요구: 갈래 큐가 갈래 정본 `서비스/아키텍처/dira협의요구사항.md`의 R14, R15를 넘겼다(갈래 티켓
+`098f5eef`). 사람이 갈래 설정 화면을 보고 "애초에 같은 런타임인데 하나만 살아 있는 게 이상하다"고 했다.
+
+- (R14) 지금은 큐 루트마다 따로 connect하고 따로 `POST runtimes`를 해서, 서버의 runtimes 표에 같은
+  컴퓨터 행이 프로젝트마다 하나씩 있고 따로 살고 죽는다. P485는 상태 파일 자리를 루트마다 나눴지만
+  런타임 등록과 토큰은 루트마다 남겼다.
+- (R15) 살아 있음 신호가 큐별 워커 경로(`workers/<w>.sh` -> `tick.sh`) 안에 있다. 실측(2026-10-14):
+  with-cto 큐의 `workers/w1.sh`가 `tick.sh`에 닿기 전에 `dispatch-gate.sh`를 부르는데, 큐 폴더가 git
+  저장소가 아니라 게이트가 `exit 0`으로 끝난다. 그래서 `tick.sh`의 원격 블록이 한 번도 돌지 않았고,
+  서버의 with-cto 런타임(`28677c11`)은 끊김 기록 없이 `last_seen_at`이 2026-10-13 13:47 UTC에서 멈췄다.
+
+둘 다 받는다. 사람이 정하지 않은 것은 주도성 5로 pm이 정했다. 핵심은 셋이다.
+
+1. **런타임의 단위가 (컴퓨터, 워크스페이스)로 바뀐다.** 토큰과 `runtime_id`는 워크스페이스 디렉터리에
+   하나만 두고, 그 워크스페이스에 연결한 큐 루트는 런타임의 프로젝트 목록이 된다. 루트별 상태
+   파일(P485)은 그대로 루트 디렉터리에 남는다.
+2. **신호는 컴퓨터 단위 시계 하나가 보낸다.** crontab 한 쌍이 `remote.py sync-all`을 부르고, 이 명령이
+   워크스페이스마다 신호를 한 번 보낸 뒤 루트마다 sync를 별도 프로세스로 돌린다. 한 루트가 실패하거나
+   멈춰도 신호와 다른 루트의 sync는 계속 간다. 상주 데몬은 만들지 않는다(P478 답 유지).
+3. **같은 워크스페이스에 둘째 루트를 붙일 때 기기 코드를 다시 받지 않는다.** 그 컴퓨터가 이미 그
+   워크스페이스의 토큰을 갖고 있으므로, 사람이 새로 승인할 권한이 없다. `--new`로 강제할 수는 있다.
+
+엔진 수정이지만 P478이 사람 승인을 받은 `remote.py` 안에서 끝나고, `tick.sh`는 원격 블록의 명령 한
+줄만 바꾼다. `tickets.py`는 안 건드린다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 워크스페이스 런타임 | `~/.config/dira/remote/<ws>/runtime.json` - `{server, runtime_id}`. 자격 증명은 `~/.config/dira/remote/<ws>/credentials.json`(`0600`) - `{runtime_token}`. 둘 다 워크스페이스에 하나다. 런타임의 정본은 이 두 파일이고, 루트의 `remote.json`의 `runtime_id`는 옛 클라이언트 호환을 위해 같은 값으로 맞춰 둘 뿐 엔진은 읽지 않는다 |
+| 프로젝트 목록 | `~/.config/dira/remote/<ws>/roots/<루트 키>/root.json` - `{queue_root, project}`(`queue_root`는 realpath). 이 파일이 있고, 그 `queue_root/remote.json`이 있고, 그 `workspace_id`가 `<ws>`인 루트만 목록에 든다. 조건이 깨진 루트 디렉터리는 sync-all이 지운다 |
+| 루트 디렉터리 | P485 그대로다. `credentials.json`만 워크스페이스로 올라가고 나머지 여섯 파일(`last-sync` `manifest.json` `state.json` `progress.json` `personas-version` `bundles-checked`)과 새 파일 `last-error`가 남는다 |
+| `project` 값 | `remote.json`의 `project`(지금 계산 그대로 - 큐 루트의 부모 디렉터리 이름). 같은 워크스페이스의 목록에 같은 `project`가 이미 다른 `queue_root`로 있으면 connect가 rc 2, `같은 이름의 프로젝트가 이 워크스페이스에 이미 연결돼 있습니다: <queue_root>` |
+| connect - 재사용 | `dira remote connect <server> --root R [--workspace <ws>] [--new]`. `--new`가 없고, `runtime.json`의 `server`가 `<server>`와 같은 워크스페이스가 이 컴퓨터에 정확히 하나면(또는 `--workspace`로 고르면) 기기 코드 없이 그 토큰으로 `POST runtimes`를 다시 불러 목록을 갱신하고, `root.json`과 `remote.json`을 쓴다. 출력 첫 줄은 `이미 연결된 워크스페이스 <ws>에 프로젝트를 더했습니다`. 둘 이상이면 rc 2, `--workspace`로 고르라는 한 줄과 후보 id 목록. 재사용한 토큰이 `401`이면 rc 1, `--new`로 다시 연결하라는 한 줄 |
+| connect - 기기 코드 | 재사용 대상이 없거나 `--new`면 지금처럼 기기 코드를 받는다. 받은 워크스페이스에 이미 `runtime.json`이 있으면, 새 토큰으로 런타임을 등록하고 성공한 뒤에 옛 런타임을 옛 토큰으로 `DELETE runtimes/<옛 id>`한다(실패는 로그 한 줄, 계속). 이후 그 워크스페이스는 새 토큰-새 id 하나다 |
+| `POST runtimes` 본문 | `{machine_name, project, projects: [{project, queue_root}], tools}`. `project`는 지금 연결하는 루트의 값(옛 서버 호환), `projects`는 그 루트를 더한 전체 목록 |
+| 신호 본문 | `POST runtimes/<id>/heartbeat` - `{tools, projects: [{project, workers: [{name, busy, next_dispatch_at}], error?}]}`. `workers`는 지금 `workers_payload(root)` 그대로다. `error`는 그 루트의 `last-error` 내용이 있을 때만 싣는다(한 줄, 500 B에서 자른다). 최상위 `workers`는 더 이상 안 싣는다 |
+| 루트별 호출 | `POST jobs/claim` 본문에 `project`, `GET writes`-`GET answers` 쿼리에 `&project=<URL 인코딩>`, `PUT objects`는 `PUT objects?project=<URL 인코딩>`. 작업별 경로(`jobs/<id>/...`)와 묶음(`personas/bundle` `schema/bundle`)은 그대로다 |
+| 옛 배치 합치기 | sync-all이 워크스페이스에 `runtime.json`이 없고 루트 디렉터리에 `credentials.json`이 있으면(P485 배치) 합친다. (1) 후보 루트를 `last-sync` mtime 내림차순으로 늘어놓고, 각 루트의 `remote.json` `runtime_id`와 그 토큰으로 신호를 보내 처음 `401`이 아닌 것을 살린다. (2) 살린 토큰-id를 `credentials.json`-`runtime.json`으로 워크스페이스에 쓴다. (3) 나머지 루트는 각자 토큰으로 `DELETE runtimes/<그 id>`를 보내고(실패해도 계속) 그 루트의 `credentials.json`을 지우고 `remote.json`의 `runtime_id`를 살린 값으로 고친다. (4) 모든 후보 루트에 `root.json`을 쓴다. 전부 `401`이면 아무것도 안 바꾸고 `REMOTE unauthorized <ws>` 한 줄. P485 이전 배치(`<ws>/credentials.json`이 있고 `runtime.json`이 없음)는 그 토큰과, 그 워크스페이스를 가리키는 `remote.json` 중 첫 것의 `runtime_id`로 같은 절차를 밟는다 |
+| 컴퓨터 시계 | crontab 두 줄 `* * * * * python3 "<remote.py 절대경로>" sync-all >> "<홈>/.config/dira/remote/sync.log" 2>&1`와 `sleep 30;` 짝줄. `<remote.py 절대경로>`는 그 줄을 쓰는 `remote.py` 자신의 경로다(설치본이면 `~/.config/dira/bin/engines/remote.py`). 줄을 넣는 함수는 `ensure_clock()` 하나고, 같은 `sync-all` 줄이 이미 있으면 아무것도 안 한다 |
+| `sync-all` | (1) `~/.config/dira/remote/.sync-all.lock`(`mkdir`, 스테일은 지금 `LOCK_STALE`)을 못 잡으면 바로 끝낸다. (2) `sync.log`가 1 MB를 넘으면 `sync.log.1`로 옮긴다. (3) 옛 배치 합치기. (4) 워크스페이스마다 신호 한 번(직전 신호 뒤 10초가 안 지났으면 건너뛴다, 시각은 `<ws>/last-heartbeat`). `401`이면 그 워크스페이스의 루트 sync는 건너뛴다. (5) 목록의 루트마다 `remote.py sync --root <R>`를 자식 프로세스로 차례로 돌린다(시간 상한 20초, 넘으면 죽이고 `last-error`에 `timeout`). 자식의 rc가 0이 아니면 마지막 stderr 줄을 `last-error`에 쓰고, 0이면 `last-error`를 비운다. 한 루트의 실패는 다음 루트를 막지 않는다 |
+| `sync --root R` | P478의 sync 순서에서 살아 있음 신호를 뺀 나머지다(루트 락-10초 간격은 그대로). 원격 동작 중 예외가 나면 그 단계 이름과 사유를 stderr 마지막 줄에 찍고 rc 1이다 - 지금처럼 다음 단계는 계속 돈다 |
+| `tick.sh` | 원격 블록의 명령을 `remote.py tick --root "$TICKET_ROOT"`로 바꾼다(시간 상한 20초는 그대로). `remote.py tick`은 `ensure_clock()`을 부른 뒤, 시계 줄이 crontab에 있으면 `sync --root R`만 돌리고(이 큐의 작업을 같은 tick에서 잡는다), 줄을 못 넣었으면 `sync-all`을 돈다(신호가 끊기지 않게) |
+| connect의 크론 | 지금 넣는 워커 두 줄에 더해 `ensure_clock()`을 부른다 |
+| disconnect | 그 루트의 `remote.json`과 루트 디렉터리를 지운다. 목록에 다른 루트가 남으면 서버는 부르지 않는다(다음 신호의 목록이 그 프로젝트를 뺀다). 마지막 루트였으면 `DELETE runtimes/<id>`를 보내고 워크스페이스의 `runtime.json`-`credentials.json`을 지운다. 이 컴퓨터에 `runtime.json`이 있는 워크스페이스가 하나도 안 남으면 시계 두 줄을 crontab에서 뺀다 |
+| §API 표 | P478 §API의 `POST runtimes`-heartbeat-`jobs/claim`-`PUT objects`-`GET writes`-`GET answers` 칸과 연결 상태 판정 한 줄을 이 스펙과 함께 고쳤다. 갈래가 제안한 형식(R14 형식 표)을 그대로 받았다 |
+
+#### 안 하는 것
+
+- 상주 데몬, 앱이 시계를 대신하는 것. 시계는 crontab 한 쌍뿐이다.
+- 워크스페이스를 넘나드는 합치기 - 런타임은 워크스페이스마다 하나다.
+- 큐 루트를 옮겼을 때 목록이 따라가게 하는 것(P485와 같다 - 새 경로에서 다시 연결한다).
+- 워커 crontab 줄(P489)과 `dispatch-gate.sh` 변경. with-cto의 게이트가 `exit 0`으로 끝나는 것은 시계를
+  떼어 내면 신호와 무관해진다. 그 큐의 디스패치 자체는 이 스펙 밖이다.
+- `tickets.py` 수정.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P491-1 | 엔진 - `remote.py` 워크스페이스 런타임(`runtime.json`-`credentials.json`-`root.json`), connect 재사용-`--workspace`-`--new`, `POST runtimes` 목록, 루트별 호출의 `project`, disconnect, 옛 배치 합치기 + `test_remote.py` | developer | - | 발행 |
+| P491-2 | 엔진 - 컴퓨터 시계: `ensure_clock()`, `sync-all`(락-로그 회전-합치기-신호-자식 프로세스 sync-`last-error`), `sync --root`에서 신호 빼기, `remote.py tick`, `tick.sh` 원격 블록 한 줄 + `test_remote.py` | developer | P491-1 | 발행 |
+| P491-3 | 매뉴얼 - `remote.md`(ko-en): 한 컴퓨터-한 워크스페이스에 런타임 하나, 둘째 프로젝트는 코드 없이 붙는다(`--workspace` `--new`), 시계 두 줄과 `sync.log`, 끊기는 그 프로젝트만 빠지고 마지막이면 런타임이 해제된다 | writer | - | 발행 |
+| P491-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P491-1, P491-2 | 발행 |
+
+**네 장이다.** P491-2는 P491-1이 정하는 워크스페이스 런타임 파일 위에서 신호를 보내므로 기다린다.
+매뉴얼은 위 표에 글이 다 있어 기다리지 않는다. designer 0장 - 화면이 없다. 에픽 `P478`에 붙인다.
+
+#### 수용조건
+
+- [ ] `python3 test_remote.py`가 통과한다.
+- [ ] 가짜 서버로 같은 워크스페이스에 루트 A를 연결한 뒤 B를 연결하면 B는 기기 코드를 묻지 않고 `이미 연결된 워크스페이스`로 시작하는 줄을 찍는다. `~/.config/dira/remote/<ws>/credentials.json`이 하나, 가짜 서버의 런타임이 하나이고, B 연결 때 받은 `POST runtimes`의 `projects`에 A와 B가 둘 다 있다.
+- [ ] 그 상태에서 `remote.py sync-all`을 한 번 돌리면 가짜 서버가 받은 heartbeat가 정확히 한 번이고 그 `projects`에 A와 B가 있으며 각각 `workers`를 갖는다. `jobs/claim` 본문의 `project`와 `PUT objects`-`GET writes`-`GET answers`의 `project=`가 루트마다 그 루트의 값이다.
+- [ ] B의 `workers/w1.sh`를 `exit 0`만 하는 스크립트로 바꿔도 `sync-all`의 heartbeat에 A와 B가 그대로 있다.
+- [ ] B의 `sync --root`가 예외를 내도록 만들면(예: B의 `ontology/objects`를 읽기 금지로) 다음 `sync-all` heartbeat에서 B에만 `error`가 있고 A는 `error` 없이 오며, A의 `jobs/claim`은 그대로 간다.
+- [ ] 옛 배치(루트 A, B가 각자 `roots/<키>/credentials.json`과 서로 다른 `runtime_id`)를 둔 채 `sync-all`을 돌리면 워크스페이스에 `runtime.json`과 `credentials.json`이 하나씩 생기고, 가짜 서버가 진 쪽 `runtime_id`로 `DELETE`를 한 번 받으며, 두 루트의 `remote.json` `runtime_id`가 같아진다. 다시 돌리면 `DELETE`가 더 오지 않는다.
+- [ ] `remote.py tick --root A`를 처음 돌리면 crontab(테스트는 `DIRA_CRONTAB_FILE`)에 `sync-all` 줄 두 개가 생기고, 다시 돌려도 두 개다.
+- [ ] B를 disconnect하면 서버는 `DELETE`를 안 받고 다음 heartbeat의 `projects`에 A만 있다. 이어서 A를 disconnect하면 `DELETE runtimes/<id>`가 한 번 가고 `runtime.json`-`credentials.json`이 사라지며 crontab에서 `sync-all` 줄이 빠진다.
+- [ ] 이 컴퓨터에서 gallae와 with-cto 루트를 다시 연결하지 않은 채 새 엔진으로 2분이 지나면 `~/.config/dira/remote/<ws>/runtime.json`이 하나이고, 갈래 서버의 runtimes 표에서 hsol.local 행이 하나이며 그 `last_seen_at`이 2분 안이다. 서버가 아직 R14 형식을 받지 않으면 이 줄은 판정불가로 적는다.
+- [ ] P491-1-P491-2 커밋의 `git show --stat`에 `tickets.py`가 없고, `tick.sh`의 변경은 원격 블록의 명령 한 줄뿐이다.
+
 ### P490. 내장 브라우저에서 누른 자리가 그대로 눌린다 (요구 `d8f0aabf`, 왕복 0회)
 
 사람 요구: *"내부브라우저 클릭 위치에 비해 약간 위쪽이 클릭되는 버그가 있습니다"*.
@@ -9679,19 +9760,22 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 |---|---|---|
 | `POST device/code` | `{machine_name, project?, queue_root?, tools?}` (선택 필드 P485) | `{device_code, user_code, verification_uri, interval, expires_in}` |
 | `POST device/token` | `{device_code}` | 대기 중 `428`, 끝나면 `{workspace_id, runtime_token}` |
-| `POST runtimes` | `{machine_name, project, tools: [{name, version, health}]}` | `{runtime_id}` |
-| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` | `{ok: true}` |
+| `POST runtimes` | `{machine_name, project, projects?: [{project, queue_root}], tools: [{name, version, health}]}` - `projects`가 있으면 `project` 대신 이 목록이 런타임의 프로젝트 목록이다(P491) | `{runtime_id}` |
+| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?}]}`(P491) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다 | `{ok: true}` |
 | `DELETE runtimes/<id>` | - | `204` |
-| `POST jobs/claim` | `{runtime_id, tools: [이름], max}` | `{jobs: [{job_id, title, persona, priority, duedate, body, job_token, job_token_expires_at}]}` |
+| `POST jobs/claim` | `{runtime_id, tools: [이름], max, project?}` - `project`가 있으면 그 프로젝트의 작업만 준다(P491) | `{jobs: [{job_id, title, persona, priority, duedate, body, job_token, job_token_expires_at}]}` |
 | `POST jobs/<job_id>/status` | `{state, hash, at}` | `204`, 돌려받은 작업은 `410` |
 | `POST jobs/<job_id>/events` | `{events: [{at, step, command}]}` | `204` |
 | `POST jobs/<job_id>/questions` | `{stem, markdown}` | `204` |
-| `GET answers?runtime_id=` | - | `{answers: [{job_id, stem, markdown}]}` |
-| `PUT objects` | `{changes: [{path, sha256, content}` 또는 `{path, deleted: true}]}` | `204` |
-| `GET writes?runtime_id=` | - | `{writes: [{op_id, path, base_sha256, content}]}` |
+| `GET answers?runtime_id=&project=` | - (`project`는 선택, 있으면 그 프로젝트의 답만. P491) | `{answers: [{job_id, stem, markdown}]}` |
+| `PUT objects?project=` | (`project`는 선택, 있으면 그 프로젝트의 사본. P491) `{changes: [{path, sha256, content}` 또는 `{path, deleted: true}]}` | `204` |
+| `GET writes?runtime_id=&project=` | - (`project`는 선택, 있으면 그 프로젝트의 쓰기만. P491) | `{writes: [{op_id, path, base_sha256, content}]}` |
 | `POST writes/<op_id>` | `{result: applied` 또는 `conflict, sha256}` | `204` |
 | `GET personas/bundle` | - | `{version, sha256, bundle}` |
 | `GET schema/bundle` | - | `{version, sha256, bundle}` |
+
+프로젝트의 연결 상태(서버 판정, P491): 런타임의 마지막 신호가 300초 안이고 그 프로젝트가 마지막 신호의
+`projects`에 있으면 연결이다. 새 필드가 없는 요청은 지금처럼 런타임의 프로젝트 하나로 처리한다.
 
 #### 온톨로지 - O1-O8
 
