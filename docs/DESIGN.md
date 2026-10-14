@@ -8998,10 +8998,10 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P491-1 | 엔진 - `remote.py` 워크스페이스 런타임(`runtime.json`-`credentials.json`-`root.json`), connect 재사용-`--workspace`-`--new`, `POST runtimes` 목록, 루트별 호출의 `project`, disconnect, 옛 배치 합치기 + `test_remote.py` | developer | - | 발행 |
-| P491-2 | 엔진 - 컴퓨터 시계: `ensure_clock()`, `sync-all`(락-로그 회전-합치기-신호-자식 프로세스 sync-`last-error`), `sync --root`에서 신호 빼기, `remote.py tick`, `tick.sh` 원격 블록 한 줄 + `test_remote.py` | developer | P491-1 | 발행 |
-| P491-3 | 매뉴얼 - `remote.md`(ko-en): 한 컴퓨터-한 워크스페이스에 런타임 하나, 둘째 프로젝트는 코드 없이 붙는다(`--workspace` `--new`), 시계 두 줄과 `sync.log`, 끊기는 그 프로젝트만 빠지고 마지막이면 런타임이 해제된다 | writer | - | 발행 |
-| P491-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P491-1, P491-2 | 발행 |
+| P491-1 | 엔진 - `remote.py` 워크스페이스 런타임(`runtime.json`-`credentials.json`-`root.json`), connect 재사용-`--workspace`-`--new`, `POST runtimes` 목록, 루트별 호출의 `project`, disconnect, 옛 배치 합치기 + `test_remote.py` | developer | - | 발행 `dfaa653f` |
+| P491-2 | 엔진 - 컴퓨터 시계: `ensure_clock()`, `sync-all`(락-로그 회전-합치기-신호-자식 프로세스 sync-`last-error`), `sync --root`에서 신호 빼기, `remote.py tick`, `tick.sh` 원격 블록 한 줄 + `test_remote.py` | developer | P491-1 | 발행 `c3f3d5f2` |
+| P491-3 | 매뉴얼 - `remote.md`(ko-en): 한 컴퓨터-한 워크스페이스에 런타임 하나, 둘째 프로젝트는 코드 없이 붙는다(`--workspace` `--new`), 시계 두 줄과 `sync.log`, 끊기는 그 프로젝트만 빠지고 마지막이면 런타임이 해제된다 | writer | - | 발행 `49d99004` |
+| P491-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P491-1, P491-2 | 발행 `6bb99033` |
 
 **네 장이다.** P491-2는 P491-1이 정하는 워크스페이스 런타임 파일 위에서 신호를 보내므로 기다린다.
 매뉴얼은 위 표에 글이 다 있어 기다리지 않는다. designer 0장 - 화면이 없다. 에픽 `P478`에 붙인다.
