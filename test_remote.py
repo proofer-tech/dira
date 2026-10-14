@@ -4,6 +4,7 @@ import importlib.util
 import hashlib
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -233,11 +234,11 @@ class T(Base, unittest.TestCase):
         return r
 
     def setup_jobs(self, jobs):
-        self.connect()
         eng = os.path.join(self.home, ".config", "dira", "bin", "engines")
         os.makedirs(eng, exist_ok=True)
         open(os.path.join(eng, "claude"), "w").write("#!/bin/sh\necho 1.0\n")  # 로그인 점검 통과
         os.chmod(os.path.join(eng, "claude"), 0o755)
+        self.connect()  # 점검은 연결 때만 그 자리에서 돈다 - 도구를 먼저 둔다
         os.makedirs(os.path.join(self.root, "workers"), exist_ok=True)
         for w in ("w1", "w2"):
             open(os.path.join(self.root, "workers", w + ".sh"), "w").write("#!/bin/bash\n")
@@ -576,6 +577,7 @@ class Tools(Base, unittest.TestCase):
 
     def test_login_check_schedule(self):
         self.connect()
+        self.m.spawn_check = self.m.run_check  # 백그라운드 자식 대신 그 자리에서 돌려 횟수를 센다
         self.assertEqual(self.logins(), 2)  # 연결 때
         h = json.load(open(self.m.health_path("ws1")))["tools"]
         self.clock = max(v["checked_at"] for v in h.values())  # 가짜 시계를 기록 시각에 맞춘다
@@ -594,6 +596,43 @@ class Tools(Base, unittest.TestCase):
         self.assertEqual(self.logins(), 5)
         self.run_remote("sync", "--root", self.root)  # 일반 sync도 점검을 늘리지 않는다
         self.assertEqual(self.logins(), 5)
+
+    def test_stale_check_does_not_block_heartbeat(self):
+        """6시간 지난 점검이 sync의 timeout 20 안에서 하트비트를 막지 않고, 결과는 health.json에 남는다."""
+        self.connect()
+        d = os.path.join(self.home, ".config", "dira", "bin", "engines")
+        for n in ("claude", "codex"):  # 점검 한 번이 timeout 20을 넘기는 도구(실측 166초)
+            open(os.path.join(d, n), "w").write(
+                '#!/bin/bash\n[ "$1" = --version ] && { echo "%s 1.2.3"; exit 0; }\n'
+                'sleep 12; echo "$0" >> "%s/logins.log"; exit 0\n' % (n, self.home))
+        hp = self.m.health_path("ws1")
+        st = json.load(open(hp))
+        for v in st["tools"].values():
+            v["checked_at"] -= 7 * 3600
+        json.dump(st, open(hp, "w"))
+        before = self.logins()
+        to = ["timeout", "20"] if shutil.which("timeout") else []
+        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron)
+        env.pop("TICKET_ONTOLOGY", None)
+        t0 = time.time()
+        r = subprocess.run(to + [sys.executable, os.path.join(HERE, "remote.py"), "sync", "--root", self.root],
+                           capture_output=True, text=True, env=env, timeout=30)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertLess(time.time() - t0, 10)
+        self.assertEqual({t["health"] for t in self.hb()["tools"]}, {"ok"})  # 직전 값으로 보냈다
+        os.utime(os.path.join(os.path.dirname(self.cred()), "last-sync"), (1, 1))
+        self.run_remote("sync", "--root", self.root)  # 점검 중인 동안 다음 sync는 다시 띄우지 않는다
+        deadline = time.time() + 45
+        while time.time() < deadline and "checking_since" in json.load(open(hp)):
+            time.sleep(0.5)
+        st = json.load(open(hp))
+        self.assertNotIn("checking_since", st)
+        self.assertEqual(self.logins() - before, 2)  # 도구당 한 번
+        self.assertTrue(all(time.time() - v["checked_at"] < 60 for v in st["tools"].values()))
+        os.utime(os.path.join(os.path.dirname(self.cred()), "last-sync"), (1, 1))
+        self.run_remote("sync", "--root", self.root)  # 새로 써졌으니 더 돌지 않는다
+        time.sleep(1)
+        self.assertNotIn("checking_since", json.load(open(hp)))
 
     # ---- 온톨로지 올리기-원격 쓰기 ----
     def ont_setup(self):

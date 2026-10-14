@@ -889,8 +889,18 @@ LOGIN_CHECK_EVERY = 6 * 3600
 
 def login_ok(name):
     cmd = [os.path.join(engines_dir(), name)] + LOGIN_ARGS.get(name, ["-p", "ok"])
+    env = dict(os.environ)
+    if name == "claude":  # 디스패치(tick.sh engine_gate_ok)와 같은 토큰으로 점검한다
+        tf = os.path.join(os.environ.get("TICKET_LOCAL") or os.path.join(os.path.expanduser("~"), ".config", "dira"),
+                          "oauth-token")
+        try:
+            with open(tf, encoding="utf-8") as f:
+                env["CLAUDE_CODE_OAUTH_TOKEN"] = f.read().strip()
+        except OSError:
+            pass
     try:
-        return subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, timeout=60).returncode == 0
+        return subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, env=env,
+                              timeout=60).returncode == 0
     except (OSError, subprocess.SubprocessError):
         return False
 
@@ -908,17 +918,50 @@ def mark_auth_error(ws, tool):
     write_json(health_path(ws), st)
 
 
+# 백그라운드 점검이 이 시간 안에 안 끝나면 죽은 것으로 보고 다시 띄운다(도구당 60초 상한 x 4 + 여유)
+CHECK_PENDING_MAX = 600
+
+
+def run_check(ws, names):
+    """도구 로그인 점검을 돌려 health.json에 합친다. sync 밖의 분리된 자식에서 돈다."""
+    res = {n: {"health": "ok" if login_ok(n) else "needs_check", "checked_at": now()} for n in names}
+    st = read_json(health_path(ws)) or {}
+    st.setdefault("tools", {}).update(res)
+    st["auth_error"] = [n for n in st.get("auth_error", []) if n not in res]
+    st.pop("checking_since", None)
+    write_json(health_path(ws), st)
+
+
+def spawn_check(ws, names):
+    # tick이 sync를 `timeout 20`으로 감싼다 - 새 세션이라야 timeout의 프로세스 그룹 kill을 피하고,
+    # fd를 다 떼야 tick의 `| while read`가 자식을 기다리지 않는다
+    subprocess.Popen([sys.executable, os.path.abspath(__file__), "check-health", "--ws", ws] + names,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True, close_fds=True)
+
+
 def refresh_health(ws, force=False):
-    """점검 시점 - 처음(연결 때)-6시간마다-인증 오류 표식. 그 밖에는 안 돌린다."""
+    """점검 시점 - 처음(연결 때)-6시간마다-인증 오류 표식. 그 밖에는 안 돌린다.
+    force(연결 때)만 그 자리에서 기다리고, sync에서는 분리된 자식으로 띄우고 직전 값을 돌려준다.
+    점검 한 번이 수 분 걸려(실측 166초) sync의 `timeout 20` 안에 하트비트를 막았다."""
     st = read_json(health_path(ws)) or {}
     tools, errs, t = st.get("tools", {}), st.get("auth_error", []), now()
     names = tool_names()
-    for n in names:
-        rec = tools.get(n)
-        if force or n in errs or not rec or t - rec["checked_at"] >= LOGIN_CHECK_EVERY:
+    due = [n for n in names if force or n in errs or not tools.get(n)
+           or t - tools[n]["checked_at"] >= LOGIN_CHECK_EVERY]
+    if force:
+        for n in due:
             tools[n] = {"health": "ok" if login_ok(n) else "needs_check", "checked_at": t}
-    st = {"tools": {n: tools[n] for n in names}, "auth_error": []}
-    write_json(health_path(ws), st)
+        st = {"tools": {n: tools[n] for n in names}, "auth_error": []}
+        write_json(health_path(ws), st)
+        return st["tools"]
+    for n in names:
+        tools.setdefault(n, {"health": "needs_check", "checked_at": 0})
+    st["tools"] = {n: tools[n] for n in names}
+    if due and t - st.get("checking_since", 0) >= CHECK_PENDING_MAX:
+        st["checking_since"] = t
+        write_json(health_path(ws), st)
+        spawn_check(ws, due)
     return st["tools"]
 
 
@@ -1101,7 +1144,13 @@ def main(argv=None):
         if name == "connect":
             p.add_argument("server")
         p.add_argument("--root", default=os.environ.get("TICKET_ROOT"))
+    p = sub.add_parser("check-health")
+    p.add_argument("--ws", required=True)
+    p.add_argument("names", nargs="*")
     a = ap.parse_args(argv)
+    if a.cmd == "check-health":
+        run_check(a.ws, [n for n in a.names if n in tool_names()])
+        return 0
     if not a.root:
         ap.error("--root가 필요합니다")
     root = os.path.abspath(a.root)
