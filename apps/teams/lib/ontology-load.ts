@@ -32,7 +32,9 @@ export async function loadMetrics(base: string, tree: ProtocolEntry[], locale: L
     Promise.all(typeFileEntries.map(async (e) => ({ rel: e.rel, text: await text(e.rel) }))),
   ]);
 
-  return computeOntologyMetrics({ schemaText, objects, views, actionLogs, typeFiles }, locale);
+  const vaultNames = tree.filter((e) => !e.isDir && e.rel.endsWith(".md")).map((e) => basename(e.rel).replace(/\.md$/, ""));
+
+  return computeOntologyMetrics({ schemaText, objects, views, actionLogs, typeFiles, vaultNames }, locale);
 }
 
 /** 지식 지도(P473)용 그래프 - 트리의 `.md` 전부를 읽어 `buildOntologyGraph`에 넘긴다.

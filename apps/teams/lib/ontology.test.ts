@@ -369,6 +369,17 @@ test("객체 뷰 — [[링크]]가 객체·다른 뷰로 닿으면 통과, 안 �
   assert.doesNotMatch(joined, /## 절 사용.*모음/);
 });
 
+test("객체 뷰 — [[링크]]가 볼트 안 다른 .md(object-sets/·datasources/)로 닿으면 댕글링이 아니다", () => {
+  const m = computeOntologyMetrics({
+    schemaText: SCHEMA,
+    objects: [],
+    views: [{ rel: "object-views/개요.md", text: "[[set-역대연사]]와 [[linkedin-후기]], [[허깨비]].\n" }],
+    vaultNames: ["set-역대연사", "linkedin-후기"],
+    actionLogs: [],
+  });
+  assert.deepEqual(m.schemaViolations, ["댕글링: object-views/개요.md -> [[허깨비]]"]);
+});
+
 test("계층 순환(OOPS!) — 관계 줄이 만드는 방향 그래프에 사이클이 있으면 잡힌다", () => {
   const m = computeOntologyMetrics({
     schemaText: SCHEMA,

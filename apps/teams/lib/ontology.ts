@@ -332,6 +332,9 @@ export type OntologyInput = {
   /** `_ontology/object-types/<타입>.md` — 필수 속성의 정본(§Properties `필수` 열). 없는
    *  호출자는 생략해도 된다(모든 타입이 무판정) */
   typeFiles?: ObjectInput[];
+  /** 볼트 안 `.md` 전부의 파일 이름(확장자 뺀 것). 뷰 링크는 객체·뷰가 아닌 `object-sets/`
+   *  `datasources/`로도 걸리므로, 여기 있는 이름이면 댕글링이 아니다. 없는 호출자는 생략한다 */
+  vaultNames?: string[];
 };
 
 export type Counted = { count: number; ratio: number; items: string[] };
@@ -573,7 +576,7 @@ export function computeOntologyMetrics(input: OntologyInput, locale: Locale = DE
 
   const views = input.views ?? [];
   const viewNames = new Set(views.map((v) => typeAndName(v.rel).name));
-  violations.push(...checkViewLinks(views, new Set([...names, ...viewNames]), locale));
+  violations.push(...checkViewLinks(views, new Set([...names, ...viewNames, ...(input.vaultNames ?? [])]), locale));
 
   const hierarchyCycleItems = findHierarchyCycles(parsed);
   const polysemousItems = findPolysemousElements(parsed);
