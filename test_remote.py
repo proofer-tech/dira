@@ -433,7 +433,7 @@ class T(Base, unittest.TestCase):
 
     def wrun(self, w, cmd):
         # PATH에 진짜 claude가 없어야 tick이 가짜 엔진 자리를 구워 덮지 않는다
-        env = dict(os.environ, HOME=self.home, TICKET_LOCAL=self.local,
+        env = dict(os.environ, HOME=self.home, TICKET_LOCAL=self.local, DIRA_CRONTAB_FILE=self.cron,
                    PATH=os.path.dirname(sys.executable) + ":/usr/bin:/bin:/usr/sbin:/sbin")
         r = subprocess.run([w, cmd], capture_output=True, text=True, env=env, timeout=60)
         return r.stdout + r.stderr
@@ -500,7 +500,7 @@ class T(Base, unittest.TestCase):
         open(os.path.join(run, "w1-%s.lock" % h, "pid"), "w").write(str(os.getpid()))
         self.wrun(w, "tick")
         self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "env.txt")))  # 세션은 안 떴다
-        self.assertTrue([c for c in self.fake.calls if c[1].endswith("/heartbeat")], self.fake.calls)
+        self.assertEqual(open(self.cron).read().count("sync-all"), 4)  # 워커 락과 무관하게 tick이 시계 줄을 넣었다
 
     def test_launcher_remote_help(self):
         r = subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), "connect", "--help"],
@@ -561,7 +561,7 @@ class Tools(Base, unittest.TestCase):
 
     def test_heartbeat_workers(self):
         self.connect()
-        self.run_remote("sync", "--root", self.root)
+        self.run_remote("sync-all")
         w = {x["name"]: x for x in self.hb()["projects"][0]["workers"]}
         self.assertEqual(w["w2"]["busy"], "abcd1234")
         self.assertIsNone(w["w1"]["busy"])
@@ -610,13 +610,14 @@ class Tools(Base, unittest.TestCase):
         env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron)
         env.pop("TICKET_ONTOLOGY", None)
         t0 = time.time()
-        r = subprocess.run(to + [sys.executable, os.path.join(HERE, "remote.py"), "sync", "--root", self.root],
+        r = subprocess.run(to + [sys.executable, os.path.join(HERE, "remote.py"), "sync-all"],
                            capture_output=True, text=True, env=env, timeout=30)
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertLess(time.time() - t0, 10)
         self.assertEqual({t["health"] for t in self.hb()["tools"]}, {"ok"})  # 직전 값으로 보냈다
         os.utime(os.path.join(os.path.dirname(self.cred()), "last-sync"), (1, 1))
-        self.run_remote("sync", "--root", self.root)  # 점검 중인 동안 다음 sync는 다시 띄우지 않는다
+        os.utime(os.path.join(self.home, ".config", "dira", "remote", "ws1", "last-heartbeat"), (1, 1))
+        self.run_remote("sync-all")  # 점검 중인 동안 다음 신호는 다시 띄우지 않는다
         deadline = time.time() + 45
         while time.time() < deadline and "checking_since" in json.load(open(hp)):
             time.sleep(0.5)
@@ -625,7 +626,8 @@ class Tools(Base, unittest.TestCase):
         self.assertEqual(self.logins() - before, 2)  # 도구당 한 번
         self.assertTrue(all(time.time() - v["checked_at"] < 60 for v in st["tools"].values()))
         os.utime(os.path.join(os.path.dirname(self.cred()), "last-sync"), (1, 1))
-        self.run_remote("sync", "--root", self.root)  # 새로 써졌으니 더 돌지 않는다
+        os.utime(os.path.join(self.home, ".config", "dira", "remote", "ws1", "last-heartbeat"), (1, 1))
+        self.run_remote("sync-all")  # 새로 써졌으니 더 돌지 않는다
         time.sleep(1)
         self.assertNotIn("checking_since", json.load(open(hp)))
 
@@ -913,6 +915,7 @@ class WorkspaceRuntime(Base, unittest.TestCase):
             os.makedirs(os.path.join(r, "ontology", "objects", "t"))
             open(os.path.join(r, "ontology", "objects", "t", "o.md"), "w").write("a")
             self.assertEqual(self.run_remote("sync", "--root", r).returncode, 0)
+        self.assertEqual(self.run_remote("sync-all").returncode, 0)
         hb = self.calls("POST", "runtimes/rt1/heartbeat")[-1][2]
         self.assertEqual(set(hb), {"tools", "projects"})
         byname = {p["project"]: p for p in hb["projects"]}
@@ -945,6 +948,100 @@ class WorkspaceRuntime(Base, unittest.TestCase):
     def m_list(self):
         with mock.patch.dict(os.environ, {"HOME": self.home}):
             return self.m.list_projects("ws1")
+
+    # ---- P491-2: 컴퓨터 시계 ----
+
+    def expire(self):
+        """10초 신호 간격과 루트 sync 간격을 건너뛴다."""
+        base = os.path.join(self.wsdir())
+        p = os.path.join(base, "last-heartbeat")
+        if os.path.exists(p):
+            os.utime(p, (1, 1))
+        for d, _, fs in os.walk(base):
+            if "last-sync" in fs:
+                os.utime(os.path.join(d, "last-sync"), (1, 1))
+
+    def two_roots(self):
+        eng = os.path.join(self.home, ".config", "dira", "bin", "engines")
+        os.makedirs(eng)
+        with open(os.path.join(eng, "claude"), "w") as f:
+            f.write("#!/bin/sh\necho 1.0\n")
+        os.chmod(os.path.join(eng, "claude"), 0o755)
+        b = self.new_root("proj2")
+        self.fake.routes[("POST", "jobs/claim")] = (200, {"jobs": []})
+        self.assertEqual(self.conn(self.root).returncode, 0)
+        self.assertEqual(self.conn(b).returncode, 0)
+        return b
+
+    def test_sync_all_one_heartbeat_with_both_projects(self):
+        b = self.two_roots()
+        n = len(self.calls("POST", "runtimes/rt1/heartbeat"))
+        r = self.run_remote("sync-all")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        hbs = self.calls("POST", "runtimes/rt1/heartbeat")
+        self.assertEqual(len(hbs) - n, 1)
+        self.assertEqual(sorted(p["project"] for p in hbs[-1][2]["projects"]), ["proj", "proj2"])
+        self.assertEqual(len(self.calls("POST", "jobs/claim")), 2)
+        self.run_remote("sync-all")  # 10초 안 - 신호는 건너뛴다
+        self.assertEqual(len(self.calls("POST", "runtimes/rt1/heartbeat")) - n, 1)
+
+    def test_failing_root_gets_error_and_does_not_block_other(self):
+        b = self.two_roots()
+        self.run_remote("sync-all")
+        shutil.rmtree(os.path.join(b, "tickets"))  # B의 sync가 예외를 낸다
+        self.expire()
+        self.run_remote("sync-all")
+        err = os.path.join(os.path.dirname(self.cred(root=b)), "last-error")
+        self.assertIn("FileNotFoundError", open(err).read())
+        self.assertFalse(os.path.exists(os.path.join(os.path.dirname(self.cred()), "last-error")))
+        claims = len(self.calls("POST", "jobs/claim"))
+        self.assertEqual(claims, 3)  # A는 두 번, B는 첫 번만
+        self.expire()
+        self.run_remote("sync-all")
+        by = {p["project"]: p for p in self.calls("POST", "runtimes/rt1/heartbeat")[-1][2]["projects"]}
+        self.assertIn("error", by["proj2"])
+        self.assertNotIn("error", by["proj"])
+        os.makedirs(os.path.join(b, "tickets"))  # 고치면 error가 사라진다
+        self.expire()
+        self.run_remote("sync-all")
+        self.assertFalse(os.path.exists(err))
+
+    def test_child_timeout_kills_and_records(self):
+        b = self.two_roots()
+        self.fake.routes[("GET", "writes?runtime_id=rt1&project=proj2")] = lambda body: (time.sleep(15), (200, {"writes": []}))[1]
+        self.expire()
+        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron, DIRA_SYNC_TIMEOUT="1")
+        t0 = time.time()
+        subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), "sync-all"], env=env,
+                       capture_output=True, text=True, timeout=30)
+        self.assertLess(time.time() - t0, 12)
+        err = os.path.join(os.path.dirname(self.cred(root=b)), "last-error")
+        self.assertEqual(open(err).read().strip(), "timeout")
+
+    def test_tick_places_clock_once_and_last_disconnect_removes_it(self):
+        self.assertEqual(self.conn(self.root).returncode, 0)
+        sa = lambda: len([l for l in open(self.cron) if "sync-all" in l])
+        self.assertEqual(sa(), 2)  # connect도 넣는다
+        os.unlink(self.cron)
+        for _ in range(2):
+            self.assertEqual(self.run_remote("tick", "--root", self.root).returncode, 0)
+        self.assertEqual(sa(), 2)
+        self.assertIn('python3 "%s" sync-all' % os.path.join(HERE, "remote.py"), open(self.cron).read())
+        self.assertEqual(self.run_remote("disconnect", "--root", self.root).returncode, 0)
+        self.assertEqual(sa(), 0)
+
+    def test_tick_without_clock_falls_back_to_sync_all(self):
+        self.two_roots()
+        n = len(self.calls("POST", "runtimes/rt1/heartbeat"))
+        os.chmod(self.cron, 0o444)
+        self.assertEqual(self.run_remote("tick", "--root", self.root).returncode, 0)  # 줄이 이미 있어 sync만
+        self.assertEqual(len(self.calls("POST", "runtimes/rt1/heartbeat")) - n, 0)
+        os.chmod(self.cron, 0o644)
+        os.unlink(self.cron)
+        os.mkdir(self.cron)  # 파일로 못 쓰니 줄을 못 넣는다
+        self.expire()
+        self.run_remote("tick", "--root", self.root)
+        self.assertEqual(len(self.calls("POST", "runtimes/rt1/heartbeat")) - n, 1)
 
     # ---- 옛 배치 합치기 ----
 

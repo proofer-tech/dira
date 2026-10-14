@@ -755,7 +755,7 @@ esac
 # remote.json이 없으면 이 블록은 아무것도 안 한다. 실패는 tick을 막지 않는다(로그 한 줄).
 if [ "$CMD" = "tick" ] && [ -f "$TICKET_ROOT/remote.json" ]; then
   _TO=""; command -v timeout >/dev/null 2>&1 && _TO="timeout 20"
-  $_TO python3 "$CODE/remote.py" sync --root "$TICKET_ROOT" 2>&1 | while IFS= read -r line; do
+  $_TO python3 "$CODE/remote.py" tick --root "$TICKET_ROOT" 2>&1 | while IFS= read -r line; do
     [ -n "$line" ] && log "$line"
   done
 fi

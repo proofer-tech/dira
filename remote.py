@@ -518,14 +518,19 @@ def cmd_sync(root):
             log("no-credentials")
             return 0
         ctx = Ctx(root, cfg, token)
+        fail = None
         for step in STEPS:
             try:
                 step(ctx)
             except Unauthorized:
-                log("unauthorized")
-                return 0
-            except Exception as e:  # sync의 실패는 tick을 막지 않는다
-                log("%s %s: %s" % (step.__name__, type(e).__name__, e))
+                print("unauthorized", file=sys.stderr)
+                return 1
+            except Exception as e:  # 다음 단계는 계속 돈다. 마지막 실패를 stderr 마지막 줄로 남긴다
+                fail = "%s %s: %s" % (step.__name__, type(e).__name__, one_line(e))
+                log(fail)
+        if fail:
+            print(fail, file=sys.stderr)
+            return 1
         return 0
     finally:
         try:
@@ -1050,11 +1055,7 @@ def send_signal(server, rid, token, ws, projs=None):
     return st
 
 
-def step_heartbeat(ctx):
-    send_signal(ctx.server, ctx.runtime_id, ctx.token, ctx.ws)
-
-
-STEPS += [step_heartbeat, claim_jobs, report_status]  # 살아 있음 -> 잡기 -> 상태 올리기
+STEPS += [claim_jobs, report_status]  # 잡기 -> 상태 올리기. 살아 있음 신호는 sync-all이 보낸다(P491)
 STEPS += [ontology_push, apply_writes]
 
 
@@ -1076,6 +1077,39 @@ def crontab_rw(new_lines=None):
             else:
                 subprocess.run(["crontab", "-"], input=cur, text=True, check=True)
     return cur
+
+
+CLOCK_MARK = " sync-all "
+
+
+def clock_lines():
+    log_ = os.path.join(cfg_home(), "sync.log")
+    one = 'python3 "%s" sync-all >> "%s" 2>&1' % (os.path.abspath(__file__), log_)
+    return ["* * * * * " + one, "* * * * * sleep 30; " + one]
+
+
+def has_clock():
+    return any(CLOCK_MARK in l and "remote.py" in l for l in crontab_rw().splitlines())
+
+
+def ensure_clock():
+    """컴퓨터 시계 두 줄을 crontab에 넣는다. 이미 sync-all 줄이 있으면 아무것도 안 한다. 시계가 있으면 True."""
+    try:
+        if not has_clock():
+            crontab_rw(clock_lines())
+        return has_clock()
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def remove_clock():
+    f = os.environ.get("DIRA_CRONTAB_FILE")
+    keep = [l for l in crontab_rw().splitlines() if not (CLOCK_MARK in l and "remote.py" in l)]
+    text = "\n".join(keep) + ("\n" if keep else "")
+    if f:
+        open(f, "w", encoding="utf-8").write(text)
+    else:
+        subprocess.run(["crontab", "-"], input=text, text=True, check=True)
 
 
 def ensure_worker(root):
@@ -1206,6 +1240,7 @@ def cmd_connect(server, root, workspace=None, new=False):
         print("이미 연결된 워크스페이스 %s에 프로젝트를 더했습니다" % ws)
     if ensure_worker(root):
         print("워커 w1과 크론 두 줄을 만들었습니다")
+    ensure_clock()
     print("연결했습니다. 크론 실행을 위해 전체 디스크 접근 권한을 켜 주세요.")
     print("구독 로그인이면 `claude setup-token`으로 장기 토큰을 만들어 두세요.")
     return 0
@@ -1235,6 +1270,9 @@ def cmd_disconnect(root):
                 os.unlink(os.path.join(ws_dir(ws), n))
             except FileNotFoundError:
                 pass
+        home = cfg_home()
+        if not any(os.path.exists(os.path.join(home, w, "runtime.json")) for w in os.listdir(home)):
+            remove_clock()  # 이 컴퓨터에 런타임이 하나도 안 남았다
     print("연결을 해제했습니다")
     return 0
 
@@ -1331,10 +1369,116 @@ def merge_all():
             log("merge %s: %s" % (ws, e))
 
 
+# ---- 컴퓨터 시계 (P491) ----
+
+SIGNAL_INTERVAL = 10  # 초
+LOG_MAX = 1 << 20
+
+
+def child_timeout():
+    return float(os.environ.get("DIRA_SYNC_TIMEOUT") or 20)
+
+
+def rotate_log(home):
+    p = os.path.join(home, "sync.log")
+    try:
+        if os.stat(p).st_size > LOG_MAX:
+            os.replace(p, p + ".1")
+    except OSError:
+        pass
+
+
+def prune_roots(ws):
+    """root.json은 있는데 조건이 깨진 루트 디렉터리를 지운다. root.json 없는 디렉터리(합치기 전)는 둔다."""
+    ok = {os.path.realpath(p["queue_root"]) for p in list_projects(ws)}
+    base = os.path.join(ws_dir(ws), "roots")
+    for k in os.listdir(base) if os.path.isdir(base) else []:
+        r = read_json(os.path.join(base, k, "root.json"))
+        if isinstance(r, dict) and os.path.realpath(str(r.get("queue_root"))) not in ok:
+            shutil.rmtree(os.path.join(base, k), ignore_errors=True)
+
+
+def run_child(ws, qr):
+    """루트 하나의 sync를 자식 프로세스로 돌리고 결과를 그 루트의 last-error에 적는다."""
+    import signal
+    p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "sync", "--root", qr],
+                         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
+    try:
+        out, err = p.communicate(timeout=child_timeout())
+        msg = "" if p.returncode == 0 else (
+            ([l for l in err.splitlines() if l.strip()] or ["rc %d" % p.returncode])[-1])
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid, signal.SIGKILL)
+        out, err = p.communicate()
+        msg = "timeout"
+    for l in (out or "").splitlines():
+        print(l, flush=True)
+    path = os.path.join(root_dir(ws, qr), "last-error")
+    if msg:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(one_line(msg) + "\n")
+        log("sync-fail %s: %s" % (qr, one_line(msg)))
+    else:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+
+
+def sync_all():
+    home = cfg_home()
+    os.makedirs(home, exist_ok=True)
+    lock = os.path.join(home, ".sync-all.lock")
+    if not take_lock(lock):
+        return 0
+    try:
+        rotate_log(home)
+        merge_all()
+        for ws in sorted(os.listdir(home)):
+            if ws.startswith(".") or not os.path.isdir(os.path.join(home, ws)):
+                continue
+            rt, token = load_runtime(ws), load_token(ws)
+            if not (rt and token):
+                continue
+            prune_roots(ws)
+            stamp = os.path.join(home, ws, "last-heartbeat")
+            try:
+                fresh = time.time() - os.stat(stamp).st_mtime < SIGNAL_INTERVAL
+            except OSError:
+                fresh = False
+            if not fresh:
+                with open(stamp, "w") as f:
+                    f.write(str(time.time()))
+                try:
+                    send_signal(rt.get("server") or "", rt["runtime_id"], token, ws)
+                except Unauthorized:
+                    log("unauthorized " + ws)
+                    continue
+                except Exception as e:  # 신호 실패는 루트 sync를 막지 않는다
+                    log("signal %s %s: %s" % (ws, type(e).__name__, e))
+            for p in list_projects(ws):
+                run_child(ws, p["queue_root"])
+        return 0
+    finally:
+        try:
+            os.rmdir(lock)
+        except OSError:
+            pass
+
+
+def cmd_tick(root):
+    """시계 줄이 있으면 이 큐의 sync만, 못 넣었으면 신호가 끊기지 않게 sync-all."""
+    if ensure_clock():
+        return cmd_sync(root)
+    return sync_all()
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="remote.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("connect", "disconnect", "sync", "persona-install", "schema-install"):
+    sub.add_parser("sync-all")
+    for name in ("connect", "disconnect", "sync", "tick", "persona-install", "schema-install"):
         p = sub.add_parser(name)
         if name == "connect":
             p.add_argument("server")
@@ -1345,6 +1489,8 @@ def main(argv=None):
     p.add_argument("--ws", required=True)
     p.add_argument("names", nargs="*")
     a = ap.parse_args(argv)
+    if a.cmd == "sync-all":
+        return sync_all()
     if a.cmd == "check-health":
         run_check(a.ws, [n for n in a.names if n in tool_names()])
         return 0
@@ -1357,6 +1503,8 @@ def main(argv=None):
         return cmd_disconnect(root)
     if a.cmd in ("persona-install", "schema-install"):
         return bundle_cmd(root, a.cmd)
+    if a.cmd == "tick":
+        return cmd_tick(root)
     return cmd_sync(root)
 
 
