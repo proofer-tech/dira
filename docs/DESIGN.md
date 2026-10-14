@@ -8938,6 +8938,52 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P490. 내장 브라우저에서 누른 자리가 그대로 눌린다 (요구 `d8f0aabf`, 왕복 0회)
+
+사람 요구: *"내부브라우저 클릭 위치에 비해 약간 위쪽이 클릭되는 버그가 있습니다"*.
+`components/browser-panel.tsx`가 클릭 좌표를 `scaleToFrame`(`lib/browser-input.ts`)으로 옮겨
+`Input.dispatchMouseEvent`에 넘기는데, 이 함수에는 어긋남을 만드는 원인 후보가 둘 있다.
+
+- **띠를 빼지 않는다.** `<img>`는 `object-contain`이라 패널 비율이 프레임 비율과 다르면 위아래
+  (또는 좌우)에 빈 띠가 생긴다. `scaleToFrame`은 띠까지 포함한 상자 전체로 나누므로, 위아래 띠가
+  있으면 그림의 아래쪽 절반을 누를수록 더 위쪽이 눌린다. 댓글 모드는 같은 문제를 이미
+  `commentPoint`로 피했다(P466).
+- **단위가 다르다.** CDP 입력의 `x` `y`는 페이지 뷰포트의 CSS px인데, 지금은 스크린캐스트
+  프레임의 픽셀을 그대로 넘긴다. `startScreencast`가 `maxWidth: 1280`으로 줄인 프레임이면 뷰포트
+  CSS px보다 작은 값이 가서 왼쪽 위로 쏠린다. 함수 주석(ponytail)이 이 근사를 이미 적어 두었다.
+
+사람이 정하지 않은 것은 주도성 5로 pm이 정했다. 둘 다 고친다 - 어느 쪽이 사람이 본 증상인지
+가리지 않아도 고칠 자리가 같은 함수 하나다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 띠 | 클릭-휠-마우스 이동은 `object-contain`의 내용 사각형 기준으로 옮긴다(`commentPoint`와 같은 계산). 띠 위의 사건은 POST하지 않는다 |
+| 단위 | 프레임 픽셀을 `Page.screencastFrame`의 `metadata.deviceWidth` `deviceHeight`(CSS px)로 비례 환산한 값을 보낸다. `x = fx * deviceWidth / naturalWidth`, `y = fy * deviceHeight / naturalHeight` |
+| 메타데이터 운반 | 라우트(`cdp/[hash]/route.ts`)가 `deviceWidth` `deviceHeight`를 클라이언트에 전한다. 기존 프레임 사건의 `data:`(base64 JPEG 그대로)는 바꾸지 않는다 - 별도 사건 이름이든 다른 방식이든 구현자가 고르고 이유를 `## 결과`에 적는다 |
+| 메타데이터가 아직 없을 때 | 지금처럼 프레임 픽셀을 그대로 보낸다(회귀 없음) |
+
+#### 안 하는 것
+
+- `maxWidth` - `quality` 값 변경, 화질 조정.
+- 댓글 모드(`commentPoint`)의 좌표 계약 변경. 표식 자리는 그대로다.
+- 터치-펜 입력, `devicePixelRatio` 에뮬레이션.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P490-1 | GUI - `lib/browser-input.ts` 좌표 함수(띠 제외 + 뷰포트 CSS px 환산), 라우트의 메타데이터 운반, `browser-panel.tsx` 연결, 단위 테스트 | developer | - | 발행 |
+| P490-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P490-1 | 발행 |
+
+**두 장이다.** designer 0장 - 화면 모양이 안 바뀐다. 에픽을 안 연다.
+
+#### 수용조건
+
+- [ ] `cd apps/teams && pnpm test`가 통과하고, 그 안에 좌표 함수 테스트 넷(위아래 띠가 있는 상자에서 내용 사각형 맨 위-맨 아래 클릭이 각각 `y = 0` 부근과 `deviceHeight` 부근으로 간다 / 좌우 띠도 같다 / 띠 위 클릭은 사건 없음 / 프레임 1280px - `deviceWidth` 1600이면 프레임 x 640이 800으로 간다)이 있다.
+- [ ] 내장 브라우저로 클릭 좌표를 화면에 찍는 페이지(예: `data:text/html,<body style="margin:0;height:2000px" onclick="document.title=event.clientX+','+event.clientY">`의 격자 페이지)를 열고, 패널 비율을 프레임보다 세로로 길게 만든 상태에서 위-가운데-아래 세 점을 누르면 페이지가 받은 좌표가 누른 자리의 격자 칸과 같다(세 점 모두 오차 한 칸 이내).
+- [ ] 앱 창을 넓혀 뷰포트 너비가 1280을 넘는 상태에서 같은 세 점을 눌러도 같은 결과다.
+- [ ] 작은 단추(높이 20px 이하) 하나를 둔 실제 페이지에서 그 단추의 아래 가장자리 근처를 누르면 단추가 눌린다.
+
 ### P489. 공통 디스패치 모듈 - cron과 화면과 MCP와 세션이 같은 창구 하나로 워커를 띄운다 (요구 `6bfd6e45`, 왕복 0회)
 
 사람 요구: *"지금은 cron에 디스패치를 의존하고 있는데요, 특정 조건에서는 특정 티켓을 바로 디스패치해서
