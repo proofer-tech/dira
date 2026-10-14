@@ -1033,6 +1033,10 @@ class WorkspaceRuntime(Base, unittest.TestCase):
             os.makedirs(os.path.join(r, "ontology", "objects", "t"))
             open(os.path.join(r, "ontology", "objects", "t", "o.md"), "w").write("a")
             self.assertEqual(self.run_remote("sync", "--root", r).returncode, 0)
+        t = time.time() + 3600  # 느린 실행에서도 루트 sync 간격 안으로 고정한다
+        for d, _, fs in os.walk(self.wsdir()):
+            if "last-sync" in fs:
+                os.utime(os.path.join(d, "last-sync"), (t, t))
         self.assertEqual(self.run_remote("sync-all").returncode, 0)
         hb = self.calls("POST", "runtimes/rt1/heartbeat")[-1][2]
         self.assertEqual(set(hb), {"tools", "projects"})
@@ -1106,7 +1110,10 @@ class WorkspaceRuntime(Base, unittest.TestCase):
         self.assertEqual(len(hbs) - n, 1)
         self.assertEqual(sorted(p["project"] for p in hbs[-1][2]["projects"]), ["proj", "proj2"])
         self.assertEqual(len(self.calls("POST", "jobs/claim")), 2)
-        self.run_remote("sync-all")  # 10초 안 - 신호는 건너뛴다
+        stamp = os.path.join(self.wsdir(), "last-heartbeat")
+        t = time.time() + 3600  # 시간에 기대지 않고 방금 보낸 것으로 고정한다
+        os.utime(stamp, (t, t))
+        self.run_remote("sync-all")  # 신호 간격 안 - 신호는 건너뛴다
         self.assertEqual(len(self.calls("POST", "runtimes/rt1/heartbeat")) - n, 1)
 
     def test_failing_root_gets_error_and_does_not_block_other(self):
