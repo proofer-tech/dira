@@ -9012,7 +9012,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 가짜 서버로 같은 워크스페이스에 루트 A를 연결한 뒤 B를 연결하면 B는 기기 코드를 묻지 않고 `이미 연결된 워크스페이스`로 시작하는 줄을 찍는다. `~/.config/dira/remote/<ws>/credentials.json`이 하나, 가짜 서버의 런타임이 하나이고, B 연결 때 받은 `POST runtimes`의 `projects`에 A와 B가 둘 다 있다.
 - [ ] 그 상태에서 `remote.py sync-all`을 한 번 돌리면 가짜 서버가 받은 heartbeat가 정확히 한 번이고 그 `projects`에 A와 B가 있으며 각각 `workers`를 갖는다. `jobs/claim` 본문의 `project`와 `PUT objects`-`GET writes`-`GET answers`의 `project=`가 루트마다 그 루트의 값이다.
 - [ ] B의 `workers/w1.sh`를 `exit 0`만 하는 스크립트로 바꿔도 `sync-all`의 heartbeat에 A와 B가 그대로 있다.
-- [ ] B의 `sync --root`가 예외를 내도록 만들면(예: B의 `ontology/objects`를 읽기 금지로) 다음 `sync-all` heartbeat에서 B에만 `error`가 있고 A는 `error` 없이 오며, A의 `jobs/claim`은 그대로 간다.
+- [ ] B의 `sync --root`가 예외를 내도록 만들면(예: B의 `.dira/tickets/` 디렉터리를 지우면) 다음 `sync-all` heartbeat에서 B에만 `error`가 있고 A는 `error` 없이 오며, A의 `jobs/claim`은 그대로 간다.
 - [ ] 옛 배치(루트 A, B가 각자 `roots/<키>/credentials.json`과 서로 다른 `runtime_id`)를 둔 채 `sync-all`을 돌리면 워크스페이스에 `runtime.json`과 `credentials.json`이 하나씩 생기고, 가짜 서버가 진 쪽 `runtime_id`로 `DELETE`를 한 번 받으며, 두 루트의 `remote.json` `runtime_id`가 같아진다. 다시 돌리면 `DELETE`가 더 오지 않는다.
 - [ ] `remote.py tick --root A`를 처음 돌리면 crontab(테스트는 `DIRA_CRONTAB_FILE`)에 `sync-all` 줄 두 개가 생기고, 다시 돌려도 두 개다.
 - [ ] B를 disconnect하면 서버는 `DELETE`를 안 받고 다음 heartbeat의 `projects`에 A만 있다. 이어서 A를 disconnect하면 `DELETE runtimes/<id>`가 한 번 가고 `runtime.json`-`credentials.json`이 사라지며 crontab에서 `sync-all` 줄이 빠진다.
