@@ -46,16 +46,6 @@ function scratch(): { root: string; dir: string; ran: string } {
   return { root, dir, ran: path.join(root, "ran.txt") };
 }
 
-/** 지목 kick 스텁 — 자기 이름 + args를 `ran.txt`에 적는다(엔진 명령이 아직 없어도 `kick.test.ts`
- *  처럼 스텁으로 착수한다). */
-function writeKickStub(dir: string, name: string, ran: string) {
-  writeFileSync(
-    path.join(dir, `${name}.sh`),
-    `#!/bin/sh\necho "$@" >> ${JSON.stringify(ran)}\n`,
-    { mode: 0o755 },
-  );
-}
-
 /** preempt 스텁 — `--dryrun`이면 `dryrunOut`을, 아니면 `realOut`을 낸다. `code`가 0이 아니면
  *  그 종료 코드로 나간다(`engine.ts runWorker`가 실패로 판정하는 경로). */
 function writePreemptStub(
@@ -90,12 +80,14 @@ async function waitFor(file: string, ms = 3000): Promise<string> {
 test("dispatchToWip — idle 워커가 있으면 지목 kick으로 끝난다(갈래 B)", async () => {
   const { root, dir, ran } = scratch();
   putLock(dir, "w1", process.pid); // running — 후보 아님
-  writeKickStub(dir, "w2", ran); // idle
+  writeFileSync(path.join(dir, "w2.sh"), "#!/bin/sh\n", { mode: 0o755 }); // idle(dispatchToWip이 먼저 idle을 본다)
+  writeFileSync(path.join(root, "dispatch.py"), `import sys\nopen(${JSON.stringify(ran)}, "a").write(" ".join(sys.argv[1:]) + "\\n")\n`);
+  process.env.DIRA_DISPATCH_PY = path.join(root, "dispatch.py");
   const restore = withFakeCrontab(`* * * * * "${path.join(dir, "w2.sh")}" >> /dev/null 2>&1\n`);
   try {
     const r = await dispatchToWip(root, "abcd1234", false);
     assert.deepStrictEqual(r, { ok: true });
-    assert.strictEqual(await waitFor(ran), "tick abcd1234");
+    assert.strictEqual(await waitFor(ran), `run ${root} --reason direct --hash abcd1234`);
   } finally {
     restore();
   }

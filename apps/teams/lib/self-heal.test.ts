@@ -43,9 +43,8 @@ function fixture(): { root: string } {
   mkdirSync(path.join(root, "workers"), { recursive: true });
   mkdirSync(path.join(root, "tickets"), { recursive: true });
   const ran = path.join(root, "ran.txt");
-  writeFileSync(path.join(root, "workers", "w1.sh"), `#!/bin/sh\necho "$@" >> ${JSON.stringify(ran)}\n`, {
-    mode: 0o755,
-  });
+  writeFileSync(path.join(root, "dispatch.py"), `import sys\nopen(${JSON.stringify(ran)}, "a").write(" ".join(sys.argv[1:]) + "\\n")\n`);
+  process.env.DIRA_DISPATCH_PY = path.join(root, "dispatch.py");
   return { root };
 }
 
@@ -130,7 +129,7 @@ test("selfHeal — 제품 결함 갈래는 ticketed다: 티켓이 남고 idle �
     assert.match(body, /kind: work/);
     // kickTicket이 idle 워커를 그 해시로 지목 디스패치했다(w1.sh의 스텁이 argv를 그대로 남긴다)
     const hash = files[0].replace(/\.md$/, "");
-    assert.strictEqual(await waitFor(path.join(root, "ran.txt")), `tick ${hash}`);
+    assert.strictEqual(await waitFor(path.join(root, "ran.txt")), `run ${root} --reason direct --hash ${hash}`);
   } finally {
     process.env.PATH = prevPath;
     restoreCron();
