@@ -124,7 +124,9 @@ class T(Base, unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(os.path.dirname(self.cred()), "credentials.json")))
         self.assertNotIn("tok-ws1", open(os.path.join(self.root, "remote.json")).read())
         self.assertTrue(os.access(os.path.join(self.root, "workers", "w1.sh"), os.X_OK))
-        self.assertEqual(len([l for l in open(self.cron) if l.strip()]), 2)
+        lines = [l for l in open(self.cron) if l.strip()]
+        self.assertEqual(len([l for l in lines if "sync-all" in l]), 2)  # 컴퓨터 시계 두 줄
+        self.assertEqual(len(lines) - 2, 2)  # 워커 줄
         reg = [c for c in self.fake.calls if c[1] == "runtimes"][0]
         self.assertEqual(reg[3], "Bearer tok-ws1")
 
@@ -133,13 +135,13 @@ class T(Base, unittest.TestCase):
         open(os.path.join(self.root, "workers", "w9.sh"), "w").write("#!/bin/bash\n")
         self.assertEqual(self.connect().returncode, 0)
         self.assertFalse(os.path.exists(os.path.join(self.root, "workers", "w1.sh")))
-        self.assertFalse(os.path.exists(self.cron))
+        self.assertNotIn("w1.sh", open(self.cron).read())  # 워커 줄은 없고 시계 줄만 있다
 
     def test_reconnect_same_workspace_does_not_duplicate_cron(self):
         self.connect()
         self.fake.token_polls = 0
         self.assertEqual(self.connect().returncode, 0)
-        self.assertEqual(len([l for l in open(self.cron) if l.strip()]), 2)
+        self.assertEqual(len([l for l in open(self.cron) if l.strip()]), 4)  # 시계 2 + 워커 2, 늘지 않는다
 
     def test_other_workspace_rejected(self):
         self.connect()
@@ -500,7 +502,7 @@ class T(Base, unittest.TestCase):
         open(os.path.join(run, "w1-%s.lock" % h, "pid"), "w").write(str(os.getpid()))
         self.wrun(w, "tick")
         self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "env.txt")))  # 세션은 안 떴다
-        self.assertEqual(open(self.cron).read().count("sync-all"), 4)  # 워커 락과 무관하게 tick이 시계 줄을 넣었다
+        self.assertEqual(open(self.cron).read().count("sync-all"), 2)  # 워커 락과 무관하게 tick이 시계 줄을 넣었다
 
     def test_launcher_remote_help(self):
         r = subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), "connect", "--help"],
