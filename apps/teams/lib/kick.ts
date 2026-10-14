@@ -15,12 +15,21 @@ import { childEnv } from "./child-env.ts";
 import { spawn } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
+import { appendFileSync, existsSync } from "node:fs";
 import { isHash } from "./paths.ts";
+import { engineRepo } from "./workers.ts";
 
-/** `dispatch.py` 위치. 설치본은 `bin/engines/`에 있다(`bin`은 TICKET_LOCAL을 안 탄다 - tick.sh BIN_DIR).
+/** `dispatch.py` 위치. cronLine이 쓰는 엔진(`engineRepo()`, 설치본은 Application Support/dira/engine)을
+ *  먼저 보고, 없으면 `bin/engines/`를 본다. 둘 다 없으면 null이다(호출자가 `KICK-SKIP`을 남긴다).
  *  `DIRA_DISPATCH_PY`는 테스트와 개발용 덮어쓰기다. */
-function dispatchPy(): string {
-  return process.env.DIRA_DISPATCH_PY || path.join(os.homedir(), ".config", "dira", "bin", "engines", "dispatch.py");
+function dispatchPy(): string | null {
+  if (process.env.DIRA_DISPATCH_PY) return process.env.DIRA_DISPATCH_PY;
+  const repo = engineRepo();
+  const cands = [
+    ..."path" in repo ? [path.join(repo.path, "dispatch.py")] : [],
+    path.join(os.homedir(), ".config", "dira", "bin", "engines", "dispatch.py"),
+  ];
+  return cands.find((c) => existsSync(c)) ?? null;
 }
 
 /** `dispatch.py run <루트> --reason <사유> [--hash <해시>]`를 띄우고 잊는다(detach). 띄웠으면 true.
@@ -29,7 +38,14 @@ function dispatchPy(): string {
 function launch(root: string, reason: "direct" | "request", hash?: string): boolean {
   try {
     if (hash !== undefined && !isHash(hash)) return false;
-    const args = [dispatchPy(), "run", root, "--reason", reason, ...(hash ? ["--hash", hash] : [])];
+    const py = dispatchPy();
+    if (!py) {
+      // python3가 파일 없음으로 조용히 죽던 자리 - 흔적을 runner.log에 남긴다(tick.sh log() 모양)
+      const ts = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " ");
+      appendFileSync(path.join(root, "workers", "runner.log"), `${ts} [dispatch] KICK-SKIP ${reason} ${hash ?? "-"} dispatch.py 없음\n`);
+      return false;
+    }
+    const args = [py, "run", root, "--reason", reason, ...(hash ? ["--hash", hash] : [])];
     const child = spawn("python3", args, { detached: true, stdio: "ignore", env: childEnv() });
     child.on("error", () => {}); // python3가 없어도 던지지 않는다 - cron이 같은 일을 한다
     child.unref();

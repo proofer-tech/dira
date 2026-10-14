@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -55,4 +55,21 @@ test("경로가 될 수 있는 해시는 아무것도 안 띄운다(신뢰 경�
 test("python3나 모듈이 없어도 던지지 않는다", async () => {
   process.env.DIRA_DISPATCH_PY = "/nonexistent/dispatch.py";
   await assert.doesNotReject(kickIdleWorker("/nonexistent-root"));
+});
+
+test("dispatch.py를 못 찾으면 runner.log에 KICK-SKIP 한 줄", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "kick-skip-"));
+  tmps.push(root);
+  mkdirSync(path.join(root, "workers"));
+  delete process.env.DIRA_DISPATCH_PY;
+  const prev = process.env.HOME;
+  process.env.HOME = root; // bin/engines 후보를 비운다
+  process.env.DIRA_ENGINE = root; // tick.sh 없는 엔진 -> engineRepo 실패
+  try {
+    assert.strictEqual(await kickRequest(root, "abcd1234"), false);
+  } finally {
+    process.env.HOME = prev;
+    delete process.env.DIRA_ENGINE;
+  }
+  assert.match(readFileSync(path.join(root, "workers", "runner.log"), "utf8"), /\[dispatch\] KICK-SKIP request abcd1234/);
 });
