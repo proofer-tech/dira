@@ -76,6 +76,14 @@ class Base:
         self.root = os.path.join(self.tmp.name, "proj", ".dira")
         os.makedirs(os.path.join(self.root, "tickets"))
         self.cron = os.path.join(self.tmp.name, "crontab")
+        # remote.py 옆 dispatch.py가 진짜면 워커가 뜬다 - 엔진 사본 디렉터리에 부른 인자만 적는 가짜를 둔다
+        self.engdir = os.path.join(self.tmp.name, "eng")
+        os.makedirs(self.engdir)
+        shutil.copy(os.path.join(HERE, "remote.py"), self.engdir)
+        self.dlog = os.path.join(self.tmp.name, "dispatch.log")
+        with open(os.path.join(self.engdir, "dispatch.py"), "w") as f:
+            f.write("import json, sys\nopen(%r, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                    "print(json.dumps({'go': True, 'why': None}))\n" % self.dlog)
         self.fake = Fake()
         self.addCleanup(self.fake.close)
         self.addCleanup(self.tmp.cleanup)
@@ -85,8 +93,14 @@ class Base:
         env.pop("TICKET_ONTOLOGY", None)
 
         env.pop("TICKET_ONTOLOGY", None)  # 실제 온톨로지를 건드리지 않는다
-        return subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), *args],
+        return subprocess.run([sys.executable, os.path.join(self.engdir, "remote.py"), *args],
                               capture_output=True, text=True, env=env, timeout=30)
+
+    def dispatched(self):
+        try:
+            return [json.loads(l) for l in open(self.dlog)]
+        except OSError:
+            return []
 
     def connect(self):
         return self.run_remote("connect", self.fake.url, "--root", self.root)
@@ -271,6 +285,46 @@ class T(Base, unittest.TestCase):
         self.assertEqual(json.load(open(tok))["job_token"], "SECRET-JT")
         claim = [c for c in self.fake.calls if c[1] == "jobs/claim"][0]
         self.assertEqual(claim[2]["max"], 2)
+
+    def two_jobs(self):
+        return [dict(self.job(), job_id="J1"), dict(self.job(), job_id="J2")]
+
+    def test_claimed_jobs_dispatch_direct_on_distinct_workers(self):
+        self.setup_jobs([self.two_jobs()])
+        self.sync()
+        hs = [n[:-3] for n in self.tickets()]
+        calls = self.dispatched()
+        self.assertEqual(len(calls), 2, calls)
+        for c in calls:
+            self.assertEqual(c[:2], ["run", self.root])
+            self.assertEqual(c[c.index("--reason") + 1], "direct")
+        self.assertEqual(sorted(c[c.index("--hash") + 1] for c in calls), sorted(hs))
+        self.assertEqual(sorted(c[c.index("--worker") + 1] for c in calls), ["w1", "w2"])
+
+    def test_no_new_job_no_dispatch(self):
+        self.setup_jobs([[], [self.job()], [self.job()]])
+        self.sync()
+        self.assertEqual(self.dispatched(), [])
+        self.sync()
+        self.assertEqual(len(self.dispatched()), 1)
+        self.sync()  # 이미 있는 job_id
+        self.assertEqual(len(self.dispatched()), 1)
+
+    def test_missing_dispatch_py_still_creates_ticket(self):
+        self.setup_jobs([[self.job()]])
+        os.unlink(os.path.join(self.engdir, "dispatch.py"))
+        r = self.sync()
+        self.assertEqual(len(self.tickets()), 1)
+        self.assertIn("REMOTE dispatch-missing", r.stdout)
+
+    def test_not_candidate_skips_hash_other_failure_tries_next_worker(self):
+        self.setup_jobs([self.two_jobs()])
+        with open(os.path.join(self.engdir, "dispatch.py"), "w") as f:
+            f.write("import json, sys\nopen(%r, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                    "print(json.dumps({'go': False, 'why': '워커가 바쁘다'}))\nsys.exit(1)\n" % self.dlog)
+        self.sync()
+        ws = [c[c.index("--worker") + 1] for c in self.dispatched()]
+        self.assertEqual(ws, ["w1", "w2"])  # 첫 해시가 w1 w2 를 다 써서 둘째는 워커가 없다
 
     def test_status_transitions_reported_once_and_token_removed(self):
         self.setup_jobs([[self.job()]])
@@ -939,6 +993,12 @@ class WorkspaceRuntime(Base, unittest.TestCase):
         self.assertTrue(byname["pro j2"]["error"].startswith("boom xxx"))
         self.assertLessEqual(len(byname["pro j2"]["error"]), 500)
         self.assertIn("workers", byname["proj"])
+        import datetime
+        for p in hb["projects"]:
+            c = datetime.datetime.fromisoformat(p["next_claim_at"])
+            self.assertIn(c.second, (0, 30))
+            self.assertIsNotNone(c.utcoffset())
+            self.assertLessEqual(abs(c.timestamp() - time.time()), 35)
         claims = [c[2]["project"] for c in self.calls("POST", "jobs/claim")]
         self.assertEqual(claims, ["proj", "pro j2"])
         paths = [c[1] for c in self.fake.calls]
@@ -1041,7 +1101,7 @@ class WorkspaceRuntime(Base, unittest.TestCase):
         for _ in range(2):
             self.assertEqual(self.run_remote("tick", "--root", self.root).returncode, 0)
         self.assertEqual(sa(), 2)
-        self.assertIn('python3 "%s" sync-all' % os.path.join(HERE, "remote.py"), open(self.cron).read())
+        self.assertIn('python3 "%s" sync-all' % os.path.join(self.engdir, "remote.py"), open(self.cron).read())
         self.assertEqual(self.run_remote("disconnect", "--root", self.root).returncode, 0)
         self.assertEqual(sa(), 0)
 

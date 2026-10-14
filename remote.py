@@ -444,15 +444,55 @@ def claim_jobs(ctx):
         log("claim HTTP %s" % st)
         return
     have = {t["job_id"] for t in remote_tickets(ctx.root)}
+    made = []
     for job in r.get("jobs", []):
         jid = one_line(job.get("job_id"))
         if not jid or jid in have:
             continue
         try:
-            create_ticket(ctx.root, job, (job.get("job_token"), job.get("job_token_expires_at")))
+            made.append(create_ticket(ctx.root, job, (job.get("job_token"), job.get("job_token_expires_at"))))
             have.add(jid)
         except (ValueError, KeyError, OSError) as e:
             log("claim-skip %s: %s" % (jid, e))
+    dispatch_made(ctx.root, made)
+
+
+DISPATCH_TIMEOUT = 10  # 초. 해시 하나당 dispatch.py를 기다리는 상한
+NOT_CANDIDATE = "그 해시는 후보가 아니다"
+
+
+def dispatch_made(root, hashes):
+    """잡은 작업을 같은 sync에서 띄운다(P492). 최적화라서 어떤 실패도 올리지 않는다 - 안 뜨면 cron이 집는다."""
+    if not hashes:
+        return
+    disp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dispatch.py")
+    if not os.path.isfile(disp):
+        log("dispatch-missing")
+        return
+    wdir = os.path.join(root, "workers")
+    try:
+        pool = sorted(f[:-3] for f in os.listdir(wdir) if f.endswith(".sh"))
+    except OSError:
+        return
+    for h in hashes:
+        while pool:
+            w = pool.pop(0)  # 시도한 워커는 rc와 무관하게 이번 sync에서 다시 안 쓴다
+            try:
+                r = subprocess.run([sys.executable, disp, "run", root, "--reason", "direct", "--hash", h,
+                                    "--worker", w], capture_output=True, text=True,
+                                   stdin=subprocess.DEVNULL, timeout=DISPATCH_TIMEOUT)
+            except (OSError, subprocess.SubprocessError) as e:
+                log("dispatch %s: %s" % (h, type(e).__name__))
+                break
+            if r.returncode == 0:
+                break
+            try:
+                why = json.loads(r.stdout).get("why")
+            except (ValueError, AttributeError):
+                log("dispatch %s: rc %s, JSON 아님" % (h, r.returncode))
+                break
+            if why == NOT_CANDIDATE:
+                break
 
 
 def job_state(root, t):
@@ -1076,7 +1116,8 @@ ERROR_MAX = 500
 def signal_body(ws, projs=None):
     entries = []
     for p in list_projects(ws) if projs is None else projs:
-        e = {"project": p["project"], "workers": workers_payload(p["queue_root"])}
+        e = {"project": p["project"], "workers": workers_payload(p["queue_root"]),
+             "next_claim_at": next_dispatch_iso()}  # 시계가 :00 :30에 돈다(P492)
         try:
             with open(os.path.join(root_dir(ws, p["queue_root"]), "last-error"), encoding="utf-8") as f:
                 err = one_line(f.read())
