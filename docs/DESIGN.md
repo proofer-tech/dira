@@ -8972,8 +8972,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P490-1 | GUI - `lib/browser-input.ts` 좌표 함수(띠 제외 + 뷰포트 CSS px 환산), 라우트의 메타데이터 운반, `browser-panel.tsx` 연결, 단위 테스트 | developer | - | 발행 |
-| P490-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P490-1 | 발행 |
+| P490-1 | GUI - `lib/browser-input.ts` 좌표 함수(띠 제외 + 뷰포트 CSS px 환산), 라우트의 메타데이터 운반, `browser-panel.tsx` 연결, 단위 테스트 | developer | - | 발행 `3a32aedc` |
+| P490-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P490-1 | 발행 `86945fab` |
 
 **두 장이다.** designer 0장 - 화면 모양이 안 바뀐다. 에픽을 안 연다.
 
