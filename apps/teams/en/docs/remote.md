@@ -199,6 +199,18 @@ A fetched job becomes an ordinary ticket in your queue. The only difference is
 `remote_job: <job_id>` in its frontmatter. It looks like any other ticket in the app, and it is
 claimed and finished by the same rules.
 
+## When a remote job waits for an answer
+
+Like a local ticket, a remote job goes into waiting for an answer when its session needs to ask a
+person something. The same question then shows up both in the dira app and on the web. You can answer
+on either the web or the dira app. Whichever answer arrives first is written as
+`tickets/<question ticket hash>.done.md`, and at the next dispatch a session reads it and carries on
+with the same job. An answer given on the web comes down at the next sync, so it can take up to about
+30 seconds.
+
+While it waits, the web shows the job's state as `awaiting`. Its job token stays in place, so the
+session that starts after the answer talks to the server with the same token.
+
 ## What goes to the server, and what does not
 
 This is everything that goes to the server.
@@ -227,7 +239,8 @@ What never goes to the server:
 The runtime token the server issues is kept only under `~/.config/dira/remote/`. It is never written
 to the queue root, tickets, or logs. Each job also gets its own job token, kept in
 `~/.config/dira/run/remote-jobs/`, passed only to that job's session as environment variables
-(`DIRA_REMOTE_URL` `DIRA_REMOTE_TOKEN`), and deleted when the job finishes.
+(`DIRA_REMOTE_URL` `DIRA_REMOTE_TOKEN`). That file is deleted only when the job finishes or the
+server takes the job back; it stays while the job waits for an answer.
 
 ## What comes down from the server
 
@@ -258,6 +271,7 @@ is also kept in `last-error` in that project's subdirectory, and the next succes
 | The web shows this computer's heartbeat has stopped | The clock is not running. Check the crontab and `sync.log` as in [The computer clock](#the-computer-clock) |
 | A tool is reported as `needs_check` | That AI tool failed its login check, and it gets no jobs. Log in to it again ([Authentication](/docs/auth)) |
 | `remote_revoked: true` in a ticket's frontmatter | This computer went quiet for too long and the server took the job back. That ticket's state is no longer reported |
+| `remote_failed: no-token` in a ticket's frontmatter | The job's token file was missing, so dira closed the ticket without starting a session. The ticket is `.done` but the work is not, and the server is told `failed`. This computer cannot recreate the token; issue the job again from the remote service |
 | `REMOTE persona-skip <name>` | You have your own persona with that name, so the server's persona was not installed |
 
 The login check runs on connect, every 6 hours, and right after a session on that tool ends with an
