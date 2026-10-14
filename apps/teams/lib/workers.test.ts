@@ -1605,10 +1605,13 @@ test("cronRegister — 후행 개행이 없는 crontab에서도 줄이 이어 �
   ]);
 });
 
+const ENG = mkdtempSync(path.join(tmpdir(), "dira-eng-"));
+writeFileSync(path.join(ENG, "dispatch.py"), "");
+
 test("cronLine - 새 형식은 dispatch.py run --reason cron --worker <워커 파일>이고 짝줄이 있다 (P489-2)", () => {
   const w = "/q/.dira/workers/w1.sh";
-  const [a, b] = cronLine({ path: w }, "/eng").split("\n");
-  const run = `python3 "/eng/dispatch.py" run "/q/.dira" --reason cron --worker "${w}" >> "/q/.dira/workers/cron.log" 2>&1`;
+  const [a, b] = cronLine({ path: w }, ENG).split("\n");
+  const run = `python3 "${ENG}/dispatch.py" run "/q/.dira" --reason cron --worker "${w}" >> "/q/.dira/workers/cron.log" 2>&1`;
   assert.strictEqual(a, `* * * * * ${run}`);
   assert.strictEqual(b, `* * * * * sleep 30; ${run}`);
   assert.strictEqual(cronPeriod(`${a}\n${b}`, w), 30); // 새 줄도 등록으로 판정한다
@@ -1620,11 +1623,22 @@ test("cronMigrate - 옛 워커 줄만 새 형식이 되고 남의 줄과 사람 
   const human = `# 손으로 쓴 줄\n0 3 * * * /usr/bin/backup --x  "a"\n* * * * * "${mine}/reaper.sh" >> "${mine}/workers/cron.log" 2>&1`;
   const other = old("w1", "/other/.dira");
   const tab = `${human}\n${old("w1")}\n${other}\n${old("w2")}\n`;
-  const out = cronMigrate(tab, [mine], "/eng");
-  const want = `${human}\n${cronLine({ path: `${mine}/workers/w1.sh` }, "/eng")}\n${other}\n${cronLine({ path: `${mine}/workers/w2.sh` }, "/eng")}\n`;
+  const out = cronMigrate(tab, [mine], ENG);
+  const want = `${human}\n${cronLine({ path: `${mine}/workers/w1.sh` }, ENG)}\n${other}\n${cronLine({ path: `${mine}/workers/w2.sh` }, ENG)}\n`;
   assert.strictEqual(out, want);
-  assert.strictEqual(cronMigrate(out, [mine], "/eng"), out); // 두 번째는 no-op
-  assert.strictEqual(cronMigrate("", [mine], "/eng"), "");
+  assert.strictEqual(cronMigrate(out, [mine], ENG), out); // 두 번째는 no-op
+  assert.strictEqual(cronMigrate("", [mine], ENG), "");
+});
+
+test("cronLine - 엔진 자리에 dispatch.py가 없으면 옛 형식이고 cronMigrate는 아무것도 안 바꾼다 (P489 개정)", () => {
+  const bare = mkdtempSync(path.join(tmpdir(), "dira-bare-"));
+  const w = "/q/.dira/workers/w1.sh";
+  const oldLines = cronLine({ path: w }, null);
+  assert.strictEqual(cronLine({ path: w }, bare), oldLines);
+  assert.strictEqual(oldLines.split("\n").length, 2);
+  assert.ok(!oldLines.includes("dispatch.py"));
+  const tab = `${oldLines}\n`;
+  assert.strictEqual(cronMigrate(tab, ["/q/.dira"], bare), tab);
 });
 
 test("cronPeriod — 짝줄(sleep 30) 있으면 30, 본 줄만 있으면 60, 미등록이면 null (§1-6 §값)", () => {

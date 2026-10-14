@@ -1878,9 +1878,10 @@ export function cronLine(worker: Pick<Worker, "path">, engine?: string | null): 
   const log = path.join(dir, "cron.log");
   // P489-2: 줄이 워커를 직접 부르지 않고 dispatch.py를 거친다. 워커 경로는 줄에 그대로 남아
   // `listWorkers`의 "crontab에 이 경로가 있는가" 판정이 안 바뀐다. 엔진을 못 찾으면 옛 형식이다.
+  // 개정 2026-10-14: 엔진 자리에 dispatch.py가 없으면(덜 깔린 설치본) 옛 형식으로 둔다.
   const repo = engine === undefined ? engineRepo() : engine ? { path: engine } : { error: "" };
   const cmd =
-    "path" in repo
+    "path" in repo && existsSync(path.join(repo.path, "dispatch.py"))
       ? `python3 ${dq(path.join(repo.path, "dispatch.py"))} run ${dq(path.dirname(dir))} --reason cron --worker ${dq(worker.path)}`
       : dq(worker.path);
   const run = `${cmd} >> ${dq(log)} 2>&1`;
@@ -2043,7 +2044,7 @@ async function writeCrontab(next: string, locale: Locale): Promise<void> {
  *  그대로다(쓰기 전에 읽기가 실패하면 아무것도 안 쓴다). 바꾼 줄이 있었는지를 돌려준다. */
 export async function migrateCron(roots: string[]): Promise<boolean> {
   const repo = engineRepo();
-  if (!("path" in repo)) return false;
+  if (!("path" in repo) || !existsSync(path.join(repo.path, "dispatch.py"))) return false;
   const before = await crontabForWrite();
   const next = cronMigrate(before, roots, repo.path);
   if (next === before) return false;
