@@ -8993,9 +8993,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P495-1 | 엔진 - `remote.py` `job_state` 순서-`done`에서만 토큰 지우기-`failed`의 `reason`-`notoken` 서브커맨드, `tick.sh` 디스패치 직전 검사 + `test_remote.py` | developer | - | 발행 |
-| P495-2 | 매뉴얼 - `remote.md`(ko-en) 원격 작업의 답변 대기와 `remote_failed: no-token` | writer | - | 발행 |
-| P495-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P495-1 | 발행 |
+| P495-1 | 엔진 - `remote.py` `job_state` 순서-`done`에서만 토큰 지우기-`failed`의 `reason`-`notoken` 서브커맨드, `tick.sh` 디스패치 직전 검사 + `test_remote.py` | developer | - | 발행 `b3696850` |
+| P495-2 | 매뉴얼 - `remote.md`(ko-en) 원격 작업의 답변 대기와 `remote_failed: no-token` | writer | - | 발행 `f9fbacad` |
+| P495-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P495-1 | 발행 `f3c687cc` |
 
 **세 장이다.** 매뉴얼은 위 표에 글감이 다 있어 기다리지 않는다. designer 0장 - dira 화면이 없다. 에픽 `P478`에 붙인다.
 
