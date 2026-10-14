@@ -63,6 +63,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
     start(controller) {
       const enc = new TextEncoder();
       let nextId = 1;
+      let lastViewport = "";
       const sendUrl = (url: string) => {
         try {
           controller.enqueue(enc.encode(`event: url\ndata: ${url}\n\n`));
@@ -89,7 +90,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
         if (closed) return;
         let msg: {
           method?: string;
-          params?: { data?: string; sessionId?: number; frame?: { url?: string; parentId?: string } };
+          params?: {
+            data?: string;
+            sessionId?: number;
+            metadata?: { deviceWidth?: number; deviceHeight?: number };
+            frame?: { url?: string; parentId?: string } };
         };
         try {
           msg = JSON.parse(String(ev.data));
@@ -103,6 +108,20 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
           return;
         }
         if (msg.method !== "Page.screencastFrame" || !msg.params?.data) return;
+        // P490: 뷰포트 CSS px는 별도 `event: viewport`로 값이 바뀔 때만 보낸다 - 프레임 `data:`는
+        // 그대로 base64라 기존 파서와 `BrowserPreview`가 안 깨지고, 프레임마다 중복을 안 싣는다.
+        const { deviceWidth: dw, deviceHeight: dh } = msg.params.metadata ?? {};
+        if (typeof dw === "number" && typeof dh === "number" && dw > 0 && dh > 0) {
+          const v = JSON.stringify({ w: dw, h: dh });
+          if (v !== lastViewport) {
+            lastViewport = v;
+            try {
+              controller.enqueue(enc.encode(`event: viewport\ndata: ${v}\n\n`));
+            } catch {
+              // 구독자가 이미 정리된 뒤
+            }
+          }
+        }
         try {
           controller.enqueue(enc.encode(`data: ${msg.params.data}\n\n`));
         } catch {

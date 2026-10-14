@@ -15,7 +15,7 @@ import { uploadAttachment } from "@/app/(app)/p/[project]/actions";
 import { toast } from "sonner";
 import { useLocale, useT } from "@/components/language-provider";
 import { LINK_SLOT_HASH, LINK_TAB_EVENT, normalizeAddressInput, readCdpFrameStream } from "@/lib/cdp-relay";
-import { commentPoint, keyBody, mouseButtonBody, scaleToFrame, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
+import { commentPoint, inputPoint, keyBody, mouseButtonBody, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trackPending, useLinkPendingReporter, useTrackedRouter } from "@/lib/route-pending";
@@ -241,6 +241,7 @@ export function BrowserMirror({
   const url = `/p/${projectId}/cdp/${hash}`;
   const isLinkSlot = hash === LINK_SLOT_HASH;
   const [frame, setFrame] = useState<string | null>(null);
+  const viewportRef = useRef<{ width: number; height: number } | null>(null);
   const [lost, setLost] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
   // §P466 - 댓글 모드(저장 안 함)와 열려 있는 댓글 하나. 팝오버가 열린 동안 미러를 누르면 먼저
@@ -296,6 +297,9 @@ export function BrowserMirror({
             navigateTimeoutRef.current = null;
           }
         },
+        (v) => {
+          viewportRef.current = v;
+        },
       );
       if (outcome === "disconnected") setLost(true);
     })();
@@ -309,12 +313,13 @@ export function BrowserMirror({
 
   const point = (clientX: number, clientY: number) => {
     const img = imgRef.current;
-    if (!img) return { x: 0, y: 0 };
-    return scaleToFrame(
+    if (!img) return null;
+    return inputPoint(
       clientX,
       clientY,
       img.getBoundingClientRect(),
-      { width: img.naturalWidth || 1, height: img.naturalHeight || 1 },
+      { width: img.naturalWidth, height: img.naturalHeight },
+      viewportRef.current,
     );
   };
 
@@ -454,23 +459,27 @@ export function BrowserMirror({
           }}
           onMouseDown={(e) => {
             if (!unlocked || commentMode) return;
-            const { x, y } = point(e.clientX, e.clientY);
-            postInput(url, mouseButtonBody("mousedown", e.button, x, y));
+            const p = point(e.clientX, e.clientY);
+            if (!p) return;
+            postInput(url, mouseButtonBody("mousedown", e.button, p.x, p.y));
           }}
           onMouseUp={(e) => {
             if (!unlocked || commentMode) return;
-            const { x, y } = point(e.clientX, e.clientY);
-            postInput(url, mouseButtonBody("mouseup", e.button, x, y));
+            const p = point(e.clientX, e.clientY);
+            if (!p) return;
+            postInput(url, mouseButtonBody("mouseup", e.button, p.x, p.y));
           }}
           onMouseMove={(e) => {
             if (!unlocked || commentMode) return;
-            const { x, y } = point(e.clientX, e.clientY);
-            postInput(url, mouseButtonBody("mousemove", e.button, x, y));
+            const p = point(e.clientX, e.clientY);
+            if (!p) return;
+            postInput(url, mouseButtonBody("mousemove", e.button, p.x, p.y));
           }}
           onWheel={(e) => {
             if (!unlocked || commentMode) return;
-            const { x, y } = point(e.clientX, e.clientY);
-            postInput(url, wheelBody(x, y, e.deltaX, e.deltaY));
+            const p = point(e.clientX, e.clientY);
+            if (!p) return;
+            postInput(url, wheelBody(p.x, p.y, e.deltaX, e.deltaY));
           }}
         />
         {pick && <CommentPopover key={pick.frame + pick.px + pick.py} projectId={projectId} pick={pick} onClosed={() => setPick(null)} />}

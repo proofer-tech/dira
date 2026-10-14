@@ -91,6 +91,7 @@ export async function readCdpFrameStream(
   onFrame: (base64Jpeg: string) => void,
   signal?: AbortSignal,
   onUrl?: (url: string) => void,
+  onViewport?: (viewport: { width: number; height: number }) => void,
 ): Promise<CdpFrameOutcome> {
   if (!res.ok) return "disconnected";
   const reader = res.body?.getReader();
@@ -117,6 +118,18 @@ export async function readCdpFrameStream(
         pendingEvent = null;
         if (event === "url") {
           onUrl?.(data);
+          continue;
+        }
+        if (event === "viewport") {
+          // P490: 뷰포트 CSS px. 모양이 틀리면 버려서 프레임 픽셀 폴백이 유지된다.
+          try {
+            const v = JSON.parse(data) as { w?: unknown; h?: unknown };
+            if (typeof v.w === "number" && typeof v.h === "number" && v.w > 0 && v.h > 0) {
+              onViewport?.({ width: v.w, height: v.h });
+            }
+          } catch {
+            // 무시
+          }
           continue;
         }
         frames++;

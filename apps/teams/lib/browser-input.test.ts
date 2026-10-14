@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { commentPoint, keyBody, mouseButtonBody, scaleToFrame, wheelBody } from "./browser-input.ts";
+import { commentPoint, inputPoint, keyBody, mouseButtonBody, scaleToFrame, wheelBody } from "./browser-input.ts";
 import { toCdpInputCommand } from "./cdp-relay.ts";
 
 test("scaleToFrame — 화면 사각형 안 비율을 그대로 프레임 원본 해상도로 옮긴다", () => {
@@ -90,4 +90,31 @@ test("commentPoint — 띠 없음, 프레임 없음", () => {
   assert.deepStrictEqual(commentPoint(320, 200, box, { width: 1280, height: 800 }), { x: 640, y: 400, px: 320, py: 200 });
   assert.strictEqual(commentPoint(640, 200, box, { width: 1280, height: 800 }), null); // 오른쪽 끝 밖
   assert.strictEqual(commentPoint(10, 10, box, { width: 0, height: 0 }), null);
+});
+
+const IBOX = { left: 0, top: 100, width: 800, height: 600 }; // 프레임 1280x400 -> 내용 800x250, 위아래 띠 175
+test("inputPoint — 위아래 띠: 내용 맨 위가 y=0, 맨 아래가 deviceHeight 부근, 띠 위는 null", () => {
+  const nat = { width: 1280, height: 400 };
+  const vp = { width: 1280, height: 400 };
+  assert.deepStrictEqual(inputPoint(10, 275, IBOX, nat, vp), { x: 16, y: 0 });
+  assert.strictEqual(inputPoint(10, 524, IBOX, nat, vp)?.y, 398);
+  assert.strictEqual(inputPoint(10, 274, IBOX, nat, vp), null);
+  assert.strictEqual(inputPoint(10, 525, IBOX, nat, vp), null);
+});
+
+test("inputPoint — 좌우 띠도 같고 띠 위는 null", () => {
+  const box = { left: 50, top: 0, width: 1000, height: 400 }; // 프레임 400x400 -> 내용 400, 좌우 띠 300
+  const nat = { width: 400, height: 400 };
+  const vp = { width: 400, height: 400 };
+  assert.strictEqual(inputPoint(350, 200, box, nat, vp)?.x, 0);
+  assert.strictEqual(inputPoint(749, 200, box, nat, vp)?.x, 399);
+  assert.strictEqual(inputPoint(349, 200, box, nat, vp), null);
+  assert.strictEqual(inputPoint(750, 200, box, nat, vp), null);
+});
+
+test("inputPoint — 프레임 1280, deviceWidth 1600이면 프레임 x 640이 800이고 메타 없으면 프레임 픽셀", () => {
+  const box = { left: 0, top: 0, width: 1280, height: 800 };
+  const nat = { width: 1280, height: 800 };
+  assert.deepStrictEqual(inputPoint(640, 400, box, nat, { width: 1600, height: 1000 }), { x: 800, y: 500 });
+  assert.deepStrictEqual(inputPoint(640, 400, box, nat, null), { x: 640, y: 400 });
 });

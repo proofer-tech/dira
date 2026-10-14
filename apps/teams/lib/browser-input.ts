@@ -78,6 +78,26 @@ export function commentPoint(
   };
 }
 
+/** 마우스 입력 좌표 - 클릭-휠-이동용(P490). `commentPoint`와 같은 내용 사각형 계산으로 띠를
+ *  빼고(띠 위는 `null`, POST 안 함), 프레임 픽셀을 뷰포트 CSS px(`viewport`, 스크린캐스트
+ *  `metadata.deviceWidth` `deviceHeight`)로 비례 환산한다. `viewport`가 아직 없으면 프레임 픽셀
+ *  그대로다. */
+export function inputPoint(
+  clientX: number,
+  clientY: number,
+  box: { left: number; top: number; width: number; height: number },
+  natural: { width: number; height: number },
+  viewport: { width: number; height: number } | null,
+): { x: number; y: number } | null {
+  const hit = commentPoint(clientX, clientY, box, natural);
+  if (!hit) return null;
+  if (!viewport) return { x: hit.x, y: hit.y };
+  return {
+    x: Math.round((hit.x * viewport.width) / natural.width),
+    y: Math.round((hit.y * viewport.height) / natural.height),
+  };
+}
+
 export function mouseButtonBody(
   domType: "mousedown" | "mouseup" | "mousemove",
   domButton: number,
