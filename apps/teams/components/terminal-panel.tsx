@@ -24,7 +24,7 @@ import { isShellBoundCtrlF, resultLabel, searchDecorations } from "@/lib/termina
 import { openLink } from "@/components/browser-panel";
 import { dispatchLinkClick } from "@/lib/link-click";
 import { useTrackedRouter } from "@/lib/route-pending";
-import { findTerminalLinks } from "@/lib/terminal-links";
+import { cellsToString, findTerminalLinks, linkCellRange, type TerminalCell } from "@/lib/terminal-links";
 
 /** `lib/pty.ts`의 `stty cols 120 rows 32`와 같은 값 — 서버가 그 크기로 셸을 열었으므로 화면도
  *  같은 크기로 맞춘다. ponytail: 고정 크기, 창 크기 반영은 다음 티켓(§11-1 수용조건 밖). */
@@ -84,11 +84,19 @@ export function TerminalPanel({
     const linkDisposable = term.registerLinkProvider({
       provideLinks(bufferLineNumber, callback) {
         const line = term.buffer.active.getLine(bufferLineNumber - 1);
-        const text = line?.translateToString(true) ?? "";
-        const links: ILink[] = findTerminalLinks(text).map((m) => ({
+        // 문자열 인덱스가 아니라 셀 열로 범위를 잡는다(P494) - 전각 문자는 두 셀이다.
+        const cells: TerminalCell[] = [];
+        for (let x = 0; line && x < line.length; x++) {
+          const cell = line.getCell(x);
+          if (cell) cells.push({ chars: cell.getChars(), width: cell.getWidth() });
+        }
+        const text = cellsToString(cells);
+        const links: ILink[] = findTerminalLinks(text).map((m) => {
+          const r = linkCellRange(cells, m.start, m.text.length);
+          return {
           range: {
-            start: { x: m.start + 1, y: bufferLineNumber },
-            end: { x: m.start + m.text.length, y: bufferLineNumber },
+            start: { x: r.start, y: bufferLineNumber },
+            end: { x: r.end, y: bufferLineNumber },
           },
           text: m.text,
           activate: (event) => {
@@ -102,7 +110,8 @@ export function TerminalPanel({
               (url, target, features) => window.open(url, target, features),
             );
           },
-        }));
+          };
+        });
         callback(links.length ? links : undefined);
       },
     });
