@@ -8938,6 +8938,48 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P494. 터미널 링크 밑줄이 두 칸 문자 뒤에서도 URL 위에 그어진다 (요구 `869aafe5`, 왕복 0회)
+
+사람 요구: *"터미널 링크 밑줄이 이상해요"* (첨부 화면: `다음 주소에서 코드를 승인하세요: http://localhost:3000/connect`
+줄에서 밑줄이 `승인하세요: http://localhos`까지 그어지고 `t:3000/connect`에는 안 그어진다).
+
+원인은 `components/terminal-panel.tsx`의 `registerLinkProvider`다. `findTerminalLinks`가 돌려준
+`start`와 `text.length`는 JS 문자열 인덱스인데, 그 값을 그대로 xterm 셀 열(`range.start.x` `range.end.x`)에
+넣는다. 한글 같은 전각 문자는 한 글자가 두 셀이라, 링크 앞에 전각 문자가 n개 있으면 범위가 n칸
+왼쪽으로 밀린다. 위 줄은 전각 문자가 15개라 15칸 밀렸다. 범위가 곧 클릭 영역이므로 밑줄만이 아니라
+누르는 자리도 같이 어긋난다.
+
+사람이 정하지 않은 것은 주도성 5로 pm이 정했다. 고치는 자리는 GUI(`apps/teams/`) 하나이고 새 의존성은
+없다(`@xterm/addon-unicode11` 등을 붙이지 않는다).
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 변환 | 문자열 인덱스를 셀 열로 바꾸는 순수 함수를 `lib/terminal-links.ts`에 둔다. 입력은 줄의 셀별 `(문자열, 폭)` 목록이고(xterm `IBufferLine.getCell(x)`의 `getChars()` `getWidth()`), 폭 0인 셀(전각 문자의 뒤 칸)은 문자열 길이에 더하지 않는다 |
+| 범위 | `start.x` = 링크 첫 글자가 놓인 셀의 1-based 열, `end.x` = 링크 마지막 글자가 놓인 셀의 1-based 열(전각이면 그 문자의 뒤 칸) |
+| 문자열 | `provideLinks`가 찾는 문자열과 변환 기준 문자열은 같은 줄에서 나온 같은 값이어야 한다 |
+| 바뀌지 않는 것 | 정규식, 꼬리 구두점 떼기, 클릭 동작(`dispatchLinkClick`) |
+
+#### 안 하는 것
+
+- 줄바꿈(wrap)으로 두 줄에 걸친 URL을 한 링크로 잇는 것. 별개 요구다.
+- 전각 폭 판정을 xterm 바깥 표로 새로 만드는 것. 폭은 버퍼 셀이 알려 주는 값만 쓴다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P494-1 | GUI - 위 값대로 셀 열 변환 함수와 `terminal-panel.tsx` 배선, 단위 테스트 | developer | - | 미발행 |
+| P494-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P494-1 | 미발행 |
+
+**두 장이다.** designer 0장 - 보이는 모양은 그대로이고 위치만 바로잡는다. 에픽을 안 연다.
+
+#### 수용조건
+
+- [ ] `cd apps/teams && pnpm test`가 통과하고, 그 안에 셀 열 변환 테스트 셋이 있다: (1) `다음 주소에서 코드를 승인하세요: http://localhost:3000/connect`(한글 15자, 폭 2) -> 범위 `start.x = 34`, `end.x = 62` / (2) ASCII만 있는 줄 `see http://a.b/c` -> `start.x = 5`, `end.x = 16`(지금 동작과 같다) / (3) URL 뒤에 한글이 오는 줄 `http://a.b 다음` -> `start.x = 1`, `end.x = 10`.
+- [ ] 앱 터미널에서 `printf '다음 주소에서 코드를 승인하세요: http://localhost:3000/connect\n'`을 치고 URL에 마우스를 올리면, 밑줄이 `http`의 `h`부터 `connect`의 `t`까지만 그어지고 `승인하세요:`에는 안 그어진다.
+- [ ] 같은 줄에서 `connect` 위를 클릭하면 링크가 열리고, `승인하세요` 위를 클릭하면 아무것도 열리지 않는다.
+- [ ] ASCII만 있는 줄(`printf 'see http://localhost:3000/x\n'`)의 밑줄과 클릭 영역이 바뀌기 전과 같다.
+
 ### P493. 새 프로젝트를 만들 때 프로젝트 폴더가 git 저장소가 아니면 로컬 저장소를 만든다 (요구 `e2d2b59e`, 왕복 0회)
 
 사람 요구: *"새로운 프로젝트를 만들 때 .git 이 없으면 실패합니다. 엔진이 프로젝트에 .git 이 없으면
