@@ -263,6 +263,12 @@ export default function Landing({
               <span className="font-mono text-xs">{createdInfo.denyCurrentBranchNote}</span>
             </p>
           )}
+          {createdInfo.gitRepoError && (
+            <p className="text-muted-foreground">
+              {t("landing.result.gitRepoErrorPrefix")}{" "}
+              <span className="font-mono text-xs">{createdInfo.gitRepoError}</span>
+            </p>
+          )}
           <p className="text-muted-foreground">
             {t("landing.result.skillsLabel")}{" "}
             <span className="font-mono text-xs">

@@ -355,6 +355,8 @@ export type CreateState = RegisterState & {
     /** 받는 트리의 `receive.denyCurrentBranch`가 이미 다른 값이라 안 건드렸다(결정 6) — 값을
      *  그대로 보여준다. 실패는 여기 안 뜬다(`.gitignore`와 같은 처분 — 조용히 넘어간다). */
     denyCurrentBranchNote?: string;
+    /** 저장소 생성이 실패한 사유 한 줄(P493) - 만들기는 막지 않는다. */
+    gitRepoError?: string;
     /** 새 프로젝트가 스킬 다섯을 받아서 태어난 결과(§새 프로젝트가 스킬을 갖고 태어난다, 결정 9)
      *  — 깐 수 · 이미 있어 건너뛴 수 · 실패한 수. 등록 경로(`registerProject`)는 이 자리 자체가
      *  없다(스킬을 하나도 안 깐다, 결정 1). */
@@ -427,6 +429,7 @@ export async function createProject(
       cronError,
       ontologyError,
       denyCurrentBranchNote: made.denyCurrentBranchNote,
+      gitRepoError: made.gitRepoError,
       registerCmd: cronRegisterCmd({ path: workerPath }),
       skills: { installed: 0, skipped: 0, failed: 0 },
     };

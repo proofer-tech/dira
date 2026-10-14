@@ -9,6 +9,7 @@ import {
   engineRepo,
   ensureBrowseHooks,
   ensureDenyCurrentBranch,
+  ensureGitRepo,
   ensureGitignoreLine,
   fillPlaceholders,
   preflight,
@@ -99,7 +100,7 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
 
   // ① 만들어진 파일 목록 = §0-3 집합 + §0-19의 `.gitignore`(specDoc 없이 — ③을 같은 트리에서 본다)
   const first = await scaffold(project, { branch: "main" });
-  assert.deepEqual(first.written.sort(), [...SET, ".gitignore"].sort());
+  assert.deepEqual(first.written.sort(), [...SET, ".gitignore", ".git"].sort());
   assert.deepEqual(first.skipped, []);
   assert.equal(await readFile(path.join(project, ".gitignore"), "utf8"), ".dira\n");
   // 다음 단계(registerCron·addProject)가 쓰는 값 — 부르는 쪽이 경로를 다시 조립하지 않는다.
@@ -599,4 +600,69 @@ test("scaffold — w1의 표준 워크트리가 없으면 게이트 첫 tick이 
     execFileSync("git", ["-C", tree, "rev-parse", "--abbrev-ref", "HEAD"], { encoding: "utf8" }).trim(),
     "wt/w1",
   );
+});
+
+// ── P493 - 저장소가 아니면 로컬 저장소와 첫 커밋 ──────────────────────────────────
+
+test("scaffold - git 아닌 빈 폴더 -> .git, 커밋 한 줄, HEAD가 통합 브랜치 (P493)", async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const made = await scaffold(dir, { branch: "trunk" });
+  assert.ok(made.written.includes(".git"));
+  assert.equal(made.gitRepoError, undefined);
+  assert.equal(git(dir, "log", "--oneline").trim().split("\n").length, 1);
+  assert.equal(git(dir, "symbolic-ref", "--short", "HEAD").trim(), "trunk");
+  assert.equal(git(dir, "ls-tree", "-r", "--name-only", "HEAD").trim(), ".gitignore");
+});
+
+test("scaffold - 이미 저장소인 폴더 -> 커밋 수가 그대로다 (P493)", async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  initRepo(dir, "main");
+  git(dir, "commit", "-q", "--allow-empty", "-m", "x");
+  const made = await scaffold(dir, { branch: "main" });
+  assert.ok(!made.written.includes(".git"));
+  assert.equal(git(dir, "rev-list", "--count", "HEAD").trim(), "1");
+});
+
+test("scaffold - 저장소의 하위 폴더 -> 하위 폴더에 .git이 안 생긴다 (P493)", async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  initRepo(dir, "main");
+  const sub = path.join(dir, "sub");
+  await mkdir(sub);
+  await scaffold(sub, { branch: "main" });
+  assert.equal(existsSync(path.join(sub, ".git")), false);
+});
+
+test("scaffold - 사람 파일 a.txt는 첫 커밋에 안 들어간다 (P493)", async (t) => {
+  const dir = await tmp();
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await writeFile(path.join(dir, "a.txt"), "hi");
+  await scaffold(dir, { branch: "main" });
+  assert.match(git(dir, "status", "--porcelain"), /\?\? a\.txt/);
+});
+
+test("ensureGitRepo - user.name이 없는 환경에서도 첫 커밋이 생긴다 (P493)", async (t) => {
+  const dir = await tmp();
+  const home = await tmp();
+  t.after(() => Promise.all([rm(dir, { recursive: true, force: true }), rm(home, { recursive: true, force: true })]));
+  await writeFile(path.join(dir, ".gitignore"), ".dira\n");
+  const saved = { HOME: process.env.HOME, G: process.env.GIT_CONFIG_GLOBAL, S: process.env.GIT_CONFIG_SYSTEM };
+  process.env.HOME = home;
+  process.env.GIT_CONFIG_GLOBAL = "/dev/null";
+  process.env.GIT_CONFIG_SYSTEM = "/dev/null";
+  // useConfigOnly - passwd 이름 자동 추정을 꺼서 설정이 없으면 커밋이 실제로 실패하게 한다
+  process.env.GIT_CONFIG_COUNT = "1";
+  process.env.GIT_CONFIG_KEY_0 = "user.useConfigOnly";
+  process.env.GIT_CONFIG_VALUE_0 = "true";
+  t.after(() => {
+    delete process.env.GIT_CONFIG_COUNT;
+    for (const [k, v] of [["HOME", saved.HOME], ["GIT_CONFIG_GLOBAL", saved.G], ["GIT_CONFIG_SYSTEM", saved.S]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+  assert.deepEqual(await ensureGitRepo(dir, "main"), { status: "created" });
+  assert.equal(git(dir, "log", "--format=%an").trim(), "dira");
 });

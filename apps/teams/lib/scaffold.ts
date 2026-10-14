@@ -103,6 +103,35 @@ export async function ensureGitignoreLine(project: string): Promise<"written" | 
   return writeFile(file, prefix + ".dira\n").then(() => "written" as const, () => "failed" as const);
 }
 
+/** `<프로젝트>`가 git 저장소가 아니면 로컬 저장소와 첫 커밋을 만든다(DESIGN.md P493). 상위 폴더가
+ *  저장소라 `rev-parse --git-dir`가 성공하면 아무것도 안 한다. 첫 커밋은 `.gitignore` 한 파일만 add한다
+ *  (사람의 다른 파일은 안 넣는다) - 커밋이 0개면 디스패치 게이트의 `git worktree add -b`가 실패한다.
+ *  작성자는 사람의 git 설정이고, 없어서 실패하면 그 커밋 한 번에만 `-c`로 dira를 붙인다.
+ *  **던지지 않는다** - 실패 사유는 `error`로 돌려준다(`.gitignore`와 같은 처분). */
+export async function ensureGitRepo(
+  project: string,
+  branch: string,
+): Promise<{ status: "created" | "skipped" } | { status: "failed"; error: string }> {
+  const git = (...args: string[]) => execFileP("git", ["-C", project, ...args]);
+  if (await git("rev-parse", "--git-dir").then(() => true, () => false)) return { status: "skipped" };
+  const msg = (e: unknown) => {
+    const x = e as { stderr?: string; message?: string };
+    return (x.stderr?.trim() || x.message || String(e)).split("\n")[0];
+  };
+  try {
+    await git("init", "-q");
+    await git("symbolic-ref", "HEAD", `refs/heads/${branch}`);
+    await git("add", "--", ".gitignore");
+    const commit = ["commit", "-q", "-m", "dira: 첫 커밋"];
+    await git(...commit).catch(() =>
+      git("-c", "user.name=dira", "-c", "user.email=dira@localhost", ...commit),
+    );
+    return { status: "created" };
+  } catch (e) {
+    return { status: "failed", error: msg(e) };
+  }
+}
+
 export type DenyCurrentBranchResult =
   | { status: "written" | "skipped" | "failed" }
   | { status: "conflict"; value: string };
@@ -200,6 +229,8 @@ export async function scaffold(
   /** `receive.denyCurrentBranch`가 이미 다른 값이라 안 건드렸을 때만 든다(결정 6) — 결과 패널이
    *  한 줄로 보여준다. */
   denyCurrentBranchNote?: string;
+  /** 저장소 생성이 실패한 사유 한 줄(P493) - 결과 패널이 보여준다. 생성은 막지 않는다. */
+  gitRepoError?: string;
 }> {
   const repo = engineRepo(locale);
   if ("error" in repo) throw new Error(repo.error);
@@ -294,9 +325,19 @@ export async function scaffold(
   const gitignore = await ensureGitignoreLine(project);
   if (gitignore !== "failed") (gitignore === "written" ? written : skipped).push(".gitignore");
 
+  // P493 - 저장소가 아니면 만든다. `.gitignore`가 실패했어도 시도한다(첫 커밋의 add가 실패하면 사유로 뜬다).
+  const gitRepo = await ensureGitRepo(project, opts.branch);
+  if (gitRepo.status === "created") written.push(".git");
+  const gitRepoError = gitRepo.status === "failed" ? gitRepo.error : undefined;
+
   // `receive.denyCurrentBranch`(결정 6) — `.gitignore`와 같은 처분, 실패해도 던지지 않는다.
   const deny = await ensureDenyCurrentBranch(project);
-  if (deny.status === "conflict") return { root, repo: repo.path, written, skipped, denyCurrentBranchNote: deny.value };
-
-  return { root, repo: repo.path, written, skipped };
+  return {
+    root,
+    repo: repo.path,
+    written,
+    skipped,
+    ...(deny.status === "conflict" ? { denyCurrentBranchNote: deny.value } : {}),
+    ...(gitRepoError ? { gitRepoError } : {}),
+  };
 }
