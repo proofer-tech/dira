@@ -8938,6 +8938,54 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P493. 새 프로젝트를 만들 때 프로젝트 폴더가 git 저장소가 아니면 로컬 저장소를 만든다 (요구 `e2d2b59e`, 왕복 0회)
+
+사람 요구: *"새로운 프로젝트를 만들 때 .git 이 없으면 실패합니다. 엔진이 프로젝트에 .git 이 없으면
+알아서 로컬 git init 하도록 해주세요."*
+
+지금 `createProject`(`app/actions.ts`) -> `scaffold`(`lib/scaffold.ts`)는 git 저장소가 아닌 폴더에서도
+성공으로 끝난다. `ensureDenyCurrentBranch`가 조용히 실패할 뿐이다. 멈추는 곳은 그 다음이다.
+`workers/w1.sh`의 디스패치 게이트가 `git -C <프로젝트> rev-parse --show-toplevel`에 실패해 전용
+워크트리를 못 만들고, `GATE 디스패치 보류`를 남긴 채 `exit 0`으로 끝난다. 그래서 큐가 티켓을 하나도
+돌리지 않는다. P491 서두의 with-cto 실측이 같은 증상이다. `git init`만으로는 모자라다:
+커밋이 하나도 없는 저장소에서는 `git worktree add -b wt/<워커>`가 기준 커밋을 못 찾아 실패한다.
+
+사람이 정하지 않은 것은 주도성 5로 pm이 정했다. 고치는 자리는 GUI의 생성 경로(`scaffold`)
+하나다. 엔진(`tick.sh` `tickets.py`)과 디스패치 게이트는 고치지 않는다 - 게이트가 매 tick마다
+남의 폴더에 저장소를 만드는 것은 생성 시점 한 번보다 훨씬 위험하다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 판정 | `git -C <프로젝트> rev-parse --git-dir`가 실패할 때만 만든다. 상위 폴더가 저장소라 성공하면 아무것도 안 한다(그 저장소를 쓴다) |
+| 시점 | `scaffold` 안, `.gitignore` 한 줄(§0-19)을 쓴 다음, `ensureDenyCurrentBranch` 앞 |
+| 저장소 | `git init` 뒤 `git symbolic-ref HEAD refs/heads/<통합 브랜치>`. 브랜치 이름은 만들기 폼의 통합 브랜치(`opts.branch`) 그대로다 |
+| 첫 커밋 | `.gitignore` 한 파일만 add해서 커밋한다. 사람의 다른 파일은 add하지 않는다. 메시지는 `dira: 첫 커밋` |
+| 작성자 | 사람의 git 설정을 그대로 쓴다. `user.name` `user.email`이 없어 커밋이 실패하면 그 커밋 한 번에만 `-c user.name=dira -c user.email=dira@localhost`를 붙여 다시 친다. 전역 설정에는 쓰지 않는다 |
+| 실패 | 생성을 막지 않는다(`.gitignore`와 같은 처분). 결과 패널에 한 줄로 사유를 알린다 |
+| 결과 패널 | 저장소를 만들었으면 `written`에 `.git`이 들어간다 |
+
+#### 안 하는 것
+
+- 이미 등록된 프로젝트(기존 큐 등록 경로 `addProject`)와 디스패치 게이트에서 저장소를 만드는 것.
+- 원격(origin) 추가, push.
+- 사람의 기존 파일을 첫 커밋에 넣는 것.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P493-1 | GUI - `lib/scaffold.ts`에 위 값대로 저장소 생성(`ensureGitRepo` 같은 함수), 결과 패널 문구(i18n 한-영), 단위 테스트 | developer | - | - |
+| P493-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P493-1 | - |
+
+**두 장이다.** designer 0장 - 결과 패널에 문구 한 줄이 늘 뿐이다. 에픽을 안 연다.
+
+#### 수용조건
+
+- [ ] `cd apps/teams && pnpm test`가 통과하고, 그 안에 `scaffold` 테스트 넷(git 아닌 빈 폴더 -> `.git`이 생기고 `git -C <폴더> log --oneline`이 한 줄이며 HEAD 브랜치가 통합 브랜치다 / 이미 저장소인 폴더 -> 커밋 수가 그대로다 / 저장소의 하위 폴더 -> 하위 폴더에 `.git`이 안 생긴다 / 폴더에 사람 파일 `a.txt`가 있으면 `git -C <폴더> status --porcelain`에 `?? a.txt`가 남는다)이 있다.
+- [ ] 앱에서 git 저장소가 아닌 새 폴더로 프로젝트를 만들면, 1분 안에 `<폴더>/.dira/worktrees/w1`이 생기고 `<폴더>/.dira/workers/runner.log`에 `GATE 디스패치 보류` 줄이 없다.
+- [ ] 같은 프로젝트에 티켓 하나를 넣으면 워커가 그 티켓을 집어 `.wip`이 된다.
+- [ ] `user.name`이 없는 환경(`HOME`을 빈 폴더로 둔 테스트)에서도 첫 커밋이 생긴다.
+
 ### P492. 원격 큐 - 잡은 작업을 같은 sync에서 바로 디스패치하고, 다음 잡기 시각을 신호에 싣는다 (요구 `9799b0ae`, 왕복 0회)
 
 사람 요구(임한솔): *"갈래에서 티켓 발행할때 바로 디스패치되도록 해주세요"*. 갈래 큐가 갈래 정본
