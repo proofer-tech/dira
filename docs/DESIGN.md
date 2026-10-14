@@ -8938,6 +8938,77 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P495. 원격 큐 - 블록을 답변 대기로 바꾼 작업을 `failed`가 아니라 `awaiting`으로 올리고, 작업 토큰을 답이 올 때까지 남긴다 (요구 `a58c33b8`, 왕복 0회)
+
+사람 요구(임한솔): *"엔진을 dira로 했더니 질문답변 단계에 빠지면 작업이 영원히 중단되어버리는 버그가생기네요"*.
+갈래 큐가 갈래 정본 `서비스/아키텍처/dira협의요구사항.md`의 R17을 넘겼다(갈래 티켓 `3cf0e75e`).
+
+실측(2026-10-14, with-cto 큐 `9f95282f`, 설치본과 레포의 `job_state`가 같다): 세션이 `## 블록`을 남기고
+끝나면(DONE) `job_state`가 `awaiting`보다 `## 블록`을 먼저 봐서 `failed`를 올리고, `report_status`가 그 즉시
+`drop_token`으로 작업 토큰 파일을 지운다. 28초 뒤 엔진이 블록을 답변 대기로 바꿔도(ASK, `## 질문 1`) 본문의
+`## 블록`이 남아 있어 계속 `failed`이고, `report_questions`는 `awaiting`일 때만 올리므로 질문이 갈래로 안
+간다. 사람이 dira 앱에서 답하면 다시 디스패치되지만 토큰 파일이 없어 `DIRA_REMOTE_TOKEN`이 비고, 페르소나
+`mcp.json`의 `Bearer ${DIRA_REMOTE_TOKEN}`이 그대로 가서 갈래 MCP가 `401`을 준다. 세션은 다시 `## 블록`을
+남기고 같은 순환을 돈다. 같은 큐의 `42ba03f5`도 같은 경로다.
+
+요청 셋을 다 받는다. 사람이 정하지 않은 것은 주도성 5로 pm이 정했다.
+
+1. **원격 작업에서 `## 블록`은 더는 `failed`가 아니다.** 엔진은 신선한 블록을 언제나 답변 대기로 바꾸므로(결정
+   7-9) 블록은 "사람이 답할 일이 생겼다"는 뜻이고, 사람이 더 할 일이 없는 끝이 아니다. 판정은 `awaiting`을
+   맨 앞(`.done` 다음)에 두고, 세션 종료와 ASK 사이의 `.wip`은 `running` 그대로 둔다 - 그래서 그 틈에 sync가
+   끼어도 바뀐 값이 없어 아무것도 안 올라간다.
+2. **작업 토큰 파일은 `done`과 `410`에서만 지운다.** 사람이 그만두기로 답한 경우도 세션이 그 답을 읽고
+   `.done`으로 닫으므로 `done` 하나로 덮인다. 다시 뜬 세션은 같은 파일에서 같은 토큰을 받는다. 만료는 갈래
+   서버가 답을 내려 줄 때와 `awaiting` -> `running`에서 6시간 뒤로 늘린다(갈래 티켓 `dd6d649f`) - dira는
+   로컬 파일의 `job_token_expires_at`을 읽지 않으므로 고칠 것이 없다.
+3. **토큰 파일이 없는 원격 작업은 세션을 안 띄우고 닫는다.** 띄워 봐야 `401`을 맞고 블록을 남겨 위 순환이
+   다시 돈다. 닫는 형태는 `.done`이고, fm `remote_failed: no-token`이 그것이 완료가 아니라는 표시다. 백로그에
+   두거나 답변 대기로 잠그면 사람이 답해도 토큰이 생기지 않아 같은 자리로 돌아온다 - 토큰은 갈래에서 작업을
+   다시 발행해야만 생긴다. `failed`는 이 경우 하나에만 쓴다. `remote_revoked: true`(410)인데 토큰이 없는
+   티켓도 같은 길로 닫힌다(지금은 그런 티켓도 디스패치되어 `401`을 맞는다).
+
+엔진 수정이지만 P478이 사람 승인을 받은 범위(`remote.py`, 그리고 P478-4가 토큰 환경변수를 넣은 `tick.sh`의
+같은 자리) 안에서 끝난다. `tickets.py` - `dispatch.py`는 안 건드린다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| `job_state` 순서 | (1) `remote_failed:` 값이 있으면 `failed` (2) `.done`이면 `done` (3) fm `awaiting:`이 있고 `tickets/<그 stem>.done.md`가 없으면 `awaiting` (4) `.wip`이면 `running` (5) 아니면 `None`(안 올린다). 본문 `## 블록`은 판정에 안 쓴다. docstring을 이 순서로 고친다 |
+| 토큰 지우기 | `report_status`는 `done`을 올리는 데 성공했을 때만 `drop_token`한다. `410` 처리(`report_status` - `report_events`)의 `drop_token`은 그대로다. `failed`를 올린 뒤에는 지우지 않는다(토큰이 없어서 생긴 상태라 지울 것이 없다) |
+| 질문 올리기 | `report_questions` - `report_events`의 `awaiting` 단계는 고칠 것이 없다. 위 순서만 바뀌면 블록 뒤 ASK가 붙은 티켓의 마지막 `## 질문 n` 절이 다음 sync에 `POST jobs/<id>/questions`로 간다 |
+| 디스패치 직전 검사 | `tick.sh`가 원격 작업 토큰을 환경변수로 넣는 자리(P478 R7, `_RJ=` 줄)에서, 티켓 fm에 `remote_job:`이 있고 `<root>/remote.json`이 있는데 `~/.config/dira/run/remote-jobs/<해시>.json`이 없으면 세션을 띄우지 않는다. `python3 <엔진>/remote.py notoken <티켓 경로>`를 부르고 로그 한 줄 `REMOTE-NOTOKEN <해시>`를 남긴 뒤 종료한다(rc 0). `remote.json`이 없는 큐는 종전과 똑같다 |
+| `remote.py notoken <경로>` | 그 `.wip` 티켓에 (a) fm `remote_failed: no-token`을 더하고 할당 키(`pid` - `session_id` - `assigned_at` - `owner` - `inbox`)를 비운다 (b) 본문 끝에 `## 결과` 절 한 줄 `작업 토큰 파일이 없어 세션을 띄우지 않고 닫았다. 원격 서버에는 failed로 보고한다. 다시 하려면 원격 서비스에서 작업을 다시 발행한다.`를 더한다 (c) `<해시>.wip.md` -> `<해시>.done.md`로 옮긴다. 쓰기는 `mark_revoked`처럼 쓰기 직전에 다시 읽고 임시 파일 + `os.replace`다. 경로가 이미 없으면 아무것도 안 하고 rc 1 |
+| 상태 본문 | `POST jobs/<id>/status`의 `state`가 `failed`이면 선택 필드 `reason`을 싣는다 - 값은 fm `remote_failed:` 값(지금은 `no-token` 하나) |
+| §API 표 | P478 §API의 `POST jobs/<job_id>/status` 요청 칸과 §값 표의 상태 보고-작업 토큰 행을 이 스펙과 함께 고쳤다. 갈래 서버가 모르는 필드는 무시하므로 하위 호환이다 |
+| 이미 걸린 티켓 | with-cto 큐의 `9f95282f` - `42ba03f5`는 토큰 파일이 이미 지워졌다. 이 스펙이 설치되면 다음 디스패치에서 `notoken`으로 닫히고 갈래에 `failed`(`reason: no-token`)가 간다. 이어서 하려면 갈래에서 다시 발행한다 - 지운 토큰을 dira가 되살릴 길은 없다 |
+| 매뉴얼 | `apps/teams/docs/remote.md`(ko-en): 답변 대기 중인 원격 작업은 웹에도 질문으로 뜨고 어느 쪽에서 답해도 같은 세션이 이어진다는 것, 문제 해결 표에 `remote_failed: no-token` 행(무슨 뜻이고 사람이 할 일은 원격 서비스에서 다시 발행하는 것) |
+
+#### 안 하는 것
+
+- 사람이 "그만"이라고 답해 닫은 작업을 `done`과 따로 갈래에 알리는 상태. 세션이 `.done`으로 닫으면 `done`이다.
+- 지워진 토큰 파일을 서버에서 다시 받아 오는 경로(토큰 재발급 API).
+- 원격이 아닌 티켓의 블록-답변 대기 흐름 변경.
+- 로컬 파일의 `job_token_expires_at` 갱신 - 만료 연장은 갈래 서버가 맡는다(`dd6d649f`).
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P495-1 | 엔진 - `remote.py` `job_state` 순서-`done`에서만 토큰 지우기-`failed`의 `reason`-`notoken` 서브커맨드, `tick.sh` 디스패치 직전 검사 + `test_remote.py` | developer | - | 발행 |
+| P495-2 | 매뉴얼 - `remote.md`(ko-en) 원격 작업의 답변 대기와 `remote_failed: no-token` | writer | - | 발행 |
+| P495-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P495-1 | 발행 |
+
+**세 장이다.** 매뉴얼은 위 표에 글감이 다 있어 기다리지 않는다. designer 0장 - dira 화면이 없다. 에픽 `P478`에 붙인다.
+
+#### 수용조건
+
+- [ ] `python3 test_remote.py`가 통과한다.
+- [ ] `remote_job:`이 있는 `.wip` 티켓 본문의 마지막 절이 `## 블록`이면 `job_state`가 `running`이다. 같은 티켓에 fm `awaiting: X`와 `## 질문 1` 절이 더 붙고 `tickets/X.done.md`가 없으면 `awaiting`이다(본문에 `## 블록`이 그대로 있어도).
+- [ ] 위 `awaiting` 티켓으로 `remote.py sync --root R`을 한 번 돌리면 가짜 서버가 `POST jobs/<id>/status` `{state: "awaiting"}`과 `POST jobs/<id>/questions`(마지막 `## 질문 n` 절)를 받고, `~/.config/dira/run/remote-jobs/<해시>.json`이 그대로 있다.
+- [ ] `tickets/X.done.md`가 생기고 티켓이 다시 `.wip`이 되면 다음 sync에서 `running`이 올라가고 토큰 파일이 그대로 있다. 티켓이 `.done`이 되면 `done`이 올라가고 토큰 파일이 지워진다.
+- [ ] `remote.json`이 있는 큐에서 `remote_job:` 티켓의 토큰 파일을 지우고 디스패치하면 세션이 뜨지 않고, `runner.log`에 `REMOTE-NOTOKEN <해시>`가 있으며, 티켓이 `<해시>.done.md`이고 fm에 `remote_failed: no-token`과 `## 결과` 한 줄이 있다. 다음 sync에서 가짜 서버가 `{state: "failed", reason: "no-token"}`을 받는다.
+- [ ] `remote.json`이 없는 큐에서는 `remote_job:` 티켓이어도 위 검사가 돌지 않는다(종전대로 디스패치된다).
+- [ ] P495-1 커밋의 `git show --stat`에 `tickets.py` - `dispatch.py`가 없다.
+
 ### P494. 터미널 링크 밑줄이 두 칸 문자 뒤에서도 URL 위에 그어진다 (요구 `869aafe5`, 왕복 0회)
 
 사람 요구: *"터미널 링크 밑줄이 이상해요"* (첨부 화면: `다음 주소에서 코드를 승인하세요: http://localhost:3000/connect`
@@ -9894,8 +9965,8 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | 살아 있음 (R3) | 신호 주기는 크론과 같은 30초다(sync 1회 = 신호 1회). 서버의 끊김 기준은 300초를 권한다 - 30초 신호 열 번 연속 실패다. 끊긴 런타임의 작업을 서버가 돌려받은 뒤 런타임이 그 작업의 상태를 올리면 서버는 `410`으로 답하고, 런타임은 그 로컬 티켓에 `## 블록` 없이 fm `remote_revoked: true`만 달고 더는 올리지 않는다 |
 | 30초 간극 | 신호 본문에 워커마다 `next_dispatch_at`(다음 크론 시각, ISO 8601)과 `busy`(지금 쥔 해시 또는 null)를 싣는다. 갈래 화면은 이 값으로 `N초 뒤 시작` 같은 상태를 그린다. dira는 상주 프로세스를 띄우지 않는다 |
 | 작업 잡기 (R1) | `POST jobs/claim`이 준 작업마다 로컬 티켓 `tickets/<새 8자 해시>.md`를 만든다(`<root>/.remote-tmp-<hash>`에 쓴 뒤 rename - 새 파일이라 claim이 아니다). fm은 `ticket`-`title`-`kind: work`-`persona`-`priority`-`duedate`-`remote_job: <job_id>`, 본문은 서버가 준 Markdown 그대로다. 같은 `job_id`의 티켓이 이미 있으면 안 만든다. 한 번에 잡는 수는 그 루트의 빈 워커 수다 |
-| 상태 보고 (R1) | `remote_job:`이 있는 티켓만 본다. 파일명과 fm으로 판정한다 - `.wip` = `running`, `.done` = `done`, fm `awaiting:`이 걸려 있고 그 stem이 아직 없으면 `awaiting`, 본문에 `## 블록`이 있으면 `failed`. 바뀐 것만 올린다(마지막으로 올린 값은 `~/.config/dira/remote/<ws>/state.json`) |
-| 작업 토큰 (R7) | 잡기 응답의 `job_token`을 `~/.config/dira/run/remote-jobs/<hash>.json`(`0600`)에 둔다. `tick.sh`가 그 해시를 디스패치할 때만 세션 환경에 `DIRA_REMOTE_URL`-`DIRA_REMOTE_TOKEN`을 넣는다. 티켓 파일-`cron.log`-세션 로그에 값이 안 남는다. `done`-`failed`를 올린 뒤 파일을 지운다 |
+| 상태 보고 (R1) | `remote_job:`이 있는 티켓만 본다. 파일명과 fm으로 판정한다 - `.wip` = `running`, `.done` = `done`, fm `awaiting:`이 걸려 있고 그 stem이 아직 없으면 `awaiting`, fm `remote_failed:`가 있으면 `failed`(P495 - 본문 `## 블록`은 판정에 안 쓴다, 순서는 P495 §값). 바뀐 것만 올린다(마지막으로 올린 값은 `~/.config/dira/remote/<ws>/state.json`) |
+| 작업 토큰 (R7) | 잡기 응답의 `job_token`을 `~/.config/dira/run/remote-jobs/<hash>.json`(`0600`)에 둔다. `tick.sh`가 그 해시를 디스패치할 때만 세션 환경에 `DIRA_REMOTE_URL`-`DIRA_REMOTE_TOKEN`을 넣는다. 티켓 파일-`cron.log`-세션 로그에 값이 안 남는다. `done`을 올린 뒤와 `410`을 받았을 때만 파일을 지운다(P495). 디스패치 때 파일이 없으면 세션을 안 띄우고 `remote_failed: no-token`으로 닫는다(P495) |
 | 페르소나 MCP (R8) | `personas/<이름>/mcp.json`(claude `--mcp-config` 형식)이 있으면 claude 세션에 `--mcp-config <그 파일>`을 붙인다. P461의 `--strict-mcp-config`는 그대로라 그 페르소나 세션에만 그 서버가 붙는다. 토큰은 파일에 `${DIRA_REMOTE_TOKEN}`으로 적고 값은 환경변수로만 들어간다. claude가 아닌 엔진은 붙이지 않고 로그 한 줄 `MCPSKIP <엔진>` |
 | 진행 기록 (R4) | 세션 로그(stream-json)에서 단계와 명령만 뽑아 올린다. 단계는 `read`(Read-Grep-Glob 도구 첫 사용), `wrote`(Write-Edit 첫 사용), `handoff`(그 세션이 `tickets/`에 새 티켓을 만듦), `awaiting`(fm `awaiting:`이 생김). 명령은 Bash 도구의 `command` 문자열이다(한 줄 2,000 B에서 자른다). 모델 출력 본문-도구 결과-사고 내용은 안 보낸다 |
 | 사람 결정 (R5) | `awaiting:`이 걸린 티켓의 마지막 `## 질문 n` 절을 그대로 올린다(형식 `protocols/질문-형식.md`). 서버가 준 답은 `tickets/<awaiting stem>.done.md`로 쓴다 - fm `kind: answer`, `ticket: <stem>`, 본문은 서버가 준 Markdown. 그 stem 파일이 이미 있으면 덮지 않는다(로컬에서 사람이 먼저 답한 것이다) |
@@ -9916,7 +9987,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?, next_claim_at?}]}`(P491, P492) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다. `next_claim_at`은 그 루트에서 다음에 `jobs/claim`을 부를 시각(ISO 8601)이다 - 잡은 작업은 같은 sync에서 디스패치되므로(P492) 서버는 쉬는 워커가 있으면 이 값을 발행한 작업의 시작 예정 시각으로 쓸 수 있다 | `{ok: true}` |
 | `DELETE runtimes/<id>` | - | `204` |
 | `POST jobs/claim` | `{runtime_id, tools: [이름], max, project?}` - `project`가 있으면 그 프로젝트의 작업만 준다(P491) | `{jobs: [{job_id, title, persona, priority, duedate, body, job_token, job_token_expires_at}]}` |
-| `POST jobs/<job_id>/status` | `{state, hash, at}` | `204`, 돌려받은 작업은 `410` |
+| `POST jobs/<job_id>/status` | `{state, hash, at, reason?}` - `state`는 `running` `awaiting` `done` `failed`. `failed`는 사람이 더 할 일이 없는 끝에만 쓰고 그때 `reason`(지금은 `no-token`)을 싣는다(P495) | `204`, 돌려받은 작업은 `410` |
 | `POST jobs/<job_id>/events` | `{events: [{at, step, command}]}` | `204` |
 | `POST jobs/<job_id>/questions` | `{stem, markdown}` | `204` |
 | `GET answers?runtime_id=&project=` | - (`project`는 선택, 있으면 그 프로젝트의 답만. P491) | `{answers: [{job_id, stem, markdown}]}` |
