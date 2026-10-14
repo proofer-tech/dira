@@ -62,8 +62,8 @@ def load_config(root):
     return read_json(os.path.join(root, "remote.json"))
 
 
-ROOT_FILES = ("credentials.json", "last-sync", "manifest.json", "state.json", "progress.json",
-              "personas-version", "bundles-checked")
+ROOT_FILES = ("last-sync", "manifest.json", "state.json", "progress.json",
+              "personas-version", "bundles-checked", "last-error")
 
 
 def root_dir(ws, root):
@@ -71,23 +71,27 @@ def root_dir(ws, root):
     return os.path.join(ws_dir(ws), "roots", key)
 
 
-def migrate_legacy(ws, root):
-    # 옛 배치(워크스페이스 한 곳)의 루트 소유 파일을 먼저 sync한 루트가 옮겨 간다
-    rd, old = root_dir(ws, root), ws_dir(ws)
-    if os.path.exists(os.path.join(rd, "credentials.json")) or not os.path.exists(os.path.join(old, "credentials.json")):
-        return
-    os.makedirs(rd, exist_ok=True)
-    for n in ROOT_FILES:
-        try:
-            os.replace(os.path.join(old, n), os.path.join(rd, n))
-        except OSError:
-            pass
+def load_runtime(ws):
+    """워크스페이스 런타임 {server, runtime_id} 또는 None (P491)."""
+    r = read_json(os.path.join(ws_dir(ws), "runtime.json"))
+    return r if isinstance(r, dict) and r.get("runtime_id") else None
 
 
-def load_token(ws, root):
-    migrate_legacy(ws, root)
-    c = read_json(os.path.join(root_dir(ws, root), "credentials.json"))
-    return c.get("runtime_token") if c else None
+def load_token(ws, root=None):
+    c = read_json(os.path.join(ws_dir(ws), "credentials.json"))
+    return c.get("runtime_token") if isinstance(c, dict) else None
+
+
+def list_projects(ws):
+    """이 워크스페이스에 연결된 루트 [{project, queue_root}] - root.json과 그 루트의 remote.json이 다 맞는 것만."""
+    out, base = [], os.path.join(ws_dir(ws), "roots")
+    for k in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+        r = read_json(os.path.join(base, k, "root.json"))
+        qr = r.get("queue_root") if isinstance(r, dict) else None
+        c = load_config(qr) if isinstance(qr, str) and qr else None
+        if c and c.get("workspace_id") == ws:
+            out.append({"project": r.get("project"), "queue_root": qr})
+    return out
 
 
 def http(server, method, path, body=None, token=None, timeout=15):
@@ -117,10 +121,17 @@ def http(server, method, path, body=None, token=None, timeout=15):
 class Ctx:
     def __init__(self, root, cfg, token):
         self.root, self.cfg, self.token = root, cfg, token
-        self.server, self.ws, self.runtime_id = cfg["server"], cfg["workspace_id"], cfg["runtime_id"]
+        self.server, self.ws = cfg["server"], cfg["workspace_id"]
+        self.project = cfg.get("project")
+        rt = load_runtime(self.ws)
+        self.runtime_id = rt["runtime_id"] if rt else cfg["runtime_id"]  # 정본은 runtime.json
 
     def call(self, method, path, body=None):
         return http(self.server, method, path, body, self.token)
+
+    def q(self):
+        """루트별 호출의 project 쿼리 조각 (P491)."""
+        return "&project=" + urllib.parse.quote(str(self.project), safe="") if self.project else ""
 
 
 
@@ -169,7 +180,8 @@ def ontology_push(ctx):
             changes.append({"path": p, "sha256": sha_of(data), "content": data.decode("utf-8", "replace")})
         else:
             changes.append({"path": p, "deleted": True})
-    st, _ = ctx.call("PUT", "objects", {"changes": changes})
+    st, _ = ctx.call("PUT", "objects" + ("?project=" + urllib.parse.quote(str(ctx.project), safe="") if ctx.project else ""),
+                     {"changes": changes})
     if st not in (200, 204):
         log("objects HTTP %s" % st)
         return
@@ -242,7 +254,7 @@ def apply_write(ont, w):
 
 
 def apply_writes(ctx):
-    st, r = ctx.call("GET", "writes?runtime_id=" + str(ctx.runtime_id))
+    st, r = ctx.call("GET", "writes?runtime_id=" + urllib.parse.quote(str(ctx.runtime_id), safe="") + ctx.q())
     if st != 200 or not r:
         return
     ont = ont_root(ctx.root)
@@ -386,7 +398,10 @@ def claim_jobs(ctx):
     tools = claim_tools(ctx.ws)
     if not tools:
         return  # 로그인 점검을 통과한 도구가 없으면 작업을 안 잡는다
-    st, r = ctx.call("POST", "jobs/claim", {"runtime_id": ctx.runtime_id, "tools": tools, "max": free})
+    body = {"runtime_id": ctx.runtime_id, "tools": tools, "max": free}
+    if ctx.project:
+        body["project"] = ctx.project
+    st, r = ctx.call("POST", "jobs/claim", body)
     if st != 200 or not r:
         log("claim HTTP %s" % st)
         return
@@ -485,7 +500,10 @@ def cmd_sync(root):
     if not take_lock(lock):
         return 0
     try:
-        migrate_legacy(cfg["workspace_id"], root)
+        try:
+            merge_legacy(cfg["workspace_id"])
+        except (OSError, Unauthorized) as e:
+            log("merge %s: %s" % (type(e).__name__, e))
         stamp = os.path.join(root_dir(cfg["workspace_id"], root), "last-sync")
         try:
             if time.time() - os.stat(stamp).st_mtime < SYNC_INTERVAL:
@@ -495,7 +513,7 @@ def cmd_sync(root):
         os.makedirs(os.path.dirname(stamp), exist_ok=True)
         with open(stamp, "w") as f:
             f.write(str(time.time()))
-        token = load_token(cfg["workspace_id"], root)
+        token = load_token(cfg["workspace_id"])
         if not token:
             log("no-credentials")
             return 0
@@ -684,7 +702,7 @@ def bundle_cmd(root, which):
     cfg = load_config(root)
     if not cfg:
         return 0
-    token = load_token(cfg["workspace_id"], root)
+    token = load_token(cfg["workspace_id"])
     if not token:
         log("no-credentials")
         return 0
@@ -827,7 +845,7 @@ def report_questions(ctx):
 
 
 def fetch_answers(ctx):
-    st, r = ctx.call("GET", "answers?runtime_id=" + urllib.parse.quote(str(ctx.runtime_id), safe=""))
+    st, r = ctx.call("GET", "answers?runtime_id=" + urllib.parse.quote(str(ctx.runtime_id), safe="") + ctx.q())
     if st != 200 or not r:
         return
     # 서버가 준 stem은 그 작업 티켓이 실제로 기다리는 stem일 때만 쓴다(경로 이탈 방지)
@@ -1009,10 +1027,31 @@ def workers_payload(root):
              "next_dispatch_at": nxt} for n in names]
 
 
+ERROR_MAX = 500
+
+
+def signal_body(ws, projs=None):
+    entries = []
+    for p in list_projects(ws) if projs is None else projs:
+        e = {"project": p["project"], "workers": workers_payload(p["queue_root"])}
+        try:
+            with open(os.path.join(root_dir(ws, p["queue_root"]), "last-error"), encoding="utf-8") as f:
+                err = one_line(f.read())
+        except OSError:
+            err = ""
+        if err:
+            e["error"] = err.encode("utf-8")[:ERROR_MAX].decode("utf-8", "ignore")
+        entries.append(e)
+    return {"tools": tools_payload(ws, refresh_health(ws)), "projects": entries}
+
+
+def send_signal(server, rid, token, ws, projs=None):
+    st, _ = http(server, "POST", "runtimes/%s/heartbeat" % rid, signal_body(ws, projs), token)
+    return st
+
+
 def step_heartbeat(ctx):
-    health = refresh_health(ctx.ws)
-    ctx.call("POST", "runtimes/%s/heartbeat" % ctx.runtime_id,
-             {"tools": tools_payload(ctx.ws, health), "workers": workers_payload(ctx.root)})
+    send_signal(ctx.server, ctx.runtime_id, ctx.token, ctx.ws)
 
 
 STEPS += [step_heartbeat, claim_jobs, report_status]  # 살아 있음 -> 잡기 -> 상태 올리기
@@ -1061,53 +1100,110 @@ def ensure_worker(root):
     return True
 
 
-def cmd_connect(server, root):
-    server = server.rstrip("/")
-    old = load_config(root)
-    machine = socket.gethostname()
-    project = os.path.basename(os.path.dirname(os.path.abspath(root)))
-    body = {"machine_name": machine}
-    if 1 <= len(project) <= 200:
-        body["project"] = project
-    qr = os.path.realpath(root)
-    if 1 <= len(qr) <= 1000:
-        body["queue_root"] = qr
-    body["tools"] = [str(n) for n in tool_names()][:20]
+def reuse_candidates(server):
+    """같은 서버의 런타임과 토큰이 이미 있는 워크스페이스 id 목록."""
+    home, out = cfg_home(), []
+    for ws in sorted(os.listdir(home)) if os.path.isdir(home) else []:
+        rt = read_json(os.path.join(home, ws, "runtime.json"))
+        if isinstance(rt, dict) and str(rt.get("server", "")).rstrip("/") == server and load_token(ws):
+            out.append(ws)
+    return out
+
+
+def device_login(server, body):
+    """기기 코드 승인을 기다려 (토큰 응답, rc)."""
     st, r = http(server, "POST", "device/code", body)
     if st != 200 or not r:
         print("기기 코드를 받지 못했습니다 (HTTP %s)" % st, file=sys.stderr)
-        return 1
+        return None, 1
     print("코드: %s" % r["user_code"])
     print("다음 주소에서 코드를 승인하세요: %s" % r["verification_uri"], flush=True)
     deadline = time.monotonic() + r.get("expires_in", 600)
-    tok = None
     while time.monotonic() < deadline:
         time.sleep(max(r.get("interval", 5), 0))
         st, t = http(server, "POST", "device/token", {"device_code": r["device_code"]})
         if st == 428:
             continue
         if st == 200 and t:
-            tok = t
-            break
+            return t, 0
         print("승인을 확인하지 못했습니다 (HTTP %s)" % st, file=sys.stderr)
-        return 1
-    if not tok:
-        print("코드가 만료됐습니다", file=sys.stderr)
-        return 1
-    ws, rt = tok["workspace_id"], tok["runtime_token"]
+        return None, 1
+    print("코드가 만료됐습니다", file=sys.stderr)
+    return None, 1
+
+
+def cmd_connect(server, root, workspace=None, new=False):
+    server = server.rstrip("/")
+    old = load_config(root)
+    machine = socket.gethostname()
+    project = os.path.basename(os.path.dirname(os.path.abspath(root)))
+    qr = os.path.realpath(root)
+    ws = None
+    if not new:
+        cands = reuse_candidates(server)
+        if workspace:
+            if workspace not in cands:
+                print("이 컴퓨터에 그 워크스페이스의 연결이 없습니다: %s" % workspace, file=sys.stderr)
+                return 2
+            ws = workspace
+        elif old and old.get("workspace_id") in cands:
+            ws = old["workspace_id"]
+        elif len(cands) == 1:
+            ws = cands[0]
+        elif len(cands) > 1:
+            print("워크스페이스가 둘 이상입니다. --workspace로 고르세요: %s" % ", ".join(cands), file=sys.stderr)
+            return 2
+    reuse = ws is not None
+    if reuse:
+        rt = load_token(ws)
+    else:
+        body = {"machine_name": machine}
+        if 1 <= len(project) <= 200:
+            body["project"] = project
+        if 1 <= len(qr) <= 1000:
+            body["queue_root"] = qr
+        body["tools"] = [str(n) for n in tool_names()][:20]
+        tok, rc = device_login(server, body)
+        if not tok:
+            return rc
+        ws, rt = tok["workspace_id"], tok["runtime_token"]
     if old and old.get("workspace_id") != ws:
         print(ALREADY, file=sys.stderr)
         return 2
-    st, reg = http(server, "POST", "runtimes",
-                   {"machine_name": machine, "project": project,
-                    "tools": tools_payload(ws, refresh_health(ws, force=True))}, rt)
+    others = [p for p in list_projects(ws) if p["queue_root"] != qr]
+    for p in others:
+        if p["project"] == project:
+            print("같은 이름의 프로젝트가 이 워크스페이스에 이미 연결돼 있습니다: %s" % p["queue_root"], file=sys.stderr)
+            return 2
+    projects = others + [{"project": project, "queue_root": qr}]
+    try:
+        st, reg = http(server, "POST", "runtimes",
+                       {"machine_name": machine, "project": project, "projects": projects,
+                        "tools": tools_payload(ws, refresh_health(ws, force=not reuse))}, rt)
+    except Unauthorized:
+        print("저장된 토큰이 거절됐습니다. --new로 다시 연결하세요", file=sys.stderr)
+        return 1
     if st != 200 or not reg:
         print("런타임을 등록하지 못했습니다 (HTTP %s)" % st, file=sys.stderr)
         return 1
-    write_json(os.path.join(root_dir(ws, root), "credentials.json"),
-               {"runtime_token": rt, "root": os.path.realpath(root)}, 0o600)
+    rid = reg["runtime_id"]
+    prev, prev_tok = load_runtime(ws), load_token(ws)
+    write_json(os.path.join(ws_dir(ws), "credentials.json"), {"runtime_token": rt}, 0o600)
+    write_json(os.path.join(ws_dir(ws), "runtime.json"), {"server": server, "runtime_id": rid})
+    write_json(os.path.join(root_dir(ws, root), "root.json"), {"queue_root": qr, "project": project})
     write_json(os.path.join(root, "remote.json"),
-               {"server": server, "workspace_id": ws, "runtime_id": reg["runtime_id"], "project": project})
+               {"server": server, "workspace_id": ws, "runtime_id": rid, "project": project})
+    if prev and prev["runtime_id"] != rid:
+        for p in others:  # remote.json의 runtime_id는 옛 클라이언트용 사본이라 같은 값으로 맞춘다
+            c = load_config(p["queue_root"])
+            write_json(os.path.join(p["queue_root"], "remote.json"), dict(c, runtime_id=rid))
+        if not reuse and prev_tok:
+            try:
+                http(server, "DELETE", "runtimes/" + str(prev["runtime_id"]), None, prev_tok)
+            except (Unauthorized, OSError) as e:
+                log("old-runtime-delete %s" % e)
+    if reuse:
+        print("이미 연결된 워크스페이스 %s에 프로젝트를 더했습니다" % ws)
     if ensure_worker(root):
         print("워커 w1과 크론 두 줄을 만들었습니다")
     print("연결했습니다. 크론 실행을 위해 전체 디스크 접근 권한을 켜 주세요.")
@@ -1120,20 +1216,119 @@ def cmd_disconnect(root):
     if not cfg:
         print("연결돼 있지 않습니다")
         return 0
-    ws = cfg["workspace_id"]
-    token = load_token(ws, root)
-    if token:
-        try:
-            http(cfg["server"], "DELETE", "runtimes/" + str(cfg["runtime_id"]), None, token)
-        except (Unauthorized, OSError) as e:
-            log("disconnect %s" % e)  # 서버에 못 알려도 로컬 연결은 끊는다
+    ws, qr = cfg["workspace_id"], os.path.realpath(root)
+    rt, token = load_runtime(ws), load_token(ws)
+    last = not [p for p in list_projects(ws) if p["queue_root"] != qr]
     try:
         os.unlink(os.path.join(root, "remote.json"))
     except FileNotFoundError:
         pass
     shutil.rmtree(root_dir(ws, root), ignore_errors=True)
+    if last and rt:  # 마지막 루트면 런타임을 해제한다. 아니면 다음 신호의 목록이 이 프로젝트를 뺀다
+        if token:
+            try:
+                http(cfg["server"], "DELETE", "runtimes/" + str(rt["runtime_id"]), None, token)
+            except (Unauthorized, OSError) as e:
+                log("disconnect %s" % e)  # 서버에 못 알려도 로컬 연결은 끊는다
+        for n in ("runtime.json", "credentials.json"):
+            try:
+                os.unlink(os.path.join(ws_dir(ws), n))
+            except FileNotFoundError:
+                pass
     print("연결을 해제했습니다")
     return 0
+
+
+# ---- 옛 배치 합치기 (P491) ----
+
+def merge_legacy(ws):
+    """루트마다 credentials.json(P485) 또는 <ws>/credentials.json만(P485 이전)인 배치를 워크스페이스 런타임 하나로 합친다.
+    runtime.json이 있으면 아무것도 안 한다. 네트워크 오류는 OSError로 올라가고 다음에 다시 시도한다."""
+    wd = ws_dir(ws)
+    if not os.path.isdir(wd) or os.path.exists(os.path.join(wd, "runtime.json")):
+        return
+    lock = os.path.join(wd, ".merge.lock")
+    if not take_lock(lock):
+        return
+    try:
+        if not os.path.exists(os.path.join(wd, "runtime.json")):
+            merge_locked(ws, wd)
+    finally:
+        try:
+            os.rmdir(lock)
+        except OSError:
+            pass
+
+
+def merge_locked(ws, wd):
+    cands = []  # (정렬키, 루트, 토큰, 그 루트의 remote.json)
+    wc = read_json(os.path.join(wd, "credentials.json"))
+    pre485 = isinstance(wc, dict) and bool(wc.get("runtime_token"))
+    if pre485:
+        r = wc.get("root")
+        c = load_config(r) if isinstance(r, str) and r else None
+        if c and c.get("workspace_id") == ws and c.get("runtime_id"):
+            cands.append((0, r, wc["runtime_token"], c))
+    else:
+        base = os.path.join(wd, "roots")
+        for k in sorted(os.listdir(base)) if os.path.isdir(base) else []:
+            cr = read_json(os.path.join(base, k, "credentials.json"))
+            r = cr.get("root") if isinstance(cr, dict) else None
+            c = load_config(r) if isinstance(r, str) and r else None
+            if c and c.get("workspace_id") == ws and c.get("runtime_id") and cr.get("runtime_token"):
+                try:
+                    mt = os.stat(os.path.join(base, k, "last-sync")).st_mtime
+                except OSError:
+                    mt = 0
+                cands.append((mt, r, cr["runtime_token"], c))
+        cands.sort(key=lambda x: -x[0])
+    if not cands:
+        return
+    projs = [{"project": c.get("project"), "queue_root": r} for _, r, _, c in cands]
+    win = None
+    for cand in cands:
+        try:
+            send_signal(cand[3]["server"], cand[3]["runtime_id"], cand[2], ws, projs)
+            win = cand
+            break
+        except Unauthorized:
+            continue
+    if not win:
+        log("unauthorized " + ws)
+        return
+    rid, server = win[3]["runtime_id"], win[3]["server"]
+    write_json(os.path.join(wd, "credentials.json"), {"runtime_token": win[2]}, 0o600)
+    write_json(os.path.join(wd, "runtime.json"), {"server": server, "runtime_id": rid})
+    for _, r, tok, c in cands:
+        if c["runtime_id"] != rid:
+            try:
+                http(c["server"], "DELETE", "runtimes/" + str(c["runtime_id"]), None, tok)
+            except (Unauthorized, OSError) as e:
+                log("merge-delete %s" % e)
+            write_json(os.path.join(r, "remote.json"), dict(c, runtime_id=rid))
+        rd = root_dir(ws, r)
+        try:
+            os.unlink(os.path.join(rd, "credentials.json"))
+        except FileNotFoundError:
+            pass
+        if pre485 and r == win[1]:  # 루트 소유 파일은 그 루트가 가져간다
+            for n in ROOT_FILES:
+                try:
+                    os.makedirs(rd, exist_ok=True)
+                    os.replace(os.path.join(wd, n), os.path.join(rd, n))
+                except OSError:
+                    pass
+        write_json(os.path.join(rd, "root.json"), {"queue_root": r, "project": c.get("project")})
+
+
+def merge_all():
+    """이 컴퓨터의 모든 워크스페이스를 합친다. P491-2의 sync-all이 부른다."""
+    home = cfg_home()
+    for ws in sorted(os.listdir(home)) if os.path.isdir(home) else []:
+        try:
+            merge_legacy(ws)
+        except (OSError, ValueError) as e:
+            log("merge %s: %s" % (ws, e))
 
 
 def main(argv=None):
@@ -1143,6 +1338,8 @@ def main(argv=None):
         p = sub.add_parser(name)
         if name == "connect":
             p.add_argument("server")
+            p.add_argument("--workspace")
+            p.add_argument("--new", action="store_true")
         p.add_argument("--root", default=os.environ.get("TICKET_ROOT"))
     p = sub.add_parser("check-health")
     p.add_argument("--ws", required=True)
@@ -1155,7 +1352,7 @@ def main(argv=None):
         ap.error("--root가 필요합니다")
     root = os.path.abspath(a.root)
     if a.cmd == "connect":
-        return cmd_connect(a.server, root)
+        return cmd_connect(a.server, root, a.workspace, a.new)
     if a.cmd == "disconnect":
         return cmd_disconnect(root)
     if a.cmd in ("persona-install", "schema-install"):

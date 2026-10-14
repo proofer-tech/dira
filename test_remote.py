@@ -12,6 +12,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest import mock
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -92,7 +93,13 @@ class Base:
 
     def cred(self, ws="ws1", root=None):
         key = hashlib.sha256(os.path.realpath(root or self.root).encode()).hexdigest()[:16]
-        return os.path.join(self.home, ".config", "dira", "remote", ws, "roots", key, "credentials.json")
+        return os.path.join(self.home, ".config", "dira", "remote", ws, "roots", key, "root.json")
+
+    def wsdir(self, ws="ws1"):
+        return os.path.join(self.home, ".config", "dira", "remote", ws)
+
+    def wscred(self, ws="ws1"):
+        return os.path.join(self.wsdir(ws), "credentials.json")
 
 
 class T(Base, unittest.TestCase):
@@ -108,9 +115,13 @@ class T(Base, unittest.TestCase):
         cfg = json.load(open(os.path.join(self.root, "remote.json")))
         self.assertEqual(cfg, {"server": self.fake.url, "workspace_id": "ws1",
                                "runtime_id": "rt1", "project": "proj"})
-        self.assertEqual(stat.S_IMODE(os.stat(self.cred()).st_mode), 0o600)
+        self.assertEqual(stat.S_IMODE(os.stat(self.wscred()).st_mode), 0o600)
+        self.assertEqual(json.load(open(self.wscred())), {"runtime_token": "tok-ws1"})
+        self.assertEqual(json.load(open(os.path.join(self.wsdir(), "runtime.json"))),
+                         {"server": self.fake.url, "runtime_id": "rt1"})
         self.assertEqual(json.load(open(self.cred())),
-                         {"runtime_token": "tok-ws1", "root": os.path.realpath(self.root)})
+                         {"queue_root": os.path.realpath(self.root), "project": "proj"})
+        self.assertFalse(os.path.exists(os.path.join(os.path.dirname(self.cred()), "credentials.json")))
         self.assertNotIn("tok-ws1", open(os.path.join(self.root, "remote.json")).read())
         self.assertTrue(os.access(os.path.join(self.root, "workers", "w1.sh"), os.X_OK))
         self.assertEqual(len([l for l in open(self.cron) if l.strip()]), 2)
@@ -133,7 +144,7 @@ class T(Base, unittest.TestCase):
     def test_other_workspace_rejected(self):
         self.connect()
         self.fake.workspace, self.fake.token_polls = "ws2", 0
-        r = self.connect()
+        r = self.run_remote("connect", self.fake.url, "--root", self.root, "--new")
         self.assertEqual(r.returncode, 2)
         self.assertIn("이 프로젝트는 이미 다른 워크스페이스에 연결돼 있습니다", r.stderr)
         self.assertEqual(json.load(open(os.path.join(self.root, "remote.json")))["workspace_id"], "ws1")
@@ -146,6 +157,7 @@ class T(Base, unittest.TestCase):
         self.assertIn(("DELETE", "runtimes/rt1", None, "Bearer tok-ws1"), self.fake.calls)
         self.assertFalse(os.path.exists(os.path.join(self.root, "remote.json")))
         self.assertFalse(os.path.exists(self.cred()))
+        self.assertFalse(os.path.exists(self.wscred()))
 
     def second_root(self):
         r2 = os.path.join(self.tmp.name, "proj2", ".dira")
@@ -163,36 +175,19 @@ class T(Base, unittest.TestCase):
     def test_two_roots_same_workspace_isolated(self):
         r2 = self.second_root()
         self.connect()
-        self.fake.routes[("POST", "device/token")] = (200, {"workspace_id": "ws1", "runtime_token": "tok-2"})
-        self.assertEqual(self.run_remote("connect", self.fake.url, "--root", r2).returncode, 0)
+        r = self.run_remote("connect", self.fake.url, "--root", r2)
+        self.assertEqual(r.returncode, 0, r.stderr)
         self.assertNotEqual(self.cred(), self.cred(root=r2))
-        self.assertEqual(json.load(open(self.cred()))["runtime_token"], "tok-ws1")
-        self.assertEqual(json.load(open(self.cred(root=r2)))["runtime_token"], "tok-2")
         stamp1 = os.path.join(os.path.dirname(self.cred()), "last-sync")
         self.run_remote("sync", "--root", self.root)
         self.assertTrue(os.path.exists(stamp1))
         self.assertFalse(os.path.exists(os.path.join(os.path.dirname(self.cred(root=r2)), "last-sync")))
         self.assertTrue(self.run_remote("sync", "--root", r2).returncode == 0)
         self.assertTrue(os.path.exists(os.path.join(os.path.dirname(self.cred(root=r2)), "last-sync")))
-        # disconnect는 그 루트 디렉터리만 지운다
         self.assertEqual(self.run_remote("disconnect", "--root", r2).returncode, 0)
         self.assertFalse(os.path.exists(os.path.dirname(self.cred(root=r2))))
         self.assertTrue(os.path.exists(self.cred()))
-        self.assertTrue(os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(self.cred()))), "health.json")))
-
-    def test_legacy_layout_migrates_on_sync(self):
-        self.connect()
-        new = os.path.dirname(self.cred())
-        old = os.path.dirname(os.path.dirname(os.path.dirname(self.cred())))
-        for n in os.listdir(new):
-            os.replace(os.path.join(new, n), os.path.join(old, n))
-        os.rmdir(new)
-        open(os.path.join(old, "manifest.json"), "w").write("{}")
-        self.assertEqual(self.run_remote("sync", "--root", self.root).returncode, 0)
-        self.assertEqual(json.load(open(self.cred()))["runtime_token"], "tok-ws1")
-        self.assertTrue(os.path.exists(os.path.join(new, "manifest.json")))
-        self.assertFalse(os.path.exists(os.path.join(old, "credentials.json")))
-        self.assertFalse(os.path.exists(os.path.join(old, "manifest.json")))
+        self.assertTrue(os.path.exists(os.path.join(self.wsdir(), "health.json")))
 
     def test_sync_interval_and_lock(self):
         self.connect()
@@ -399,7 +394,7 @@ class T(Base, unittest.TestCase):
         self.assertNotIn("질문 1", qs[0]["markdown"])
         self.assertIn("awaiting", [e["step"] for e in self.events()])
         ans = {"job_id": "J1", "stem": "abcd1234", "markdown": "(a)로 가세요"}
-        self.fake.routes[("GET", "answers?runtime_id=rt1")] = (200, {"answers": [ans]})
+        self.fake.routes[("GET", "answers?runtime_id=rt1&project=proj")] = (200, {"answers": [ans]})
         self.sync()
         text = open(os.path.join(tdir, "abcd1234.done.md")).read()
         self.assertTrue(text.startswith("---\nkind: answer\nticket: abcd1234\n---\n"))
@@ -412,7 +407,7 @@ class T(Base, unittest.TestCase):
         tdir, h, p = self.wip_job("awaiting: abcd1234")
         bad = [{"job_id": "J1", "stem": "../evil", "markdown": "x"},
                {"job_id": "J1", "stem": "ffffffff", "markdown": "x"}]
-        self.fake.routes[("GET", "answers?runtime_id=rt1")] = (200, {"answers": bad})
+        self.fake.routes[("GET", "answers?runtime_id=rt1&project=proj")] = (200, {"answers": bad})
         self.sync()
         self.assertEqual([n for n in os.listdir(tdir) if "answer" in n or n.startswith("ffff")], [])
         self.assertFalse(os.path.exists(os.path.join(self.root, "evil.done.md")))
@@ -567,7 +562,7 @@ class Tools(Base, unittest.TestCase):
     def test_heartbeat_workers(self):
         self.connect()
         self.run_remote("sync", "--root", self.root)
-        w = {x["name"]: x for x in self.hb()["workers"]}
+        w = {x["name"]: x for x in self.hb()["projects"][0]["workers"]}
         self.assertEqual(w["w2"]["busy"], "abcd1234")
         self.assertIsNone(w["w1"]["busy"])
         import datetime
@@ -640,7 +635,7 @@ class Tools(Base, unittest.TestCase):
         self.ont = os.path.join(self.root, "ontology")
         os.makedirs(os.path.join(self.ont, "objects", "t"))
         self.puts = []
-        self.fake.routes[("PUT", "objects")] = lambda b: (self.puts.append(b) or (204, None))
+        self.fake.routes[("PUT", "objects?project=proj")] = lambda b: (self.puts.append(b) or (204, None))
         self.stamp = os.path.join(os.path.dirname(self.cred()), "last-sync")
 
     def osync(self):
@@ -670,7 +665,7 @@ class Tools(Base, unittest.TestCase):
 
     def write_op(self, writes):
         self.posts = {}
-        self.fake.routes[("GET", "writes?runtime_id=rt1")] = (200, {"writes": writes})
+        self.fake.routes[("GET", "writes?runtime_id=rt1&project=proj")] = (200, {"writes": writes})
         for w in writes:
             self.fake.routes[("POST", "writes/" + w["op_id"])] = \
                 (lambda b, o=w["op_id"]: (self.posts.__setitem__(o, b) or (204, None)))
@@ -719,13 +714,13 @@ class Tools(Base, unittest.TestCase):
         # 새 프로젝트: objects/-versions/ 가 아예 없다. 한글 op_id 는 quote 해서 보고한다
         self.connect()
         self.ont = os.path.join(self.root, "ontology")
-        self.fake.routes[("PUT", "objects")] = (204, None)
+        self.fake.routes[("PUT", "objects?project=proj")] = (204, None)
         self.stamp = os.path.join(os.path.dirname(self.cred()), "last-sync")
         import urllib.parse
         ws = [{"op_id": "글감-1", "path": "objects/글감/a1-첫글.md", "base_sha256": None, "content": "본"},
               {"op_id": "판-1", "path": "versions/글감/a1-첫글/1.md", "base_sha256": None, "content": "지난"}]
         self.posts = {}
-        self.fake.routes[("GET", "writes?runtime_id=rt1")] = (200, {"writes": ws})
+        self.fake.routes[("GET", "writes?runtime_id=rt1&project=proj")] = (200, {"writes": ws})
         for w in ws:
             self.fake.routes[("POST", "writes/" + urllib.parse.quote(w["op_id"], safe=""))] = \
                 (lambda b, o=w["op_id"]: (self.posts.__setitem__(o, b) or (204, None)))
@@ -833,6 +828,181 @@ class Tools(Base, unittest.TestCase):
         self.serve("schema/bundle", dict(self.SCHEMA, files={"../../evil.md": "x"}))
         self.assertEqual(self.run_remote("schema-install", "--root", self.root).returncode, 1)
         self.assertFalse(os.path.exists(ont))
+
+
+class WorkspaceRuntime(Base, unittest.TestCase):
+    """P491-1: 런타임은 (컴퓨터, 워크스페이스)마다 하나다."""
+
+    def setUp(self):
+        super().setUp()
+        spec = importlib.util.spec_from_file_location("remote", os.path.join(HERE, "remote.py"))
+        self.m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.m)
+        self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = (200, {"ok": True})
+
+    def new_root(self, name):
+        r = os.path.join(self.tmp.name, name, ".dira")
+        os.makedirs(os.path.join(r, "tickets"))
+        return r
+
+    def conn(self, root, *extra):
+        return self.run_remote("connect", self.fake.url, "--root", root, *extra)
+
+    def calls(self, method, path):
+        return [c for c in self.fake.calls if c[0] == method and c[1] == path]
+
+    def test_second_root_reuses_token(self):
+        b = self.new_root("proj2")
+        self.assertEqual(self.conn(self.root).returncode, 0)
+        r = self.conn(b)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue(r.stdout.startswith("이미 연결된 워크스페이스 ws1에"), r.stdout)
+        self.assertEqual(len(self.calls("POST", "device/code")), 1)
+        self.assertEqual(os.listdir(self.wsdir()).count("credentials.json"), 1)
+        reg = self.calls("POST", "runtimes")[-1]
+        self.assertEqual([p["project"] for p in reg[2]["projects"]], ["proj", "proj2"])
+        self.assertEqual(reg[2]["project"], "proj2")
+        self.assertEqual(reg[3], "Bearer tok-ws1")
+
+    def test_conflicts_and_choice(self):
+        self.assertEqual(self.conn(self.root).returncode, 0)
+        dup = self.new_root(os.path.join("x", "proj"))
+        r = self.conn(dup)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("같은 이름의 프로젝트가 이 워크스페이스에 이미 연결돼 있습니다: " + os.path.realpath(self.root), r.stderr)
+        self.assertFalse(os.path.exists(os.path.join(dup, "remote.json")))
+        # 워크스페이스가 둘이면 --workspace 없이는 rc 2
+        c = self.new_root("c")
+        self.fake.workspace, self.fake.token_polls = "ws2", 0
+        self.fake.routes[("POST", "runtimes")] = (200, {"runtime_id": "rt2"})
+        self.assertEqual(self.conn(c, "--new").returncode, 0)
+        d = self.new_root("d")
+        r = self.conn(d)
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("ws1", r.stderr)
+        self.assertIn("ws2", r.stderr)
+        self.assertEqual(len(self.calls("POST", "device/code")), 2)
+        self.assertEqual(self.conn(d, "--workspace", "ws1").returncode, 0)
+        self.assertEqual(json.load(open(os.path.join(d, "remote.json")))["workspace_id"], "ws1")
+
+    def test_new_deletes_old_runtime_after_register(self):
+        self.assertEqual(self.conn(self.root).returncode, 0)
+        b = self.new_root("proj2")
+        self.fake.token_polls = 0
+        self.fake.routes[("POST", "runtimes")] = (200, {"runtime_id": "rt9"})
+        self.assertEqual(self.conn(b, "--new").returncode, 0)
+        dels = self.calls("DELETE", "runtimes/rt1")
+        self.assertEqual(len(dels), 1)
+        self.assertEqual(json.load(open(os.path.join(self.wsdir(), "runtime.json")))["runtime_id"], "rt9")
+        self.assertEqual(json.load(open(os.path.join(self.root, "remote.json")))["runtime_id"], "rt9")
+        self.assertEqual(len(self.calls("POST", "runtimes")), 2)
+        self.assertLess(self.fake.calls.index(self.calls("POST", "runtimes")[-1]), self.fake.calls.index(dels[0]))
+
+    def test_signal_and_per_root_calls(self):
+        eng = os.path.join(self.home, ".config", "dira", "bin", "engines")
+        os.makedirs(eng)
+        open(os.path.join(eng, "claude"), "w").write("#!/bin/sh\necho 1.0\n")
+        os.chmod(os.path.join(eng, "claude"), 0o755)
+        b = self.new_root("pro j2")
+        self.fake.routes[("POST", "jobs/claim")] = (200, {"jobs": []})
+        self.assertEqual(self.conn(self.root).returncode, 0)
+        self.assertEqual(self.conn(b).returncode, 0)
+        err = os.path.join(os.path.dirname(self.cred(root=b)), "last-error")
+        open(err, "w").write("boom\n" + "x" * 900)
+        for r in (self.root, b):
+            os.makedirs(os.path.join(r, "ontology", "objects", "t"))
+            open(os.path.join(r, "ontology", "objects", "t", "o.md"), "w").write("a")
+            self.assertEqual(self.run_remote("sync", "--root", r).returncode, 0)
+        hb = self.calls("POST", "runtimes/rt1/heartbeat")[-1][2]
+        self.assertEqual(set(hb), {"tools", "projects"})
+        byname = {p["project"]: p for p in hb["projects"]}
+        self.assertEqual(set(byname), {"proj", "pro j2"})
+        self.assertNotIn("error", byname["proj"])
+        self.assertTrue(byname["pro j2"]["error"].startswith("boom xxx"))
+        self.assertLessEqual(len(byname["pro j2"]["error"]), 500)
+        self.assertIn("workers", byname["proj"])
+        claims = [c[2]["project"] for c in self.calls("POST", "jobs/claim")]
+        self.assertEqual(claims, ["proj", "pro j2"])
+        paths = [c[1] for c in self.fake.calls]
+        for p in ("proj", "pro%20j2"):
+            for base in ("objects?project=", "writes?runtime_id=rt1&project=", "answers?runtime_id=rt1&project="):
+                self.assertIn(base + p, paths)
+
+    def test_disconnect_last_root_releases_runtime(self):
+        b = self.new_root("proj2")
+        self.conn(self.root)
+        self.conn(b)
+        self.assertEqual(self.run_remote("disconnect", "--root", b).returncode, 0)
+        self.assertEqual(self.calls("DELETE", "runtimes/rt1"), [])
+        self.assertTrue(os.path.exists(self.cred()))
+        self.assertTrue(os.path.exists(os.path.join(self.root, "remote.json")))
+        self.assertEqual([p["project"] for p in self.m_list()], ["proj"])
+        self.assertEqual(self.run_remote("disconnect", "--root", self.root).returncode, 0)
+        self.assertEqual(len(self.calls("DELETE", "runtimes/rt1")), 1)
+        self.assertFalse(os.path.exists(os.path.join(self.wsdir(), "runtime.json")))
+        self.assertFalse(os.path.exists(self.wscred()))
+
+    def m_list(self):
+        with mock.patch.dict(os.environ, {"HOME": self.home}):
+            return self.m.list_projects("ws1")
+
+    # ---- 옛 배치 합치기 ----
+
+    def legacy_root(self, name, rid, tok, age, p485=True):
+        r = self.new_root(name)
+        json.dump({"server": self.fake.url, "workspace_id": "ws1", "runtime_id": rid, "project": name},
+                  open(os.path.join(r, "remote.json"), "w"))
+        rd = os.path.join(self.wsdir(), "roots", hashlib.sha256(os.path.realpath(r).encode()).hexdigest()[:16])
+        os.makedirs(rd)
+        json.dump({"runtime_token": tok, "root": os.path.realpath(r)}, open(os.path.join(rd, "credentials.json"), "w"))
+        open(os.path.join(rd, "last-sync"), "w").write("1")
+        os.utime(os.path.join(rd, "last-sync"), (age, age))
+        return r
+
+    def merge(self):
+        with mock.patch.dict(os.environ, {"HOME": self.home}):
+            self.m.merge_all()
+
+    def test_merge_p485_layout(self):
+        a = self.legacy_root("pa", "rtA", "tok-A", 2000)
+        b = self.legacy_root("pb", "rtB", "tok-B", 1000)
+        self.fake.routes[("POST", "runtimes/rtA/heartbeat")] = (401, None)
+        self.fake.routes[("POST", "runtimes/rtB/heartbeat")] = (200, {"ok": True})
+        self.fake.routes[("DELETE", "runtimes/rtA")] = (204, None)
+        self.merge()
+        self.assertEqual(json.load(open(os.path.join(self.wsdir(), "runtime.json")))["runtime_id"], "rtB")
+        self.assertEqual(json.load(open(self.wscred())), {"runtime_token": "tok-B"})
+        dels = self.calls("DELETE", "runtimes/rtA")
+        self.assertEqual(len(dels), 1)
+        self.assertEqual(dels[0][3], "Bearer tok-A")
+        for r in (a, b):
+            self.assertEqual(json.load(open(os.path.join(r, "remote.json")))["runtime_id"], "rtB")
+        self.assertEqual(sorted(p["project"] for p in self.m_list()), ["pa", "pb"])
+        self.assertEqual(self.calls("DELETE", "runtimes/rtB"), [])
+        n = len(self.fake.calls)
+        self.merge()
+        self.assertEqual(len(self.fake.calls), n)
+
+    def test_merge_all_unauthorized_changes_nothing(self):
+        self.legacy_root("pa", "rtA", "tok-A", 2000)
+        self.fake.routes[("POST", "runtimes/rtA/heartbeat")] = (401, None)
+        self.merge()
+        self.assertFalse(os.path.exists(os.path.join(self.wsdir(), "runtime.json")))
+        self.assertEqual(self.m_list(), [])
+
+    def test_merge_pre_p485_layout(self):
+        r = self.new_root("pa")
+        json.dump({"server": self.fake.url, "workspace_id": "ws1", "runtime_id": "rt1", "project": "pa"},
+                  open(os.path.join(r, "remote.json"), "w"))
+        os.makedirs(self.wsdir())
+        json.dump({"runtime_token": "tok-old", "root": os.path.realpath(r)}, open(self.wscred(), "w"))
+        open(os.path.join(self.wsdir(), "manifest.json"), "w").write("{}")
+        self.merge()
+        self.assertEqual(json.load(open(os.path.join(self.wsdir(), "runtime.json")))["runtime_id"], "rt1")
+        self.assertEqual(json.load(open(self.wscred())), {"runtime_token": "tok-old"})
+        self.assertEqual([p["project"] for p in self.m_list()], ["pa"])
+        self.assertTrue(os.path.exists(os.path.join(os.path.dirname(self.cred(root=r)), "manifest.json")))
+        self.assertFalse(os.path.exists(os.path.join(self.wsdir(), "manifest.json")))
 
 
 if __name__ == "__main__":
