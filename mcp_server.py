@@ -14,6 +14,7 @@ import json
 import os
 import secrets
 import sys
+import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -118,6 +119,14 @@ def make_handler(token):
     return H
 
 
+class Server(ThreadingHTTPServer):
+    # HTTPServer.server_bind는 socket.getfqdn(host)로 역방향 DNS를 조회한다. macOS 러너에서 35초가
+    # 걸려 keepalive.sh의 10초 대기를 넘겼다(CI 2026-10-11~14). 이름은 안 쓰니 조회하지 않는다.
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
+
+
 def serve_http(addr):
     host, _, port = addr.rpartition(":")
     if host != "127.0.0.1" or not port.isdigit():
@@ -125,7 +134,7 @@ def serve_http(addr):
     token = os.environ.get("DIRA_MCP_TOKEN")
     made = not token
     token = token or secrets.token_hex(32)
-    srv = ThreadingHTTPServer((host, int(port)), make_handler(token))
+    srv = Server((host, int(port)), make_handler(token))
     ready = {"url": "http://127.0.0.1:%d/mcp" % srv.server_port, "port": srv.server_port}
     if made:
         ready["token"] = token
