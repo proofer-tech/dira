@@ -128,7 +128,33 @@ def t_ticket_create(a):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n" + body.rstrip("\n") + "\n")
-    return {"hash": h, "path": path}
+    res = {"hash": h, "path": path}
+    if str(fm.get("kind", "")).strip() == "request":
+        try:  # 즉시 디스패치는 최적화다(P489 결정 3). 실패해도 티켓 생성은 성공이다
+            res["dispatch"] = dispatch_run(root, "request", hash=h)
+        except ToolError as e:
+            res["dispatch"] = {"go": False, "worker": None, "hash": h, "reason": "request", "why": str(e)}
+    return res
+
+
+def dispatch_run(root, reason, hash=None, worker=None):
+    """dispatch.py run의 한 줄 JSON. rc 1(안 띄움)은 정상 응답이다."""
+    argv = [sys.executable, os.path.join(ENGINE_DIR, "dispatch.py"), "run", root, "--reason", reason]
+    if hash:
+        argv += ["--hash", str(hash)]
+    if worker:
+        if not isinstance(worker, str) or not WORKER_RE.match(worker):
+            raise ToolError("worker 이름이 올바르지 않습니다")
+        argv += ["--worker", worker]
+    r = run(argv, root)
+    try:
+        return json.loads(r["stdout"])
+    except ValueError:
+        raise ToolError("dispatch.py 실패(rc=%s): %s" % (r["rc"], r["stderr"].strip()[:200]))
+
+
+def t_dispatch_now(a):
+    return dispatch_run(get_root(a), "direct", a.get("hash"), a.get("worker"))
 
 
 def t_ticket_read(a):
@@ -326,6 +352,8 @@ TOOLS = {
     "projects": ("GUI에 등록된 프로젝트와 큐 루트 목록", {"type": "object", "properties": {}}, t_projects),
     "queue_list": ("열린 티켓 목록(<w>.sh list)", _s("", W), t_queue_list),
     "dispatch": ("워커를 1회 돌린다(<w>.sh)", _s("", W, ["worker"]), lambda a: worker_cmd(a)),
+    "dispatch_now": ("지금 워커를 띄운다(dispatch.py run --reason direct). 해시가 있으면 그 티켓을 지목. "
+                     "{go, worker, hash, reason, why}", _s("", {**H, **W}), t_dispatch_now),
     "dryrun": ("실행 없이 선정 결과만(<w>.sh dryrun)", _s("", W), lambda a: worker_cmd(a, "dryrun")),
     "reap": ("스테일 티켓 회수(<w>.sh reap)", _s("", W), lambda a: worker_cmd(a, "reap")),
     "unassign": ("티켓 할당 풀기", _s("", {**H, **W, "force": BOOL}, ["hash"]), t_unassign),
@@ -371,6 +399,7 @@ COVERS = {
                    "pollstart": _X, "pollplan": _X, "pollresult": _X, "clear": _X},
     "tick.sh": {"list": "queue_list", "unassign": "unassign", "reap": "reap", "poll": _X, "preempt": _X,
                 "dryrun": "dryrun", "tick": "dispatch"},
+    "dispatch.py": {"run": "dispatch_now"},
     "graph.py": {"build": _X, "query": "graph_query", "path": _X, "explain": _X},
     "dira_env.py": {"list": "env_list", "create": "env_create", "replace": "env_replace",
                     "delete": "env_delete", "run": _X, "context": _X},

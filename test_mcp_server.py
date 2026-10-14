@@ -36,7 +36,7 @@ assert len(out) == 2, out
 names = {t["name"] for t in out[1]["result"]["tools"]}
 NEED = {"projects", "queue_list", "dispatch", "dryrun", "reap", "unassign", "ticket_find", "ticket_read",
         "ticket_create", "ticket_append", "ticket_done", "interject", "graph_query", "env_list", "env_create",
-        "env_replace", "env_delete", "engine_exec"}
+        "env_replace", "env_delete", "engine_exec", "dispatch_now"}
 assert NEED <= names, NEED - names
 assert rpc([{"jsonrpc": "2.0", "id": 3, "method": "zzz"}])[0]["error"]["code"] == -32601
 
@@ -82,6 +82,26 @@ assert not os.path.exists(marker)
 for r in (call("env_create", name="FOO", value=SECRET), call("env_list"),
           call("env_replace", name="FOO", value=SECRET, revision=1)):
     assert SECRET not in json.dumps(r, ensure_ascii=False), r
+
+# 4b. dispatch_now와 요구 즉시 디스패치: 가짜 crontab + 워커 파일, 부하 상한은 크게
+os.makedirs(os.path.join(tmp, "local"), exist_ok=True)
+json.dump({"load_max": 1e9}, open(os.path.join(tmp, "local", "dispatch.json"), "w"))
+worker = os.path.join(os.path.realpath(root), "workers", "w1.sh")
+open(worker, "w").write('echo "$@" > "%s/ran"\n' % tmp)
+os.makedirs(os.path.join(tmp, "bin"))
+cron = os.path.join(tmp, "bin", "crontab")
+open(cron, "w").write("#!/bin/sh\necho '* * * * * %s'\n" % worker)
+os.chmod(cron, 0o755)
+env["PATH"] = os.path.join(tmp, "bin") + os.pathsep + env["PATH"]
+mk = {"title": "t", "kind": "work", "persona": "developer"}
+call("ticket_create", hash="d1d1d1d1", fm=mk, body="## Goal\nx")
+res, err = call("dispatch_now", hash="d1d1d1d1")
+assert not err and res["go"] is True and res["worker"] == "w1", res
+res, err = call("ticket_create", hash="e2e2e2e2", fm=mk, body="## Goal\nx")
+assert not err and "dispatch" not in res, res
+res, err = call("ticket_create", hash="f3f3f3f3", fm={**mk, "kind": "request"}, body="## Goal\nx")
+assert not err and "dispatch" in res and res["dispatch"]["reason"] == "request", res
+assert call("dispatch_now", worker="../x")[1], "worker 이름 검증"
 
 # 5. HTTP
 srv = subprocess.Popen([sys.executable, SERVER, "--http", "127.0.0.1:0"], stdout=subprocess.PIPE, text=True,
