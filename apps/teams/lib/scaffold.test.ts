@@ -44,6 +44,7 @@ const SET = [
   ".dira/protocols/CORE.md",
   ".dira/protocols/CORE-TICKETS.md",
   ".dira/protocols/CORE-MEMORY.md",
+  ".dira/protocols/CORE-DISPATCH.md",
   ".dira/personas/pm/PROFILE.md",
   ".dira/personas/developer/PROFILE.md",
   ".dira/personas/qa/PROFILE.md",
@@ -353,7 +354,7 @@ test("scaffold — 데스크톱 extraResources만으로 만든 가짜 엔진에�
 
   const project = path.join(dir, "myproject");
   const result = await scaffold(project, { branch: "main" });
-  for (const name of ["CORE.md", "CORE-TICKETS.md", "CORE-MEMORY.md"]) {
+  for (const name of ["CORE.md", "CORE-TICKETS.md", "CORE-MEMORY.md", "CORE-DISPATCH.md"]) {
     assert.ok(result.written.includes(path.join(".dira/protocols", name)), `${name}이 안 만들어졌다`);
     await stat(path.join(project, ".dira/protocols", name));
   }

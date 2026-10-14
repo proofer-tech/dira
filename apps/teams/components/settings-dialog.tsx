@@ -100,6 +100,7 @@ import type { Locale } from "@/lib/i18n";
 import type { AutonomyLevel } from "@/lib/projects";
 import { VercelEnvLine } from "@/components/vercel-env-line";
 import { codeAfterList, rowMarkKey, type EnvErrorCode, type EnvItem, type VercelMeta, type VercelOnlyItem } from "@/lib/project-env";
+import { saveFailure } from "@/lib/selfish-mode";
 import { DEFAULT_KEYMAP, MODIFIER_KEYS, actionName, formatCombo, type ActionId } from "@/lib/keymap";
 import { wrap } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -943,7 +944,8 @@ function SelfishModeSection() {
         cap: capN,
         exclude: exclude.split("\n").map((x) => x.trim()).filter(Boolean),
       });
-      setMsg(r.ok ? k("saved") : k("permission"));
+      const fail = r.ok ? null : saveFailure(r.error);
+      setMsg(!fail ? k("saved") : fail.kind === "invalid" ? fmt(k("invalid"), { reason: fail.reason }) : k("permission"));
       load();
     });
 

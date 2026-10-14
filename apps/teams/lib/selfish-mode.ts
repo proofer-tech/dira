@@ -154,3 +154,11 @@ export function projectLine(p: SelfishReport["per_project"][number]): string {
   const ratio = p.dispatch ? Math.round((p.stall / p.dispatch) * 100) : 0;
   return `${p.project}: 디스패치 ${p.dispatch}, 완료 ${p.done}, STALL ${p.stall} (${ratio}%), 상한 건너뜀 ${p.cap_skip}, 한도 사망 ${p.limit_reap}, 마지막 디스패치 ${p.last_dispatch ?? "없음"}`;
 }
+
+/** saveSelfishSettings가 입력 검증에서 돌려주는 사유. 이 밖의 실패는 System Events 호출 거절(권한)이다. */
+export const SAVE_INVALID = ["invalid schedule", "invalid cap", "invalid exclude"];
+
+/** 저장 실패를 권한 안내로 띄울지 가른다. 입력 오류면 그 사유를 그대로 보여 준다. */
+export function saveFailure(error: string | undefined): { kind: "invalid"; reason: string } | { kind: "permission" } {
+  return error && SAVE_INVALID.includes(error) ? { kind: "invalid", reason: error } : { kind: "permission" };
+}

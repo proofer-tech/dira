@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import {
-  buildReport, countRunnerLog, DEFAULT_EXCLUDE, filterQuitTargets, judgeSelfish, parseSelfishConfig, projectLine,
+  buildReport, countRunnerLog, DEFAULT_EXCLUDE, filterQuitTargets, judgeSelfish, parseSelfishConfig, projectLine, saveFailure,
 } from "./selfish-mode.ts";
 
 const L = (y: number, mo: number, d: number, h: number, mi = 0, s = 0) => new Date(y, mo - 1, d, h, mi, s).getTime();
@@ -76,4 +76,12 @@ test("보고가 프로젝트마다 한 줄이다", () => {
   ]);
   assert.equal(r.per_project[0]!.dispatch, 1);
   assert.equal(projectLine(r.per_project[0]!), "dira: 디스패치 1, 완료 0, STALL 1 (100%), 상한 건너뜀 0, 한도 사망 0, 마지막 디스패치 2026-10-13 01:00:00");
+});
+
+test("저장 실패: 입력 오류는 사유를 보이고 권한 안내가 아니다", () => {
+  for (const e of ["invalid schedule", "invalid cap", "invalid exclude"]) {
+    assert.deepEqual(saveFailure(e), { kind: "invalid", reason: e });
+  }
+  assert.deepEqual(saveFailure("Not authorized to send Apple events"), { kind: "permission" });
+  assert.deepEqual(saveFailure(undefined), { kind: "permission" });
 });
