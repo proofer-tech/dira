@@ -8938,6 +8938,104 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P489. 공통 디스패치 모듈 - cron과 화면과 MCP와 세션이 같은 창구 하나로 워커를 띄운다 (요구 `6bfd6e45`, 왕복 0회)
+
+사람 요구: *"지금은 cron에 디스패치를 의존하고 있는데요, 특정 조건에서는 특정 티켓을 바로 디스패치해서
+워커 할당할 수 있는 창구를 만들고 dira 판단하에/또는 직접 호출하여 사용할 수 있도록 해주세요. 이걸 공통
+디스패치 모듈로 만들고 기존 cron도 자체 디스패치 로직을 가지는게 아니라 이 모듈을 호출하도록 하여 역할을
+분명히 해주세요."* 조건으로 세 가지를 들었다 - 요구사항을 만들었을 때 부하가 기준 이하이고 쓸 수 있는
+워커가 있고 다른 디스패치 후보가 없을 때, 직접 호출(MCP 등)되었을 때, 그리고 dira가 판단할 때(엔진 기본
+스킬로 탑재)다.
+
+#### 실측 (2026-10-14)
+
+- cron은 워커마다 crontab 두 줄(`workers/<w>.sh`와 `sleep 30; workers/<w>.sh`)을 갖는다. 각 줄이 그 워커의
+  훅을 지나 `tick.sh`를 부르고, `tick.sh`가 후보를 고른다. 어느 워커를 깨울지는 crontab의 줄이 정한다.
+- 화면은 `lib/kick.ts`의 `kickIdleWorker`와 `kickTicket`이 `listWorkers`로 `idle` 첫 하나를 직접 골라
+  `workers/<w>.sh` 또는 `workers/<w>.sh tick <해시>`를 띄운다. 부르는 자리는 `board/actions.ts` 두 곳,
+  `tickets/[hash]/actions.ts` 한 곳, `lib/dispatch.ts`, `lib/self-heal.ts`다.
+- MCP의 `dispatch` 도구는 워커 이름을 받아 `<w>.sh`를 한 번 돌린다. 워커를 고르는 판단은 부르는 쪽에 있다.
+- 머신 부하로 디스패치를 막는 조건은 지금 없다. `tick.sh`는 `load1`을 건강 로그에 적기만 한다.
+
+그래서 "띄울지, 어느 워커로 띄울지"를 판단하는 자리가 crontab, `kick.ts`, MCP 호출자의 세 곳에 흩어져 있다.
+
+#### 결정
+
+1. **판단은 엔진 모듈 `dispatch.py` 하나가 한다.** 엔진 디렉터리(`tick.sh` 옆)에 두고 표준 라이브러리만 쓴다.
+   cron과 화면과 MCP와 세션은 전부 이 모듈을 부르고, 워커를 직접 고르지 않는다.
+2. **역할을 셋으로 나눈다.** crontab은 시계이고, `dispatch.py`는 띄울지와 어느 워커로 띄울지를 정하며,
+   워커 파일과 `tick.sh`는 실행한다. 어느 티켓을 집을지는 지금처럼 `tick.sh`가 정한다(해시가 없으면 큐 맨
+   앞, 있으면 지목 디스패치 §1-5 갈래 B). 워커 파일이 source하는 훅(게이트, 상한)은 워커 쪽 보호막으로 그대로
+   남는다.
+3. **즉시 디스패치는 최적화이고 정확성의 일부가 아니다**(§4-5와 같다). 모듈이 안 띄워도 cron이 30초 안에
+   같은 일을 한다. 그래서 부르는 쪽은 결과로 실패하지 않는다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 명령 | `python3 <엔진>/dispatch.py run <루트> --reason <사유> [--hash <해시>] [--worker <이름 또는 워커 파일 경로>] [--dryrun]` |
+| 사유 | `cron` `request` `direct` `judge` 넷. 그 밖의 값은 사용법 오류 |
+| 출력 | stdout 한 줄 JSON `{"go": true 또는 false, "worker": 이름 또는 null, "hash": 해시 또는 null, "reason": 사유, "why": 문장}` |
+| 종료 코드 | 0 = 띄웠다(`--dryrun`이면 띄울 것이다), 1 = 안 띄웠다, 2 = 사용법 오류 |
+| idle 워커 | `<루트>/workers/*.sh` 중 crontab 본문에 그 파일 경로가 있고, 워커 락 `${TICKET_LOCAL:-~/.config/dira}/run/<이름>-<sha1(<workers 절대경로>/<이름>)[:8]>.lock`이 없는 것(`lib/workers.ts` `lockPath`와 같은 식). 이름 오름차순 첫 하나를 고른다. `--worker`가 있으면 그 워커만 본다 |
+| 부하 | `os.getloadavg()[0]`. 상한은 `~/.config/dira/dispatch.json`의 `load_max`(실수)이고, 파일이나 키가 없으면 `os.cpu_count()`다 |
+| 다른 후보 | `tickets.py select <루트>`가 내는 후보 중 `--hash`가 아닌 것 |
+| 띄우기 | 해시가 없으면 `workers/<w>.sh`, 있으면 `workers/<w>.sh tick <해시>`를 새 세션으로 띄우고 기다리지 않는다. 표준 출력과 오류는 `<루트>/workers/cron.log`에 덧붙인다 |
+| 로그 | `<루트>/workers/runner.log`에 `<날짜> <시각> [dispatch] KICK <사유> <해시 또는 -> <워커>` 또는 `... [dispatch] KICK-SKIP <사유> <해시 또는 -> <why>`. 단 `cron` 사유는 아무것도 안 적는다 - 30초마다 줄이 쌓이고, 도는 큐의 판정은 지금처럼 `tick.sh`의 `DISPATCH` 줄이다(§0-3) |
+| `--dryrun` | 판정과 출력은 같고 띄우기와 로그만 안 한다. 큐를 한 글자도 안 고친다 |
+
+| 사유 | 부르는 자리 | 띄우는 조건 |
+|---|---|---|
+| `cron` | crontab 줄 | `--worker` 필수. 그 워커가 idle이면 띄운다. 부하와 다른 후보는 안 본다 - 지금 cron과 같다. 후보가 없으면 `tick.sh`가 그냥 끝난다 |
+| `request` | 요구(`kind: request`) 티켓을 만든 자리. 화면의 티켓 만들기 액션과 MCP `ticket_create` | `--hash` 필수. 부하가 상한 이하, idle 워커가 있음, 다른 후보 0건, 그 해시가 후보. 넷이 다 맞을 때만 띄운다 |
+| `direct` | MCP `dispatch_now`, 화면의 kick(`kickIdleWorker`, `kickTicket`), 사람의 CLI | 해시가 있으면 그 해시가 후보이고 idle 워커가 있을 때 띄운다. 해시가 없으면 idle 워커만 본다. 부하와 다른 후보는 안 본다 - 사람이나 화면이 "지금"이라고 했기 때문이다 |
+| `judge` | 세션이 엔진 기본 지침(아래)을 따라 부른다 | `request`와 같은 네 조건. `--hash` 필수 |
+
+| 자리 | 바뀌는 것 |
+|---|---|
+| crontab 줄 | `* * * * * python3 "<엔진>/dispatch.py" run "<루트>" --reason cron --worker "<루트>/workers/<w>.sh" >> "<루트>/workers/cron.log" 2>&1`와 `sleep 30;` 짝줄. 워커 파일 경로가 줄에 그대로 들어 있어 `workers.ts`의 "crontab에 이 경로가 있는가" 판정은 안 바뀐다. `<엔진>`은 `lib/`가 이미 `tick.sh`를 찾는 경로 해석을 그대로 쓴다 |
+| 옛 줄 | `workers/<w>.sh`를 직접 부르는 줄도 계속 돈다(호환). 앱이 켜질 때 등록 프로젝트의 옛 줄을 새 형식으로 한 번 바꾼다. 쓰기는 지금 등록 경로(`crontab -`의 stdin)와 같고, 실패하면 옛 줄을 그대로 둔다 |
+| `lib/kick.ts` | 두 함수가 워커를 고르지 않고 `dispatch.py run <루트> --reason direct [--hash <해시>]`를 detach로 띄운다. 던지지 않는 계약은 그대로다. `listWorkers`를 안 부른다 |
+| 화면의 요구 만들기 | 만든 티켓이 `kind: request`면 `--reason request --hash <해시>`, 그 밖은 지금처럼 `direct`(해시 없음) |
+| MCP | 새 도구 `dispatch_now {hash?, worker?}` = `--reason direct`. `ticket_create`가 `kind: request`를 만들면 `--reason request --hash`를 부르고 그 JSON을 응답에 `dispatch` 키로 싣는다. `COVERS`에 `"dispatch.py": {"run": "dispatch_now"}` |
+| 엔진 기본 지침 | 코어 형제 문서 `protocols/CORE-DISPATCH.md`(영문, 코어 결정 7). 언제 `judge`로 부르는가 - 사람이 지금 대화에서 기다리는 티켓을 만들었을 때, 내가 닫는 티켓이 다른 티켓의 `deps`를 풀 때(풀린 해시로), 내가 낸 핸드오프 없이는 내 이어받기가 못 갈 때. 안 부르는 때 - 그 밖의 모든 발행(cron이 30초 안에 집는다). `CORE.md`에는 트리거와 파일명 한 줄만 두고, 더하는 바이트보다 많이 줄여 3,500 B 이하를 지킨다 |
+
+#### 안 하는 것
+
+- 선점(`preempt`)을 모듈로 옮기는 것. 갈래 C는 사람의 확인이 끼는 다른 절차라 `lib/dispatch.ts` 그대로다.
+- 워커 쪽 훅(`dispatch-gate.sh`, `session-cap.sh`, `shell-cap.sh`)을 모듈로 옮기는 것. 이 큐의 훅이고 엔진이 아니다.
+- 부하 상한을 화면에서 고치는 것. 첫 주는 파일로 두고 `KICK-SKIP` 줄을 보고 정한다.
+- crontab을 큐마다 한 줄로 합치는 것. 워커 `stopped` 판정이 워커마다의 줄에 걸려 있어서 판정 전체가 바뀐다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P489-1 | 엔진 - `dispatch.py run`(사유 넷, idle 워커, 부하, 다른 후보, 띄우기, 로그, `--dryrun`) + `test_dispatch.py` | developer | - | 발행 `4f4ceafe` |
+| P489-2 | 앱 - crontab 줄을 새 형식으로(`cronLine`-등록 명령), 앱 기동 시 옛 줄 이주, 이 큐 crontab 교체 + 테스트 | developer | P489-1 | 발행 `d7a171af` |
+| P489-3 | 앱 - `lib/kick.ts`가 모듈을 부르고, 요구를 만든 화면 액션이 `request` 사유를 쓴다 + 테스트 | developer | P489-1 | 발행 `7925ca1c` |
+| P489-4 | 엔진 - MCP `dispatch_now`, `ticket_create`의 `request` 호출, `COVERS` + 테스트 | developer | P489-1 | 발행 `ecb34e23` |
+| P489-5 | 코어 - `protocols/CORE-DISPATCH.md`와 `CORE.md` 트리거 한 줄 | developer | - | 발행 `89511ad4` |
+| P489-6 | 매뉴얼 - `concurrency.md`에 즉시 디스패치 절(사유 넷과 조건, `dispatch.json`, `KICK` 줄 읽는 법), 영문판 같이 | writer | - | 발행 `e4df61c9` |
+| P489-7 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P489-2, P489-3, P489-4, P489-5 | 발행 `6f50bb82` |
+
+P489-2부터 P489-4까지는 P489-1의 명령을 부르므로 그 뒤에 가고, 셋끼리는 서로 기다리지 않는다. 지침과
+매뉴얼은 위 표에 명령과 조건이 다 있어 기다리지 않는다. designer 0장 - 화면이 새로 그리는 것이 없다.
+에픽 `P489`를 연다.
+
+#### 수용조건
+
+- [ ] 열린 후보가 하나뿐이고 idle 워커가 있는 큐에서 `python3 dispatch.py run <루트> --reason request --hash <그 해시> --dryrun`을 돌리면 `"go": true`와 워커 이름이 나오고 rc가 0이며, 큐 파일과 `runner.log`가 안 바뀐다.
+- [ ] 같은 큐에 열린 후보를 하나 더 두고 같은 명령을 `--dryrun` 없이 돌리면 `"go": false`, rc 1이고, `runner.log`에 `KICK-SKIP request <해시>` 줄이 하나 늘고, 워커가 안 뜬다.
+- [ ] `~/.config/dira/dispatch.json`에 `{"load_max": 0}`을 두면 `request`와 `judge`는 `"go": false`(why에 부하)이고, 같은 해시로 `direct`는 `"go": true`다.
+- [ ] 워커 락이 전부 잡혀 있으면 네 사유 모두 `"go": false`이고 rc 1이다.
+- [ ] `--reason bogus`는 rc 2다. `request`나 `judge`에 `--hash`가 없거나 `cron`에 `--worker`가 없어도 rc 2다.
+- [ ] 앱을 다시 켠 뒤 `crontab -l | grep 'Projects/dira/'`의 모든 줄이 `dispatch.py run`과 `--reason cron`과 워커 파일 경로를 담고, 2분 안에 `runner.log`에 새 `DISPATCH` 줄이 생기며, 워커 화면에 `stopped`로 바뀐 워커가 없다.
+- [ ] 큐가 빈 상태에서 화면으로 요구 티켓을 만들면 10초 안에 그 티켓이 `.wip`이 되고 `runner.log`에 `KICK request <해시>` 줄이 있다.
+- [ ] MCP `tools/list`에 `dispatch_now`가 있고, 열린 해시로 부르면 응답 JSON의 `go`가 true이며 그 티켓이 10초 안에 `.wip`이 된다.
+- [ ] `grep -n 'listWorkers' apps/teams/lib/kick.ts`의 출력이 비어 있다.
+- [ ] `wc -c protocols/CORE.md`가 3500 이하이고 `grep -c 'CORE-DISPATCH.md' protocols/CORE.md`가 1 이상이다.
+- [ ] `python3 test_dispatch.py`, `python3 test_mcp_parity.py`, `python3 test_mcp_server.py`, `cd apps/teams && pnpm test`, `pnpm exec tsc --noEmit`이 통과한다.
+
 ### P488. 온톨로지 파일 목록 머리 행 왼쪽에 노드 뷰로 돌아가는 버튼을 둔다 (요구 `e1b8a5fb`, 왕복 0회)
 
 사람 요구: *"온톨로지 파일목록 접기 행 좌측에 노드뷰(노드가연결된 홈 기본 뷰)를 보는 버튼을 추가해주세요"*.
