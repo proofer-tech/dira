@@ -141,8 +141,34 @@ PUSH_MAX = 200
 SUBDIRS = ("objects", "versions")
 
 
+def worker_ontology(root):
+    """워커 스크립트 `TICKET_ONTOLOGY="..."` 첫 줄. 크론의 sync-all에는 환경변수가 없어 스크립트에서 읽는다."""
+    try:
+        names = sorted(os.listdir(os.path.join(root, "workers")))
+    except OSError:
+        return None
+    for n in names:
+        if not n.endswith(".sh"):
+            continue
+        try:
+            with open(os.path.join(root, "workers", n), encoding="utf-8") as f:
+                for line in f.readlines()[:20]:
+                    m = re.match(r"""\s*(?:export\s+)?TICKET_ONTOLOGY=(["']?)(.+?)\1\s*$""", line)
+                    if m and os.path.isdir(m.group(2)):
+                        return m.group(2)
+        except (OSError, UnicodeDecodeError):
+            continue
+    return None
+
+
 def ont_root(root):
-    return os.path.abspath(os.environ.get("TICKET_ONTOLOGY") or os.path.join(root, "ontology"))
+    return os.path.abspath(os.environ.get("TICKET_ONTOLOGY") or worker_ontology(root) or os.path.join(root, "ontology"))
+
+
+def ont_roots(root):
+    """올릴 온톨로지 위치들. 앞이 주(쓰기 기본)이고 큐 안 ontology는 옛 객체 보존용 보조다."""
+    a, b = ont_root(root), os.path.abspath(os.path.join(root, "ontology"))
+    return [a] if a == b else [a, b]
 
 
 def sha_of(data):
@@ -163,11 +189,21 @@ def scan_ontology(ont):
     return out
 
 
+def scan_all(onts):
+    """({상대경로: sha256}, {상대경로: 소유 위치}). 같은 경로면 앞 위치가 이긴다."""
+    now, owner = {}, {}
+    for ont in onts:
+        for p, h in scan_ontology(ont).items():
+            if p not in now:
+                now[p], owner[p] = h, ont
+    return now, owner
+
+
 def ontology_push(ctx):
-    ont = ont_root(ctx.root)
+    onts = ont_roots(ctx.root)
     mpath = os.path.join(root_dir(ctx.ws, ctx.root), "manifest.json")
     old = read_json(mpath) or {}
-    now = scan_ontology(ont)
+    now, owner = scan_all(onts)
     todo = [p for p in sorted(now) if old.get(p) != now[p]] + [p for p in sorted(old) if p not in now]
     todo = todo[:PUSH_MAX]  # ponytail: 한 번에 200건. 남은 것은 다음 sync가 올린다
     if not todo:
@@ -175,7 +211,7 @@ def ontology_push(ctx):
     changes = []
     for p in todo:
         if p in now:
-            with open(os.path.join(ont, p), "rb") as f:
+            with open(os.path.join(owner[p], p), "rb") as f:
                 data = f.read()
             changes.append({"path": p, "sha256": sha_of(data), "content": data.decode("utf-8", "replace")})
         else:
@@ -257,12 +293,14 @@ def apply_writes(ctx):
     st, r = ctx.call("GET", "writes?runtime_id=" + urllib.parse.quote(str(ctx.runtime_id), safe="") + ctx.q())
     if st != 200 or not r:
         return
-    ont = ont_root(ctx.root)
+    onts = ont_roots(ctx.root)
     mpath = os.path.join(root_dir(ctx.ws, ctx.root), "manifest.json")
     for w in r.get("writes", []):
         op = w.get("op_id")
         if not op or "/" in str(op):
             continue
+        # 파일이 있는 위치에 쓴다. 어디에도 없으면 주 위치
+        ont = next((o for o in onts if os.path.lexists(os.path.join(o, str(w.get("path"))))), onts[0])
         result, sha = apply_write(ont, w)
         if result == "applied":
             m = read_json(mpath) or {}
@@ -632,7 +670,7 @@ def install_schema(ctx):
     files, lines = b.get("files"), b.get("schema_lines", [])
     if not isinstance(files, dict) or not isinstance(lines, list):
         raise Rejected("files/schema_lines 형식이 올바르지 않습니다")
-    ont = os.environ.get("TICKET_ONTOLOGY") or os.path.join(ctx.root, "ontology")
+    ont = ont_root(ctx.root)
     base = os.path.join(ont, "_ontology")
     todo, conflicts = [], []
     for rel, body in files.items():

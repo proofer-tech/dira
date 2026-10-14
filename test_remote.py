@@ -667,6 +667,19 @@ class Tools(Base, unittest.TestCase):
         self.osync()
         self.assertEqual(self.puts[3]["changes"], [{"path": "objects/t/o000.md", "deleted": True}])
 
+    def test_push_merges_worker_vault_with_queue_ontology(self):
+        self.ont_setup()
+        vault = os.path.join(self.home, "vault")
+        os.makedirs(os.path.join(vault, "objects", "Meet"))
+        open(os.path.join(vault, "objects", "Meet", "meet-9.md"), "w").write("m9")
+        open(os.path.join(self.ont, "objects", "t", "old.md"), "w").write("old")
+        os.makedirs(os.path.join(self.root, "workers"), exist_ok=True)
+        open(os.path.join(self.root, "workers", "w1.sh"), "w").write('#!/bin/bash\nTICKET_ONTOLOGY="%s"\n' % vault)
+        self.osync()
+        got = sorted(c["path"] for c in self.puts[0]["changes"])
+        self.assertEqual(got, ["objects/Meet/meet-9.md", "objects/t/old.md"])
+        self.assertFalse(any(c.get("deleted") for c in self.puts[0]["changes"]))
+
     def write_op(self, writes):
         self.posts = {}
         self.fake.routes[("GET", "writes?runtime_id=rt1&project=proj")] = (200, {"writes": writes})
