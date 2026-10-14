@@ -1,6 +1,6 @@
 # Remote queue
 
-> As of 2026-10-11 the remote queue (`remote.py` and the `dira remote` command) is still being built.
+> As of 2026-10-14 the remote queue (`remote.py` and the `dira remote` command) is still being built.
 > This chapter describes the finished behavior. If the terminal says `command not found: dira`, your
 > shell cannot find `dira`; see the PATH note under [Connecting](#connecting). If you get
 > `dira remote: 클라이언트가 설치되지 않았습니다` ("the client is not installed"), the remote queue has
@@ -12,6 +12,11 @@ and the ontology originals stay in this computer's queue.
 
 You connect one project at a time. A project you have not connected runs exactly as before. If the
 queue root has no `remote.json`, every remote step does nothing and exits.
+
+The server sees this computer as a runtime. A runtime is one computer paired with one workspace, and
+every project you connect to that workspace attaches to that one runtime. Connect three projects on
+the same computer to the same workspace and the server shows one runtime with three projects under
+it.
 
 ## Connecting
 
@@ -50,15 +55,16 @@ You are ready when `command -v dira` in a new terminal window prints a path endi
 
 After approval the command does four things.
 
-- It writes the credentials to
-  `~/.config/dira/remote/<workspace_id>/roots/<root key>/credentials.json` (mode `0600`) and the
-  connection settings to `remote.json` in the queue root. The root key is a 16-character value
-  computed from the queue root's real path, so each queue root gets its own directory.
-- It registers this computer as a runtime. A runtime is one computer paired with one AI tool, so
-  each tool in `~/.config/dira/bin/engines/` (`claude` `codex` `agy` `grok`) is registered
-  separately, and its login is checked once.
+- It writes the credentials to `~/.config/dira/remote/<workspace_id>/credentials.json` (mode
+  `0600`) and the connection settings to `remote.json` in the queue root. There is one credentials
+  file per workspace.
+- It registers this computer as the workspace's runtime and records the runtime id in
+  `runtime.json` in the same directory. The registration also reports the names and versions of the
+  AI tools in `~/.config/dira/bin/engines/` (`claude` `codex` `agy` `grok`), and each tool's login
+  is checked once.
 - If the queue has no worker, it creates `workers/w1.sh` and adds the
-  [two crontab lines](/docs/cron).
+  [two crontab lines](/docs/cron). If this computer does not have the
+  [two clock lines](#the-computer-clock) yet, it adds those too.
 - It ends by printing two reminders: grant Full Disk Access, and get a long-lived token with
   `claude setup-token`. Sessions started by cron cannot run without both. The steps are in
   [Authentication](/docs/auth).
@@ -67,15 +73,62 @@ A project connects to one workspace only. Connecting an already-connected projec
 workspace is refused with `이 프로젝트는 이미 다른 워크스페이스에 연결돼 있습니다` ("this project is
 already connected to another workspace") and rc 2. To switch workspaces, disconnect first.
 
-The other direction is fine: one computer can connect several projects to the same workspace. Run
-`dira remote connect` once per project, each with its own `--root`. Credentials, the last sync time,
-and the ontology manifest are stored per queue root, so a project you connect later does not
-overwrite the token of one you connected earlier. Only the tool versions and login check results
-(`health.json`) describe the computer itself, so the workspace directory keeps one copy that all its
-projects share.
+## Connecting a second project
 
-If you move a queue root to a different path, its root key changes and the credentials are no longer
-found. Connect again from the new path.
+Adding another project to the same workspace does not need a new confirmation code. This computer
+already holds that workspace's credentials, so run the same command with a different `--root`.
+
+```sh
+dira remote connect <server> --root ~/Projects/second/.dira
+```
+
+The command adds the project to the runtime's project list without a browser approval and exits
+right away. Its first line reads:
+
+```
+이미 연결된 워크스페이스 <workspace_id>에 프로젝트를 더했습니다
+```
+
+("added the project to the already-connected workspace <workspace_id>")
+
+If this computer has two or more workspaces connected to the same server, the command cannot tell
+which one you mean. It prints the candidate ids and exits with rc 2. Pick one with `--workspace` and
+run it again.
+
+```sh
+dira remote connect <server> --root ~/Projects/second/.dira --workspace <workspace_id>
+```
+
+To get a confirmation code anyway, add `--new`. You need it in two cases:
+
+- You want this project on another workspace that this computer has not connected yet. Without
+  `--new`, it goes to the workspace that is already connected.
+- The command exits with rc 1, saying the server rejected the stored credentials, and tells you to
+  connect again with `--new`.
+
+If the workspace you approve with `--new` already has a runtime, dira registers a new runtime with
+the new credentials and then deletes the old one from the server. The workspace's other projects
+move to the new runtime; you do not have to connect them again.
+
+Project names must be unique within a workspace. A project's name is the name of its queue root's
+parent directory, so if you connect two `myproject/.dira` roots at different paths to the same
+workspace, the second is refused with
+`같은 이름의 프로젝트가 이 워크스페이스에 이미 연결돼 있습니다: <queue_root>` ("a project with the
+same name is already connected to this workspace") and rc 2.
+
+If you move a queue root to a different path, dira can no longer find that project. Connect again
+from the new path.
+
+### If you already connected each project separately
+
+Older dira took separate credentials for each project and so made one runtime per project. Projects
+connected that way do not need to be connected again. The first time the new engine's
+[clock](#the-computer-clock) runs, it keeps one still-valid set of credentials per workspace and
+deletes the other runtimes from the server. From then on the server shows one runtime for that
+workspace, with every project under it.
+
+If the server rejects every set of credentials, nothing is changed and `sync.log` gets one line,
+`REMOTE unauthorized <workspace_id>`. Connect one of those projects again with `--new`.
 
 ## Disconnecting
 
@@ -83,23 +136,64 @@ found. Connect again from the new path.
 dira remote disconnect --root ~/Projects/myproject/.dira
 ```
 
-This tells the server you are leaving, then deletes `remote.json` and that project's whole root
-directory (`roots/<root key>/`). Other projects connected to the same workspace keep their
-credentials and `health.json`, and they keep syncing. It leaves the crontab lines alone. The worker keeps running, but now handles local tickets only. To
-stop the worker too, remove the two crontab lines as described in [cron](/docs/cron).
+Disconnecting removes only that project. The command deletes `remote.json` in its queue root and
+the subdirectory the project used inside the workspace directory. If other projects remain on the
+same workspace, the server is not called. The next heartbeat sends a project list without this one,
+and the remaining projects keep syncing on the same runtime.
+
+If it was the workspace's last project, the runtime is released too. dira deletes the runtime on the
+server and removes `runtime.json` and `credentials.json` from the workspace directory. When no
+connected workspace is left on this computer, it also removes the two clock lines from the crontab.
+
+The worker's two crontab lines stay. The worker keeps running, but now handles local tickets only. To
+stop the worker too, remove those two lines as described in [cron](/docs/cron).
+
+## The computer clock
+
+Once any remote queue is connected, the crontab gets two lines like these, separate from the worker
+lines.
+
+```
+* * * * * python3 "<home>/.config/dira/bin/engines/remote.py" sync-all >> "<home>/.config/dira/remote/sync.log" 2>&1
+* * * * * sleep 30; python3 "<home>/.config/dira/bin/engines/remote.py" sync-all >> "<home>/.config/dira/remote/sync.log" 2>&1
+```
+
+If you connected with the engine from the repository, the `remote.py` path is that engine's path.
+Together the two lines run `sync-all` every 30 seconds. That is this computer's clock. However many
+projects you connect, the computer has one pair of clock lines.
+
+Each `sync-all` run does two things. First it sends one heartbeat per workspace, then it runs a
+separate sync for each connected project. If one project's sync fails or does not finish within 20
+seconds, the heartbeat has already gone out and the other projects still sync. A failed project
+carries a one-line reason on the next heartbeat.
+
+Because the heartbeat is separate from the workers, a queue whose worker stops before picking a
+ticket, or never runs at all, does not make this computer look disconnected on the web. The other
+way round: if the web shows this computer's heartbeat has stopped, check the clock first.
+
+```sh
+crontab -l | grep sync-all
+tail -n 50 ~/.config/dira/remote/sync.log
+```
+
+If the `sync-all` lines are missing, they come back the next time a worker of a connected project
+runs. If the lines are there but no heartbeat arrives, the last lines of `sync.log` tell you why.
+Once the log passes 1 MB it is moved to `sync.log.1` and starts fresh.
 
 ## Why a job from the web starts late
 
-dira has no process that stays running. cron starts a worker once every 30 seconds, and right before
-picking a ticket the worker exchanges one round of messages with the server. That round is called a
-sync. A job you start on the web comes down to this computer at the next sync, and its session starts
-in that same run. So you may wait up to about 30 seconds.
+dira has no process that stays running. Talking to the server is done by processes cron starts every
+30 seconds. One round of that is called a sync, and it happens in two places: the clock above syncs
+every project in turn, and each queue's worker syncs its own project right before picking a ticket. A
+job you start on the web comes down to this computer at the next sync, and if a worker fetched it,
+its session starts in that same run. So you may wait up to about 30 seconds.
 
 With no free worker, you wait longer. Each sync fetches only as many jobs as the queue has free
 workers, so if every worker is holding another ticket, the job stays on the server until one
 finishes.
 
-On every sync, each worker reports its next run time and the ticket it currently holds. The web
+On every heartbeat, the clock reports each project's workers with their next run time and the
+ticket each currently holds. The web
 screen can use those values to show when a job will start.
 
 A fetched job becomes an ordinary ticket in your queue. The only difference is
@@ -112,8 +206,10 @@ This is everything that goes to the server.
 
 | What | When |
 |---|---|
-| Computer name, project, AI tool names, versions, and login status | On connect and every sync |
-| Each worker's next run time and the hash of the ticket it holds | Every sync (the heartbeat) |
+| Computer name, names and queue root paths of the connected projects | On connect |
+| AI tool names, versions, and login status | On connect and every heartbeat |
+| Each project's workers: next run time and the hash of the ticket each holds | Every heartbeat (30 seconds) |
+| A one-line reason (500 B at most) the project's last sync failed | Every heartbeat after a failure |
 | A remote job's state (`running` `awaiting` `done` `failed`) | When it changes |
 | Progress - step names and the shell commands the session ran | While a remote job runs |
 | The `## 질문 n` (question) section that asks a person | When a remote job waits for an answer |
@@ -152,12 +248,15 @@ Persona and schema bundles are checked for a new version every 10 minutes.
 
 ## When something goes wrong
 
-A failing remote step never stops the worker. Local tickets keep running, and the worker log gets
-one line, `REMOTE <reason>`.
+A failing remote step never stops the worker. Local tickets keep running, and one line,
+`REMOTE <reason>`, goes to the worker log for a sync the worker ran, or to
+`~/.config/dira/remote/sync.log` for a sync the clock ran. When one project's sync fails, the reason
+is also kept in `last-error` in that project's subdirectory, and the next successful sync clears it.
 
 | Log or state | Meaning and what to do |
 |---|---|
-| `REMOTE unauthorized` | The server rejected the runtime token. Sync has stopped; disconnect and connect again |
+| `REMOTE unauthorized` | The server rejected the runtime token. Sync for that workspace has stopped; connect one of its projects again with `--new` |
+| The web shows this computer's heartbeat has stopped | The clock is not running. Check the crontab and `sync.log` as in [The computer clock](#the-computer-clock) |
 | A tool is reported as `needs_check` | That AI tool failed its login check, and it gets no jobs. Log in to it again ([Authentication](/docs/auth)) |
 | `remote_revoked: true` in a ticket's frontmatter | This computer went quiet for too long and the server took the job back. That ticket's state is no longer reported |
 | `REMOTE persona-skip <name>` | You have your own persona with that name, so the server's persona was not installed |
