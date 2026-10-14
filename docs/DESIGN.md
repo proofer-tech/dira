@@ -9036,6 +9036,30 @@ P489-2부터 P489-4까지는 P489-1의 명령을 부르므로 그 뒤에 가고,
 - [ ] `wc -c protocols/CORE.md`가 3500 이하이고 `grep -c 'CORE-DISPATCH.md' protocols/CORE.md`가 1 이상이다.
 - [ ] `python3 test_dispatch.py`, `python3 test_mcp_parity.py`, `python3 test_mcp_server.py`, `cd apps/teams && pnpm test`, `pnpm exec tsc --noEmit`이 통과한다.
 
+#### 개정 (2026-10-14) - 설치본에 `dispatch.py`가 없었다 (요구 `6593dbd6`)
+
+v1.2.23 설치본 엔진(`~/Library/Application Support/dira/engine/`)에 `dispatch.py`가 없었다.
+`apps/desktop/package.json`의 extraResources 목록에 그 항목이 빠져 있었기 때문이다. 그런데도 앱 기동 시
+`migrateCron`이 네 프로젝트의 워커 줄 52개를 `dispatch.py run` 형식으로 바꿨고, 그 뒤로 매분 `[Errno 2]`가
+찍히며 모든 큐의 디스패치가 멎었다. 홈 대화가 파일을 손으로 복사해 되살렸지만, 다음 릴리스가 설치본을
+통째로 덮으므로 목록을 고치지 않으면 다시 멎는다.
+
+1. **extraResources에 `../../dispatch.py` -> `engine/dispatch.py`를 넣는다.**
+2. **`dist` 스크립트가 번들에 `engine/dispatch.py`가 있는지 확인하고, 없으면 실패한다.** 기존
+   `server/node_modules` 확인과 같은 모양이다. 목록 누락을 릴리스 전에 잡는 자리는 여기 하나다.
+3. **`cronLine`과 `migrateCron`은 엔진 자리에 `dispatch.py`가 있을 때만 새 형식을 쓴다.** 없으면
+   `cronLine`은 옛 형식(워커 파일 직접 호출)을 내고, `migrateCron`은 아무것도 바꾸지 않는다. 옛 형식도
+   큐를 돌리므로, 엔진이 덜 깔린 설치본에서도 디스패치가 멎지 않는다.
+4. **`engineRepo()`의 판정은 그대로 `tick.sh` 하나다.** 스캐폴딩과 생성 버튼이 같이 쓰는 판정이라,
+   `dispatch.py` 하나 때문에 새 프로젝트 생성까지 거부하게 만들지 않는다.
+
+수용조건:
+
+- [ ] `grep -c '"../../dispatch.py"' apps/desktop/package.json`이 1이다.
+- [ ] `apps/desktop/package.json`의 `dist` 스크립트에 `engine/dispatch.py` 존재 확인이 있고, 없으면 오류 문구와 함께 실패한다.
+- [ ] `dispatch.py`가 없는 엔진 경로를 넘기면 `cronLine`이 옛 형식 두 줄을 내고, `migrateCron`(또는 그 판정 함수)이 crontab을 안 바꾼다는 단위 테스트가 있고 통과한다.
+- [ ] `cd apps/teams && pnpm test`, `pnpm exec tsc --noEmit`이 통과한다.
+
 ### P488. 온톨로지 파일 목록 머리 행 왼쪽에 노드 뷰로 돌아가는 버튼을 둔다 (요구 `e1b8a5fb`, 왕복 0회)
 
 사람 요구: *"온톨로지 파일목록 접기 행 좌측에 노드뷰(노드가연결된 홈 기본 뷰)를 보는 버튼을 추가해주세요"*.
