@@ -36,6 +36,7 @@ const {
   copyContext,
   createWorker,
   cronLine,
+  cronMigrate,
   cronPeriod,
   dispatchRound,
   lastDispatchSid,
@@ -1516,8 +1517,8 @@ test("cron 명령어 — NFC crontab 줄 · NFD 경로에서 해제가 진짜로
   const other = "* * * * * /usr/local/bin/other.sh";
   const nfcLine = `* * * * * "${p.normalize("NFC")}" >> "${log.normalize("NFC")}" 2>&1`;
   // 등록 단위는 2줄이다(제약 4) — `printf`가 두 줄을 다 넣어야 30초 폴링이 된다
-  const nfdRun = `"${p}" >> "${log}" 2>&1`;
-  const nfdLines = `* * * * * ${nfdRun}\n* * * * * sleep 30; ${nfdRun}`;
+  const nfdLines = cronLine({ path: p });
+  assert.ok(nfdLines.includes(log));
 
   const c = withWritableCrontab(`${other}\n${nfcLine}\n`);
   try {
@@ -1554,8 +1555,7 @@ const FIXTURE = [
 
 test("cronRegister/cronUnregister — 대상 줄만 바뀌고 나머지는 바이트 그대로 (제약 4)", () => {
   const p = "/Users/x/Projects/p/.dira/workers/w9.sh";
-  const run = `"${p}" >> "/Users/x/Projects/p/.dira/workers/cron.log" 2>&1`;
-  const lines = `* * * * * ${run}\n* * * * * sleep 30; ${run}`;
+  const lines = cronLine({ path: p });
 
   // 등록: 딱 2줄이 늘고(등록 단위, 제약 4) 나머지 텍스트가 완전히 동일하다
   const added = cronRegister(FIXTURE, p);
@@ -1599,10 +1599,32 @@ test("cronRegister — 후행 개행이 없는 crontab에서도 줄이 이어 �
   // 빈 crontab(= 등록된 워커 없음)
   assert.strictEqual(cronRegister("", "/tmp/w1.sh"), `${cronLine({ path: "/tmp/w1.sh" })}\n`);
   // 그 `cronLine`이 진짜 2줄이다 — 아니면 위 두 단언은 1줄짜리를 그대로 통과시킨다
-  assert.deepStrictEqual(cronLine({ path: "/tmp/w1.sh" }).split("\n"), [
+  assert.deepStrictEqual(cronLine({ path: "/tmp/w1.sh" }, null).split("\n"), [
     `* * * * * "/tmp/w1.sh" >> "/tmp/cron.log" 2>&1`,
     `* * * * * sleep 30; "/tmp/w1.sh" >> "/tmp/cron.log" 2>&1`,
   ]);
+});
+
+test("cronLine - 새 형식은 dispatch.py run --reason cron --worker <워커 파일>이고 짝줄이 있다 (P489-2)", () => {
+  const w = "/q/.dira/workers/w1.sh";
+  const [a, b] = cronLine({ path: w }, "/eng").split("\n");
+  const run = `python3 "/eng/dispatch.py" run "/q/.dira" --reason cron --worker "${w}" >> "/q/.dira/workers/cron.log" 2>&1`;
+  assert.strictEqual(a, `* * * * * ${run}`);
+  assert.strictEqual(b, `* * * * * sleep 30; ${run}`);
+  assert.strictEqual(cronPeriod(`${a}\n${b}`, w), 30); // 새 줄도 등록으로 판정한다
+});
+
+test("cronMigrate - 옛 워커 줄만 새 형식이 되고 남의 줄과 사람 줄은 바이트 그대로 (P489-2)", () => {
+  const mine = "/q/.dira";
+  const old = (n: string, root = mine) => cronLine({ path: `${root}/workers/${n}.sh` }, null);
+  const human = `# 손으로 쓴 줄\n0 3 * * * /usr/bin/backup --x  "a"\n* * * * * "${mine}/reaper.sh" >> "${mine}/workers/cron.log" 2>&1`;
+  const other = old("w1", "/other/.dira");
+  const tab = `${human}\n${old("w1")}\n${other}\n${old("w2")}\n`;
+  const out = cronMigrate(tab, [mine], "/eng");
+  const want = `${human}\n${cronLine({ path: `${mine}/workers/w1.sh` }, "/eng")}\n${other}\n${cronLine({ path: `${mine}/workers/w2.sh` }, "/eng")}\n`;
+  assert.strictEqual(out, want);
+  assert.strictEqual(cronMigrate(out, [mine], "/eng"), out); // 두 번째는 no-op
+  assert.strictEqual(cronMigrate("", [mine], "/eng"), "");
 });
 
 test("cronPeriod — 짝줄(sleep 30) 있으면 30, 본 줄만 있으면 60, 미등록이면 null (§1-6 §값)", () => {

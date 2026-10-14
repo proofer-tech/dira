@@ -19,4 +19,7 @@ export async function register() {
     const config = await resolveConfig(project);
     await mirrorCore(config.protocols).catch(() => {});
   }
+  // P489-2: 옛 crontab 워커 줄을 dispatch.py 형식으로 한 번 바꾼다. 실패하면 옛 줄이 그대로 돈다.
+  const { migrateCron } = await import("./lib/workers.ts");
+  await migrateCron(projects.map((p) => p.root)).catch(() => {});
 }

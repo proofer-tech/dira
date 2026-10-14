@@ -1873,10 +1873,36 @@ const dq = (s: string) => `"${s.replace(/(["$`\\])/g, "\\$1")}"`;
  *  cron의 제일 잔 필드가 분이라(`man 5 crontab`) 30초 폴링은 `sleep 30` 줄을 하나 더 두어 낸다.
  *  **한 줄에 `;`로 붙이지 않는다** — 워커는 동기 프로세스라 앞 호출이 세션을 물면 뒷반쪽이
  *  30초 뒤가 아니라 그 세션이 끝난 뒤에 뜬다(`tick.sh:129`). 두 줄이어야 :00·:30이 결정적이다. */
-export function cronLine(worker: Pick<Worker, "path">): string {
-  const log = path.join(path.dirname(worker.path), "cron.log");
-  const run = `${dq(worker.path)} >> ${dq(log)} 2>&1`;
+export function cronLine(worker: Pick<Worker, "path">, engine?: string | null): string {
+  const dir = path.dirname(worker.path);
+  const log = path.join(dir, "cron.log");
+  // P489-2: 줄이 워커를 직접 부르지 않고 dispatch.py를 거친다. 워커 경로는 줄에 그대로 남아
+  // `listWorkers`의 "crontab에 이 경로가 있는가" 판정이 안 바뀐다. 엔진을 못 찾으면 옛 형식이다.
+  const repo = engine === undefined ? engineRepo() : engine ? { path: engine } : { error: "" };
+  const cmd =
+    "path" in repo
+      ? `python3 ${dq(path.join(repo.path, "dispatch.py"))} run ${dq(path.dirname(dir))} --reason cron --worker ${dq(worker.path)}`
+      : dq(worker.path);
+  const run = `${cmd} >> ${dq(log)} 2>&1`;
   return `* * * * * ${run}\n* * * * * sleep 30; ${run}`;
+}
+
+const OLD_CRON_LINE = /^\* \* \* \* \* (sleep 30; )?"([^"\\]+)\/workers\/([^"\\\/]+\.sh)" >> "\2\/workers\/cron\.log" 2>&1$/;
+
+/** 옛 형식(`workers/<w>.sh`를 직접 부르는) 워커 줄을 새 형식으로 바꾼다. `roots`에 든 프로젝트의
+ *  `cronLine`이 만든 모양과 **정확히 같은** 줄만 건드린다 - 다른 프로젝트 줄과 사람이 쓴 줄은
+ *  바이트 그대로다. 짝줄(`sleep 30;`)은 짝줄로 남는다. */
+export function cronMigrate(text: string, roots: string[], engine: string): string {
+  const set = new Set(roots.map((r) => nfc(r)));
+  return text
+    .split("\n")
+    .map((line) => {
+      const m = OLD_CRON_LINE.exec(line);
+      if (!m || !set.has(nfc(m[2]))) return line;
+      const [first, second] = cronLine({ path: `${m[2]}/workers/${m[3]}` }, engine).split("\n");
+      return m[1] ? second : first;
+    })
+    .join("\n");
 }
 
 /** 워커의 cron 등록 주기 (DESIGN.md §1-6 §값 — 다음 디스패치까지 남은 초의 재료).
@@ -2001,6 +2027,30 @@ export const cronWriteError = (stderr: string, locale: Locale = DEFAULT_LOCALE) 
  *
  *  돌려주는 값은 **crontab이 실제로 바뀌었는가**다. false = 이미 그 상태였다(no-op) — 중단이
  *  "이미 미등록입니다"를 에러가 아니라 사실로 말할 수 있는 근거가 이것뿐이다. */
+async function writeCrontab(next: string, locale: Locale): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = execFile("crontab", ["-"], { timeout: CRONTAB_WRITE_TIMEOUT }, (err, _out, stderr) => {
+      const killed = (err as { killed?: boolean } | null)?.killed;
+      if (err) {
+        reject(new Error(killed ? writeTimedOut(locale) : cronWriteError((stderr || err.message).trim(), locale)));
+      } else resolve();
+    });
+    child.stdin!.end(next);
+  });
+}
+
+/** 앱 기동 시 1회(P489-2): 등록 프로젝트의 옛 워커 줄을 새 형식으로 바꾼다. 실패하면 옛 줄이
+ *  그대로다(쓰기 전에 읽기가 실패하면 아무것도 안 쓴다). 바꾼 줄이 있었는지를 돌려준다. */
+export async function migrateCron(roots: string[]): Promise<boolean> {
+  const repo = engineRepo();
+  if (!("path" in repo)) return false;
+  const before = await crontabForWrite();
+  const next = cronMigrate(before, roots, repo.path);
+  if (next === before) return false;
+  await writeCrontab(next, DEFAULT_LOCALE);
+  return true;
+}
+
 /** `matchKey`가 들어간 줄로 등록 여부를 잰다. 워커 crontab 등록(`registerCron`)이 쓴다. */
 async function applyCrontab(
   matchKey: string,
@@ -2011,17 +2061,7 @@ async function applyCrontab(
   const before = await crontabForWrite(locale);
   const next = want ? compute.register(before) : compute.unregister(before);
   const changed = next !== before;
-  if (changed) {
-    await new Promise<void>((resolve, reject) => {
-      const child = execFile("crontab", ["-"], { timeout: CRONTAB_WRITE_TIMEOUT }, (err, _out, stderr) => {
-        const killed = (err as { killed?: boolean } | null)?.killed;
-        if (err) {
-          reject(new Error(killed ? writeTimedOut(locale) : cronWriteError((stderr || err.message).trim(), locale)));
-        } else resolve();
-      });
-      child.stdin!.end(next);
-    });
-  }
+  if (changed) await writeCrontab(next, locale);
   const after = await crontabForWrite(locale);
   if (after.split("\n").some((l) => isWorkerLine(l, matchKey)) !== want) {
     throw new Error(
