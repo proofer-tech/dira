@@ -185,16 +185,15 @@ Once the log passes 1 MB it is moved to `sync.log.1` and starts fresh.
 dira has no process that stays running. Talking to the server is done by processes cron starts every
 30 seconds. One round of that is called a sync, and it happens in two places: the clock above syncs
 every project in turn, and each queue's worker syncs its own project right before picking a ticket. A
-job you start on the web comes down to this computer at the next sync, and if a worker fetched it,
-its session starts in that same run. So you may wait up to about 30 seconds.
+job you start on the web comes down to this computer at the next sync, and whether the clock or a
+worker fetched it, its session starts in that same sync. So you may wait up to about 30 seconds.
 
 With no free worker, you wait longer. Each sync fetches only as many jobs as the queue has free
 workers, so if every worker is holding another ticket, the job stays on the server until one
 finishes.
 
-On every heartbeat, the clock reports each project's workers with their next run time and the
-ticket each currently holds. The web
-screen can use those values to show when a job will start.
+On every heartbeat, the clock reports, for each project, when it will next fetch jobs, plus each
+worker's next run time and the ticket it currently holds. The web screen can use those values to show when a job will start.
 
 A fetched job becomes an ordinary ticket in your queue. The only difference is
 `remote_job: <job_id>` in its frontmatter. It looks like any other ticket in the app, and it is
