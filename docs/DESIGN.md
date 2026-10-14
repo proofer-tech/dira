@@ -8938,6 +8938,68 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P492. 원격 큐 - 잡은 작업을 같은 sync에서 바로 디스패치하고, 다음 잡기 시각을 신호에 싣는다 (요구 `9799b0ae`, 왕복 0회)
+
+사람 요구(임한솔): *"갈래에서 티켓 발행할때 바로 디스패치되도록 해주세요"*. 갈래 큐가 갈래 정본
+`서비스/아키텍처/dira협의요구사항.md`의 R16을 넘겼다(갈래 티켓 `79d8c683`).
+
+실측(2026-10-14, `remote.py`): 작업 잡기는 컴퓨터 시계(P491 `sync-all`, 30초 간격)가 부르는 `sync --root`
+안의 `claim_jobs`에서 돈다. `claim_jobs`는 `tickets/<해시>.md`를 만들고 끝나므로, 그 티켓은 그 큐의 다음
+워커 cron(`dispatch.py run --reason cron`, 30초 간격)을 기다린다. 그래서 갈래에서 발행한 작업이 시작되기까지
+최대 약 60초가 걸린다(잡기 대기 30초 + 디스패치 대기 30초). 매뉴얼 `remote.md`의 "길게는 30초쯤"은 워커의
+`tick.sh`가 잡은 경우에만 맞고, 시계가 잡은 경우에는 틀린다.
+
+둘 다 받는다. 사람이 정하지 않은 것은 주도성 5로 pm이 정했다.
+
+1. **잡은 작업은 같은 sync에서 바로 디스패치한다.** 사유는 갈래가 제안한 `direct`다. 사람이 갈래 화면에서
+   직접 발행한 작업이고, `direct`는 "그 해시가 후보이고 idle 워커가 있으면 띄운다, 부하와 다른 후보는 안
+   본다"(P489)라서 뜻이 맞는다. `request`는 다른 후보가 하나라도 있으면 안 띄우므로 갈래 작업이 로컬 백로그
+   뒤에 다시 묶인다.
+2. **다음 잡기 시각을 신호에 싣는다.** heartbeat의 `projects` 각 항목에 선택 필드 `next_claim_at`을 더한다.
+   이름과 자리는 갈래 제안 그대로다.
+
+상주 데몬을 만들지 않는다는 앞선 답(P478, P491)은 유지한다. 이 스펙은 잡기 뒤의 두 번째 대기만 없앤다. 엔진
+수정이지만 P478이 사람 승인을 받은 `remote.py` 안에서 끝나고 `dispatch.py` - `tick.sh` - `tickets.py`는 안
+건드린다. 즉시 디스패치는 최적화이고 정확성의 일부가 아니다(P489 결정 3) - 안 떠도 cron이 30초 안에 집는다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 부르는 자리 | `claim_jobs`가 이번 호출에서 `create_ticket`에 성공한 해시들(만든 순서). 하나도 없으면 아무것도 안 부른다. 이미 있던 `job_id`로 건너뛴 작업은 부르지 않는다 |
+| 명령 | 해시마다 `python3 <엔진>/dispatch.py run <루트> --reason direct --hash <해시> --worker <워커 이름>`을 자식 프로세스로 부르고 끝날 때까지 기다린다(시간 상한 10초, 넘으면 그 해시는 건너뛴다). `<엔진>`은 `remote.py` 자신의 디렉터리다. 그 자리에 `dispatch.py`가 없으면 부르지 않고 `log("dispatch-missing")` 한 줄로 끝낸다 |
+| 워커 고르기 | `dispatch.py`의 idle 판정은 워커 락을 보는데, 띄운 워커가 락을 만들기 전에 다음 해시를 부르면 같은 워커가 다시 뽑힌다. 그래서 `--worker`로 워커를 나눠 준다. `<루트>/workers/*.sh` 이름 오름차순으로 후보를 늘어놓고, 해시마다 이번 sync에서 아직 쓰지 않은 워커를 차례로 지정해 부른다. rc 0이면 그 워커를 쓴 것으로 표시하고 다음 해시로 간다. rc 1이면 출력 JSON의 `why`가 `그 해시는 후보가 아니다`일 때 그 해시를 건너뛰고, 그 밖이면 같은 해시로 다음 워커를 시도한다. 시도한 워커는 rc와 무관하게 이번 sync에서 다시 쓰지 않는다. 워커가 떨어지면 남은 해시는 cron이 집는다 |
+| 로그 | `dispatch.py`가 `runner.log`에 이미 `KICK direct <해시> <워커>` 또는 `KICK-SKIP direct <해시> <why>`를 적는다. `remote.py`는 더 적지 않는다. 자식이 상한에 걸리거나 JSON을 못 읽으면 `log("dispatch <해시>: <사유>")` 한 줄 |
+| 실패 | 디스패치의 어떤 실패도 예외로 올리지 않는다. `claim_jobs`의 rc와 `last-error`는 디스패치 결과로 바뀌지 않는다 |
+| 순서 | 잡기 -> 디스패치 -> 상태 올리기(`report_status`). 같은 sync의 `report_status`가 막 뜬 작업을 `running`으로 올릴 수도, 다음 sync에서 올릴 수도 있다 - 둘 다 맞다 |
+| `next_claim_at` | heartbeat `projects` 각 항목의 선택 필드. ISO 8601(초 단위, 오프셋 포함). 값은 그 루트에서 다음에 `jobs/claim`을 부를 시각이고, 시계가 `:00`과 `:30`에 돌므로 지금 이후의 첫 30초 경계다 - `next_dispatch_iso()`와 같은 계산을 쓴다. 쉬는 워커가 없어도 싣는다(갈래는 쉬는 워커가 있을 때만 쓴다) |
+| 서버 형식 | P478 §API 표 heartbeat 행에 `next_claim_at?`를 더했다. 갈래 서버가 모르는 필드는 무시하므로 하위 호환이다. 다른 경로와 응답은 그대로다 |
+| 매뉴얼 | `remote.md`(ko-en) "웹에서 누른 작업이 늦게 시작하는 이유" 절. 시계가 잡든 워커가 잡든 같은 sync에서 세션이 시작되므로 길게는 30초쯤이라는 문장이 이제 두 경우 모두 맞다는 점, 빈 워커가 없으면 더 기다린다는 점을 그대로 둔다 |
+
+#### 안 하는 것
+
+- 상주 데몬, 잡기 간격(30초) 단축, 서버가 컴퓨터를 깨우는 푸시.
+- `dispatch.py`의 사유 추가나 판정 변경. 워커 나누기는 부르는 쪽(`--worker`)에서 끝낸다.
+- 갈래 서버의 수신과 화면(시작 예정 시각 그리기) - 갈래 티켓이 맡는다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P492-1 | 엔진 - `remote.py` `claim_jobs`가 만든 해시를 `dispatch.py --reason direct --hash --worker`로 띄움(워커 나누기-상한 10초-`dispatch.py` 없음), heartbeat `projects[].next_claim_at` + `test_remote.py` | developer | - | 발행 `e085c1ed` |
+| P492-2 | 매뉴얼 - `remote.md`(ko-en) "웹에서 누른 작업이 늦게 시작하는 이유" 절을 P492에 맞춘다 | writer | - | 발행 `bcd93dc6` |
+| P492-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P492-1 | 발행 `8c99c2e6` |
+
+**세 장이다.** 매뉴얼은 위 표에 글감이 다 있어 기다리지 않는다. designer 0장 - dira 화면이 없다. 에픽 `P478`에 붙인다.
+
+#### 수용조건
+
+- [ ] `python3 test_remote.py`가 통과한다.
+- [ ] 가짜 서버가 작업 둘을 내주고 루트에 idle 워커가 둘(`w1` `w2`)이면, `remote.py sync --root R` 한 번 뒤 `R/workers/runner.log`에 `KICK direct <해시1> w1`과 `KICK direct <해시2> w2`가 한 줄씩 있다(테스트는 `dispatch.py` 자리에 부른 인자를 적는 가짜를 둬도 된다 - 그때는 두 호출의 `--worker`가 서로 다르다).
+- [ ] 가짜 서버가 작업을 안 내주거나, 이미 있는 `job_id`만 내주면 `dispatch.py`가 한 번도 불리지 않는다.
+- [ ] 엔진 디렉터리에 `dispatch.py`가 없어도 `sync --root`가 rc 0이고 티켓은 그대로 만들어진다.
+- [ ] `sync-all` 한 번에 가짜 서버가 받은 heartbeat의 `projects` 각 항목에 `next_claim_at`이 있고, 그 값이 받은 시각 이후 30초 이내의 `:00` 또는 `:30`이다.
+- [ ] 이 컴퓨터에서 갈래에 연결된 상태로 쉬는 워커가 있을 때 갈래 화면에서 작업을 발행하면 그 세션이 발행 뒤 40초 안에 시작된다(`runner.log`의 `KICK direct` 시각 - 발행 시각). 갈래 서버가 아직 배포 전이면 이 줄은 판정불가로 적는다.
+- [ ] P492-1 커밋의 `git show --stat`에 `dispatch.py` - `tick.sh` - `tickets.py`가 없다.
+
 ### P491. 원격 큐 - 런타임을 (컴퓨터, 워크스페이스)마다 하나로 두고, 신호를 큐별 워커에서 떼어 컴퓨터 단위 시계가 보낸다 (요구 `0f1e855b`, 왕복 0회)
 
 사람 요구: 갈래 큐가 갈래 정본 `서비스/아키텍처/dira협의요구사항.md`의 R14, R15를 넘겼다(갈래 티켓
@@ -9761,7 +9823,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | `POST device/code` | `{machine_name, project?, queue_root?, tools?}` (선택 필드 P485) | `{device_code, user_code, verification_uri, interval, expires_in}` |
 | `POST device/token` | `{device_code}` | 대기 중 `428`, 끝나면 `{workspace_id, runtime_token}` |
 | `POST runtimes` | `{machine_name, project, projects?: [{project, queue_root}], tools: [{name, version, health}]}` - `projects`가 있으면 `project` 대신 이 목록이 런타임의 프로젝트 목록이다(P491) | `{runtime_id}` |
-| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?}]}`(P491) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다 | `{ok: true}` |
+| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?, next_claim_at?}]}`(P491, P492) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다. `next_claim_at`은 그 루트에서 다음에 `jobs/claim`을 부를 시각(ISO 8601)이다 - 잡은 작업은 같은 sync에서 디스패치되므로(P492) 서버는 쉬는 워커가 있으면 이 값을 발행한 작업의 시작 예정 시각으로 쓸 수 있다 | `{ok: true}` |
 | `DELETE runtimes/<id>` | - | `204` |
 | `POST jobs/claim` | `{runtime_id, tools: [이름], max, project?}` - `project`가 있으면 그 프로젝트의 작업만 준다(P491) | `{jobs: [{job_id, title, persona, priority, duedate, body, job_token, job_token_expires_at}]}` |
 | `POST jobs/<job_id>/status` | `{state, hash, at}` | `204`, 돌려받은 작업은 `410` |
