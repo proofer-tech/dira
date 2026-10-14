@@ -348,7 +348,34 @@ class T(Base, unittest.TestCase):
         self.assertEqual(last["hash"], h)
         self.assertIn("at", last)
 
-    def test_failed_and_awaiting(self):
+    def test_block_then_awaiting_keeps_token_until_done(self):
+        self.setup_jobs([[self.job()]])
+        self.fake.routes[("POST", "jobs/J1/questions")] = (204, None)
+        self.sync()
+        tdir = os.path.join(self.root, "tickets")
+        h = self.tickets()[0][:-3]
+        p = os.path.join(tdir, h + ".wip.md")
+        os.rename(os.path.join(tdir, h + ".md"), p)
+        tok = os.path.join(self.home, ".config", "dira", "run", "remote-jobs", h + ".json")
+        open(p, "a").write("\n## 블록\n막힘\n")
+        self.sync()
+        self.assertEqual(self.statuses(), ["running"])  # 블록만 있는 .wip 은 running
+        text = open(p).read()
+        open(p, "w").write(text.replace("remote_job: J1", "remote_job: J1\nawaiting: abcd1234") + "\n## 질문 1\n\n어느 쪽?\n")
+        self.sync()
+        self.assertEqual(self.statuses(), ["running", "awaiting"])
+        self.assertEqual([c[1] for c in self.fake.calls].count("jobs/J1/questions"), 1)
+        self.assertTrue(os.path.exists(tok))
+        open(os.path.join(tdir, "abcd1234.done.md"), "w").write("x")
+        self.sync()
+        self.assertEqual(self.statuses(), ["running", "awaiting", "running"])
+        self.assertTrue(os.path.exists(tok))
+        os.rename(p, os.path.join(tdir, h + ".done.md"))
+        self.sync()
+        self.assertEqual(self.statuses(), ["running", "awaiting", "running", "done"])
+        self.assertFalse(os.path.exists(tok))
+
+    def test_notoken_closes_ticket_and_reports_failed_with_reason(self):
         self.setup_jobs([[self.job()]])
         self.sync()
         tdir = os.path.join(self.root, "tickets")
@@ -356,17 +383,21 @@ class T(Base, unittest.TestCase):
         p = os.path.join(tdir, h + ".wip.md")
         os.rename(os.path.join(tdir, h + ".md"), p)
         text = open(p).read()
-        open(p, "w").write(text.replace("remote_job: J1", "remote_job: J1\nawaiting: abcd1234"))
+        open(p, "w").write(text.replace("remote_job: J1", "remote_job: J1\npid: 1\nsession_id: s\nowner: o\ninbox: i\nassigned_at: a"))
+        r = subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), "notoken", p], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertFalse(os.path.exists(p))
+        done = open(os.path.join(tdir, h + ".done.md")).read()
+        self.assertIn("remote_failed: no-token", done)
+        for k in ("pid:", "session_id:", "owner:", "inbox:", "assigned_at:"):
+            self.assertNotIn(k, done)
+        self.assertEqual(done.count("## 결과"), 1)
+        self.assertIn("작업 토큰 파일이 없어", done)
         self.sync()
-        self.assertEqual(self.statuses(), ["awaiting"])
-        open(os.path.join(tdir, "abcd1234.done.md"), "w").write("x")
-        self.sync()
-        self.assertEqual(self.statuses(), ["awaiting", "running"])
-        open(p, "a").write("\n## 블록\n막힘\n")
-        self.sync()
-        self.assertEqual(self.statuses(), ["awaiting", "running", "failed"])
-        tok = os.path.join(self.home, ".config", "dira", "run", "remote-jobs", h + ".json")
-        self.assertFalse(os.path.exists(tok))
+        last = [c for c in self.fake.calls if c[1] == "jobs/J1/status"][-1][2]
+        self.assertEqual((last["state"], last["reason"]), ("failed", "no-token"))
+        r = subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), "notoken", p], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 1)
 
     def test_410_marks_revoked_and_stops(self):
         self.setup_jobs([[self.job()]])
@@ -530,6 +561,24 @@ class T(Base, unittest.TestCase):
         open(os.path.join(tdir, "bbbb0001.md"), "w").write("---\nticket: bbbb0001\ntitle: t\n---\n\n## Goal\nx\n")
         self.wrun(w, "tick")
         self.assertNotIn("DIRA_REMOTE", open(os.path.join(self.tmp.name, "env.txt")).read())
+
+    def test_tick_closes_remote_ticket_without_token_file(self):
+        tdir = os.path.join(self.root, "tickets")
+        self.setup_jobs([])
+        w = self.worker()
+        text = "---\nticket: dddd0001\ntitle: t\nremote_job: JX\n---\n\n## Goal\nx\n"
+        open(os.path.join(tdir, "dddd0001.md"), "w").write(text)
+        self.wrun(w, "tick")
+        log = open(os.path.join(self.root, "workers", "runner.log")).read()
+        self.assertIn("REMOTE-NOTOKEN dddd0001", log)
+        self.assertFalse(os.path.exists(os.path.join(self.tmp.name, "env.txt")))  # 세션이 안 떴다
+        self.assertIn("remote_failed: no-token", open(os.path.join(tdir, "dddd0001.done.md")).read())
+        # remote.json이 없으면 검사가 안 돈다
+        os.unlink(os.path.join(self.root, "remote.json"))
+        open(os.path.join(tdir, "dddd0002.md"), "w").write(text.replace("dddd0001", "dddd0002"))
+        self.wrun(w, "tick")
+        self.assertNotIn("REMOTE-NOTOKEN dddd0002", open(os.path.join(self.root, "workers", "runner.log")).read())
+        self.assertTrue(os.path.exists(os.path.join(self.tmp.name, "env.txt")))
 
     def test_claude_argv_has_mcp_config_only_for_persona_with_file(self):
         self.setup_jobs([])

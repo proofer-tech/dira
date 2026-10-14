@@ -1668,6 +1668,12 @@ fi
 # P478 R7: 원격 작업 티켓의 세션에만 작업 토큰을 환경변수로 넣는다. 값은 argv-로그에 안 쓴다.
 unset DIRA_REMOTE_URL DIRA_REMOTE_TOKEN
 _RJ="$HOME/.config/dira/run/remote-jobs/$THASH.json"
+# P495: 토큰 파일이 없는 원격 작업은 띄워 봐야 401이라 세션 없이 .done(remote_failed: no-token)으로 닫는다.
+if [ ! -f "$_RJ" ] && [ -f "$TICKET_ROOT/remote.json" ] && grep -q '^remote_job:' "$TPATH" 2>/dev/null; then
+  python3 "$CODE/remote.py" notoken "$TPATH" >/dev/null 2>&1
+  log "REMOTE-NOTOKEN $THASH"
+  exit 0
+fi
 if [ -f "$_RJ" ] && [ -f "$TICKET_ROOT/remote.json" ]; then
   _RE=$(python3 -c 'import json,sys
 print(json.load(open(sys.argv[1]))["server"].rstrip("/"), json.load(open(sys.argv[2]))["job_token"], sep="\n")' \

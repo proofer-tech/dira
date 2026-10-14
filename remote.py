@@ -496,17 +496,47 @@ def dispatch_made(root, hashes):
 
 
 def job_state(root, t):
-    """.done = done, 본문 ## 블록 = failed, awaiting: stem 파일이 없으면 awaiting, .wip = running. 아니면 None."""
+    """remote_failed: 값 = failed, .done = done, awaiting: stem 파일이 없으면 awaiting, .wip = running. 아니면 None.
+    본문 ## 블록은 안 본다 - 엔진이 블록을 답변 대기로 바꾸므로 사람이 답할 일이지 끝이 아니다(P495)."""
+    if fm_get(t["fm"], "remote_failed"):
+        return "failed"
     if t["suffix"] == "done":
         return "done"
-    if re.search(r"^## 블록\s*$", t["body"], re.M):
-        return "failed"
     stem = fm_get(t["fm"], "awaiting")
     if stem and not os.path.exists(os.path.join(root, "tickets", stem + ".done.md")):
         return "awaiting"
     if t["suffix"] == "wip":
         return "running"
     return None
+
+
+NOTOKEN_RESULT = ("작업 토큰 파일이 없어 세션을 띄우지 않고 닫았다. 원격 서버에는 failed로 보고한다. "
+                  "다시 하려면 원격 서비스에서 작업을 다시 발행한다.")
+ASSIGN_KEYS = ("pid", "session_id", "assigned_at", "owner", "inbox")
+
+
+def cmd_notoken(path):
+    """토큰 없는 .wip 원격 작업을 .done 으로 닫는다: remote_failed: no-token + 할당 키 비움 + ## 결과 한 줄."""
+    m = re.match(r"^([0-9a-f]{8})\.wip\.md$", os.path.basename(path))
+    try:
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return 1
+    if not m or not text.startswith("---\n") or text.find("\n---\n", 3) < 0:
+        return 1
+    end = text.find("\n---\n", 3)
+    fm = [l for l in text[4:end].split("\n") if l.split(":", 1)[0] not in ASSIGN_KEYS]
+    if fm_get(fm, "remote_failed") is None:
+        fm.append("remote_failed: no-token")
+    body = text[end + 5:].rstrip("\n")
+    out = "---\n" + "\n".join(fm) + "\n---\n" + body + "\n\n## 결과\n\n" + NOTOKEN_RESULT + "\n"
+    tmp = "%s.remote-%d" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(out)
+    os.replace(tmp, path)
+    os.replace(path, os.path.join(os.path.dirname(path), m.group(1) + ".done.md"))
+    return 0
 
 
 def mark_revoked(t):
@@ -534,8 +564,10 @@ def report_status(ctx):
         if s is None or state.get(t["job_id"]) == s:
             continue
         at = datetime.datetime.now().astimezone().isoformat(timespec="seconds")
-        st, _ = ctx.call("POST", "jobs/%s/status" % urllib.parse.quote(t["job_id"], safe=""),
-                         {"state": s, "hash": t["hash"], "at": at})
+        body = {"state": s, "hash": t["hash"], "at": at}
+        if s == "failed":
+            body["reason"] = fm_get(t["fm"], "remote_failed")
+        st, _ = ctx.call("POST", "jobs/%s/status" % urllib.parse.quote(t["job_id"], safe=""), body)
         if st == 410:
             mark_revoked(t)
             drop_token(t["hash"])
@@ -545,7 +577,7 @@ def report_status(ctx):
             continue
         state[t["job_id"]] = s
         changed = True
-        if s in ("done", "failed"):
+        if s == "done":
             drop_token(t["hash"])
     if changed:
         os.makedirs(os.path.dirname(sp), exist_ok=True)
@@ -1564,12 +1596,16 @@ def main(argv=None):
             p.add_argument("--workspace")
             p.add_argument("--new", action="store_true")
         p.add_argument("--root", default=os.environ.get("TICKET_ROOT"))
+    p = sub.add_parser("notoken")
+    p.add_argument("path")
     p = sub.add_parser("check-health")
     p.add_argument("--ws", required=True)
     p.add_argument("names", nargs="*")
     a = ap.parse_args(argv)
     if a.cmd == "sync-all":
         return sync_all()
+    if a.cmd == "notoken":
+        return cmd_notoken(a.path)
     if a.cmd == "check-health":
         run_check(a.ws, [n for n in a.names if n in tool_names()])
         return 0
