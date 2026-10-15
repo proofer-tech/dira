@@ -81,11 +81,20 @@ def main():
     assert rc == 0 and ran(S[0], "w1") == "tick aaaaaaaa"
     assert "[dispatch] KICK request aaaaaaaa w1" in runlog(S[1])
 
-    # request: 다른 후보가 있으면 no-go + KICK-SKIP 한 줄, 워커 안 뜸
+    # request: 다른 후보가 있어도 go, judge는 no-go + KICK-SKIP 한 줄, 워커 안 뜸
     S = setup(["aaaaaaaa", "bbbbbbbb"])
-    rc, j = run(*S, "--reason", "request", "--hash", "aaaaaaaa")
+    rc, j = run(*S, "--reason", "request", "--hash", "aaaaaaaa", "--dryrun")
+    assert rc == 0 and j["go"] and j["worker"] == "w1", (rc, j)
+    rc, j = run(*S, "--reason", "judge", "--hash", "aaaaaaaa")
     assert rc == 1 and not j["go"] and j["worker"] is None
-    assert runlog(S[1]).count("KICK-SKIP request aaaaaaaa") == 1 and ran(S[0], "w1", False) is None
+    assert runlog(S[1]).count("KICK-SKIP judge aaaaaaaa") == 1 and ran(S[0], "w1", False) is None
+    # request: idle 워커 0개면 no-go + KICK-SKIP 한 줄
+    S = setup(["aaaaaaaa"])
+    lock(S[1], S[2], "w1")
+    lock(S[1], S[2], "w2")
+    rc, j = run(*S, "--reason", "request", "--hash", "aaaaaaaa")
+    assert rc == 1 and not j["go"]
+    assert "KICK-SKIP request aaaaaaaa idle 워커가 없다" in runlog(S[1])
     # 후보 아닌 해시
     rc, j = run(*S, "--reason", "judge", "--hash", "cccccccc")
     assert rc == 1 and not j["go"]
@@ -94,15 +103,15 @@ def main():
     rc, j = run(*S, "--reason", "judge", "--hash", "aaaaaaaa", "--dryrun")
     assert rc == 0 and j["go"]
 
-    # load_max 0: request와 judge는 no-go(부하), direct는 go
-    S = setup(["aaaaaaaa"])
+    # load_max 0: judge만 no-go(부하), request와 direct는 go
+    S = setup(["aaaaaaaa", "bbbbbbbb"])
     with open(os.path.join(S[2], "dispatch.json"), "w") as f:
         json.dump({"load_max": 0}, f)
-    for r in ("request", "judge"):
+    rc, j = run(*S, "--reason", "judge", "--hash", "aaaaaaaa", "--dryrun")
+    assert rc == 1 and not j["go"] and "부하" in j["why"], j
+    for r in ("request", "direct"):
         rc, j = run(*S, "--reason", r, "--hash", "aaaaaaaa", "--dryrun")
-        assert rc == 1 and not j["go"] and "부하" in j["why"], (r, j)
-    rc, j = run(*S, "--reason", "direct", "--hash", "aaaaaaaa", "--dryrun")
-    assert rc == 0 and j["go"], j
+        assert rc == 0 and j["go"], (r, j)
 
     # direct: 해시 없으면 idle만 본다, 다른 후보 무시. 해시가 후보 아니면 no-go
     S = setup(["aaaaaaaa", "bbbbbbbb"])

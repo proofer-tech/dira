@@ -77,8 +77,8 @@ def candidates(root):
 def decide(root, reason, h, worker):
     """-> (worker 또는 None, why)"""
     idle = idle_workers(root, worker)
-    gated = reason in ("request", "judge")
-    cands = candidates(root) if (gated or (h and reason == "direct")) else []
+    gated = reason == "judge"
+    cands = candidates(root) if (reason in ("request", "judge") or (h and reason == "direct")) else []
     if reason == "cron":
         return (idle[0], "idle 워커") if idle else (None, "워커가 idle이 아니다")
     if h and h not in cands:
