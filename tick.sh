@@ -45,6 +45,16 @@ log() { printf '%s [%s] %s\n' "$(date '+%F %T')" "${TICKET_NAME:-?}" "$*" >> "$R
 TICKET_NAME="${TICKET_NAME:-$(basename "$0" .sh)}"
 # 기본 작업 디렉터리 = 루트의 부모(<프로젝트>/.dira/workers/w1.sh -> <프로젝트>)
 TICKET_CWD="${TICKET_CWD:-$(dirname "$TICKET_ROOT")}"
+# P499-1: `remote H`는 `tick H`와 같은 길이다. 원격 슬롯(TICKET_NAME=remote<n>)은 기준 워커의 워크트리를
+# 나눠 쓰지 않고 자기 작업 디렉터리를 갖는다. 세션 재활용은 끈다(다음 티켓은 다음 sync가 다시 띄운다).
+REMOTE_SLOT=""
+if [ "${1:-}" = remote ]; then
+  REMOTE_SLOT=1
+  TICKET_REUSE=0
+  TICKET_CWD="$LOCAL/run/remote-cwd/$(python3 -c \
+    'import hashlib,sys;print(hashlib.sha1(sys.argv[1].encode()).hexdigest()[:8])' "$TICKET_ROOT")/$TICKET_NAME"
+  mkdir -p "$TICKET_CWD"
+fi
 
 # 프롬프트에 큐 경로를 적을 때, 같은 곳을 가리키는 워크트리 안의 이름이 있으면 그 이름을
 # 쓴다(§워커는 언제나 자기 워크트리에서 일한다 §개정 1). 읽는 파일은 안 갈린다 - 프롬프트
@@ -498,10 +508,12 @@ run_capped() {
 }
 
 CMD="${1:-tick}"
+[ -n "$REMOTE_SLOT" ] && CMD=tick
 # §1-5 갈래 B(지목 디스패치, 엔진 계약 `3acc1a56`) — `tick <해시>`일 때만 채운다. 인자 없는
 # `tick` · `dryrun`은 그대로 빈 값이라 아래 선정 루프가 종전과 한 글자도 안 다르게 돈다.
 TARGETHASH=""
 [ "$CMD" = "tick" ] && [ -n "${2:-}" ] && TARGETHASH="$2"
+[ -n "$REMOTE_SLOT" ] && [ -z "$TARGETHASH" ] && { echo "remote에는 해시가 필요합니다"; exit 2; }
 
 case "$CMD" in
   list)
@@ -753,7 +765,7 @@ esac
 
 # --- 원격 큐(P478): 워커 락보다 앞이다 - 락 때문에 이번 tick이 빠져도 살아 있음 신호는 간다 ---
 # remote.json이 없으면 이 블록은 아무것도 안 한다. 실패는 tick을 막지 않는다(로그 한 줄).
-if [ "$CMD" = "tick" ] && [ -f "$TICKET_ROOT/remote.json" ]; then
+if [ "$CMD" = "tick" ] && [ -z "$REMOTE_SLOT" ] && [ -f "$TICKET_ROOT/remote.json" ]; then
   _TO=""; command -v timeout >/dev/null 2>&1 && _TO="timeout 20"
   $_TO python3 "$CODE/remote.py" tick --root "$TICKET_ROOT" 2>&1 | while IFS= read -r line; do
     [ -n "$line" ] && log "$line"
@@ -1344,6 +1356,9 @@ esac
 # JSON은 이 문서 층(PROMPT)과 TAIL을 블록 둘로 나눠 쓰고, argv/dryrun은 아래에서 다시 합친
 # "$PROMPT$TAIL"을 쓰므로 최종 문자열은 한 글자도 안 갈린다.
 TAIL="$PROMPT"
+[ -n "$REMOTE_SLOT" ] && TAIL="$TAIL
+
+이 세션은 원격 슬롯($TICKET_NAME)이라 workers/$TICKET_NAME.sh가 없습니다. 워커 스크립트가 필요하면 $(basename "$0" .sh).sh를 쓰세요."
 PROMPT=""
 
 # --- 협업 프로토콜: <protocols>/AGENTS.md 를 프롬프트에 인라인한다 ---
