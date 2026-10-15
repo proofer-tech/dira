@@ -44,7 +44,10 @@ class Fake:
                 body = json.loads(self.rfile.read(n)) if n else None
                 path = self.path[len(PREFIX):]
                 fake.calls.append((self.command, path, body, self.headers.get("Authorization")))
-                r = fake.routes.get((self.command, path), (404, None))
+                r = fake.routes.get((self.command, path))
+                if r is None and path.startswith("reads?"):  # wait 값이 시각마다 달라 접두사로 받는다
+                    r = fake.routes.get((self.command, "reads"))
+                r = r or (404, None)
                 st, out = r(body) if callable(r) else r
                 raw = b"" if out is None else json.dumps(out).encode()
                 self.send_response(st)
@@ -79,7 +82,8 @@ class Base:
         # remote.py 옆 dispatch.py가 진짜면 워커가 뜬다 - 엔진 사본 디렉터리에 부른 인자만 적는 가짜를 둔다
         self.engdir = os.path.join(self.tmp.name, "eng")
         os.makedirs(self.engdir)
-        shutil.copy(os.path.join(HERE, "remote.py"), self.engdir)
+        for f in ("remote.py", "ontology_read.py", "graph.py"):
+            shutil.copy(os.path.join(HERE, f), self.engdir)
         self.dlog = os.path.join(self.tmp.name, "dispatch.log")
         with open(os.path.join(self.engdir, "dispatch.py"), "w") as f:
             f.write("import json, sys\nopen(%r, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
@@ -752,36 +756,57 @@ class Tools(Base, unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertNotIn("Error", r.stdout)
 
-    def test_push_changed_and_deleted_and_batch(self):
+    def test_sync_does_not_push_objects(self):
+        # P496: O4 올리기를 껐다 - 객체를 고쳐도 PUT objects가 안 간다
         self.ont_setup()
-        for i in range(201):
-            open(os.path.join(self.ont, "objects", "t", "o%03d.md" % i), "w").write("a%d" % i)
+        open(os.path.join(self.ont, "objects", "t", "o1.md"), "w").write("a")
         self.osync()
-        self.assertEqual(len(self.puts[0]["changes"]), 200)
+        open(os.path.join(self.ont, "objects", "t", "o1.md"), "w").write("edited")
         self.osync()
-        self.assertEqual(len(self.puts[1]["changes"]), 1)
-        self.osync()
-        self.assertEqual(len(self.puts), 2)
-        open(os.path.join(self.ont, "objects", "t", "o000.md"), "w").write("edited")
-        self.osync()
-        self.assertEqual([c["path"] for c in self.puts[2]["changes"]], ["objects/t/o000.md"])
-        self.assertEqual(self.puts[2]["changes"][0]["content"], "edited")
-        os.unlink(os.path.join(self.ont, "objects", "t", "o000.md"))
-        self.osync()
-        self.assertEqual(self.puts[3]["changes"], [{"path": "objects/t/o000.md", "deleted": True}])
+        self.assertEqual(self.puts, [])
+        self.assertFalse([c for c in self.fake.calls if c[0] == "PUT"])
 
-    def test_push_merges_worker_vault_with_queue_ontology(self):
+    # ---- 원격 읽기 긴 대기 (P496) ----
+    def read_setup(self, reads):
         self.ont_setup()
-        vault = os.path.join(self.home, "vault")
-        os.makedirs(os.path.join(vault, "objects", "Meet"))
-        open(os.path.join(vault, "objects", "Meet", "meet-9.md"), "w").write("m9")
-        open(os.path.join(self.ont, "objects", "t", "old.md"), "w").write("old")
-        os.makedirs(os.path.join(self.root, "workers"), exist_ok=True)
-        open(os.path.join(self.root, "workers", "w1.sh"), "w").write('#!/bin/bash\nTICKET_ONTOLOGY="%s"\n' % vault)
-        self.osync()
-        got = sorted(c["path"] for c in self.puts[0]["changes"])
-        self.assertEqual(got, ["objects/Meet/meet-9.md", "objects/t/old.md"])
-        self.assertFalse(any(c.get("deleted") for c in self.puts[0]["changes"]))
+        self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = (200, {"ok": True})
+        open(os.path.join(self.ont, "objects", "t", "o1.md"), "w").write("---\nname: o1\ntype: t\n---\nbody\n")
+        self.answers = {}
+        queue = list(reads)
+        self.fake.routes[("GET", "reads")] = lambda _b: (200, {"reads": [queue.pop(0)] if queue else []})
+        for r in reads:
+            self.fake.routes[("POST", "reads/" + r["read_id"])] = \
+                (lambda rid: lambda b: (self.answers.__setitem__(rid, b) or (200, {"ok": True})))(r["read_id"])
+
+    def sync_all_deadline(self, secs):
+        os.environ["DIRA_READ_DEADLINE"] = str(time.time() + secs)
+        self.addCleanup(os.environ.pop, "DIRA_READ_DEADLINE", None)
+        t0 = time.time()
+        r = self.run_remote("sync-all")
+        return r, time.time() - t0
+
+    def test_read_answered_within_deadline(self):
+        self.read_setup([{"read_id": "r1", "op": "object", "args": {"name": "o1"}, "project": "proj"},
+                         {"read_id": "r2", "op": "object", "args": {"name": "o1"}, "project": "nope"},
+                         {"read_id": "r3", "op": "bogus", "args": {}}])
+        r, dt = self.sync_all_deadline(20)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertLess(dt, 28)
+        self.assertEqual(self.answers["r1"]["result"]["object"]["name"], "o1")
+        self.assertNotIn("errors", self.answers["r1"])
+        self.assertEqual(self.answers["r2"], {"error": "unknown project"})  # 모르는 프로젝트
+        self.assertIn("error", self.answers["r3"])  # 모르는 op
+        self.assertFalse([c for c in self.fake.calls if c[0] == "PUT"])
+        hb = [c for c in self.fake.calls if c[1] == "runtimes/rt1/heartbeat"][-1][2]
+        self.assertIs(hb["reads"], True)
+
+    def test_reads_404_does_not_wait(self):
+        self.ont_setup()
+        self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = (200, {"ok": True})
+        r, dt = self.sync_all_deadline(20)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertLess(dt, 10)
+        self.assertTrue([c for c in self.fake.calls if c[0] == "GET" and c[1].startswith("reads?")])
 
     def write_op(self, writes):
         self.posts = {}
@@ -1039,7 +1064,7 @@ class WorkspaceRuntime(Base, unittest.TestCase):
                 os.utime(os.path.join(d, "last-sync"), (t, t))
         self.assertEqual(self.run_remote("sync-all").returncode, 0)
         hb = self.calls("POST", "runtimes/rt1/heartbeat")[-1][2]
-        self.assertEqual(set(hb), {"tools", "projects"})
+        self.assertEqual(set(hb), {"tools", "projects", "reads"})
         byname = {p["project"]: p for p in hb["projects"]}
         self.assertEqual(set(byname), {"proj", "pro j2"})
         self.assertNotIn("error", byname["proj"])
@@ -1056,7 +1081,7 @@ class WorkspaceRuntime(Base, unittest.TestCase):
         self.assertEqual(claims, ["proj", "pro j2"])
         paths = [c[1] for c in self.fake.calls]
         for p in ("proj", "pro%20j2"):
-            for base in ("objects?project=", "writes?runtime_id=rt1&project=", "answers?runtime_id=rt1&project="):
+            for base in ("writes?runtime_id=rt1&project=", "answers?runtime_id=rt1&project="):
                 self.assertIn(base + p, paths)
 
     def test_disconnect_last_root_releases_runtime(self):

@@ -1158,7 +1158,7 @@ def signal_body(ws, projs=None):
         if err:
             e["error"] = err.encode("utf-8")[:ERROR_MAX].decode("utf-8", "ignore")
         entries.append(e)
-    return {"tools": tools_payload(ws, refresh_health(ws)), "projects": entries}
+    return {"tools": tools_payload(ws, refresh_health(ws)), "projects": entries, "reads": True}
 
 
 def send_signal(server, rid, token, ws, projs=None):
@@ -1167,7 +1167,7 @@ def send_signal(server, rid, token, ws, projs=None):
 
 
 STEPS += [claim_jobs, report_status]  # 잡기 -> 상태 올리기. 살아 있음 신호는 sync-all이 보낸다(P491)
-STEPS += [ontology_push, apply_writes]
+STEPS += [apply_writes]  # 온톨로지 올리기(O4)는 P496에서 껐다. 읽기는 sync-all 끝의 긴 대기가 답한다
 
 
 def crontab_rw(new_lines=None):
@@ -1537,6 +1537,83 @@ def run_child(ws, qr):
             pass
 
 
+# ---- 원격 읽기 긴 대기 (P496) ----
+
+READ_MARGIN = 5  # 다음 시계 시각 5초 전까지만 기다린다
+
+
+def read_deadline():
+    """긴 대기 마감(epoch 초). 환경변수 DIRA_READ_DEADLINE이 덮는다. 시계는 매분 0초와 30초."""
+    env = os.environ.get("DIRA_READ_DEADLINE")
+    if env:
+        return float(env)
+    t = time.time()
+    return (t // 30 + 1) * 30 - READ_MARGIN
+
+
+def answer_read(item, projs):
+    """읽기 항목 하나의 답 본문."""
+    import ontology_read
+    names = [p for p in projs if p["project"] == item.get("project")] if item.get("project") else []
+    pick = names[0] if names else (projs[0] if not item.get("project") and len(projs) == 1 else None)
+    if pick is None:
+        return {"error": "unknown project"}
+    try:
+        out = ontology_read.run(pick["queue_root"], item.get("op"), item.get("args") or {})
+        body = {"result": out["result"]}
+        if out.get("errors"):
+            body["errors"] = out["errors"]
+        return body
+    except ValueError as e:
+        return {"error": str(e)}
+    except Exception as e:
+        return {"error": "%s: %s" % (type(e).__name__, e)}
+
+
+def read_loop(ws, rt, token, deadline):
+    server, rid = rt.get("server") or "", rt["runtime_id"]
+    projs = list_projects(ws)
+    try:
+        while True:
+            wait = min(25, int(deadline - time.time() - 2))
+            if wait < 1:
+                return
+            st, body = http(server, "GET", "reads?runtime_id=%s&wait=%d" % (rid, wait), None, token,
+                            timeout=wait + 10)
+            if st in (404, 405):
+                log("reads %s %d" % (ws, st))
+                return
+            if st != 200 or not isinstance(body, dict):
+                if st >= 400:
+                    log("reads %s %d" % (ws, st))
+                    return
+                continue
+            items = body.get("reads")
+            if not items:
+                time.sleep(0.5)  # 서버가 기다리지 않고 빈 목록을 주면 바쁜 루프가 된다
+            for it in items if isinstance(items, list) else []:
+                if not isinstance(it, dict) or not it.get("read_id"):
+                    continue
+                http(server, "POST", "reads/%s" % urllib.parse.quote(str(it["read_id"]), safe=""),
+                     answer_read(it, projs), token)  # 410은 조용히 넘어간다
+    except Unauthorized:
+        log("unauthorized " + ws)
+    except Exception as e:
+        log("reads %s %s: %s" % (ws, type(e).__name__, e))
+
+
+def long_wait(workspaces):
+    import threading
+    deadline = read_deadline()
+    if deadline - time.time() < (1 if os.environ.get("DIRA_READ_DEADLINE") else READ_MARGIN):
+        return  # 마감까지 5초가 안 남았으면 안 기다린다
+    ts = [threading.Thread(target=read_loop, args=(ws, rt, token, deadline)) for ws, rt, token in workspaces]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+
+
 def sync_all():
     home = cfg_home()
     os.makedirs(home, exist_ok=True)
@@ -1546,6 +1623,7 @@ def sync_all():
     try:
         rotate_log(home)
         merge_all()
+        waiters = []
         for ws in sorted(os.listdir(home)):
             if ws.startswith(".") or not os.path.isdir(os.path.join(home, ws)):
                 continue
@@ -1570,6 +1648,8 @@ def sync_all():
                     log("signal %s %s: %s" % (ws, type(e).__name__, e))
             for p in list_projects(ws):
                 run_child(ws, p["queue_root"])
+            waiters.append((ws, rt, token))
+        long_wait(waiters)
         return 0
     finally:
         try:
