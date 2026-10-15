@@ -9058,10 +9058,10 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P501-1 | 앱 - `lib/dispatch-stall.ts` `judgeStall` + 테스트 + ko-en 사전 키 | developer | - | 대기 |
-| P501-2 | 앱 - 서버가 판정 입력을 모아 보드 폴링에 싣고, `next-dispatch.tsx` 뒤에 `멈춤` 버튼과 팝오버 | developer | P501-1 | 대기 |
-| P501-3 | 매뉴얼 - `troubleshooting.md`(ko-en)에 `멈춤` 표시 절 | writer | - | 대기 |
-| P501-4 | QA - 위 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P501-1, P501-2, P501-3 | 대기 |
+| P501-1 | 앱 - `lib/dispatch-stall.ts` `judgeStall` + 테스트 + ko-en 사전 키 | developer | - | 발행 `2869f4d1` |
+| P501-2 | 앱 - 서버가 판정 입력을 모아 보드 폴링에 싣고, `next-dispatch.tsx` 뒤에 `멈춤` 버튼과 팝오버 | developer | P501-1 | 발행 `472c55b4` |
+| P501-3 | 매뉴얼 - `troubleshooting.md`(ko-en)에 `멈춤` 표시 절 | writer | - | 발행 `da14314f` |
+| P501-4 | QA - 위 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P501-1, P501-2, P501-3 | 발행 `fbbd2de3` |
 
 **2를 1에 엮는다.** 2가 부를 함수와 출력 형식이 1의 파일이라 그것 없이 착수하면 같은 파일을 두 번 쓴다.
 3은 위 표만 보면 써지므로 안 엮는다. designer 0장 - status bar의 기존 텍스트 크기와 색 토큰만 쓴다.
