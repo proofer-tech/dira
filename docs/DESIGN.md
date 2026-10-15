@@ -8998,10 +8998,10 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P498-1 | 엔진 - `dispatch.py` `request` 조건을 둘로 + `test_dispatch.py` + `board/actions.ts` 주석 | developer | - | 발행 |
-| P498-2 | 앱 - 홈 대화 턴 끝에 새 요구 해시를 `kickRequest` + `lib/` 판정 함수 테스트 | developer | - | 발행 |
-| P498-3 | 매뉴얼 - `concurrency.md`(ko-en) 즉시 디스패치 절의 `request` 조건과 홈 대화 입구 | writer | - | 발행 |
-| P498-4 | QA - 위 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P498-1, P498-2 | 발행 |
+| P498-1 | 엔진 - `dispatch.py` `request` 조건을 둘로 + `test_dispatch.py` + `board/actions.ts` 주석 | developer | - | 발행 `986e3a87` |
+| P498-2 | 앱 - 홈 대화 턴 끝에 새 요구 해시를 `kickRequest` + `lib/` 판정 함수 테스트 | developer | - | 발행 `916fb64b` |
+| P498-3 | 매뉴얼 - `concurrency.md`(ko-en) 즉시 디스패치 절의 `request` 조건과 홈 대화 입구 | writer | - | 발행 `e34d0810` |
+| P498-4 | QA - 위 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P498-1, P498-2 | 발행 `a12a9434` |
 
 셋은 서로 기다리지 않는다 - 값 표에 조건과 문장이 다 있다. designer 0장 - 화면에 새로 그리는 것이 없다.
 에픽은 새로 열지 않고 `P489`에 붙인다(같은 모듈의 조건 변경이다).
