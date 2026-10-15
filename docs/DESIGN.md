@@ -8938,6 +8938,74 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P498. 요구를 접수한 순간 쓸 수 있는 워커가 있으면 그 요구를 바로 디스패치한다 (요구 `995d7402`, 왕복 0회)
+
+사람 요구: *"요구 접수할 때 지금 워커 점유 가능한 상태면 접수한 티켓 바로 디스패치되게 해주세요"*.
+
+#### 실측 (2026-10-15)
+
+- 접수 폼(`board/actions.ts`)과 MCP `ticket_create`는 이미 `dispatch.py run --reason request --hash <해시>`를
+  부른다(P489). 그런데 이 큐의 `runner.log`에 남은 `request` 줄 5개가 **전부 `KICK-SKIP`이다** - 부하 3건
+  (`부하 245.46가 상한 10.00를 넘는다` 등, 이 요구 `995d7402` 자신도 여기에 걸렸다), 후보 아님 2건이다.
+- 부하 상한은 `~/.config/dira/dispatch.json`이 없어 기본값 `os.cpu_count()` = 10이다. 이 머신의 `load1`은
+  워커 세션이 돌면 늘 100을 넘는다(측정 당시 218). 그래서 부하 조건은 사실상 항상 거짓이다.
+- cron 사유는 부하와 다른 후보를 안 본다(P489 표). 그러므로 `request`가 부하로 건너뛰어도 기계를 보호하지
+  못하고, 같은 워커가 30초 안에 cron으로 뜬다. 막는 것은 지연뿐이다.
+- `request`는 다른 후보가 하나라도 있으면 안 띄운다. 큐에 백로그가 있으면 사람이 방금 접수한 요구가 그
+  뒤에 줄을 선다.
+- 홈 대화 입구(§7)는 세션이 `Write`로 `kind: request` 파일을 만들 뿐이라 디스패치를 아예 안 부른다.
+
+#### 결정
+
+1. **`request` 사유의 조건은 둘이다 - 그 해시가 후보이고, idle 워커가 있다.** 부하와 다른 후보는 안 본다.
+   사람이 "워커를 점유할 수 있으면"이라고 한 조건이 idle 워커 하나이기 때문이다. 판정은 `direct`에 해시를
+   준 경우와 같고, 로그의 사유 이름만 `request`로 남는다(어느 입구에서 왔는지 `runner.log`로 가린다).
+2. **`judge`는 바꾸지 않는다.** 세션이 스스로 판단해 부르는 사유라 사람의 요구 범위 밖이고, 네 조건(부하 -
+   idle - 다른 후보 0건 - 후보)을 그대로 둔다. P489 표의 `judge` 행은 "`request`와 같은 네 조건"이라고 적혀
+   있으므로 네 조건을 직접 나열하는 문장으로 고친다.
+3. **홈 대화 입구도 같은 디스패치를 부른다.** 홈 세션의 턴이 끝났을 때(`{"type":"result"}`를 받은 뒤) 앱이
+   그 턴의 스냅샷이 준 새 티켓 해시로 `tickets/<해시>.md`(열림)가 생겼는지 보고, 생겼으면
+   `kickRequest(root, 해시)`를 부른다. 세션 지침은 안 고친다 - 파일을 쓰는 것은 세션이고 디스패치는 앱이 한다.
+4. 즉시 디스패치는 여전히 최적화다(P489 결정 3). 실패해도 접수는 성공이고 cron이 30초 안에 집는다.
+
+주도성 5 판단: 엔진(`dispatch.py`) 수정이다. P489가 사람 승인을 받은 모듈 안에서 판정 한 갈래만 바뀌고
+`tick.sh` - `tickets.py`는 안 건드린다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 자리 | 바뀌는 것 |
+|---|---|
+| `dispatch.py` `decide` | `request`는 해시 후보 검사 다음에 `idle`만 본다. 있으면 `(idle[0], "idle 워커")`, 없으면 `(None, "idle 워커가 없다")`. 부하 - 다른 후보 검사는 `judge`에만 남는다. `--hash` 필수(rc 2)는 그대로다 |
+| `test_dispatch.py` | `request` + 다른 후보 있음 -> go, `request` + `load_max 0` -> go, `request` + idle 워커 없음 -> no-go(`idle 워커가 없다`). `judge`의 기존 단언(다른 후보 - 부하로 no-go)은 그대로 통과 |
+| `board/actions.ts` 주석 | `모듈이 부하와 다른 후보를 본다` -> `모듈이 후보와 idle 워커를 본다` |
+| 홈 대화 | 턴이 끝난 뒤 `existsSync(<루트>/tickets/<새 해시>.md)`면 `kickRequest(root, 새 해시)`. 파일이 없거나(요구를 안 만든 턴) 이미 `.wip`이면 안 부른다. 판정은 `lib/` 함수 하나로 두고 테스트한다(`pnpm test`는 `app/**`을 안 훑는다) |
+| P489 사유 표 | `request` 행의 조건을 위 결정 1로, `judge` 행을 네 조건 나열로 고친다 |
+| 매뉴얼 | `apps/teams/docs/concurrency.md`와 영문판의 즉시 디스패치 절에서 `request` 조건을 결정 1로, 홈 대화 입구도 같은 길을 탄다는 한 줄 |
+
+#### 수용조건
+
+- [ ] 임시 큐(워커 1개 idle, 열린 후보 `aaaaaaaa`와 `bbbbbbbb`, `dispatch.json`의 `load_max` 0)에서
+      `python3 dispatch.py run <루트> --reason request --hash aaaaaaaa --dryrun`을 돌리면 rc 0이고 JSON의
+      `go`가 true, `worker`가 그 워커다.
+- [ ] 같은 큐에서 `--reason judge --hash aaaaaaaa --dryrun`은 rc 1이고 `why`가 부하 문장이다.
+- [ ] 워커 락이 있어 idle 워커가 0개인 큐에서 `--reason request --hash aaaaaaaa`는 rc 1이고 `runner.log`에
+      `KICK-SKIP request aaaaaaaa idle 워커가 없다` 한 줄이 남는다.
+- [ ] `python3 -m pytest test_dispatch.py`가 통과한다.
+- [ ] 홈 대화 판정 함수의 테스트가 `pnpm test`에서 통과한다 - 새 해시 파일이 열림이면 kick 1회, 없거나
+      `.wip`이면 0회.
+- [ ] idle 워커가 있는 실제 큐에서 접수 폼으로 요구를 넣으면 `runner.log`에 `KICK request <그 해시> <워커>`가
+      남고, 그 해시가 60초 안에 `.wip`이 된다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P498-1 | 엔진 - `dispatch.py` `request` 조건을 둘로 + `test_dispatch.py` + `board/actions.ts` 주석 | developer | - | 발행 |
+| P498-2 | 앱 - 홈 대화 턴 끝에 새 요구 해시를 `kickRequest` + `lib/` 판정 함수 테스트 | developer | - | 발행 |
+| P498-3 | 매뉴얼 - `concurrency.md`(ko-en) 즉시 디스패치 절의 `request` 조건과 홈 대화 입구 | writer | - | 발행 |
+| P498-4 | QA - 위 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P498-1, P498-2 | 발행 |
+
+셋은 서로 기다리지 않는다 - 값 표에 조건과 문장이 다 있다. designer 0장 - 화면에 새로 그리는 것이 없다.
+에픽은 새로 열지 않고 `P489`에 붙인다(같은 모듈의 조건 변경이다).
+
 ### P497. 원격 큐 - 긴 대기 연결로 서버의 깨우기를 받고, 로컬 작업 티켓이 바뀌면 바로 보고한다 (요구 `bc7376c9`, 왕복 0회)
 
 사람 요구(임한솔): *"갈래-dira간 핸드오프가 너무 느려요 상호간 요청과 처리를 즉각 송수신하도록 해주세요."*
@@ -9499,9 +9567,9 @@ P496-1이 진입점 `run`을 정해야 원격 읽기와 MCP 도구가 그것을 
 | 사유 | 부르는 자리 | 띄우는 조건 |
 |---|---|---|
 | `cron` | crontab 줄 | `--worker` 필수. 그 워커가 idle이면 띄운다. 부하와 다른 후보는 안 본다 - 지금 cron과 같다. 후보가 없으면 `tick.sh`가 그냥 끝난다 |
-| `request` | 요구(`kind: request`) 티켓을 만든 자리. 화면의 티켓 만들기 액션과 MCP `ticket_create` | `--hash` 필수. 부하가 상한 이하, idle 워커가 있음, 다른 후보 0건, 그 해시가 후보. 넷이 다 맞을 때만 띄운다 |
+| `request` | 요구(`kind: request`) 티켓을 만든 자리. 화면의 티켓 만들기 액션, 홈 대화(P498), MCP `ticket_create` | `--hash` 필수. 그 해시가 후보이고 idle 워커가 있으면 띄운다. 부하와 다른 후보는 안 본다(P498 결정 1) |
 | `direct` | MCP `dispatch_now`, 화면의 kick(`kickIdleWorker`, `kickTicket`), 사람의 CLI | 해시가 있으면 그 해시가 후보이고 idle 워커가 있을 때 띄운다. 해시가 없으면 idle 워커만 본다. 부하와 다른 후보는 안 본다 - 사람이나 화면이 "지금"이라고 했기 때문이다 |
-| `judge` | 세션이 엔진 기본 지침(아래)을 따라 부른다 | `request`와 같은 네 조건. `--hash` 필수 |
+| `judge` | 세션이 엔진 기본 지침(아래)을 따라 부른다 | `--hash` 필수. 부하가 상한 이하, idle 워커가 있음, 다른 후보 0건, 그 해시가 후보. 넷이 다 맞을 때만 띄운다 |
 
 | 자리 | 바뀌는 것 |
 |---|---|
