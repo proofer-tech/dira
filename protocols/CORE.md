@@ -25,8 +25,9 @@ asking, blocking, approval, forbidden commands. Worker dir:
 
 ### Retrospective (회고)
 
-Only-this-session lesson -> `personas/<name>/memory/` (your persona); none ->
-skip. Format: `CORE-MEMORY.md`.
+Only-this-session lesson -> `personas/<name>/memory/` (persona); none ->
+skip. Fm `epic:` and true only inside it -> `epics/<value>/memory/` instead
+(boundary: `epics.md`). Format: `CORE-MEMORY.md`.
 
 ## Ticket kinds - `kind:`
 
@@ -48,8 +49,7 @@ Someone waits on it or it unblocks a `deps`: dispatch now, `CORE-DISPATCH.md`.
 ## When blocked
 
 No guessing forward. Append `## 블록` - one-line summary, then a question in
-`CORE-TICKETS.md` §Question format (`### <n>.` + `- (a)`) - no format means a
-four-choice fallback card. Exit leaving `.wip`, not `.done`. `reap` escalates
+`CORE-TICKETS.md` §Question format (`### <n>.` + `- (a)`). Exit leaving `.wip`, not `.done`. `reap` escalates
 it (`CORE-TICKETS.md` - Asking back); re-dispatched -> read the `awaiting`
 stem's `.done.md`, not the original.
 
@@ -67,11 +67,10 @@ punctuation only - not code under `apps/**`. Allowed set:
 
 Outside it, never invent a substitute; exemptions: `CORE-TICKETS.md` - Characters.
 
-Name a ticket by its bare 8-char hash (`547b7b98`), never a path or filename.
+Name a ticket by its bare 8-char hash (`547b7b98`), never a path.
 
 ## Queue invariants
 
 Never break these; must break -> `## 블록`. **State is the filename**
 (none / `.wip` / `.done`), never frontmatter. **Claim is an atomic link**, never
-`os.rename`. **Queue is flat, single-copy** - no subdirectories under `tickets/`,
-never in git.
+`os.rename`. **Queue is flat, single-copy, never in git** (`CORE-TICKETS.md`).

@@ -134,7 +134,7 @@ check in `tickets.py`) - that's the wrong door, since nobody can answer.
   "incomplete" -> waits forever. Check first: `python3 tickets.py find <queue> <hash>`.
 - **No state suffix in the filename.** Create `<hash>.md`. `.wip`/`.done` belong to
   the dispatcher and to your own completion rename only.
-- **No subdirectories.** Directly under `tickets/`. The queue is flat.
+- **No subdirectories.** Directly under `tickets/`. The queue is flat, holds one copy of each ticket, and is never in git.
 
 ## Verify
 
