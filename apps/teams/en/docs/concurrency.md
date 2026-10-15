@@ -252,13 +252,19 @@ Every caller attaches a reason. Each reason checks different conditions.
 | Reason | Called from | Starts a worker when |
 |---|---|---|
 | `cron` | Each worker's crontab line | That worker is idle. Load and other candidates are not checked. With no candidate, `tick.sh` simply ends |
-| `request` | The moment a request (`kind: request`) ticket is made: the ticket-creation action on screen and MCP `ticket_create` | All four hold: load is at or under the limit, an idle worker exists, there are zero candidates other than that ticket, and that ticket is a candidate |
+| `request` | The moment a request (`kind: request`) ticket is made: the ticket-creation action on screen, the home chat, and MCP `ticket_create` | That ticket is a candidate and an idle worker exists. Load and other candidates are not checked |
 | `direct` | MCP `dispatch_now`, the kicks on screen, a command a person runs | With a hash, that ticket is a candidate and an idle worker exists. Without one, an idle worker is enough. Load and other candidates are not checked |
-| `judge` | A session, on its own, following the engine guidance | The same four conditions as `request` |
+| `judge` | A session, on its own, following the engine guidance | All four hold: load is at or under the limit, an idle worker exists, there are zero candidates other than that ticket, and that ticket is a candidate |
 
-`request` and `judge` start nothing while the queue holds even one other candidate. The new ticket
-does not jump ahead of tickets already waiting; it waits for its cron turn. `direct`, on the other
-hand, means a person or a screen said "now," so it skips the load and other-candidate checks.
+`request` fires the moment a person has just put in a request, so if even one worker is idle, that
+request starts right away. It does not queue up behind tickets that were already waiting. `direct`
+also means a person or a screen said "now," so it skips the load and other-candidate checks too.
+Only `judge` checks all four. It starts nothing while the queue holds even one other candidate, so
+the new ticket does not jump ahead of tickets already waiting and waits for its cron turn instead.
+
+When you put in a request from the home chat, the app calls `request` after the chat turn ends. It
+calls only if that turn created a new request file and no worker has taken it yet; a turn that made
+no request calls nothing. So no `KICK` line appears until the home chat has finished its answer.
 
 A session calls with `judge` in three cases: a person in the current conversation is waiting on a
 ticket it just made, the ticket it is closing clears another ticket's `deps`, or its own handoff
@@ -271,7 +277,7 @@ covered in §The worker lock above.
 
 ### Changing the load limit - `~/.config/dira/dispatch.json`
 
-Only `request` and `judge` check load. If this computer's one-minute load average (the first
+Only `judge` checks load. If this computer's one-minute load average (the first
 number `uptime` shows) is above the limit, no worker starts. The default limit is this computer's
 CPU core count.
 
@@ -299,12 +305,22 @@ Every immediate-dispatch decision leaves one line in `<root>/workers/runner.log`
   ticket shows in that worker's `DISPATCH` line.
 - **A `KICK-SKIP` line** means nothing started, and the last field says in a sentence which
   condition failed: load over the limit, no idle worker, another candidate waiting, or the ticket
-  not being a candidate.
+  not being a candidate. A `request` line only ever shows the last two: no idle worker, or not a
+  candidate.
 - **The `cron` reason writes no line at all.** It would pile up a line every 30 seconds. For cron
   rounds, read the worker-named `DISPATCH` and `SKIP` lines as before (see [Logs](/docs/logs)).
 
-If you made a request ticket, nothing started for more than 30 seconds, and there is no
-`KICK-SKIP` line either, immediate dispatch was never called. Look at cron instead.
+If you put in a request and it did not start right away, find the `request` line carrying that
+hash in `runner.log`.
+
+- `KICK-SKIP request <hash> idle 워커가 없다` (no idle worker) means no worker was idle: every
+  worker was on another ticket, or had been dropped from crontab and stopped. When one finishes,
+  cron picks the request up within 30 seconds. If you see this every time, add workers (§This
+  project's ceiling above).
+- `KICK-SKIP request <hash> 그 해시는 후보가 아니다` (that hash is not a candidate) usually means
+  another worker took it in the meantime, or its `deps` are not cleared yet.
+- No line at all means immediate dispatch was never called. For the home chat, first check that the
+  turn has ended; otherwise look at cron.
 
 To see the decision without starting anything, call it yourself with `--dryrun`. The engine
 directory is the one that holds `tick.sh`.
