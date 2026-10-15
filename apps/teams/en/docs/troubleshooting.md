@@ -22,9 +22,9 @@ no open tickets there is simply no work, and nothing attaches. The board reads t
 
 Several reasons can hold at once, but the line shows only one. A reason higher in the table below
 wins. Click the line and a popover opens. Its first line is the chosen reason and what to do, and
-below that comes one line per idle worker, `<name> - <that worker's line>`. Expand a worker's line
-and you see the raw text the call was made from, the line that worker wrote to `runner.log`. You do
-not have to open the workers one by one and read their logs. If the watchdog has a problem it
+below that, under `Idle workers`, comes one line per idle worker, `<name> - <that worker's line>`.
+Expand a worker's line and you see the `Raw line` the call was made from, the line that worker
+wrote to `runner.log`. You do not have to open the workers one by one and read their logs. If the watchdog has a problem it
 cannot fix on its own and handed to a person, it shows up separately in a `Watchdog` group at the
 bottom.
 
@@ -32,20 +32,20 @@ bottom.
 
 | Order | Key | The line after `Stalled:` | What to do |
 |---|---|---|---|
-| 1 | `auth` | `No {engine} auth token` | `Put a token in Settings > Authentication and it starts on the next tick` ([Authentication](/docs/auth)) |
-| 2 | `cooldown` | `Account limit - clears in {n}s` | `It clears if you wait. To run now, turn on another account in Settings > Authentication` |
+| 1 | `auth` | `{engine} has no auth token` | `Add a token in Settings > Authentication and it starts on the next tick` ([Authentication](/docs/auth)) |
+| 2 | `cooldown` | `Account limit - clears in {n}s` | `It clears by waiting. To run now, turn on another account in Settings > Authentication` |
 | 3 | `machineCap` | `Machine-wide sessions {a}/{b} - other projects are using the slots` | `It clears when another session ends. To run now, raise Settings > Workers > Machine-wide session limit` ([How many to run at once](/docs/concurrency)) |
-| 4 | `personaCap` | `{persona} limit {a}/{b}` | `It clears when that persona's In progress tickets finish. Change the limit on the persona screen` |
-| 5 | `priority` | `No other ticket starts until priority 1 ticket {hash} finishes` | `It clears when {hash} finishes. If this work must not be blocked, lower that ticket's priority`. Clicking the hash opens that ticket |
+| 4 | `personaCap` | `{persona} limit {a}/{b}` | `It clears when that persona's in-progress ticket ends. Change the limit on the Personas screen` |
+| 5 | `priority` | `Priority 1 ticket {hash} blocks other tickets until it ends` | `It clears when {hash} ends. If it should not block, lower that ticket's priority`. The `Open ticket` link opens that ticket |
 | 6 | `shellCap` | `{n} shells piled up, resting` | `The watchdog cleans up on the next tick. Nothing for you to do` |
-| 7 | `watchdog` | The watchdog's line as written | `The watchdog cannot fix this on its own. A person fixes what the sentence above names` |
-| 8 | `noCandidate` | `No ticket can start - waiting on deps {d}, awaiting answer {w}, polling {p}` | `Answer the tickets awaiting an answer, or wait for the prerequisite tickets to finish`. Clicking `awaiting answer {w}` shows only Awaiting answer tickets on the board |
-| 9 | `notWaking` | `Idle workers have not woken once in 90 seconds` | `Check the worker screen for a defect mark (no cron line - no exec bit)`. The link opens the worker screen ([It is on cron but never wakes](#it-is-on-cron-but-never-wakes)) |
+| 7 | `watchdog` | The watchdog's line as written | `The watchdog cannot fix this itself. A person fixes what the sentence above points at` |
+| 8 | `noCandidate` | `No ticket can start - waiting on deps {d}, awaiting answer {w}, polling {p}` | `Answer the awaiting tickets or wait for the dependencies to finish`. The `Show awaiting tickets` link shows only Awaiting answer tickets on the board |
+| 9 | `notWaking` | `No idle worker woke for 90 seconds` | `Check the defect marks on the Workers screen (no cron line - no exec bit)`. The `Open Workers` link opens the Workers screen ([It is on cron but never wakes](#it-is-on-cron-but-never-wakes)) |
 | - | `unknown` | `Unknown reason - raw: {raw}` | `Paste the raw line into the home chat and ask` |
 
 For the reasons that clear by waiting (`cooldown` - `machineCap` - `personaCap` - `priority` -
-`shellCap`), restarting does not make them clear any sooner. The account limit, the session limits and the piled-up shells are all still
-there after the app comes back. If you do not want to wait, change the one setting the to-do names.
+`shellCap`), restarting does not make them clear any sooner. The account limit, the session limits
+and the piled-up shells are all still there after the app comes back. If you do not want to wait, change the one setting the to-do names.
 `noCandidate` is not a fault. Every remaining ticket is waiting on a prerequisite, an answer or a
 polling condition, and the next ticket starts once one of those comes through ([It is Open and
 nobody claims it](#it-is-open-and-nobody-claims-it)).
