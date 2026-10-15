@@ -204,9 +204,19 @@ new sync. The next tick is a few seconds away, so this does not take long. If a 
 the long wait from reaching the server, no wake arrives, the job comes down at the next sync, and you
 may wait up to about 30 seconds.
 
-With no free worker, you wait longer. Each sync fetches only as many jobs as the queue has free
-workers, so if every worker is holding another ticket, the job stays on the server until one
-finishes.
+A remote job does not wait for your local workers, even when they are all busy, because a fetched
+job starts in a remote slot rather than on a worker. A remote slot is a place to run that is separate
+from the workers, named `remote1`, `remote2`, and so on. So even when local tickets occupy every
+worker, the job starts at the next clock tick as described above, at most about 30 seconds later.
+
+How many remote jobs run at once is set by `slots` in the queue root's `remote.json`. The default is
+2. When every slot is taken, the job stays on the server until one finishes. To change the number,
+edit the integer in `remote.json`, for example `"slots": 3`. Each sync reads the file again, so the
+change applies from the next sync.
+
+Set `slots` to `0` to turn remote slots off and get the earlier behavior. Each sync then fetches only
+as many jobs as the queue has free workers, so if every worker is holding another ticket, the job
+stays on the server until one finishes.
 
 On every heartbeat, the clock reports, for each project, when it will next fetch jobs, plus each
 worker's next run time and the ticket it currently holds. The web screen can use those values to show when a job will start.
