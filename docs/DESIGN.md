@@ -8938,6 +8938,89 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P500. 원격 큐 - 원격 읽기의 빈 시간을 줄이고, 해석 캐시로 읽기마다 온톨로지 전체를 다시 해석하지 않으며, 한 번에 받은 읽기를 함께 답한다 (요구 `7ed350b0`, 왕복 0회)
+
+갈래 큐가 넘긴 요청이다(갈래 요청 `3ed53cf2`). 갈래 사용자가 온톨로지 읽기가 매우 느리다고 알렸다. 갈래
+쪽에서 고칠 수 있는 것(이름별 조회 `95cb0dff`, 같은 읽기 묶기 `1acfe63d`)은 갈래 큐가 맡고, 아래 셋은 dira
+코드라 이 큐로 넘어왔다.
+
+#### 실측 (2026-10-15, `remote.py` - `ontology_read.py`)
+
+- **빈 시간.** 시계는 매분 0초와 30초에 `sync-all`을 띄운다. 긴 대기 마감은 다음 시각 5초 전이고
+  (`READ_MARGIN = 5`), 긴 대기는 모든 루트의 `run_child`(루트당 상한 20초)가 끝난 뒤에야 시작한다. 그래서
+  30초마다 적어도 5초, 루트 sync가 느리면 그보다 길게 아무도 읽기를 가져가지 않는다. 마감 여유 5초는
+  `.sync-all.lock`이 다음 시계 전에 풀려야 해서 둔 값이다 - 락을 쥔 채 시각이 넘어가면 다음 시계가 통째로
+  빠진다.
+- **깨우기가 읽기를 막는다.** `read_loop`는 응답마다 `handle_wake`를 부르고, 그 안의 `run_now`가 루트 sync를
+  동기로 돌린다. 그동안 다음 `GET reads`가 나가지 않는다.
+- **해석 반복.** `op_objects` - `op_object` - `op_search`가 모두 `load_objects`로 `objects/` 아래 파일을 전부
+  읽고 해석하고 SHA-256을 계산한다. 이름 하나를 묻는 `object`도 같다. 갈래가 이름별 조회로 바꾸면 이름
+  수만큼 전체 해석이 반복된다.
+- **차례 처리.** `read_loop`는 한 응답의 항목(최대 20건)을 `answer_read`로 하나씩 답한다. 뒤 항목은 앞
+  항목의 전체 해석을 모두 기다린다.
+
+#### 결정
+
+셋 다 받는다. 상주 데몬을 만들지 않는다는 앞선 답(P478, P491)은 유지한다 - 읽기는 여전히 시계가 띄운
+`sync-all` 프로세스 안에서만 한다.
+
+1. **락을 둘로 나누고 긴 대기를 sync와 동시에 시작한다.** `.sync-all.lock`은 신호와 루트 sync만 감싸고,
+   긴 대기는 워크스페이스별 새 락 `.read-<ws>.lock`을 쓴다. 신호를 보낸 직후 긴 대기를 시작하고 루트 sync는
+   그 옆 스레드에서 돈다. 다음 시계가 sync 락을 못 잡는 일이 없으므로 마감 여유를 5초에서 1초로 줄인다.
+2. **깨우기 sync는 읽기를 막지 않는다.** `handle_wake`의 `run_now`는 별도 스레드로 띄운다. 같은 루트는 한
+   번에 하나만 돌고, `WAKE_GAP` - `WAKE_CUTOFF`는 그대로다.
+3. **해석 캐시를 둔다.** `ontology_read.py` 모듈 안의 메모리 캐시이고 열쇠는 (절대경로, `st_mtime_ns`,
+   `st_size`)다. 디렉터리를 훑고 `stat`하는 일은 읽기마다 하고, 해석과 SHA-256은 열쇠가 바뀐 파일만 한다.
+   디스크에 캐시 파일을 두지 않는다 - `sync-all` 프로세스 한 번(약 30초)과 MCP 서버 프로세스가 수명이고,
+   그 안의 반복이 이번 비용의 전부다.
+4. **한 응답의 항목을 함께 답한다.** 스레드 최대 4개로 `answer_read`를 돌리고, 끝나는 대로 `POST reads/<id>`를
+   보낸다. 그 사이 다음 `GET reads`는 모든 항목의 답을 보낸 뒤에 나간다(순서는 그대로).
+
+엔진 수정이지만 P478이 사람 승인을 받은 `remote.py`와 P496의 `ontology_read.py` 안에서 끝난다. `tick.sh` -
+`tickets.py` - `dispatch.py`는 안 건드린다. API는 바뀌지 않는다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 자리 | 값 |
+|---|---|
+| `READ_MARGIN` | 1(초). `read_deadline()`은 다음 30초 경계 - 1초다. `long_wait`의 "마감까지 이만큼이 안 남으면 안 기다린다" 문턱도 이 값을 쓴다 |
+| `sync_all` 순서 | sync 락 -> 로그 회전 - 합치기 -> 워크스페이스마다 신호 -> 긴 대기 스레드 시작(`read_loop` - `watch_loop`) -> 루트 sync(`run_child`를 지금처럼 차례로, 별도 스레드 하나) -> 루트 sync가 끝나면 **sync 락을 푼다** -> 긴 대기 스레드를 기다린다 -> 끝. 신호가 `Unauthorized`인 워크스페이스는 지금처럼 긴 대기에서 뺀다 |
+| 읽기 락 | `<cfg_home>/.read-<ws>.lock`(`take_lock`과 같은 방식, mkdir). 못 잡으면 0.2초 간격으로 3초까지 다시 시도하고, 그래도 못 잡으면 이번 시계에서 그 워크스페이스의 긴 대기를 건너뛴다(`log("read-busy <ws>")`). 긴 대기가 끝나면 푼다. `watch_loop`는 이 락 안에서 함께 돈다 |
+| `read_loop`의 `wait` | `min(25, int(deadline - time.time() - 1))`. 1 미만이면 끝낸다 |
+| 깨우기 | `handle_wake`는 고른 루트마다 `threading.Thread(target=run_now, args=(ws, qr, "--now"), daemon=True)`를 띄우고 바로 돌아간다. 그 루트의 이전 깨우기 스레드가 아직 살아 있으면 띄우지 않는다. `long_wait`는 끝날 때 이 스레드들을 `join`한다(상한은 `child_timeout()`) |
+| 함께 답하기 | `read_loop`는 한 응답의 유효 항목을 `concurrent.futures.ThreadPoolExecutor(max_workers=4)`로 `answer_read`에 넘기고, 각 결과가 나오는 대로 그 항목의 `POST reads/<id>`를 보낸다. 모든 POST가 끝난 뒤 `handle_wake`와 다음 `GET reads`로 간다 |
+| 해석 캐시 | `ontology_read.py`의 모듈 전역 `_CACHE = {}`와 `threading.Lock`. `parse(rel, path)`를 부르기 전에 `os.stat(path)`로 열쇠 `(path, st_mtime_ns, st_size)`를 만들고, `_CACHE[path]`의 열쇠가 같으면 저장해 둔 (객체, 사유)를 쓴다. 다르면 해석해서 덮는다. 저장한 객체는 `rel`이 같을 때만 쓴다(같은 파일이 다른 위치 상대경로로 보이면 다시 해석). 이번 훑기에 안 나온 경로는 `load_objects`가 끝날 때 지운다. `stat`이 실패하면 지금처럼 `parse`가 `read-failed`를 낸다 |
+| 캐시가 돌려주는 것 | 해석 결과 객체를 그대로 공유하지 않는다 - 호출자가 고칠 수 있으므로 `load_objects`는 캐시의 객체를 얕은 복사(`dict(o)`)해 돌려준다. `props` - `links`는 지금 어떤 op도 고치지 않으므로 깊은 복사는 하지 않는다 |
+| `versions/` | 이번 범위 밖이다(`op_versions` - `op_version`은 이미 그 이름 폴더만 읽는다) |
+| 매뉴얼 | `remote.md`(ko-en)의 컴퓨터 시계 - 원격 읽기 절. 긴 대기는 신호 직후 시작해 다음 시계 1초 전까지 열려 있으므로 빈 시간이 30초 중 약 1초라는 점, 루트 sync가 길어도 읽기는 기다리지 않는다는 점. "약 5초 틈"과 "약 25초" 문장을 이에 맞춘다 |
+
+#### 안 하는 것
+
+- 상주 데몬, 디스크 캐시, 파일 감시(FSEvents 등).
+- `GET reads` 동시 요청(한 워크스페이스에 긴 대기는 하나다). API 변경.
+- 갈래 쪽 이름별 조회와 같은 읽기 묶기 - 갈래 티켓 `95cb0dff` - `1acfe63d`가 맡는다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P500-1 | 엔진 - `remote.py` 락 나누기 - `sync_all` 순서 - `READ_MARGIN` 1 - 깨우기 스레드 - 함께 답하기 + `test_remote.py` | developer | - | 발행 예정 |
+| P500-2 | 엔진 - `ontology_read.py` 해석 캐시 + 그 테스트 | developer | - | 발행 예정 |
+| P500-3 | 매뉴얼 - `remote.md`(ko-en) 위 매뉴얼 행 | writer | - | 발행 예정 |
+| P500-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P500-1, P500-2 | 발행 예정 |
+
+**네 장이다.** P500-1과 P500-2는 고치는 파일이 달라 서로 기다리지 않는다. designer 0장 - dira 화면이 없다.
+에픽 `P478`에 붙인다.
+
+#### 수용조건
+
+- [ ] `python3 test_remote.py`가 통과하고, `ontology_read.py`를 부르는 테스트 파일(`grep -l ontology_read test_*.py`)도 전부 통과한다.
+- [ ] 가짜 서버에서 루트 sync가 10초 걸리도록 만들고(`DIRA_SYNC_TIMEOUT` 안, 가짜 서버의 `jobs/claim`을 10초 늦게 답함) `remote.py sync-all`을 돌리면, 첫 `GET reads`가 신호 뒤 2초 안에 온다.
+- [ ] 같은 조건에서 `sync-all`이 끝나기 전에 `.sync-all.lock`이 사라지고, 그 사이 두 번째 `sync-all`을 띄우면 그것이 신호를 보낸다(`last-heartbeat` 간격 조건을 맞춘 상태에서).
+- [ ] `DIRA_READ_DEADLINE`을 두지 않은 `read_deadline()`의 값이 다음 30초 경계 - 1초다.
+- [ ] 깨우기 응답 뒤 그 루트 sync가 5초 걸리도록 만들면, 다음 `GET reads`가 깨우기 응답 뒤 1초 안에 온다.
+- [ ] 한 응답에 읽기 넷을 주고 `answer_read`가 항목마다 1초 걸리게 만들면(테스트에서 바꿔 끼움) 네 `POST reads/<id>`가 모두 응답 뒤 2초 안에 온다.
+- [ ] 객체 500개인 임시 온톨로지에서 `ontology_read.run(root, "object", {"name": ...})`를 두 번 부르면 두 번째 호출에서 `parse`가 한 번도 안 불린다. 객체 파일 하나를 고친 뒤 다시 부르면 `parse`가 정확히 한 번 불리고, 고친 내용과 새 `sha256`이 결과에 있다. 파일 하나를 지우면 그 객체가 결과에서 빠진다.
+- [ ] P500 커밋들의 `git show --stat`에 `tick.sh` - `tickets.py` - `dispatch.py`가 없다.
+
 ### P499. 원격 큐 - 잡은 작업은 워커와 디스패치를 거치지 않고 원격 슬롯에서 바로 세션을 연다 (요구 `c35960b2`, 왕복 0회)
 
 사람 요구(임한솔): *"갈래가 dira 엔진 쓸 때는 티켓 디스패치 루트 타지말고 즉각 세션 열어서 수행하도록
