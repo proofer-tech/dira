@@ -8938,6 +8938,93 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P496. 원격 큐 - 온톨로지를 사본으로 올리지 않고, dira가 해석한 구조로 원격 읽기와 MCP 도구에 돌려준다 (요구 `d0691fd0`, 왕복 0회)
+
+사람 결정(임한솔, 2026-10-15): *"온톨로지를 DB사본으로 가지고 있으면 안돼요 온톨로지는 온톨로지고 DB에는 갈래
+플랫폼 운영을 위한 정보들만 있어야 해요"*, 이어서 *"이러면 dira에 외부에서 온톨로지를 읽는 API/MCP를
+강화해야할 것 같은데요"*. 갈래 큐가 갈래 정본 `서비스/아키텍처/dira협의요구사항.md`의 R18과 "R18 형식" 표를
+넘겼다(갈래 요구 `560e3d03`).
+
+실측(2026-10-15, with-cto): 런타임이 `PUT objects`로 객체 530건을 올렸지만 갈래 서버 파서가 frontmatter 형식
+차이(`links`가 이름 목록, 빈 속성 값, `name:` 대신 `id:`)로 530건을 모두 건너뛰고 `204`로 답했다. 매니페스트에는
+올린 것으로 남았고 화면에는 아무것도 나오지 않았다. 갈래가 dira 형식을 따로 해석하는 한 같은 어긋남이 다시 생긴다.
+
+요청 넷을 다 받는다. 사람이 정하지 않은 것은 주도성 5로 pm이 정했다.
+
+1. **해석은 한 곳에서만 한다.** 새 엔진 파일 `ontology_read.py`가 여섯 조회를 구현하고, 원격 읽기(`remote.py`)와
+   MCP 도구(`mcp_tools.py`)가 같은 함수를 부른다. 관계 해석은 `graph.py` `ontology_links`를 그대로 쓰되, 이름
+   목록 형태의 `links:`도 읽도록 넓힌다 - 그래야 `graph.py` 간선과 원격 읽기의 관계가 같다.
+2. **형식은 갈래 제안(R18 형식 표)을 받는다.** 다르게 정한 것은 셋이다. (a) `GET reads`의 `project`는
+   선택이고, dira는 빼고 부른다 - 런타임 하나가 프로젝트 여럿을 가지므로(P485, P491) 한 번의 긴 대기로 전부
+   받고, 서버는 항목마다 `project`를 싣는다. (b) 해석 오류의 `reason`은 아래 다섯 값으로 고정한다. (c) 신호에
+   `reads: true`를 실어 원격 읽기가 들어간 런타임임을 알린다.
+3. **긴 대기는 컴퓨터 시계(`sync-all`) 안에서만 한다.** 시계는 매분 0초와 30초에 돌고(P491), sync를 마친 뒤
+   다음 시계 시각 5초 전까지 `GET reads`를 되풀이한다. `.sync-all.lock`을 쥔 채로 기다리므로 대기하는 프로세스는
+   언제나 하나다. 큐별 `sync --root`(워커 tick)는 기다리지 않는다. 상주 데몬은 만들지 않는다(P478 답 유지).
+4. **O4 올리기는 끈다.** `sync`가 `ontology_push`를 부르지 않는다. 매니페스트 파일은 지우지 않고 그대로 둔다.
+   O5 원격 쓰기는 그대로다 - 갈래가 쓰기의 기준 `sha256`을 `object` 조회의 `content`와 함께 받는다.
+
+엔진 수정이다. `remote.py`는 P478이 사람 승인을 받은 범위이고, `graph.py` - `mcp_tools.py` - 새 파일
+`ontology_read.py` - `tick.sh`의 엔진 파일 굽기 목록 한 줄은 주도성 5로 pm이 정했다. `tickets.py` - `dispatch.py`는
+안 건드린다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| 파일 | 레포 루트 `ontology_read.py`(python3 표준 라이브러리만, `graph.py`의 `read_fm` - `ontology_links` - `nfc` - `strip_quotes`와 `remote.py`의 `ont_roots`를 import), 테스트 `test_ontology_read.py`. 진입점 하나 `run(root, op, args) -> {"result": ..., "errors": [...]}`이고 모르는 `op`나 잘못된 `args`는 `ValueError(<사유 한 줄>)`이다 |
+| 설치 | `tick.sh`의 엔진 파일 굽기 목록(`for f in mcp_server.py mcp_tools.py ...`)에 `ontology_read.py`를 더한다. 앱 패키징(`apps/desktop/package.json` `extraResources`)은 엔진 파일을 낱낱이 적으므로 `ontology_read.py`를 더한다. 2026-10-15 실측으로 그 목록에 `remote.py`도 없어서 같이 더한다 |
+| 읽는 자리 | `ont_roots(root)`의 위치들(주 위치 다음 보조 위치, O4 보강과 같다)에서 `objects/` - `versions/` - `_ontology/` 아래 `.md`만. 심링크는 따라가지 않고, 같은 상대경로면 앞 위치가 이긴다(`scan_all`과 같다) |
+| 객체 구조 | `{name, type, path, sha256, title, props, links}`. `name`은 fm `name`, 없으면 파일 이름에서 `.md`를 뗀 것(NFC). `type`은 fm `type`, 없으면 `objects/` 바로 아래 폴더 이름. `path`는 온톨로지 위치 기준 상대경로(`objects/<타입>/<이름>.md`). `sha256`은 파일 바이트 전체. `title`은 `props.title`이 비어 있지 않으면 그 값, 아니면 `name` |
+| `props` | fm 키 중 `name` - `type` - `links`를 뺀 전부. 값은 따옴표를 벗긴 문자열, `[a, b]` 인라인이나 들여쓴 `- a` 블록이면 문자열 목록, 값도 블록도 없으면 `null`. `id:` 같은 키도 그냥 속성 하나다 |
+| `links` | `[{type, to, props}]`. 맵 형태(`links:` 아래 `  <관계>:` 아래 `    - ...[[대상]]`)는 `ontology_links` 결과 그대로이고, `property:`가 있으면 `props: {property: <값>}`, 없으면 `{}`. 이름 목록 형태(`links:` 바로 아래 `  - "[[대상]]"`)는 `type: "links"`다. `graph.py` `ontology_links`가 이 형태도 읽도록 고쳐 같은 결과를 낸다(그래서 `graph.py` 간선에도 `rel: links`가 생긴다) |
+| `errors` | 해석하지 못한 파일은 건너뛰지 않고 `{path, reason}`으로 싣는다. `reason`은 `not-utf8`(UTF-8로 못 읽음) - `no-frontmatter`(첫 줄이 `---`가 아님) - `unclosed-frontmatter`(닫는 `---` 없음) - `duplicate-name`(같은 `name`이 다른 경로에 또 있음, 경로순 첫 파일만 객체가 되고 나머지가 오류) - `read-failed`(그 밖의 읽기 실패) 다섯이다. 오류 파일은 객체 목록에 안 들어간다 |
+| `objects` | args `{types?, cursor?, limit?}`. `objects/` 아래 객체를 `path` 순으로, `types`가 있으면 그 타입만. `limit` 기본 200, 최대 1,000(넘으면 1,000). `cursor`는 직전 쪽의 마지막 `path`이고 그보다 뒤부터 준다. 남았으면 `cursor`, 끝이면 키가 없다. 본문은 안 싣는다. `errors`는 첫 쪽(`cursor` 없음)에만 전부 싣는다 |
+| `object` | args `{name, backlinks?}`. 객체 구조에 `body`(fm 뒤 본문, 앞 빈 줄 하나 제거)와 `content`(파일 원문)를 더해 `{object}`. 없으면 `{object: null}`. `backlinks: true`면 `objects/` 전체에서 `to`가 그 이름인 관계를 `{from, type, props}` 목록으로 싣는다 |
+| `search` | args `{q, types?, limit?}`. `q`를 NFC - casefold해서 이름 - 제목 - 속성 값 - 본문에서 부분 일치로 찾는다. 이름이나 제목에서 맞은 것이 먼저, 그 안은 `path` 순. `limit` 기본 20, 최대 100. 항목은 객체 구조 + `excerpt`(처음 맞은 자리 앞뒤로 합쳐 100자 안팎, 줄바꿈은 공백). `q`가 비면 `ValueError` |
+| `versions` | args `{name}`. `versions/*/<name>/*.md`를 `{version, path, sha256, at}` 목록으로, `version`은 파일 이름에서 `.md`를 뗀 것이고 `version` 문자열 순이다. `at`은 파일 mtime의 ISO 8601(오프셋 포함) |
+| `version` | args `{name, version}`. `{content, sha256}`, 없으면 `{content: null}` |
+| `schema` | args `{}`. `_ontology/` 아래 fm `type: ObjectType` 파일은 `object_types`에 `{name, props, body}`로 싣는다 - `props`는 fm `properties` 목록(없으면 `[]`), `body`는 fm `body` 값(없으면 `null`). fm `type: LinkType` 파일은 `link_types`에 `{name, from, to}`로 싣는다 - `from` - `to`는 fm 값을 ` - `나 `,`로 나눈 이름 목록 |
+| 긴 대기 - 언제 | `sync-all`이 모든 워크스페이스의 신호와 루트 sync를 마친 뒤, `.sync-all.lock`을 쥔 채로. 마감은 다음 시계 시각(매분 0초 또는 30초) 5초 전이다. 마감까지 5초가 안 남았으면 안 기다린다. 테스트는 환경변수 `DIRA_READ_DEADLINE`(epoch 초)로 마감을 덮는다 |
+| 긴 대기 - 어떻게 | 런타임 토큰이 있는 워크스페이스마다 스레드 하나(`threading`). 각 스레드는 `GET reads?runtime_id=<id>&wait=<남은 초에서 2를 뺀 값, 최대 25, 정수>`를 되풀이하고, 받은 항목을 하나씩 처리해 `POST reads/<read_id>`로 답한 뒤 다시 부른다. `wait`가 1보다 작아지면 멈춘다. `404` - `405`(원격 읽기를 모르는 서버)나 네트워크 오류면 그 워크스페이스는 이번 실행에서 멈추고 `sync.log`에 `reads <ws> <사유>` 한 줄. `401`이면 `unauthorized <ws>` 한 줄 |
+| 읽기 항목 | `{read_id, op, args, project}`. `project`가 런타임의 프로젝트 목록(`list_projects`)에 있으면 그 큐 루트로 `run(root, op, args)`, 없거나 비었으면 프로젝트가 하나일 때만 그것을 쓰고 아니면 `{error: "unknown project"}` |
+| 답 | 성공은 `POST reads/<read_id>` `{result, errors}`(`errors`가 비면 키를 뺀다). `ValueError`는 `{error: <사유>}`, 그 밖의 예외는 `{error: "<예외 이름>: <메시지>"}`. `410`은 조용히 넘어간다 |
+| 신호 | `POST runtimes/<id>/heartbeat` 본문에 `reads: true`를 더한다 |
+| O4 끄기 | `remote.py` `sync`의 순서에서 `ontology_push`를 뺀다(함수는 남겨도 되지만 부르는 곳이 없다). `manifest.json`은 지우지 않는다 |
+| MCP 도구 | `mcp_tools.py` `TOOLS`에 여섯 개 - `ontology_objects` `ontology_object` `ontology_search` `ontology_versions` `ontology_version` `ontology_schema`. 입력은 `root`(공통) + 위 args와 같은 이름, 출력은 `run`의 반환 그대로(JSON 문자열). `ValueError`는 도구 오류다. 설명 한 줄씩은 위 표의 조회 설명을 줄여 쓴다 |
+| 세션에서 쓰기 | 원격 작업 세션은 `--strict-mcp-config`라 dira MCP가 저절로 붙지 않는다. 페르소나 `mcp.json`(P478 R8)에 `{"command": "${HOME}/.config/dira/bin/dira", "args": ["mcp"]}` 서버를 더하면 그 세션이 `TICKET_ROOT`를 물려받아 이 도구를 쓴다. 이 줄은 갈래 페르소나 묶음이 싣는다 - dira는 고칠 것이 없다 |
+| §API 표 | P478 §API에 `GET reads` - `POST reads/<read_id>` 두 행을 더하고, heartbeat 행에 `reads?`를, `PUT objects` 행에 "P496부터 안 부른다"를 적었다. §값 표의 sync 순서 - 올리기(O4) 행도 이 스펙과 함께 고쳤다 |
+
+#### 안 하는 것
+
+- 상주 데몬, 그리고 큐별 워커 tick 안의 긴 대기 - 시계 한 벌에서만 기다린다.
+- 원격 읽기의 결과를 캐시하는 것 - 요청마다 파일을 다시 읽는다. 느려지면 그때 잰다.
+- `objects/` - `versions/` - `_ontology/` 밖(vault 루트의 `with CTO.md` 같은 파일) 읽기 - O8과 함께 다룬다.
+- 원격 쓰기(O5) 변경, 올렸던 사본을 서버에서 지우는 요청 - 서버가 갈래 큐에서 따로 지운다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P496-1 | 엔진 - `ontology_read.py` 여섯 조회 - 객체 구조 - `errors`, `graph.py` `ontology_links` 이름 목록 형태, `tick.sh` 굽기 목록 + `test_ontology_read.py` | developer | - | 다음 |
+| P496-2 | 엔진 - `remote.py` `sync-all` 긴 대기 - 읽기 처리 - 신호 `reads: true` - O4 끄기 + `test_remote.py` | developer | P496-1 | 다음 |
+| P496-3 | 엔진 - `mcp_tools.py` 온톨로지 도구 여섯 + `test_mcp_server.py` - `test_mcp_parity.py` | developer | P496-1 | 다음 |
+| P496-4 | 매뉴얼 - `remote.md`(ko-en) 온톨로지가 서버에 사본으로 안 가고 요청 때 읽힌다는 것, MCP 도구 목록 문서에 온톨로지 도구 여섯 | writer | - | 다음 |
+| P496-5 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P496-2, P496-3 | 다음 |
+
+P496-1이 진입점 `run`을 정해야 원격 읽기와 MCP 도구가 그것을 부른다. 매뉴얼은 위 표에 글감이 다 있어 기다리지
+않는다. designer 0장 - dira 화면이 없다. 에픽 `P478`에 붙인다.
+
+#### 수용조건
+
+- [ ] `python3 test_ontology_read.py` - `python3 test_graph.py` - `python3 test_remote.py` - `python3 test_mcp_server.py` - `python3 test_mcp_parity.py`가 통과한다.
+- [ ] `links:`가 이름 목록인 객체, 빈 속성 값(`role:`)이 있는 객체, `name:` 없이 `id:`만 있는 객체를 둔 온톨로지에서 `run(root, "objects", {})`가 셋을 모두 싣는다. 첫째의 `links`에 `{type: "links", to: <대상>, props: {}}`가 있고, 둘째의 `props.role`이 `null`이고, 셋째의 `name`이 파일 이름이고 `props.id`가 그 값이다.
+- [ ] frontmatter가 없는 파일과 같은 `name`의 두 번째 파일은 객체 목록에 없고 `errors`에 `no-frontmatter` - `duplicate-name`으로 경로와 함께 있다.
+- [ ] 객체 250개에서 `objects`를 `limit` 없이 부르면 200개와 `cursor`가 오고, 그 `cursor`로 다시 부르면 50개가 오고 `cursor`가 없다.
+- [ ] `object`의 `sha256`이 `shasum -a 256 <그 파일>`과 같고 `content`가 파일 원문이다. `backlinks: true`면 그 이름을 가리키는 다른 객체가 `from`으로 나온다. 없는 이름이면 `{object: null}`이다.
+- [ ] 가짜 서버에 읽기 요청 하나(`op: "object"`)를 넣고 `remote.py sync-all`을 `DIRA_READ_DEADLINE`을 10초 뒤로 두고 돌리면, 서버가 `POST reads/<read_id>`로 그 객체를 받고 `sync-all`이 마감 안에 끝난다. 서버가 `GET reads`에 `404`를 주면 `sync-all`이 기다리지 않고 끝난다.
+- [ ] 객체 파일을 고치고 `remote.py sync --root R`을 돌려도 가짜 서버가 `PUT objects`를 받지 않는다. 신호 본문에 `reads: true`가 있다.
+- [ ] `dira mcp`(stdio)에 `tools/list`를 보내면 `ontology_` 도구 여섯이 있고, `ontology_object`를 부른 결과가 같은 인자의 `run` 결과와 같다.
+- [ ] 커밋들의 `git show --stat`에 `tickets.py` - `dispatch.py`가 없다.
+
 ### P495. 원격 큐 - 블록을 답변 대기로 바꾼 작업을 `failed`가 아니라 `awaiting`으로 올리고, 작업 토큰을 답이 올 때까지 남긴다 (요구 `a58c33b8`, 왕복 0회)
 
 사람 요구(임한솔): *"엔진을 dira로 했더니 질문답변 단계에 빠지면 작업이 영원히 중단되어버리는 버그가생기네요"*.
@@ -9960,7 +10047,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | 워크스페이스 분리 (R10) | 큐 루트 하나에 워크스페이스 하나다. 이미 `remote.json`이 있는 루트에 다른 `workspace_id`로 연결하면 rc 2, `이 프로젝트는 이미 다른 워크스페이스에 연결돼 있습니다`. 자격 증명-작업 토큰-매니페스트는 전부 `workspace_id` 디렉터리 아래에 둔다 |
 | 연결 절차 (R6) | `dira remote connect <server> --root <큐 루트>` - 기기 코드 방식. `user_code`와 `verification_uri`를 찍고 `interval`초마다 토큰을 묻는다(`expires_in`이 지나면 rc 1). 받으면 자격 증명과 `remote.json`을 쓰고, 런타임을 등록하고, 그 큐에 워커가 없으면 `workers/w1.sh`를 만들고 크론 두 줄(README §cron 등록)을 넣는다. 끝에 전체 디스크 접근 권한과 `claude setup-token` 안내 두 줄을 찍는다. `dira remote disconnect --root`는 서버에 해제를 알리고 `remote.json`과 그 워크스페이스 자격 증명을 지운다(크론 줄은 안 건드린다) |
 | sync 시점 | 워커 진입(`tick.sh`)에서 **워커 락을 잡기 전에** `timeout 20 python3 remote.py sync --root <root>`를 부른다. 락이 잡혀 있어 이번 tick이 빠지는 경우에도 sync는 돈다 - 그래서 세션이 도는 동안에도 살아 있음 신호가 끊기지 않는다. 같은 루트의 워커 여럿이 겹치면 `mkdir <root>/.remote-sync.lock` 락으로 하나만 돌고 나머지는 바로 빠진다. 직전 sync 뒤 10초가 안 지났으면 빠진다. sync의 실패는 tick을 막지 않는다(로그 한 줄 `REMOTE <사유>`) |
-| sync 순서 | 살아 있음 신호 -> 작업 잡기 -> 상태-진행 기록-질문 올리기 -> 답 내려받기 -> 온톨로지 올리기 -> 원격 쓰기 적용 -> (10분마다) 페르소나-스키마 묶음 확인 |
+| sync 순서 | 살아 있음 신호 -> 작업 잡기 -> 상태-진행 기록-질문 올리기 -> 답 내려받기 -> 원격 쓰기 적용 -> (10분마다) 페르소나-스키마 묶음 확인. 온톨로지 올리기는 P496에서 뺐고, 원격 읽기의 긴 대기는 `sync-all` 끝에서 한다(P496) |
 | 런타임 (R2) | 등록 단위는 컴퓨터 하나 x AI 도구 하나다. 도구는 `~/.config/dira/bin/engines/`의 엔진(`claude` `codex` `agy` `grok`) 중 실재하는 것이다. 버전은 sync마다 `<도구> --version`(시간 상한 5초). 로그인 점검은 연결 때, 6시간마다, 그리고 그 도구로 돈 세션이 인증 오류(`token-rotate.sh`가 이미 판정하는 그 오류)로 끝난 직후에 최소 프롬프트 한 번(시간 상한 60초)으로 한다. 실패한 도구는 `needs_check`로 보고하고 그 도구로는 작업을 안 잡는다 |
 | 살아 있음 (R3) | 신호 주기는 크론과 같은 30초다(sync 1회 = 신호 1회). 서버의 끊김 기준은 300초를 권한다 - 30초 신호 열 번 연속 실패다. 끊긴 런타임의 작업을 서버가 돌려받은 뒤 런타임이 그 작업의 상태를 올리면 서버는 `410`으로 답하고, 런타임은 그 로컬 티켓에 `## 블록` 없이 fm `remote_revoked: true`만 달고 더는 올리지 않는다 |
 | 30초 간극 | 신호 본문에 워커마다 `next_dispatch_at`(다음 크론 시각, ISO 8601)과 `busy`(지금 쥔 해시 또는 null)를 싣는다. 갈래 화면은 이 값으로 `N초 뒤 시작` 같은 상태를 그린다. dira는 상주 프로세스를 띄우지 않는다 |
@@ -9984,14 +10071,16 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | `POST device/code` | `{machine_name, project?, queue_root?, tools?}` (선택 필드 P485) | `{device_code, user_code, verification_uri, interval, expires_in}` |
 | `POST device/token` | `{device_code}` | 대기 중 `428`, 끝나면 `{workspace_id, runtime_token}` |
 | `POST runtimes` | `{machine_name, project, projects?: [{project, queue_root}], tools: [{name, version, health}]}` - `projects`가 있으면 `project` 대신 이 목록이 런타임의 프로젝트 목록이다(P491) | `{runtime_id}` |
-| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?, next_claim_at?}]}`(P491, P492) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다. `next_claim_at`은 그 루트에서 다음에 `jobs/claim`을 부를 시각(ISO 8601)이다 - 잡은 작업은 같은 sync에서 디스패치되므로(P492) 서버는 쉬는 워커가 있으면 이 값을 발행한 작업의 시작 예정 시각으로 쓸 수 있다 | `{ok: true}` |
+| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?, next_claim_at?}]}`(P491, P492) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다. `next_claim_at`은 그 루트에서 다음에 `jobs/claim`을 부를 시각(ISO 8601)이다 - 잡은 작업은 같은 sync에서 디스패치되므로(P492) 서버는 쉬는 워커가 있으면 이 값을 발행한 작업의 시작 예정 시각으로 쓸 수 있다  `reads?`(P496)는 원격 읽기가 들어간 런타임이면 `true`다 | `{ok: true}` |
 | `DELETE runtimes/<id>` | - | `204` |
 | `POST jobs/claim` | `{runtime_id, tools: [이름], max, project?}` - `project`가 있으면 그 프로젝트의 작업만 준다(P491) | `{jobs: [{job_id, title, persona, priority, duedate, body, job_token, job_token_expires_at}]}` |
 | `POST jobs/<job_id>/status` | `{state, hash, at, reason?}` - `state`는 `running` `awaiting` `done` `failed`. `failed`는 사람이 더 할 일이 없는 끝에만 쓰고 그때 `reason`(지금은 `no-token`)을 싣는다(P495) | `204`, 돌려받은 작업은 `410` |
 | `POST jobs/<job_id>/events` | `{events: [{at, step, command}]}` | `204` |
 | `POST jobs/<job_id>/questions` | `{stem, markdown}` | `204` |
 | `GET answers?runtime_id=&project=` | - (`project`는 선택, 있으면 그 프로젝트의 답만. P491) | `{answers: [{job_id, stem, markdown}]}` |
-| `PUT objects?project=` | (`project`는 선택, 있으면 그 프로젝트의 사본. P491) `{changes: [{path, sha256, content}` 또는 `{path, deleted: true}]}` | `204` |
+| `PUT objects?project=` | P496부터 런타임이 부르지 않는다(O4 끔). 옛 런타임이 부르면 서버는 저장하지 않고 `204`. (`project`는 선택, 있으면 그 프로젝트의 사본. P491) `{changes: [{path, sha256, content}` 또는 `{path, deleted: true}]}` | `204` |
+| `GET reads?runtime_id=&project=&wait=<초>` | - (P496. `wait`는 0-25, 요청이 없으면 그 시간까지 기다렸다가 빈 목록. `project`는 선택이고 런타임은 빼고 부른다 - 빼면 그 런타임의 모든 프로젝트) | `{reads: [{read_id, op, args, project}]}` - `op`와 `args`, 결과 형식은 P496 §값 |
+| `POST reads/<read_id>` | `{result, errors?: [{path, reason}]}` 또는 `{error}` (P496) | `204`, 이미 지난 요청이면 `410` |
 | `GET writes?runtime_id=&project=` | - (`project`는 선택, 있으면 그 프로젝트의 쓰기만. P491) | `{writes: [{op_id, path, base_sha256, content}]}` |
 | `POST writes/<op_id>` | `{result: applied` 또는 `conflict, sha256}` | `204` |
 | `GET personas/bundle` | - | `{version, sha256, bundle}` |
@@ -10007,7 +10096,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | 스키마 묶음 (O1) | `remote.py schema-install --root <root>`(sync가 10분마다 부르고, 손으로도 부른다). 묶음 `{version, files: {<_ontology 아래 상대경로>: <본문>}, schema_lines: [<SCHEMA.md에 더할 줄>]}`. 같은 경로에 내용이 다른 파일이 이미 있으면 **묶음 전체를 거절**하고 rc 2로 충돌한 경로를 찍는다(부분 설치 없음). 설치는 중량 개정이고 **이 스펙이 pm의 중량 판정이다** - 3단계 게이트는 묶음을 만든 쪽이 이미 지났다고 본다. 타입-관계마다 action-log에 `스키마개정: <이름>(중량, <정의역> -> <치역>) - 원격 스키마 묶음 v<version> - 버린 대안: 사용자마다 시딩` 한 줄을 쓴다 |
 | 본문 규칙 (O2) | 객체 타입 정의 파일 fm에 `body: document`가 있으면 그 타입의 객체 파일은 본문에 `#`-`##` 제목과 절을 쓸 수 있다. 키가 없으면 종전대로 `##` 금지다. `protocols/ontology.md` §공통에 이 예외 한 줄, 앱 검사(`lib/ontology.ts`)가 이 키를 존중한다 |
 | 판 보관 (O3) | 온톨로지 루트 `versions/<타입>/<이름>/<판>.md`. `objects/` 밖이고, `graph.py` 노드-앱 스키마 검사-`dira 형식이 아닙니다` 판정에서 전부 뺀다. `versions/`만 있는 폴더는 dira 형식이 아니다 |
-| 올리기 (O4) | 감시 프로세스 없이 sync마다 `objects/**/*.md`와 `versions/**/*.md`의 sha256 목록을 `~/.config/dira/remote/<ws>/manifest.json`과 비교해 바뀐 것-지운 것만 `PUT objects`로 올린다. 사람이 손으로 고친 것도 같은 방식으로 잡힌다. 한 번에 200건까지, 남으면 다음 sync |
+| 올리기 (O4) | **P496에서 끔 - 원격 읽기(R18)로 대체했다.** 아래는 그 전 동작이다. 감시 프로세스 없이 sync마다 `objects/**/*.md`와 `versions/**/*.md`의 sha256 목록을 `~/.config/dira/remote/<ws>/manifest.json`과 비교해 바뀐 것-지운 것만 `PUT objects`로 올린다. 사람이 손으로 고친 것도 같은 방식으로 잡힌다. 한 번에 200건까지, 남으면 다음 sync |
 | 원격 쓰기 (O5) | `GET writes`의 각 항목을 쓰기 직전에 지금 파일의 sha256과 `base_sha256`을 비교한다(새 파일은 `base_sha256: null`이고 파일이 없어야 한다). 다르면 쓰지 않고 `conflict`. 같으면 임시 파일에 쓴 뒤 `os.replace`, action-log에 `- HH:MM <새객체 또는 값갱신>: <이름> - 원격 편집 (op <op_id>)` 한 줄을 `O_APPEND` 한 번으로 더한다. 경로는 `objects/`-`versions/` 아래만이고 `..`-심링크 밖은 거절이다 |
 | 온톨로지 위치 (O4 보강, `6cfa5a20`) | 크론의 sync-all은 환경변수가 없어 `ont_root()`가 `TICKET_ONTOLOGY`를 못 봤다. 이제 환경변수가 없으면 `<큐>/workers/*.sh`(이름순)의 앞 20줄에서 `TICKET_ONTOLOGY="<경로>"` 줄을 찾고, 그 폴더가 있으면 그 폴더(vault)를 **주 위치**로 쓴다. 없으면 종전대로 `<큐>/ontology`다. 주 위치가 vault면 `<큐>/ontology`는 **보조 위치**로 같이 올린다 - 두 위치의 `objects/`-`versions/`를 합친 목록이고 같은 경로면 주 위치가 이긴다. 그래서 기존 글감-원고(`<큐>/ontology/objects/`)는 manifest에서 deleted로 잡히지 않는다. 원격 쓰기(O5)는 그 경로의 파일이 있는 위치에 쓰고 어디에도 없으면 주 위치(vault, 공유 드라이브)에 직접 쓴다. 스키마 묶음(O1)도 주 위치에 설치하므로 `_ontology/SCHEMA.md`가 vault에 생긴다. vault 루트의 `with CTO.md`처럼 `objects/`-`versions/` 밖 객체는 이번에도 올리지 않는다(범위 밖, 필요하면 O8과 함께 다룬다). 워커가 여럿이고 `TICKET_ONTOLOGY`가 서로 다르면 이름순 첫 번째만 쓴다 |
 | 속성 인용 (O6) | 제안대로 관계 `인용한다`의 링크 속성 `property`로 적는다 - `links:` 블록의 그 항목 아래 `property: affiliation` 한 줄이다. `graph.py`는 이 속성을 간선에 싣고, 앱 객체 화면은 대상 객체의 그 속성 값을 같이 보여 준다 |
