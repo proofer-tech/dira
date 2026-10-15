@@ -4,6 +4,7 @@
 표준 라이브러리만 쓴다. remote.json이 없는 큐에서는 전부 아무것도 안 하고 rc 0이다.
 """
 import argparse
+import concurrent.futures
 import datetime
 import glob
 import hashlib
@@ -15,6 +16,7 @@ import shutil
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -1550,7 +1552,7 @@ def run_now(ws, qr, flag):
 
 # ---- 원격 읽기 긴 대기 (P496) ----
 
-READ_MARGIN = 5  # 다음 시계 시각 5초 전까지만 기다린다
+READ_MARGIN = 1  # 다음 시계 시각 1초 전까지만 기다린다. 읽기 락이 sync 락과 달라 락 풀 여유가 필요 없다 (P500)
 WAKE_GAP = 2  # 초. 같은 루트의 깨우기 sync는 시작 뒤 이 시간 안이면 건너뛴다
 WAKE_CUTOFF = 3  # 초. 마감까지 이만큼이 안 남았으면 새 sync를 안 띄운다
 
@@ -1583,6 +1585,9 @@ def answer_read(item, projs):
         return {"error": "%s: %s" % (type(e).__name__, e)}
 
 
+_wake_threads = {}  # 루트 -> 마지막 깨우기 sync 스레드
+
+
 def handle_wake(ws, wake, last, deadline):
     """서버의 깨우기. 목록에 있는 프로젝트의 큐 루트를 --now로 돌린다. 같은 루트는 WAKE_GAP 안이면 건너뛴다."""
     for w in wake if isinstance(wake, list) else []:
@@ -1599,7 +1604,12 @@ def handle_wake(ws, wake, last, deadline):
         last[qr] = time.time()
         kinds = w.get("kinds") if isinstance(w.get("kinds"), list) else []
         log("wake %s %s" % (proj, ",".join(str(k) for k in kinds)))
-        run_now(ws, qr, "--now")
+        old = _wake_threads.get(qr)
+        if old is not None and old.is_alive():
+            continue  # 이 루트의 이전 깨우기 sync가 아직 돈다
+        t = threading.Thread(target=run_now, args=(ws, qr, "--now"), daemon=True)
+        _wake_threads[qr] = t
+        t.start()  # 읽기를 막지 않는다 (P500)
 
 
 def read_loop(ws, rt, token, deadline):
@@ -1608,7 +1618,7 @@ def read_loop(ws, rt, token, deadline):
     last = {}
     try:
         while True:
-            wait = min(25, int(deadline - time.time() - 2))
+            wait = min(25, int(deadline - time.time() - 1))
             if wait < 1:
                 return
             st, body = http(server, "GET", "reads?runtime_id=%s&wait=%d&wake=1" % (rid, wait), None, token,
@@ -1622,13 +1632,15 @@ def read_loop(ws, rt, token, deadline):
                     return
                 continue
             items = body.get("reads")
-            if not items:
+            if not items and not body.get("wake"):
                 time.sleep(0.5)  # 서버가 기다리지 않고 빈 목록을 주면 바쁜 루프가 된다
-            for it in items if isinstance(items, list) else []:
-                if not isinstance(it, dict) or not it.get("read_id"):
-                    continue
-                http(server, "POST", "reads/%s" % urllib.parse.quote(str(it["read_id"]), safe=""),
-                     answer_read(it, projs), token)  # 410은 조용히 넘어간다
+            valid = [it for it in items if isinstance(it, dict) and it.get("read_id")] if isinstance(items, list) else []
+            if valid:  # 항목을 함께 답하고 끝나는 대로 POST한다. 모두 보낸 뒤 다음 GET (P500)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+                    futs = {ex.submit(answer_read, it, projs): it for it in valid}
+                    for f in concurrent.futures.as_completed(futs):
+                        http(server, "POST", "reads/%s" % urllib.parse.quote(str(futs[f]["read_id"]), safe=""),
+                             f.result(), token)  # 410은 조용히 넘어간다
             handle_wake(ws, body.get("wake"), last, deadline)
     except Unauthorized:
         log("unauthorized " + ws)
@@ -1696,17 +1708,52 @@ def watch_loop(ws, deadline):
         log("watch %s %s: %s" % (ws, type(e).__name__, e))
 
 
-def long_wait(workspaces):
-    import threading
+READ_LOCK_TRY = 3  # 초. 읽기 락을 이만큼 다시 시도한다
+
+
+def read_session(ws, rt, token, deadline):
+    """워크스페이스 하나의 긴 대기. 읽기 락 `.read-<ws>.lock` 안에서 read_loop와 watch_loop가 함께 돈다."""
+    lock = os.path.join(cfg_home(), ".read-%s.lock" % ws)
+    end = time.time() + READ_LOCK_TRY
+    while not take_lock(lock):
+        if time.time() >= end:
+            log("read-busy " + ws)
+            return
+        time.sleep(0.2)
+    try:
+        ts = [threading.Thread(target=read_loop, args=(ws, rt, token, deadline)),
+              threading.Thread(target=watch_loop, args=(ws, deadline))]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+    finally:
+        try:
+            os.rmdir(lock)
+        except OSError:
+            pass
+
+
+def start_long_wait(workspaces):
+    """긴 대기 스레드를 띄우고 바로 돌아온다. 마감까지 READ_MARGIN이 안 남았으면 빈 목록."""
     deadline = read_deadline()
-    if deadline - time.time() < (1 if os.environ.get("DIRA_READ_DEADLINE") else READ_MARGIN):
-        return  # 마감까지 5초가 안 남았으면 안 기다린다
-    ts = [threading.Thread(target=read_loop, args=(ws, rt, token, deadline)) for ws, rt, token in workspaces]
-    ts += [threading.Thread(target=watch_loop, args=(ws, deadline)) for ws, _, _ in workspaces]
+    if deadline - time.time() < READ_MARGIN:
+        return []
+    ts = [threading.Thread(target=read_session, args=(ws, rt, token, deadline)) for ws, rt, token in workspaces]
     for t in ts:
         t.start()
+    return ts
+
+
+def finish_long_wait(ts):
     for t in ts:
         t.join()
+    for t in list(_wake_threads.values()):
+        t.join(child_timeout())
+
+
+def long_wait(workspaces):
+    finish_long_wait(start_long_wait(workspaces))
 
 
 def sync_all():
@@ -1715,10 +1762,11 @@ def sync_all():
     lock = os.path.join(home, ".sync-all.lock")
     if not take_lock(lock):
         return 0
+    locked = True
     try:
         rotate_log(home)
         merge_all()
-        waiters = []
+        waiters, roots = [], []
         for ws in sorted(os.listdir(home)):
             if ws.startswith(".") or not os.path.isdir(os.path.join(home, ws)):
                 continue
@@ -1741,16 +1789,29 @@ def sync_all():
                     continue
                 except Exception as e:  # 신호 실패는 루트 sync를 막지 않는다
                     log("signal %s %s: %s" % (ws, type(e).__name__, e))
-            for p in list_projects(ws):
-                run_child(ws, p["queue_root"])
+            roots += [(ws, p["queue_root"]) for p in list_projects(ws)]
             waiters.append((ws, rt, token))
-        long_wait(waiters)
-        return 0
-    finally:
+        waits = start_long_wait(waiters)  # 신호 직후 시작한다. 루트 sync는 옆 스레드에서 돈다 (P500)
+
+        def sync_roots():
+            for ws, qr in roots:
+                run_child(ws, qr)
+        st = threading.Thread(target=sync_roots)
+        st.start()
+        st.join()
+        locked = False
         try:
-            os.rmdir(lock)
+            os.rmdir(lock)  # 다음 시계가 sync 락을 잡을 수 있게 긴 대기보다 먼저 푼다
         except OSError:
             pass
+        finish_long_wait(waits)
+        return 0
+    finally:
+        if locked:
+            try:
+                os.rmdir(lock)
+            except OSError:
+                pass
 
 
 def cmd_tick(root):

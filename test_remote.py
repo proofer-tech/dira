@@ -716,7 +716,8 @@ class Tools(Base, unittest.TestCase):
         json.dump(st, open(hp, "w"))
         before = self.logins()
         to = ["timeout", "20"] if shutil.which("timeout") else []
-        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron)
+        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron,
+                   DIRA_READ_DEADLINE=str(time.time() - 1))  # 긴 대기를 빼고 루트 sync 시간만 잰다 (시각에 안 흔들린다)
         env.pop("TICKET_ONTOLOGY", None)
         t0 = time.time()
         r = subprocess.run(to + [sys.executable, os.path.join(HERE, "remote.py"), "sync-all"],
@@ -1275,7 +1276,7 @@ class Wake(Base, unittest.TestCase):
             calls["n"] += 1
             self.read_times.append(time.time())
             w = wake_for_call(calls["n"])
-            if w:
+            if w and any(x.get("project") == "proj" for x in w):  # 루트 sync가 읽기와 동시에 돌므로 알려진 프로젝트의 깨우기만 센다 (P500)
                 self.woke = True
             return 200, ({"reads": [], "wake": w} if w else {"reads": []})
 
@@ -1308,7 +1309,7 @@ class Wake(Base, unittest.TestCase):
         r = self.sync_all(24)
         n = r.stdout.count("REMOTE wake proj writes")
         self.assertGreaterEqual(n, 2, r.stdout)
-        self.assertLessEqual(n, 8, r.stdout)  # 긴 대기 약 10초 / 2초
+        self.assertLessEqual(n, 12, r.stdout)  # 긴 대기 약 22초 / 2초 (P500: 신호 직후 시작)
 
     def test_wake_unknown_project_skipped_and_no_wake_is_plain(self):
         self.wake_setup(lambda n: [{"project": "nope", "kinds": ["jobs"]}] if n == 1 else None)
@@ -1434,6 +1435,128 @@ class Watch(Base, unittest.TestCase):
         n = out.count("REMOTE report-now proj")
         self.assertGreaterEqual(n, 1, out)
         self.assertLessEqual(n, 3, out)  # 약 8초 동안 5초에 한 번
+
+
+class Gap(Base, unittest.TestCase):
+    """P500-1: 읽기 락 분리 - 긴 대기 즉시 시작 - 깨우기 스레드 - 함께 답하기."""
+    setup_jobs = T.setup_jobs
+    job = T.job
+    tickets = T.tickets
+
+    def spawn(self, secs):
+        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron,
+                   DIRA_READ_DEADLINE=str(time.time() + secs))
+        env.pop("TICKET_ONTOLOGY", None)
+        p = subprocess.Popen([sys.executable, os.path.join(self.engdir, "remote.py"), "sync-all"],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        self.addCleanup(lambda: (p.kill(), p.wait(), time.sleep(1)))
+        return p
+
+    def beats(self):
+        return [t for t, c in self.stamped if c[1] == "runtimes/rt1/heartbeat"]
+
+    def test_slow_root_sync_does_not_delay_reads_or_hold_lock(self):
+        self.setup_jobs([])
+        self.stamped = []
+        self.reads_at = []
+        self.claims = 0
+
+        def claim(_b):
+            self.claims += 1
+            if self.claims == 1:
+                time.sleep(10)  # 루트 sync가 10초 걸린다
+            return 200, {"jobs": []}
+        self.fake.routes[("POST", "jobs/claim")] = claim
+        self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = lambda b: (self.stamped.append((time.time(), ("POST", "runtimes/rt1/heartbeat"))) or (200, {"ok": True}))
+        self.fake.routes[("GET", "reads")] = lambda b: (self.reads_at.append(time.time()) or (200, {"reads": []}))
+        p = self.spawn(18)
+        lock = os.path.join(self.home, ".config", "dira", "remote", ".sync-all.lock")
+        end = time.time() + 12
+        while not self.reads_at and time.time() < end:
+            time.sleep(0.1)
+        self.assertTrue(self.reads_at, "읽기 요청이 안 왔다")
+        self.assertLess(self.reads_at[0] - self.beats()[0], 2)  # 루트 sync 10초와 무관하게 신호 뒤 2초 안
+        while os.path.isdir(lock) and time.time() < end + 8:
+            time.sleep(0.1)
+        self.assertFalse(os.path.isdir(lock))
+        self.assertIsNone(p.poll(), "sync-all이 긴 대기보다 먼저 끝났다")  # 락은 풀렸는데 프로세스는 읽는 중이다
+        n = len(self.beats())
+        os.utime(os.path.join(self.wsdir(), "last-heartbeat"), (1, 1))
+        r = self.run_remote("sync-all")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(len(self.beats()), n + 1)  # 두 번째 sync-all이 신호를 보냈다
+
+    def test_read_deadline_is_boundary_minus_1(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("remote_d", os.path.join(self.engdir, "remote.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        self.assertEqual(m.READ_MARGIN, 1)
+        os.environ.pop("DIRA_READ_DEADLINE", None)
+        with mock.patch.object(m.time, "time", return_value=1000.5):
+            self.assertEqual(m.read_deadline(), 1019)
+        with mock.patch.object(m.time, "time", return_value=1019.5):  # 이미 마감 안쪽 1초 - 다음 경계로 넘어가지 않는다
+            self.assertEqual(m.read_deadline(), 1019)
+
+    def test_wake_sync_does_not_block_next_read(self):
+        self.setup_jobs([])
+        self.claims = 0
+        self.wake_at = None
+        self.reads_at = []
+
+        def claim(_b):
+            self.claims += 1
+            if self.claims > 1:
+                time.sleep(5)  # 깨우기 sync가 5초 걸린다
+            return 200, {"jobs": []}
+
+        def reads(_b):
+            now = time.time()
+            self.reads_at.append(now)
+            if self.wake_at is None and self.claims >= 1:  # 루트 sync가 한 번 끝난 뒤에만 깨운다
+                self.wake_at = now
+                return 200, {"reads": [], "wake": [{"project": "proj", "kinds": ["jobs"]}]}
+            return 200, {"reads": []}
+        self.fake.routes[("POST", "jobs/claim")] = claim
+        self.fake.routes[("GET", "reads")] = reads
+        self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = (200, {"ok": True})
+        p = self.spawn(14)
+        end = time.time() + 12
+        while time.time() < end and not (self.wake_at and [t for t in self.reads_at if t > self.wake_at]):
+            time.sleep(0.1)
+        self.assertIsNotNone(self.wake_at)
+        nxt = [t for t in self.reads_at if t > self.wake_at]
+        self.assertTrue(nxt, "다음 읽기 요청이 안 왔다")
+        self.assertLess(nxt[0] - self.wake_at, 1)
+
+    def test_four_reads_answered_together(self):
+        self.setup_jobs([])
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("remote_p", os.path.join(self.engdir, "remote.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        ids = ["r1", "r2", "r3", "r4"]
+        self.posted = {}
+        served = []
+
+        def reads(_b):
+            if served:
+                return 200, {"reads": []}
+            served.append(time.time())
+            return 200, {"reads": [{"read_id": i, "op": "object", "args": {}, "project": "proj"} for i in ids]}
+        self.fake.routes[("GET", "reads")] = reads
+        for i in ids:
+            self.fake.routes[("POST", "reads/" + i)] = \
+                (lambda rid: lambda b: (self.posted.__setitem__(rid, time.time()) or (200, {"ok": True})))(i)
+        old = os.environ.get("HOME")
+        os.environ["HOME"] = self.home
+        try:
+            m.answer_read = lambda it, projs: (time.sleep(1), {"result": {}})[1]  # 항목마다 1초
+            m.read_loop("ws1", m.load_runtime("ws1"), m.load_token("ws1"), time.time() + 6)
+        finally:
+            os.environ["HOME"] = old
+        self.assertEqual(sorted(self.posted), ids)
+        self.assertLess(max(self.posted.values()) - served[0], 2)
 
 
 if __name__ == "__main__":
