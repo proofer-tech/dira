@@ -190,16 +190,18 @@ every project in turn, and each queue's worker syncs its own project right befor
 job you start on the web comes down to this computer at the next sync, and whether the clock or a
 worker fetched it, its session starts in that same sync.
 
-After it finishes syncing, the clock keeps a connection to the server open and waits until 5
-seconds before the next clock tick. This is called the long wait, and it takes up about 25 of every
-30 seconds. If you start a job on the web during the long wait, the server wakes this computer and
-the clock syncs that project right away. The job comes down and starts within 3 seconds. Answers to questions and ontology edits made on the
+Right after sending the heartbeat, the clock keeps a connection to the server open and waits until
+1 second before the next clock tick. This is called the long wait, and it takes up about 29 of every
+30 seconds. Project syncs run separately from the long wait, so even a slow sync does not hold back
+the start of the long wait. If you start a job on the web during the long wait, the server wakes
+this computer and the clock syncs that project right away. While that sync runs, the long wait keeps
+taking the next requests. The job comes down and starts within 3 seconds. Answers to questions and ontology edits made on the
 web come down the same way, within 3 seconds. The long
 wait runs inside the same process cron started and ends before the next tick, so there is still no
 process that stays running.
 
-A job started outside the long wait waits for the next clock tick. That covers the gap of about 5
-seconds between ticks, and also the last 3 seconds of the long wait, when a wake no longer starts a
+A job started outside the long wait waits for the next clock tick. That covers the gap of about 1
+second between ticks, and also the last 3 seconds of the long wait, when a wake no longer starts a
 new sync. The next tick is a few seconds away, so this does not take long. If a network error keeps
 the long wait from reaching the server, no wake arrives, the job comes down at the next sync, and you
 may wait up to about 30 seconds.
@@ -298,9 +300,10 @@ The ontology is not uploaded to the server as a copy. When you open the ontology
 server sends a read request to this computer, and dira here reads the files at that moment and
 answers. Every request reads the files fresh, so the web shows exactly what is on this computer now.
 
-Read requests are taken by [the computer clock](#the-computer-clock). After it finishes syncing,
-`sync-all` waits for read requests from the server until 5 seconds before the next clock tick and
-answers each one as it arrives. So the web cannot show the ontology when:
+Read requests are taken by [the computer clock](#the-computer-clock). Right after sending the
+heartbeat, `sync-all` waits for read requests from the server until 1 second before the next clock
+tick and answers each one as it arrives. Reads do not wait for a slow project sync or for a sync
+started by a wake, and several requests that arrive together are answered together. So the web cannot show the ontology when:
 
 - this computer is off or asleep
 - the network is down
