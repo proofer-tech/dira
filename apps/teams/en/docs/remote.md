@@ -8,7 +8,9 @@
 
 A web service hands out jobs, and dira on your computer picks them up and runs them. The server only
 creates and distributes jobs; it never runs a model. Sessions run on this computer, and the results
-and the ontology originals stay in this computer's queue.
+and the ontology originals stay in this computer's queue. No copy of the ontology is uploaded to the
+server either. Each time the web asks to see it, this computer reads it and answers
+([Viewing the ontology on the web](#viewing-the-ontology-on-the-web)).
 
 You connect one project at a time. A project you have not connected runs exactly as before. If the
 queue root has no `remote.json`, every remote step does nothing and exits.
@@ -224,7 +226,7 @@ This is everything that goes to the server.
 | A remote job's state (`running` `awaiting` `done` `failed`) | When it changes |
 | Progress - step names and the shell commands the session ran | While a remote job runs |
 | The `## 질문 n` (question) section that asks a person | When a remote job waits for an answer |
-| Contents of the `.md` files under the ontology's `objects/` and `versions/` | When they change or are deleted |
+| Answers to ontology reads the web requested | Each time a request comes in |
 
 There are four progress steps: the first time the session reads a file (`read`), the first time it
 edits one (`wrote`), when it creates a new ticket (`handoff`), and when it starts waiting for an
@@ -258,6 +260,50 @@ server takes the job back; it stays while the job waits for an answer.
 
 Persona and schema bundles are checked for a new version every 10 minutes.
 
+## Viewing the ontology on the web
+
+The ontology is not uploaded to the server as a copy. When you open the ontology on the web, the
+server sends a read request to this computer, and dira here reads the files at that moment and
+answers. Every request reads the files fresh, so the web shows exactly what is on this computer now.
+
+Read requests are taken by [the computer clock](#the-computer-clock). After it finishes syncing,
+`sync-all` waits for read requests from the server until 5 seconds before the next clock tick and
+answers each one as it arrives. So the web cannot show the ontology when:
+
+- this computer is off or asleep
+- the network is down
+- the crontab does not have the two clock lines
+
+Once it is back, the ontology shows again from the next clock tick.
+
+Only three folders under the project's ontology location are read.
+
+| Folder | What the web sees |
+|---|---|
+| `objects/` | The object list, one object's body and links, search |
+| `versions/` | An object's past versions and the contents of each |
+| `_ontology/` | Object type and link type definitions |
+
+Only `.md` files under these three folders are read, and symlinks are not followed. Files placed
+directly in the ontology location, and any other folder, never reach the web.
+
+A file whose frontmatter cannot be parsed is left out of the object list. It is not skipped
+silently: the answer carries its path and one of the reasons below. If an object is missing on the
+web, check whether its file hits one of these.
+
+| Reason | Meaning |
+|---|---|
+| `not-utf8` | The file could not be read as UTF-8 |
+| `no-frontmatter` | The first line is not `---` |
+| `unclosed-frontmatter` | There is no closing `---` for the frontmatter |
+| `duplicate-name` | Another file at a different path has the same `name`. Only the first file in path order becomes an object |
+| `read-failed` | It could not be read for some other reason |
+
+Earlier versions of dira uploaded the files under `objects/` and `versions/` whenever they changed.
+dira no longer uploads them. dira does not delete the copies uploaded back then; the remote service
+cleans them up on its side. Objects edited on the web are still written to this computer as in
+[Ontology edits](#what-comes-down-from-the-server) above.
+
 ## When something goes wrong
 
 A failing remote step never stops the worker. Local tickets keep running, and one line,
@@ -273,6 +319,7 @@ is also kept in `last-error` in that project's subdirectory, and the next succes
 | `remote_revoked: true` in a ticket's frontmatter | This computer went quiet for too long and the server took the job back. That ticket's state is no longer reported |
 | `remote_failed: no-token` in a ticket's frontmatter | The job's token file was missing, so dira closed the ticket without starting a session. The ticket is `.done` but the work is not, and the server is told `failed`. This computer cannot recreate the token; issue the job again from the remote service |
 | `REMOTE persona-skip <name>` | You have your own persona with that name, so the server's persona was not installed |
+| `reads <workspace> <reason>` in `sync.log` | The server does not know read requests, or the network failed, so this clock run takes no more read requests for that workspace. The next clock run tries again |
 
 The login check runs on connect, every 6 hours, and right after a session on that tool ends with an
 authentication error.

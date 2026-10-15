@@ -30,6 +30,8 @@ Common operations are named tools.
 | `ticket_done` | Renames `.wip` to `.done`. No other rename |
 | `interject` | Sends one interjection line to a running session, by the same path as the screen's interject |
 | `graph_query` | Asks the ontology (`graph.py query`) |
+| `ontology_objects` `ontology_object` `ontology_search` | Read ontology objects as a list, one at a time, or by search. See [Reading the ontology](#reading-the-ontology) |
+| `ontology_versions` `ontology_version` `ontology_schema` | Read an object's past versions and the ontology schema. See [Reading the ontology](#reading-the-ontology) |
 | `env_list` `env_create` `env_replace` `env_delete` | Manage project environment variables. Values never appear in a response |
 
 Anything not in that table goes through `engine_exec`. Give `program` one entry from the allowlist
@@ -42,6 +44,36 @@ The `timeout` limit defaults to 600 seconds.
 
 For example, to claim a ticket by hand with `handclaim`, set `program` to `tickets.py` and `args` to
 `["handclaim", "<ticket path>"]`. When the engine gains a subcommand, it is reachable this way too.
+
+### Reading the ontology
+
+The six tools starting with `ontology_` read the `.md` files under the ontology location's
+`objects/` `versions/` `_ontology/` directly and return JSON. They arrive in a version later than
+v1.2.19, so if no tool name starting with `ontology_` appears in the tool list, update the app. They
+go through the same code the web uses to view the ontology in the
+[remote queue](/docs/remote#viewing-the-ontology-on-the-web), so both give the same answers. Every
+call reads the files fresh.
+
+| Tool | Arguments | Returns |
+|---|---|---|
+| `ontology_objects` | `types` `cursor` `limit` | The objects under `objects/`, in path order, without bodies. `limit` defaults to 200, at most 1,000. If more remain, a `cursor` is attached; call again with that value as `cursor` for the next page |
+| `ontology_object` | `name` `backlinks` | One object plus its body (`body`) and the raw file (`content`). If there is none, `object` is `null`. With `backlinks` set to `true` it also returns the links that point at this object |
+| `ontology_search` | `q` `types` `limit` | Objects whose name, title, property values, or body contain `q`, each with about 100 characters around the first match (`excerpt`). Matches on name or title come first. `limit` defaults to 20, at most 100 |
+| `ontology_versions` | `name` | That object's past versions, each with version name, path, `sha256`, and modified time |
+| `ontology_version` | `name` `version` | The raw text and `sha256` of one past version. If there is none, `content` is `null` |
+| `ontology_schema` | none | The object type (`object_types`) and link type (`link_types`) definitions in `_ontology/` |
+
+An object comes as `{name, type, path, sha256, title, props, links}`. `props` is the frontmatter
+minus `name` `type` `links`, and `links` is `[{type, to, props}]`. A file whose frontmatter cannot be
+parsed is left out of the objects and listed in `errors` with its path and a reason. The five
+reasons are in [Remote queue](/docs/remote#viewing-the-ontology-on-the-web). `ontology_objects`
+carries `errors` only on the first page.
+
+`graph_query` asks questions of the graph built from the ontology; these six read the file contents
+as structure. When you need one object's properties or body, call `ontology_object`.
+
+Remote job sessions do not get this MCP server automatically. For a session there to use these
+tools, the persona's `mcp.json` must include the `dira mcp` server.
 
 ### Choosing the queue
 

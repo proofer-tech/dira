@@ -28,6 +28,8 @@ MCP를 지원하는 클라이언트(Claude Code, Claude Desktop, Cursor 등)에�
 | `ticket_done` | `.wip`을 `.done`으로 바꿉니다. 다른 rename은 하지 않습니다 |
 | `interject` | 진행 중인 세션에 참견 한 줄을 보냅니다. 화면의 참견과 같은 길로 갑니다 |
 | `graph_query` | 온톨로지에 묻습니다(`graph.py query`) |
+| `ontology_objects` `ontology_object` `ontology_search` | 온톨로지 객체를 목록-하나-검색으로 읽습니다. 아래 [온톨로지 읽기](#온톨로지-읽기) |
+| `ontology_versions` `ontology_version` `ontology_schema` | 객체의 지난 판과 온톨로지 스키마를 읽습니다. 아래 [온톨로지 읽기](#온톨로지-읽기) |
 | `env_list` `env_create` `env_replace` `env_delete` | 프로젝트 환경변수를 다룹니다. 값은 응답에 싣지 않습니다 |
 
 이 표에 없는 작업은 `engine_exec`로 합니다. `program`에 아래 허용목록 중 하나를, `args`에 인자
@@ -40,6 +42,34 @@ MCP를 지원하는 클라이언트(Claude Code, Claude Desktop, Cursor 등)에�
 
 예를 들어 손으로 티켓을 가져가는 `handclaim`은 `program`을 `tickets.py`로, `args`를
 `["handclaim", "<티켓 경로>"]`로 줍니다. 엔진에 서브커맨드가 늘면 이 경로로 같이 닿습니다.
+
+### 온톨로지 읽기
+
+`ontology_`로 시작하는 도구 여섯은 온톨로지 위치의 `objects/` `versions/` `_ontology/` 아래 `.md`
+파일을 직접 읽어 JSON으로 돌려줍니다. 이 여섯은 v1.2.19보다 뒤의 판에 들어오므로, 도구 목록에
+`ontology_`로 시작하는 이름이 없으면 앱을 올리세요. [원격 큐](/docs/remote#웹에서-온톨로지를-볼-때)에서 웹이
+온톨로지를 볼 때와 같은 코드를 거치므로 두 쪽의 답이 같습니다. 부를 때마다 파일을 새로 읽습니다.
+
+| 도구 | 인자 | 돌려주는 것 |
+|---|---|---|
+| `ontology_objects` | `types` `cursor` `limit` | `objects/` 아래 객체 목록을 경로 순으로 돌려줍니다. 본문은 없습니다. `limit`은 기본 200, 최대 1,000이고, 남은 것이 있으면 `cursor`가 붙습니다. 다음 쪽은 그 값을 `cursor`로 다시 부릅니다 |
+| `ontology_object` | `name` `backlinks` | 객체 하나에 본문(`body`)과 파일 원문(`content`)을 더해 돌려줍니다. 없으면 `object`가 `null`입니다. `backlinks`를 `true`로 주면 이 객체를 가리키는 관계도 함께 돌려줍니다 |
+| `ontology_search` | `q` `types` `limit` | 이름-제목-속성 값-본문에서 `q`를 찾아 객체와 처음 맞은 자리 앞뒤 100자 안팎(`excerpt`)을 돌려줍니다. 이름이나 제목에서 맞은 것이 먼저 옵니다. `limit`은 기본 20, 최대 100입니다 |
+| `ontology_versions` | `name` | 그 객체의 지난 판 목록을 판 이름-경로-`sha256`-수정 시각으로 돌려줍니다 |
+| `ontology_version` | `name` `version` | 지난 판 하나의 원문과 `sha256`을 돌려줍니다. 없으면 `content`가 `null`입니다 |
+| `ontology_schema` | 없음 | `_ontology/`의 객체 타입(`object_types`)과 관계 타입(`link_types`) 정의를 돌려줍니다 |
+
+객체 하나는 `{name, type, path, sha256, title, props, links}`로 옵니다. `props`는 frontmatter에서
+`name` `type` `links`를 뺀 나머지이고, `links`는 `[{type, to, props}]`입니다. frontmatter를 해석하지
+못한 파일은 객체에서 빠지고 `errors`에 경로와 사유로 실립니다. 사유 다섯 가지는
+[원격 큐](/docs/remote#웹에서-온톨로지를-볼-때)에 있습니다. `ontology_objects`는 첫 쪽에만 `errors`를
+싣습니다.
+
+`graph_query`는 온톨로지에서 만든 그래프에 질문을 던지고, 이 여섯은 파일 내용을 구조 그대로 읽습니다.
+객체 하나의 속성이나 본문이 필요하면 `ontology_object`를 부르세요.
+
+원격 작업 세션에는 이 MCP 서버가 저절로 붙지 않습니다. 그 세션에서 이 도구를 쓰려면 페르소나의
+`mcp.json`에 `dira mcp` 서버가 들어 있어야 합니다.
 
 ### 어느 큐인지 정하기
 
