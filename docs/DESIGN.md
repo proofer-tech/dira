@@ -8990,7 +8990,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 같은 큐에서 `--reason judge --hash aaaaaaaa --dryrun`은 rc 1이고 `why`가 부하 문장이다.
 - [ ] 워커 락이 있어 idle 워커가 0개인 큐에서 `--reason request --hash aaaaaaaa`는 rc 1이고 `runner.log`에
       `KICK-SKIP request aaaaaaaa idle 워커가 없다` 한 줄이 남는다.
-- [ ] `python3 -m pytest test_dispatch.py`가 통과한다.
+- [ ] `python3 test_dispatch.py`가 `ok`를 출력한다(import 시점에 `main()`을 도는 스크립트형이라 pytest로는 수집되지 않는다).
 - [ ] 홈 대화 판정 함수의 테스트가 `pnpm test`에서 통과한다 - 새 해시 파일이 열림이면 kick 1회, 없거나
       `.wip`이면 0회.
 - [ ] idle 워커가 있는 실제 큐에서 접수 폼으로 요구를 넣으면 `runner.log`에 `KICK request <그 해시> <워커>`가
