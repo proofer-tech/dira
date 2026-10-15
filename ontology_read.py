@@ -6,6 +6,7 @@ import hashlib
 import os
 import re
 import sys
+import threading
 import unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -89,17 +90,43 @@ def parse(rel, path):
             "links": links, "_body": body, "_content": text}, None
 
 
+# P500-2: 열쇠 (경로, mtime_ns, size)가 같으면 해석을 다시 안 한다. 메모리에만 둔다.
+# ponytail: mtime과 크기가 같은 채 내용만 바뀐 파일은 못 잡는다. 필요하면 열쇠에 inode나 해시를 더한다.
+_CACHE = {}
+_LOCK = threading.Lock()
+
+
+def parse_cached(rel, path):
+    try:
+        st = os.stat(path)
+    except OSError:
+        return parse(rel, path)
+    key = (st.st_mtime_ns, st.st_size)
+    with _LOCK:
+        hit = _CACHE.get(path)
+    if hit and hit[0] == key and hit[1] == rel:
+        return hit[2], hit[3]
+    o, why = parse(rel, path)
+    with _LOCK:
+        _CACHE[path] = (key, rel, o, why)
+    return o, why
+
+
 def load_objects(root):
-    objs, errors, seen = [], [], set()
+    objs, errors, seen, paths = [], [], set(), set()
     for rel, path in walk(ont_roots(root), "objects").items():
-        o, why = parse(rel, path)
+        paths.add(path)
+        o, why = parse_cached(rel, path)
         if o is None:
             errors.append({"path": rel, "reason": why})
         elif o["name"] in seen:
             errors.append({"path": rel, "reason": "duplicate-name"})
         else:
             seen.add(o["name"])
-            objs.append(o)
+            objs.append(dict(o))
+    with _LOCK:
+        for k in [k for k in _CACHE if k not in paths]:
+            del _CACHE[k]
     return objs, errors
 
 

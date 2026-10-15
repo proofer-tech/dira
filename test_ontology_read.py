@@ -125,5 +125,33 @@ try:
         except ValueError:
             pass
     print("PASS 모르는 op - 잘못된 args ValueError")
+    # P500-2 해석 캐시: 두 번째 호출은 parse 0번, 파일 하나를 고치면 1번, 지우면 결과에서 빠진다
+    ct = tempfile.mkdtemp()
+    try:
+        for i in range(500):
+            write(ct, "objects/사람/o%03d.md" % i, "---\ntype: 사람\nname: o%03d\n---\n\n본문 %d\n" % (i, i))
+        calls = []
+        real_parse = R.parse
+        R.parse = lambda rel, path: (calls.append(rel), real_parse(rel, path))[1]
+        try:
+            R._CACHE.clear()
+            a = run(ct, "object", {"name": "o007"})["result"]["object"]
+            assert len(calls) == 500, len(calls)
+            del calls[:]
+            b = run(ct, "object", {"name": "o007"})["result"]["object"]
+            assert calls == [] and a == b, calls
+            f = write(ct, "objects/사람/o007.md", "---\ntype: 사람\nname: o007\n---\n\n고친 본문입니다\n")
+            c = run(ct, "object", {"name": "o007"})["result"]["object"]
+            assert calls == ["objects/사람/o007.md"], calls
+            assert "고친 본문" in c["body"] and c["sha256"] == hashlib.sha256(open(f, "rb").read()).hexdigest()
+            os.remove(f)
+            del calls[:]
+            assert run(ct, "object", {"name": "o007"})["result"]["object"] is None and calls == []
+            assert len(run(ct, "objects", {"limit": 1000})["result"]["objects"]) == 499 and f not in R._CACHE
+        finally:
+            R.parse = real_parse
+    finally:
+        shutil.rmtree(ct, ignore_errors=True)
+    print("PASS 해석 캐시 - 재호출 parse 0 - 수정 1 - 삭제")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
