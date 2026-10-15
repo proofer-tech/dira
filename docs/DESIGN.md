@@ -9002,10 +9002,10 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P500-1 | 엔진 - `remote.py` 락 나누기 - `sync_all` 순서 - `READ_MARGIN` 1 - 깨우기 스레드 - 함께 답하기 + `test_remote.py` | developer | - | 발행 예정 |
-| P500-2 | 엔진 - `ontology_read.py` 해석 캐시 + 그 테스트 | developer | - | 발행 예정 |
-| P500-3 | 매뉴얼 - `remote.md`(ko-en) 위 매뉴얼 행 | writer | - | 발행 예정 |
-| P500-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P500-1, P500-2 | 발행 예정 |
+| P500-1 | 엔진 - `remote.py` 락 나누기 - `sync_all` 순서 - `READ_MARGIN` 1 - 깨우기 스레드 - 함께 답하기 + `test_remote.py` | developer | - | 발행 `6026eba4` |
+| P500-2 | 엔진 - `ontology_read.py` 해석 캐시 + 그 테스트 | developer | - | 발행 `38ff3d74` |
+| P500-3 | 매뉴얼 - `remote.md`(ko-en) 위 매뉴얼 행 | writer | - | 발행 `820c2118` |
+| P500-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P500-1, P500-2 | 발행 `b117d669` |
 
 **네 장이다.** P500-1과 P500-2는 고치는 파일이 달라 서로 기다리지 않는다. designer 0장 - dira 화면이 없다.
 에픽 `P478`에 붙인다.
