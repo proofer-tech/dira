@@ -214,7 +214,7 @@ export async function createTicket(
 
     // 즉시 디스패치(§4-5). 열린 티켓이 방금 태어났다 — cron을 60초 기다리지 않는다.
     // 결과를 안 본다: 실패해도 cron이 ≤60초 뒤에 같은 일을 하고, 화면에 보고할 자리도 없다.
-    // 요구(`kind: request`)면 `request` 사유로 해시를 넘긴다(P489) - 모듈이 부하와 다른 후보를 본다.
+    // 요구(`kind: request`)면 `request` 사유로 해시를 넘긴다(P489) - 모듈이 후보와 idle 워커를 본다.
     await (kind === "request" ? kickRequest(project.root, hash) : kickIdleWorker(project.root));
   } catch (e) {
     return { error: (e as Error).message };
