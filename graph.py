@@ -277,6 +277,11 @@ def ontology_links(lines, end):
         if not m:
             if re.match(r"^\S", lines[i]):
                 break
+            if re.match(r"^\s{2,}-\s", lines[i]):
+                # P496: 이름 목록 형태 `links:\n  - "[[대상]]"` -> 관계 이름 "links".
+                wm = WIKILINK_RE.search(lines[i])
+                if wm:
+                    out.append(("links", nfc(wm.group(1).strip()), ""))
             i += 1
             continue
         rel = m.group(1).strip()

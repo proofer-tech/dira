@@ -309,6 +309,14 @@ try:
     assert len(load(proot)["nodes"]) == n0, "versions/ 파일이 노드로 들어갔다"
     print("PASS P478-8 versions/ 제외-property 간선")
 
+    # P496: 이름 목록 형태 links:
+    write(os.path.join(proot, "ontology", "objects", "사람", "정.md"),
+          "---\ntype: 사람\nname: 정\nlinks:\n  - \"[[을]]\"\n  - \"[[병]]\"\n---\n\n본문\n")
+    build(proot, force=True)
+    nl = {e["target"] for e in load(proot)["links"] if e["source"] == "정" and e["rel"] == "links"}
+    assert nl == {"을", "병"}, nl
+    print("PASS P496 이름 목록 links 간선 rel=links")
+
     print("PASS 노드6종-간선(deps-req-archives-awaiting-인용-위키링크-절참조-evidence-impl-links)-"
           "중복제목#N-검증①(표준라이브러리)-검증⑦(큐 무수정)-증분(무변경 0-1장 수정 1-삭제 반영)-"
           "검증⑧(graph.json 없어도 tick.sh 무WARN)-시드매칭(exact우선-무관어배제-빈결과)-"

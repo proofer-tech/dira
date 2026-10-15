@@ -85,6 +85,14 @@
         "to": "engine/learn.py"
       },
       {
+        "from": "../../remote.py",
+        "to": "engine/remote.py"
+      },
+      {
+        "from": "../../ontology_read.py",
+        "to": "engine/ontology_read.py"
+      },
+      {
         "from": "../../agy-gui.sh",
         "to": "engine/agy-gui.sh"
       },
