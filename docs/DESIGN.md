@@ -9001,10 +9001,10 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P499-1 | 엔진 - `tick.sh` `remote H` 명령(원격 sync 건너뜀 - 슬롯 락 - `TICKET_CWD` - REUSE 끔 - 프롬프트 한 문장) | developer | - | 발행 예정 |
-| P499-2 | 엔진 - `remote.py` `slots` - 도는 슬롯 수 - `claim_jobs` `max` - `launch_remote` - 이어 띄우기 - heartbeat `remote_slots` - connect 기본값 + `test_remote.py` | developer | - | 발행 예정 |
-| P499-3 | 매뉴얼 - `remote.md`(ko-en) 위 매뉴얼 행 | writer | - | 발행 예정 |
-| P499-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P499-1, P499-2 | 발행 예정 |
+| P499-1 | 엔진 - `tick.sh` `remote H` 명령(원격 sync 건너뜀 - 슬롯 락 - `TICKET_CWD` - REUSE 끔 - 프롬프트 한 문장) | developer | - | 발행 `2cb908aa` |
+| P499-2 | 엔진 - `remote.py` `slots` - 도는 슬롯 수 - `claim_jobs` `max` - `launch_remote` - 이어 띄우기 - heartbeat `remote_slots` - connect 기본값 + `test_remote.py` | developer | - | 발행 `e0cb1997` |
+| P499-3 | 매뉴얼 - `remote.md`(ko-en) 위 매뉴얼 행 | writer | - | 발행 `21b6c956` |
+| P499-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P499-1, P499-2 | 발행 `508ca96d` |
 
 **네 장이다.** P499-1과 P499-2는 위 표의 명령 형식(`TICKET_NAME=remote<n>` + `<기준 워커>.sh remote <해시>`)으로
 만나므로 서로 기다리지 않는다. designer 0장 - dira 화면이 없다. 에픽 `P478`에 붙인다.
