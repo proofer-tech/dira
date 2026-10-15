@@ -12,6 +12,48 @@ The commands in the grey boxes below are checks the app does not run for you, so
 terminal yourself. `<root>` in them is the queue root, that is, the `.dira` inside the project
 folder.
 
+## `Stalled:` sits after the clock
+
+**Screen**: look at the status bar along the bottom of the window, right after the `next dispatch`
+clock icon. When dispatch has stalled, one line, `Stalled: <reason>`, attaches there. Stalled means
+at least one worker is idle while at least one open ticket is still sitting there unclaimed. With
+no open tickets there is simply no work, and nothing attaches. The board reads this again every
+5 seconds, so you do not need to restart the app to see it change.
+
+Several reasons can hold at once, but the line shows only one. A reason higher in the table below
+wins. Click the line and a popover opens. Its first line is the chosen reason and what to do, and
+below that comes one line per idle worker, `<name> - <that worker's line>`. Expand a worker's line
+and you see the raw text the call was made from, the line that worker wrote to `runner.log`. You do
+not have to open the workers one by one and read their logs. If the watchdog has a problem it
+cannot fix on its own and handed to a person, it shows up separately in a `Watchdog` group at the
+bottom.
+
+**Causes and what to do**: on screen, the `{}` slots in the table are filled with real values.
+
+| Order | Key | The line after `Stalled:` | What to do |
+|---|---|---|---|
+| 1 | `auth` | `No {engine} auth token` | `Put a token in Settings > Authentication and it starts on the next tick` ([Authentication](/docs/auth)) |
+| 2 | `cooldown` | `Account limit - clears in {n}s` | `It clears if you wait. To run now, turn on another account in Settings > Authentication` |
+| 3 | `machineCap` | `Machine-wide sessions {a}/{b} - other projects are using the slots` | `It clears when another session ends. To run now, raise Settings > Workers > Machine-wide session limit` ([How many to run at once](/docs/concurrency)) |
+| 4 | `personaCap` | `{persona} limit {a}/{b}` | `It clears when that persona's In progress tickets finish. Change the limit on the persona screen` |
+| 5 | `priority` | `No other ticket starts until priority 1 ticket {hash} finishes` | `It clears when {hash} finishes. If this work must not be blocked, lower that ticket's priority`. Clicking the hash opens that ticket |
+| 6 | `shellCap` | `{n} shells piled up, resting` | `The watchdog cleans up on the next tick. Nothing for you to do` |
+| 7 | `watchdog` | The watchdog's line as written | `The watchdog cannot fix this on its own. A person fixes what the sentence above names` |
+| 8 | `noCandidate` | `No ticket can start - waiting on deps {d}, awaiting answer {w}, polling {p}` | `Answer the tickets awaiting an answer, or wait for the prerequisite tickets to finish`. Clicking `awaiting answer {w}` shows only Awaiting answer tickets on the board |
+| 9 | `notWaking` | `Idle workers have not woken once in 90 seconds` | `Check the worker screen for a defect mark (no cron line - no exec bit)`. The link opens the worker screen ([It is on cron but never wakes](#it-is-on-cron-but-never-wakes)) |
+| - | `unknown` | `Unknown reason - raw: {raw}` | `Paste the raw line into the home chat and ask` |
+
+For the reasons that clear by waiting (`cooldown` - `machineCap` - `personaCap` - `priority` -
+`shellCap`), restarting does not make them clear any sooner. The account limit, the session limits and the piled-up shells are all still
+there after the app comes back. If you do not want to wait, change the one setting the to-do names.
+`noCandidate` is not a fault. Every remaining ticket is waiting on a prerequisite, an answer or a
+polling condition, and the next ticket starts once one of those comes through ([It is Open and
+nobody claims it](#it-is-open-and-nobody-claims-it)).
+
+`unknown` means the line is not in the table. The screen then shows the raw line as it is instead
+of guessing a reason. The popover has no fix-it buttons either. The to-do only points at the
+existing settings screens.
+
 ## A ticket is not on the board
 
 **Screen**: clear every filter and the search box on the board, and look in the table view
