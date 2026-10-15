@@ -8938,6 +8938,80 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P497. 원격 큐 - 긴 대기 연결로 서버의 깨우기를 받고, 로컬 작업 티켓이 바뀌면 바로 보고한다 (요구 `bc7376c9`, 왕복 0회)
+
+사람 요구(임한솔): *"갈래-dira간 핸드오프가 너무 느려요 상호간 요청과 처리를 즉각 송수신하도록 해주세요."*
+갈래 큐가 갈래 정본 `서비스/아키텍처/dira협의요구사항.md`의 R19와 "R19 형식" 표를 넘겼다(갈래 티켓 `f698533a`).
+
+실측(2026-10-15, `remote.py`): 작업 잡기 - 쓰기 적용 - 답 내려받기 - 상태 - 진행 기록 - 질문 올리기는 모두 컴퓨터
+시계(P491 `sync-all`, 30초 간격)가 부르는 `sync --root` 안에서만 돈다. 원격 읽기만 `sync-all` 끝의 긴 대기(P496)로
+바로 처리된다. 그래서 갈래에서 낸 작업 - 쓰기 - 답은 길게는 30초 뒤에 잡히고, 로컬에서 시작하거나 끝난 작업도
+길게는 30초 뒤에 갈래에 보인다.
+
+요청 둘을 다 받는다. 상주 데몬을 만들지 않는다는 앞선 답(P478, P491)은 유지한다 - 긴 대기는 이미 30초 중 약
+25초 동안 서버와 연결돼 있으므로, 그 시간 안에서만 양쪽을 바로 깨운다. 사람이 정하지 않은 것은 주도성 5로 pm이
+정했다.
+
+1. **서버 -> 런타임: 깨우기.** `read_loop`가 `GET reads`에 `wake=1`을 붙이고, 응답의 `wake`에 프로젝트가 있으면
+   그 루트의 sync를 10초 검사 없이 바로 돌린 뒤 긴 대기로 돌아간다. 이름 - 자리 - 형식은 갈래 제안(R19 형식 표)을
+   그대로 받는다. `kinds`는 로그에만 남기고 sync는 언제나 전체를 돈다 - 서버가 (런타임, 프로젝트)마다 마지막
+   `jobs/claim` - `GET writes` - `GET answers` 시각 뒤에 생긴 것만 깨우므로, 전체를 돌면 세 시각이 모두 갱신돼
+   같은 일로 다시 깨지 않는다.
+2. **런타임 -> 서버: 바로 보고.** 긴 대기 동안 워크스페이스마다 감시 스레드 하나가 1초마다 살아 있는 원격 작업
+   티켓을 `stat`한다. 티켓 파일이 바뀌면 그 루트의 보고 단계(상태 - 진행 기록 - 질문)만 바로 돌린다. 세션 로그만
+   자랐으면(진행 기록) 같은 루트에서 5초에 한 번까지만 돌린다 - 세션이 도는 동안 로그는 쉬지 않고 자라기 때문이다.
+3. **긴 대기 밖은 그대로다.** 시계와 시계 사이의 틈(약 5초)과 큐별 `sync --root`(워커 tick)는 바꾸지 않는다.
+
+엔진 수정이지만 P478이 사람 승인을 받은 `remote.py` 안에서 끝난다. `tick.sh` - `tickets.py` - `dispatch.py`는 안
+건드린다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 항목 | 값 |
+|---|---|
+| `sync --root R --now` | 10초 간격 검사(`SYNC_INTERVAL`)를 건너뛰고 전체 단계를 돈다. `last-sync` 도장은 지금처럼 쓴다. 루트 락(`.remote-sync.lock`)은 그대로 쥐고, 락을 못 잡으면 아무것도 안 하고 rc 75다(플래그 없는 `sync`는 지금처럼 rc 0) |
+| `sync --root R --report` | 보고 단계 셋(`report_status` - `report_events` - `report_questions`)만 이 순서로 돈다. 10초 검사를 안 하고 `last-sync` 도장을 안 쓴다 - 시계의 전체 sync를 막지 않기 위해서다. 락을 못 잡으면 rc 75. 실패 처리(단계 이름 - 사유를 stderr 마지막 줄, rc 1)는 `sync`와 같다 |
+| `run_now(ws, qr, flag)` | `run_child`와 같은 자식 프로세스 실행(상한 `child_timeout()`)에 `--now` 또는 `--report`를 붙인다. rc 75는 오류가 아니라 "다른 sync가 돌고 있음"이라 `last-error`를 안 건드리고 `False`를 돌려준다. 그 밖은 `run_child`처럼 `last-error`를 쓰거나 지우고 `True` |
+| 마감 근처 | 마감(`read_deadline()`)까지 3초가 안 남았으면 깨우기 - 바로 보고 sync를 새로 띄우지 않는다. 곧 다음 시계가 전체 sync를 돈다 |
+| 깨우기 - 요청 | `read_loop`의 `GET reads?runtime_id=<id>&wait=<초>`에 `&wake=1`을 붙인다 |
+| 깨우기 - 응답 | `{reads, wake?: [{project, kinds: ["jobs" - "writes" - "answers" 중 하나 이상]}]}`. 서버는 깨울 것이 생기면 `wait`를 다 채우지 않고 바로 답한다. `reads` 항목을 먼저 처리하고 그다음 `wake`를 처리한다 |
+| 깨우기 - 처리 | `wake`의 `project`가 런타임의 프로젝트 목록(`list_projects`)에 있으면 그 큐 루트로 `run_now(ws, qr, "--now")`를 이 스레드에서 돌리고 `sync.log`에 `wake <project> <kinds를 쉼표로>` 한 줄. 없으면 `wake-skip <project>` 한 줄만. 같은 루트는 직전 깨우기 sync 시작 뒤 2초 안이면 건너뛴다 - 서버가 같은 일로 거듭 깨워도 바쁜 루프가 되지 않는다. `wake`가 없거나 목록이 아니면 지금과 같다 |
+| 감시 - 대상 | `jobs_dir()`의 토큰 파일 `<해시>.json`(살아 있는 원격 작업, `done` 보고 뒤 지워진다)마다, 프로젝트 루트의 `tickets/` 아래 `<해시>.md` - `<해시>.wip.md` - `<해시>.done.md` 중 있는 것. 그 루트에 하나도 없으면 그 해시는 그 루트 것이 아니다 |
+| 감시 - 서명 | 루트마다 둘이다. 티켓 서명은 대상 티켓 파일의 `(이름, st_mtime_ns, st_size)` 정렬 목록, 로그 서명은 대상 해시의 `workers/logs/*-<해시>.log` 크기 합이다. 긴 대기를 시작할 때 한 번 재고(그때는 보고하지 않는다 - 시계 sync가 방금 돌았다), 그 뒤 1초마다 다시 잰다 |
+| 감시 - 보고 | 티켓 서명이 바뀌면 바로, 로그 서명만 바뀌었으면 그 루트의 직전 보고 sync 시작 뒤 5초가 지났을 때 `run_now(ws, qr, "--report")`를 돌리고 `sync.log`에 `report-now <project>` 한 줄. `True`면 새 서명을 기억하고, `False`(락 충돌)면 안 기억해 다음 1초에 다시 시도한다 |
+| 감시 - 스레드 | `long_wait`가 워크스페이스마다 `read_loop` 스레드와 감시 스레드를 같이 띄우고 둘 다 기다린다. 감시 스레드는 마감에 멈춘다. `read_loop`가 `404` - `405` - 네트워크 오류로 일찍 멈춰도 감시 스레드는 마감까지 돈다 - 바로 보고는 원격 읽기를 모르는 서버에도 쓸모가 있다 |
+| 신호 | 바꾸지 않는다. 서버는 `wake=1` 쿼리로 깨우기를 아는 런타임인지 안다 |
+| §API 표 | P478 §API의 `GET reads` 행에 `wake=1` 쿼리와 `wake?` 응답을 적었다. `wake=1`이 없으면 서버는 지금과 같으므로 하위 호환이다 |
+
+#### 안 하는 것
+
+- 상주 데몬, 큐별 워커 tick 안의 긴 대기 - 시계 한 벌에서만 기다린다(P496과 같다).
+- 시계 사이의 틈(약 5초) 메우기 - 갈래가 그대로 둬도 된다고 했다.
+- `kinds`별로 단계를 골라 돌리기 - 전체 sync가 서버의 세 시각을 함께 갱신하는 편이 단순하다. 느려지면 그때 잰다.
+- 파일 시스템 이벤트 API(FSEvents 등) - 의존성 0을 지키려고 `stat` 폴링만 쓴다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P497-1 | 엔진 - `remote.py` `sync --now` - `--report` - rc 75, `run_now`, `read_loop`의 `wake=1`과 깨우기 처리(2초 간격 - 마감 3초 전 멈춤) + `test_remote.py` | developer | - | 발행 `abd01178` |
+| P497-2 | 엔진 - `remote.py` 감시 스레드(대상 - 서명 둘 - 1초 폴링 - 로그 5초 간격 - 락 충돌 재시도), `long_wait`에 함께 띄우기 + `test_remote.py` | developer | P497-1 | 발행 `fff86a55` |
+| P497-3 | 매뉴얼 - `apps/teams/docs/remote.md` - `apps/teams/en/docs/remote.md`의 "웹에서 누른 작업이 늦게 시작하는 이유" - "원격 작업이 답을 기다릴 때" 절과 서버로 가는 것 표를 P497에 맞춘다(긴 대기 중에는 3초 안, 시계 사이의 틈에서는 다음 시계까지) | writer | - | 발행 `ac7233d0` |
+| P497-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P497-1, P497-2 | 발행 `477b6ded` |
+
+**네 장이다.** P497-2는 P497-1이 만드는 `run_now`와 `--report` 위에서 돈다. 매뉴얼은 위 표에 글감이 다 있어
+기다리지 않는다. designer 0장 - dira 화면이 없다. 에픽 `P478`에 붙인다.
+
+#### 수용조건
+
+- [ ] `python3 test_remote.py`가 통과한다.
+- [ ] 가짜 서버가 `GET reads`에 `wake=1` 쿼리를 받는다. 그 응답에 `wake: [{project: <연결한 프로젝트>, kinds: ["jobs"]}]`와 작업 하나를 주고 `remote.py sync-all`을 `DIRA_READ_DEADLINE`을 15초 뒤로 두고 돌리면, 응답 뒤 3초 안에 `jobs/claim`이 오고 그 큐 `tickets/`에 `remote_job:` 티켓이 생기며, `sync.log`에 `wake <project> jobs`가 있다.
+- [ ] 직전 `sync --root`가 5초 전에 돌았어도(10초 간격 안) 위 깨우기가 sync를 돈다. 서버가 같은 `wake`를 매번 주면 그 루트의 깨우기 sync는 2초에 한 번을 넘지 않는다.
+- [ ] `wake`의 `project`가 런타임 목록에 없으면 sync가 돌지 않고 `sync.log`에 `wake-skip <project>`가 있다. 응답에 `wake`가 없으면 P496과 같이 동작한다.
+- [ ] 원격 작업 티켓 `<해시>.wip.md`와 토큰 파일이 있는 큐에서 `sync-all`의 긴 대기 중에 그 티켓을 `<해시>.done.md`로 바꾸면, 3초 안에 가짜 서버가 `POST jobs/<job_id>/status` `{state: "done"}`을 받고, 그 사이 `jobs/claim`은 다시 오지 않는다.
+- [ ] 긴 대기 중에 그 티켓의 세션 로그(`workers/logs/*-<해시>.log`)에 도구 호출 줄을 덧붙이면 6초 안에 `POST jobs/<job_id>/events`가 온다. 로그를 1초마다 덧붙여도 그 루트의 `report-now`는 5초에 한 번을 넘지 않는다.
+- [ ] 루트 락 `.remote-sync.lock`을 다른 프로세스가 쥔 채로 `sync --root R --now`를 돌리면 rc 75이고, 깨우기 - 바로 보고가 그 rc를 받아도 그 루트의 `last-error`가 생기지 않는다.
+- [ ] `sync --root R --report`를 돌리면 가짜 서버가 `jobs/claim` - `GET writes` - `GET answers`를 받지 않고, `last-sync` 도장의 mtime이 바뀌지 않는다.
+- [ ] P497 커밋들의 `git show --stat`에 `remote.py` - `test_remote.py` 말고는 없다.
+
 ### P496. 원격 큐 - 온톨로지를 사본으로 올리지 않고, dira가 해석한 구조로 원격 읽기와 MCP 도구에 돌려준다 (요구 `d0691fd0`, 왕복 0회)
 
 사람 결정(임한솔, 2026-10-15): *"온톨로지를 DB사본으로 가지고 있으면 안돼요 온톨로지는 온톨로지고 DB에는 갈래
@@ -10047,7 +10121,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | 워크스페이스 분리 (R10) | 큐 루트 하나에 워크스페이스 하나다. 이미 `remote.json`이 있는 루트에 다른 `workspace_id`로 연결하면 rc 2, `이 프로젝트는 이미 다른 워크스페이스에 연결돼 있습니다`. 자격 증명-작업 토큰-매니페스트는 전부 `workspace_id` 디렉터리 아래에 둔다 |
 | 연결 절차 (R6) | `dira remote connect <server> --root <큐 루트>` - 기기 코드 방식. `user_code`와 `verification_uri`를 찍고 `interval`초마다 토큰을 묻는다(`expires_in`이 지나면 rc 1). 받으면 자격 증명과 `remote.json`을 쓰고, 런타임을 등록하고, 그 큐에 워커가 없으면 `workers/w1.sh`를 만들고 크론 두 줄(README §cron 등록)을 넣는다. 끝에 전체 디스크 접근 권한과 `claude setup-token` 안내 두 줄을 찍는다. `dira remote disconnect --root`는 서버에 해제를 알리고 `remote.json`과 그 워크스페이스 자격 증명을 지운다(크론 줄은 안 건드린다) |
 | sync 시점 | 워커 진입(`tick.sh`)에서 **워커 락을 잡기 전에** `timeout 20 python3 remote.py sync --root <root>`를 부른다. 락이 잡혀 있어 이번 tick이 빠지는 경우에도 sync는 돈다 - 그래서 세션이 도는 동안에도 살아 있음 신호가 끊기지 않는다. 같은 루트의 워커 여럿이 겹치면 `mkdir <root>/.remote-sync.lock` 락으로 하나만 돌고 나머지는 바로 빠진다. 직전 sync 뒤 10초가 안 지났으면 빠진다. sync의 실패는 tick을 막지 않는다(로그 한 줄 `REMOTE <사유>`) |
-| sync 순서 | 살아 있음 신호 -> 작업 잡기 -> 상태-진행 기록-질문 올리기 -> 답 내려받기 -> 원격 쓰기 적용 -> (10분마다) 페르소나-스키마 묶음 확인. 온톨로지 올리기는 P496에서 뺐고, 원격 읽기의 긴 대기는 `sync-all` 끝에서 한다(P496) |
+| sync 순서 | 살아 있음 신호 -> 작업 잡기 -> 상태-진행 기록-질문 올리기 -> 답 내려받기 -> 원격 쓰기 적용 -> (10분마다) 페르소나-스키마 묶음 확인. 온톨로지 올리기는 P496에서 뺐고, 원격 읽기의 긴 대기는 `sync-all` 끝에서 한다(P496). 긴 대기 중에는 서버의 깨우기로 전체 sync를, 로컬 작업 티켓 변화로 보고 단계를 바로 돈다(P497) |
 | 런타임 (R2) | 등록 단위는 컴퓨터 하나 x AI 도구 하나다. 도구는 `~/.config/dira/bin/engines/`의 엔진(`claude` `codex` `agy` `grok`) 중 실재하는 것이다. 버전은 sync마다 `<도구> --version`(시간 상한 5초). 로그인 점검은 연결 때, 6시간마다, 그리고 그 도구로 돈 세션이 인증 오류(`token-rotate.sh`가 이미 판정하는 그 오류)로 끝난 직후에 최소 프롬프트 한 번(시간 상한 60초)으로 한다. 실패한 도구는 `needs_check`로 보고하고 그 도구로는 작업을 안 잡는다 |
 | 살아 있음 (R3) | 신호 주기는 크론과 같은 30초다(sync 1회 = 신호 1회). 서버의 끊김 기준은 300초를 권한다 - 30초 신호 열 번 연속 실패다. 끊긴 런타임의 작업을 서버가 돌려받은 뒤 런타임이 그 작업의 상태를 올리면 서버는 `410`으로 답하고, 런타임은 그 로컬 티켓에 `## 블록` 없이 fm `remote_revoked: true`만 달고 더는 올리지 않는다 |
 | 30초 간극 | 신호 본문에 워커마다 `next_dispatch_at`(다음 크론 시각, ISO 8601)과 `busy`(지금 쥔 해시 또는 null)를 싣는다. 갈래 화면은 이 값으로 `N초 뒤 시작` 같은 상태를 그린다. dira는 상주 프로세스를 띄우지 않는다 |
@@ -10079,7 +10153,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | `POST jobs/<job_id>/questions` | `{stem, markdown}` | `204` |
 | `GET answers?runtime_id=&project=` | - (`project`는 선택, 있으면 그 프로젝트의 답만. P491) | `{answers: [{job_id, stem, markdown}]}` |
 | `PUT objects?project=` | P496부터 런타임이 부르지 않는다(O4 끔). 옛 런타임이 부르면 서버는 저장하지 않고 `204`. (`project`는 선택, 있으면 그 프로젝트의 사본. P491) `{changes: [{path, sha256, content}` 또는 `{path, deleted: true}]}` | `204` |
-| `GET reads?runtime_id=&project=&wait=<초>` | - (P496. `wait`는 0-25, 요청이 없으면 그 시간까지 기다렸다가 빈 목록. `project`는 선택이고 런타임은 빼고 부른다 - 빼면 그 런타임의 모든 프로젝트) | `{reads: [{read_id, op, args, project}]}` - `op`와 `args`, 결과 형식은 P496 §값 |
+| `GET reads?runtime_id=&project=&wait=<초>&wake=1` | - (P496. `wait`는 0-25, 요청이 없으면 그 시간까지 기다렸다가 빈 목록. `project`는 선택이고 런타임은 빼고 부른다 - 빼면 그 런타임의 모든 프로젝트. `wake=1`(P497)이면 서버는 (런타임, 프로젝트)마다 마지막 `jobs/claim` - `GET writes` - `GET answers` 시각 뒤에 생긴 일이 있을 때 기다리지 않고 바로 답한다. 없으면 P496과 같다) | `{reads: [{read_id, op, args, project}], wake?: [{project, kinds: ["jobs" - "writes" - "answers"]}]}` - `op`와 `args`, 결과 형식은 P496 §값, `wake` 처리는 P497 §값 |
 | `POST reads/<read_id>` | `{result, errors?: [{path, reason}]}` 또는 `{error}` (P496) | `204`, 이미 지난 요청이면 `410` |
 | `GET writes?runtime_id=&project=` | - (`project`는 선택, 있으면 그 프로젝트의 쓰기만. P491) | `{writes: [{op_id, path, base_sha256, content}]}` |
 | `POST writes/<op_id>` | `{result: applied` 또는 `conflict, sha256}` | `204` |
