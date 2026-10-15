@@ -80,6 +80,7 @@
  *  허용목록(`ef1e8c89` 실측)으로만 열었지만, §7-5(요구 `ea5e6f4d`)가 그 목록과 경로 스코프를
  *  통째로 없애고 `--dangerously-skip-permissions`로 바꿨다 — 셸에 쓰기 제한이 없다(`TOOLS`
  *  주석). */
+import { kickNewRequest } from "./home-kick.ts";
 import { childEnv } from "./child-env.ts";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
@@ -1286,8 +1287,9 @@ export async function ask(
   // 검사 없이 그대로 싣는다(남의 앱 데이터 도메인을 질문마다 재면 macOS 권한 창이 뜬다,
   // `51c730de`와 같은 선). 기본값(`<root>/ontology`)은 워커와 같이 존재를 잰다.
   const showOntology = config && !usingDefault(config, "ontology") ? true : await ontologyHasMarkdown(ontology);
+  const snapshot = await snapshotOf(project, sessionId);
   const prompt = buildPrompt(
-    await snapshotOf(project, sessionId),
+    snapshot,
     q,
     showOntology ? ontology : "",
     config?.personas ? await personaBlock(config.personas, persona ?? HOME_PERSONA) : "",
@@ -1313,6 +1315,8 @@ export async function ask(
   // **성공한 턴에서만 적는다**(§7 §세션 정보 한 줄). 실패한 첫 턴은 방금 `settleFirstTurn`이
   // id를 새것으로 갈아서, 그 id 아래 적어도 다음 질문이 여는 새 세션과 무관한 값이 된다.
   if (run.ok && live.model) await saveModel(project.id, sessionId, live.model);
+  // P498 결정 3 - 턴이 끝났으니 이 턴이 만든 요구를 바로 디스패치한다(던지지 않는다)
+  await kickNewRequest(project.root, snapshot);
 
   return { ...run, sessionId, resumed };
 }
