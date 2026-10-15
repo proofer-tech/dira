@@ -126,6 +126,7 @@ class Ctx:
         self.root, self.cfg, self.token = root, cfg, token
         self.server, self.ws = cfg["server"], cfg["workspace_id"]
         self.project = cfg.get("project")
+        self.used = set()  # 이번 sync에서 띄운 슬롯 번호와 해시(P499)
         rt = load_runtime(self.ws)
         self.runtime_id = rt["runtime_id"] if rt else cfg["runtime_id"]  # 정본은 runtime.json
 
@@ -432,8 +433,44 @@ def free_workers(root):
     return max(0, n - wip)
 
 
+SLOTS_DEFAULT = 2
+
+
+def slots_of(root):
+    """remote.json의 slots(P499). 없거나 정수가 아니면 2, 음수는 0. 0이면 슬롯을 끈다."""
+    v = (load_config(root) or {}).get("slots")
+    if isinstance(v, bool) or not isinstance(v, int):
+        return SLOTS_DEFAULT
+    return max(0, v)
+
+
+def slot_lock(root, n):
+    """tick.sh의 워커 락과 같은 계산: $LOCAL/run/remote<n>-<sha1(<root>/workers/remote<n>)[:8]>.lock."""
+    local = os.environ.get("TICKET_LOCAL") or os.path.join(os.path.expanduser("~"), ".config", "dira")
+    h = hashlib.sha1(("%s/workers/remote%d" % (root, n)).encode()).hexdigest()[:8]
+    return os.path.join(local, "run", "remote%d-%s.lock" % (n, h))
+
+
+def slot_busy(root, n):
+    try:
+        with open(os.path.join(slot_lock(root, n), "pid")) as f:
+            os.kill(int(f.read().strip()), 0)
+        return True
+    except PermissionError:
+        return True  # 다른 사용자의 산 프로세스
+    except (OSError, ValueError):
+        return False
+
+
+def free_slots(root):
+    """(슬롯 수, 빈 슬롯 번호들)."""
+    slots = slots_of(root)
+    return slots, [n for n in range(1, slots + 1) if not slot_busy(root, n)]
+
+
 def claim_jobs(ctx):
-    free = free_workers(ctx.root)
+    slots, idle = free_slots(ctx.root)
+    free = len(idle) if slots >= 1 else free_workers(ctx.root)
     if free <= 0:
         return
     tools = claim_tools(ctx.ws)
@@ -457,7 +494,45 @@ def claim_jobs(ctx):
             have.add(jid)
         except (ValueError, KeyError, OSError) as e:
             log("claim-skip %s: %s" % (jid, e))
-    dispatch_made(ctx.root, made)
+    if slots >= 1:
+        launch_remote(ctx.root, made, ctx.used)
+    else:
+        dispatch_made(ctx.root, made)
+
+
+def launch_remote(root, hashes, used=None):
+    """해시마다 첫 빈 원격 슬롯에서 `tick.sh remote`를 분리 실행한다(P499). 기다리지 않고 예외를 올리지 않는다.
+    used: 이번 sync에서 이미 고른 슬롯 번호와 해시(set) - 다시 안 쓴다."""
+    if not hashes:
+        return []
+    used = set() if used is None else used
+    wdir = os.path.join(root, "workers")
+    try:
+        base = min(f[:-3] for f in os.listdir(wdir) if f.endswith(".sh"))
+    except (OSError, ValueError):
+        log("launch %s: 기준 워커 없음" % hashes[0])
+        return []
+    _, idle = free_slots(root)
+    idle = [n for n in idle if n not in used]
+    done = []
+    for h in hashes:
+        if h in used:
+            continue
+        if not idle:
+            break
+        n = idle.pop(0)
+        used.update((n, h))
+        try:
+            with open(os.path.join(wdir, "cron.log"), "ab") as out:
+                subprocess.Popen(["bash", os.path.join(wdir, base + ".sh"), "remote", h],
+                                 env=dict(os.environ, TICKET_NAME="remote%d" % n),
+                                 stdin=subprocess.DEVNULL, stdout=out, stderr=out, start_new_session=True)
+        except (OSError, subprocess.SubprocessError) as e:
+            log("launch %s: %s" % (h, type(e).__name__))
+            continue
+        log("launch %s remote%d" % (h, n))
+        done.append(h)
+    return done
 
 
 DISPATCH_TIMEOUT = 10  # 초. 해시 하나당 dispatch.py를 기다리는 상한
@@ -992,7 +1067,22 @@ def fetch_answers(ctx):
                 pass
 
 
-STEPS += [report_events, report_questions, fetch_answers]
+def relaunch_open(ctx):
+    """열린 원격 작업 티켓을 슬롯으로 이어 띄운다(P499). 답이 온 것과 앞서 못 뜬 것이 여기서 뜬다."""
+    if slots_of(ctx.root) < 1:
+        return
+    found = []
+    for t in remote_tickets(ctx.root):
+        if t["suffix"]:
+            continue
+        try:
+            found.append((os.stat(t["path"]).st_mtime, t["hash"]))
+        except OSError:
+            pass
+    launch_remote(ctx.root, [h for _, h in sorted(found)], ctx.used)
+
+
+STEPS += [report_events, report_questions, fetch_answers, relaunch_open]
 
 
 # ---- connect / disconnect ----
@@ -1155,6 +1245,9 @@ def signal_body(ws, projs=None):
     for p in list_projects(ws) if projs is None else projs:
         e = {"project": p["project"], "workers": workers_payload(p["queue_root"]),
              "next_claim_at": next_dispatch_iso()}  # 시계가 :00 :30에 돈다(P492)
+        slots, idle = free_slots(p["queue_root"])
+        if slots >= 1:
+            e["remote_slots"] = len(idle)
         try:
             with open(os.path.join(root_dir(ws, p["queue_root"]), "last-error"), encoding="utf-8") as f:
                 err = one_line(f.read())
@@ -1342,7 +1435,8 @@ def cmd_connect(server, root, workspace=None, new=False):
     write_json(os.path.join(ws_dir(ws), "runtime.json"), {"server": server, "runtime_id": rid})
     write_json(os.path.join(root_dir(ws, root), "root.json"), {"queue_root": qr, "project": project})
     write_json(os.path.join(root, "remote.json"),
-               {"server": server, "workspace_id": ws, "runtime_id": rid, "project": project})
+               {"server": server, "workspace_id": ws, "runtime_id": rid, "project": project,
+                "slots": slots_of(root)})
     if prev and prev["runtime_id"] != rid:
         for p in others:  # remote.json의 runtime_id는 옛 클라이언트용 사본이라 같은 값으로 맞춘다
             c = load_config(p["queue_root"])

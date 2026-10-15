@@ -106,6 +106,11 @@ class Base:
         except OSError:
             return []
 
+    def set_slots(self, n):
+        path = os.path.join(self.root, "remote.json")
+        cfg = json.load(open(path))
+        json.dump(dict(cfg, slots=n), open(path, "w"))
+
     def connect(self):
         return self.run_remote("connect", self.fake.url, "--root", self.root)
 
@@ -132,7 +137,7 @@ class T(Base, unittest.TestCase):
         self.assertIn("ABCD-1234", r.stdout)
         cfg = json.load(open(os.path.join(self.root, "remote.json")))
         self.assertEqual(cfg, {"server": self.fake.url, "workspace_id": "ws1",
-                               "runtime_id": "rt1", "project": "proj"})
+                               "runtime_id": "rt1", "project": "proj", "slots": 2})
         self.assertEqual(stat.S_IMODE(os.stat(self.wscred()).st_mode), 0o600)
         self.assertEqual(json.load(open(self.wscred())), {"runtime_token": "tok-ws1"})
         self.assertEqual(json.load(open(os.path.join(self.wsdir(), "runtime.json"))),
@@ -248,12 +253,13 @@ class T(Base, unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stderr)
         return r
 
-    def setup_jobs(self, jobs):
+    def setup_jobs(self, jobs, slots=0):  # 기본 0: P492 길(dispatch.py direct)을 본다
         eng = os.path.join(self.home, ".config", "dira", "bin", "engines")
         os.makedirs(eng, exist_ok=True)
         open(os.path.join(eng, "claude"), "w").write("#!/bin/sh\necho 1.0\n")  # 로그인 점검 통과
         os.chmod(os.path.join(eng, "claude"), 0o755)
         self.connect()  # 점검은 연결 때만 그 자리에서 돈다 - 도구를 먼저 둔다
+        self.set_slots(slots)
         os.makedirs(os.path.join(self.root, "workers"), exist_ok=True)
         for w in ("w1", "w2"):
             open(os.path.join(self.root, "workers", w + ".sh"), "w").write("#!/bin/bash\n")
@@ -304,6 +310,119 @@ class T(Base, unittest.TestCase):
             self.assertEqual(c[c.index("--reason") + 1], "direct")
         self.assertEqual(sorted(c[c.index("--hash") + 1] for c in calls), sorted(hs))
         self.assertEqual(sorted(c[c.index("--worker") + 1] for c in calls), ["w1", "w2"])
+
+    # ---- P499-2: 원격 슬롯 ----
+
+    def slot_env(self):
+        """슬롯 락이 TICKET_LOCAL 아래로 가고, 기준 워커 w1.sh는 부른 인자와 TICKET_NAME을 적는 가짜가 된다."""
+        self.local = os.path.join(self.tmp.name, "local")
+        os.makedirs(os.path.join(self.local, "run"))
+        self.llog = os.path.join(self.tmp.name, "launch.log")
+        with open(os.path.join(self.root, "workers", "w1.sh"), "w") as f:
+            f.write('#!/bin/bash\necho "$TICKET_NAME $*" >> %s\n' % self.llog)
+        patcher = mock.patch.dict(os.environ, {"TICKET_LOCAL": self.local})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def lock_slot(self, n, pid):
+        rm = importlib.util.spec_from_file_location("remote_mod", os.path.join(HERE, "remote.py"))
+        mod = importlib.util.module_from_spec(rm)
+        rm.loader.exec_module(mod)
+        d = mod.slot_lock(self.root, n)
+        os.makedirs(d)
+        open(os.path.join(d, "pid"), "w").write(str(pid))
+
+    def launched_lines(self):
+        for _ in range(50):
+            try:
+                lines = open(self.llog).read().splitlines()
+                if lines:
+                    time.sleep(0.2)
+                    return sorted(open(self.llog).read().splitlines())
+            except OSError:
+                pass
+            time.sleep(0.1)
+        return []
+
+    def claim_max(self):
+        return [c[2]["max"] for c in self.fake.calls if c[1] == "jobs/claim"]
+
+    def test_slots_claim_max_and_launch_ignore_busy_workers(self):
+        self.setup_jobs([self.two_jobs()], slots=2)
+        self.slot_env()
+        for n in (1, 2):  # 워커 락 대신 .wip 둘 - free_workers 는 0
+            open(os.path.join(self.root, "tickets", "0000000%d.wip.md" % n), "w").write("x")
+        r = self.sync()
+        self.assertEqual(self.claim_max(), [2])
+        hs = sorted(n[:-3] for n in self.tickets() if not n.endswith(".wip.md"))
+        got = sorted(l.split()[2:] for l in r.stdout.splitlines() if l.startswith("REMOTE launch "))
+        self.assertEqual(sorted(g[0] for g in got), hs)
+        self.assertEqual(sorted(g[1] for g in got), ["remote1", "remote2"])
+        self.assertEqual(self.dispatched(), [])
+        lines = self.launched_lines()
+        self.assertEqual(len(lines), 2, lines)
+        self.assertEqual(sorted(l.split()[0] for l in lines), ["remote1", "remote2"])
+        self.assertTrue(all(l.split()[1] == "remote" for l in lines))
+
+    def test_live_slot_lock_lowers_max_and_remote_slots(self):
+        self.setup_jobs([[self.job()]], slots=2)
+        self.slot_env()
+        self.lock_slot(1, os.getpid())
+        r = self.sync()
+        self.assertEqual(self.claim_max(), [1])
+        self.assertIn("launch", r.stdout)
+        self.assertIn("remote2", r.stdout)
+        self.assertNotIn("remote1", r.stdout)
+        body = importlib.util.module_from_spec(importlib.util.spec_from_file_location(
+            "rm2", os.path.join(HERE, "remote.py")))
+        body.__spec__.loader.exec_module(body)
+        self.assertEqual(len(body.free_slots(self.root)[1]), 1)
+
+    def test_heartbeat_carries_remote_slots(self):
+        self.setup_jobs([], slots=2)
+        self.slot_env()
+        self.lock_slot(1, os.getpid())
+        mod = importlib.util.module_from_spec(importlib.util.spec_from_file_location(
+            "rm3", os.path.join(HERE, "remote.py")))
+        mod.__spec__.loader.exec_module(mod)
+        with mock.patch.object(mod, "tools_payload", return_value=[]), \
+                mock.patch.object(mod, "refresh_health", return_value={}):
+            body = mod.signal_body("ws1", [{"project": "proj", "queue_root": self.root}])
+        self.assertEqual(body["projects"][0]["remote_slots"], 1)
+        self.set_slots(0)
+        with mock.patch.object(mod, "tools_payload", return_value=[]), \
+                mock.patch.object(mod, "refresh_health", return_value={}):
+            body = mod.signal_body("ws1", [{"project": "proj", "queue_root": self.root}])
+        self.assertNotIn("remote_slots", body["projects"][0])
+
+    def test_slots_zero_is_p492(self):
+        self.setup_jobs([self.two_jobs()], slots=0)
+        self.slot_env()
+        r = self.sync()
+        self.assertEqual(self.claim_max(), [2])  # free_workers
+        self.assertEqual(len(self.dispatched()), 2)
+        self.assertNotIn("launch", r.stdout)
+
+    def test_answered_open_remote_ticket_launches_same_sync(self):
+        self.setup_jobs([[]], slots=2)
+        self.slot_env()
+        h = "abcdef01"
+        open(os.path.join(self.root, "tickets", h + ".md"), "w").write(
+            "---\nticket: %s\nkind: work\nremote_job: J9\nawaiting: q1\n---\n\n본문\n" % h)
+        self.fake.routes[("GET", "answers?runtime_id=rt1&project=proj")] = (200, {"answers": [
+            {"job_id": "J9", "stem": "q1", "markdown": "응"}]})
+        r = self.sync()
+        self.assertIn("REMOTE launch %s remote1" % h, r.stdout)
+        self.assertTrue(os.path.exists(os.path.join(self.root, "tickets", "q1.done.md")))
+
+    def test_launch_failure_without_base_worker_does_not_raise(self):
+        self.setup_jobs([[self.job()]], slots=2)
+        self.slot_env()
+        os.unlink(os.path.join(self.root, "workers", "w1.sh"))
+        os.unlink(os.path.join(self.root, "workers", "w2.sh"))
+        r = self.sync()
+        self.assertIn("기준 워커 없음", r.stdout)
+        self.assertEqual(len(self.tickets()), 1)
 
     def test_no_new_job_no_dispatch(self):
         self.setup_jobs([[], [self.job()], [self.job()]])
@@ -1125,6 +1244,9 @@ class WorkspaceRuntime(Base, unittest.TestCase):
         self.fake.routes[("POST", "jobs/claim")] = (200, {"jobs": []})
         self.assertEqual(self.conn(self.root).returncode, 0)
         self.assertEqual(self.conn(b).returncode, 0)
+        for r in (self.root, b):  # 이 절의 테스트는 P492 길(워커 수가 상한)을 본다
+            c = json.load(open(os.path.join(r, "remote.json")))
+            json.dump(dict(c, slots=0), open(os.path.join(r, "remote.json"), "w"))
         return b
 
     def test_sync_all_one_heartbeat_with_both_projects(self):
