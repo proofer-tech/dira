@@ -188,7 +188,20 @@ dira has no process that stays running. Talking to the server is done by process
 30 seconds. One round of that is called a sync, and it happens in two places: the clock above syncs
 every project in turn, and each queue's worker syncs its own project right before picking a ticket. A
 job you start on the web comes down to this computer at the next sync, and whether the clock or a
-worker fetched it, its session starts in that same sync. So you may wait up to about 30 seconds.
+worker fetched it, its session starts in that same sync.
+
+After it finishes syncing, the clock keeps a connection to the server open and waits until 5
+seconds before the next clock tick. This is called the long wait, and it takes up about 25 of every
+30 seconds. If you start a job on the web during the long wait, the server wakes this computer and
+the clock syncs that project right away. The job comes down and starts within 3 seconds. The long
+wait runs inside the same process cron started and ends before the next tick, so there is still no
+process that stays running.
+
+A job started outside the long wait waits for the next clock tick. That covers the gap of about 5
+seconds between ticks, and also the last 3 seconds of the long wait, when a wake no longer starts a
+new sync. The next tick is a few seconds away, so this does not take long. If a network error keeps
+the long wait from reaching the server, no wake arrives, the job comes down at the next sync, and you
+may wait up to about 30 seconds.
 
 With no free worker, you wait longer. Each sync fetches only as many jobs as the queue has free
 workers, so if every worker is holding another ticket, the job stays on the server until one
@@ -207,8 +220,11 @@ Like a local ticket, a remote job goes into waiting for an answer when its sessi
 person something. The same question then shows up both in the dira app and on the web. You can answer
 on either the web or the dira app. Whichever answer arrives first is written as
 `tickets/<question ticket hash>.done.md`, and at the next dispatch a session reads it and carries on
-with the same job. An answer given on the web comes down at the next sync, so it can take up to about
-30 seconds.
+with the same job.
+
+During the long wait, both directions take under 3 seconds. An answer written on the web comes down
+as soon as the server wakes this computer, and a question the session leaves goes up to the web right
+away. Outside the long wait, both wait for the next clock tick.
 
 While it waits, the web shows the job's state as `awaiting`. Its job token stays in place, so the
 session that starts after the answer talks to the server with the same token.
@@ -223,14 +239,19 @@ This is everything that goes to the server.
 | AI tool names, versions, and login status | On connect and every heartbeat |
 | Each project's workers: next run time and the hash of the ticket each holds | Every heartbeat (30 seconds) |
 | A one-line reason (500 B at most) the project's last sync failed | Every heartbeat after a failure |
-| A remote job's state (`running` `awaiting` `done` `failed`) | When it changes |
-| Progress - step names and the shell commands the session ran | While a remote job runs |
-| The `## 질문 n` (question) section that asks a person | When a remote job waits for an answer |
+| A remote job's state (`running` `awaiting` `done` `failed`) | When it changes. Within 3 seconds during the long wait, otherwise at the next sync |
+| Progress - step names and the shell commands the session ran | While a remote job runs. At most once every 5 seconds during the long wait, otherwise at the next sync |
+| The `## 질문 n` (question) section that asks a person | When a remote job waits for an answer. Within 3 seconds during the long wait, otherwise at the next sync |
 | Answers to ontology reads the web requested | Each time a request comes in |
 
 There are four progress steps: the first time the session reads a file (`read`), the first time it
 edits one (`wrote`), when it creates a new ticket (`handoff`), and when it starts waiting for an
 answer (`awaiting`). Each shell command is cut at 2,000 bytes.
+
+During the long wait, the clock checks the remote job's ticket file every second. When the job
+starts, finishes, or leaves a question, the ticket file changes and the state and question go up
+right away. Progress piles up the whole time a session runs, so it goes up at most once every 5
+seconds.
 
 What never goes to the server:
 
