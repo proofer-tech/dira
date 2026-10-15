@@ -1167,7 +1167,8 @@ class WorkspaceRuntime(Base, unittest.TestCase):
         b = self.two_roots()
         self.fake.routes[("GET", "writes?runtime_id=rt1&project=proj2")] = lambda body: (time.sleep(15), (200, {"writes": []}))[1]
         self.expire()
-        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron, DIRA_SYNC_TIMEOUT="1")
+        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron, DIRA_SYNC_TIMEOUT="1",
+                   DIRA_READ_DEADLINE=str(time.time() + 3))  # 시계 위상과 무관하게 긴 대기를 고정한다
         t0 = time.time()
         subprocess.run([sys.executable, os.path.join(HERE, "remote.py"), "sync-all"], env=env,
                        capture_output=True, text=True, timeout=30)
