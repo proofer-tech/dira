@@ -8938,6 +8938,88 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P499. 원격 큐 - 잡은 작업은 워커와 디스패치를 거치지 않고 원격 슬롯에서 바로 세션을 연다 (요구 `c35960b2`, 왕복 0회)
+
+사람 요구(임한솔): *"갈래가 dira 엔진 쓸 때는 티켓 디스패치 루트 타지말고 즉각 세션 열어서 수행하도록
+해주세요"*. 갈래 큐가 갈래 정본 `서비스/아키텍처/dira협의요구사항.md`의 R20을 넘겼다(갈래 티켓 `61aafccd`).
+
+#### 실측 (2026-10-15, `remote.py`)
+
+- `claim_jobs`는 `free_workers`(워커 `.sh` 수 - `.wip` 수)만큼만 `max`로 잡는다. 로컬 티켓으로 워커가 모두
+  바쁘면 원격 작업은 잡히지도 않는다.
+- 잡은 작업은 `dispatch_made`가 `dispatch.py --reason direct`로 idle 워커를 찾는다(P492). 없으면 cron을
+  기다리고, 원격 작업이 로컬 백로그와 같은 줄에 선다.
+- `tick.sh`의 워커 락 경로는 `$LOCAL/run/<TICKET_NAME>-<sha1(workers 경로/이름) 8자>.lock`이고, reap의
+  `_worker_lock_live`는 fm `owner:`의 워커 이름으로 같은 경로를 본다. `dispatch.py`의 idle 판정은
+  `workers/*.sh` 이름만 훑는다. 그래서 `TICKET_NAME`을 `workers/*.sh`에 없는 이름으로 주면 그 락은 reap에는
+  보이고 디스패치에는 안 보인다.
+
+#### 결정
+
+요청 셋을 다 받는다. 상주 데몬을 만들지 않는다는 앞선 답(P478, P491)은 유지한다 - 세션은 시계(`sync-all`)가
+부르는 `sync --root` 안에서 띄우고 sync는 기다리지 않는다.
+
+1. **원격 슬롯을 둔다.** 워커와 별개인 실행 자리이고 이름은 `remote1` `remote2` ...이다. 잡은 작업은 같은
+   sync에서 비어 있는 슬롯으로 바로 띄운다. 워커 cron - `dispatch.py` - 워커 락을 거치지 않는다.
+2. **로컬 티켓 파일은 그대로 남긴다.** 진행 기록(R4) - 질문과 답(R5, R17) - 끝남 판정 - 상태 보고가 전부
+   티켓 파일 위에서 돌고, "원격 작업도 로컬 티켓이 되어 같은 claim 락으로 잡힌다"(P478 §안 하는 것)는 큐
+   불변이다. 바뀌는 것은 누가 그 티켓을 집느냐뿐이다.
+3. **세션은 `tick.sh`의 지목 디스패치를 재사용한다.** 새 명령 `remote H`는 `tick H`와 같은 길(claim -
+   프롬프트 - 페르소나 묶음 - MCP - 작업 토큰 - 사후 처리)을 타되 원격 sync 블록과 워커 이름을 다르게 쓴다.
+   세션 실행부를 두 벌로 만들지 않는다.
+4. **슬롯 띄우기가 실패하면 종전 길로 돌아간다.** 티켓은 열린 `.md`로 남으므로 워커 cron이 집는다. 즉시
+   실행은 최적화이고 정확성의 일부가 아니다(P489 결정 3).
+5. **답이 온 작업도 같은 길이다.** `fetch_answers`가 답 파일을 쓴 뒤, 그리고 sync마다 한 번, 열린 원격 작업
+   티켓을 슬롯으로 띄운다.
+6. **상한은 `remote.json`의 `slots`이고 기본값은 2다.** 워커 수와 무관하다. `0`이면 원격 슬롯을 끄고
+   P492 동작(빈 워커 수만큼 잡고 `dispatch.py direct`)으로 돌아간다.
+
+주도성 5 판단: 엔진 수정이다(`remote.py` + `tick.sh`의 `remote` 명령). `tick.sh`는 P478이 원격 블록과 토큰
+줄로 승인받은 범위를 넘으므로 이 스펙이 근거다. `dispatch.py` - `tickets.py`는 안 건드린다.
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 자리 | 값 |
+|---|---|
+| 상한 | `<root>/remote.json`의 정수 `slots`. 없거나 정수가 아니면 2, 음수는 0. `dira remote connect`는 새 `remote.json`에 `"slots": 2`를 적는다(재연결은 있는 값을 유지) |
+| 도는 슬롯 수 | `remote1`..`remote<slots>`마다 `tick.sh`와 같은 계산의 락 경로(`$LOCAL/run/remote<n>-<sha1("<root>/workers/remote<n>") 앞 8자>.lock`, `$LOCAL`은 `TICKET_LOCAL` 또는 `~/.config/dira`)가 있고 그 안의 pid가 살아 있으면 도는 중이다. 빈 슬롯 = `slots` - 도는 수(0 미만이면 0) |
+| `claim_jobs` | `slots`가 1 이상이면 `max`는 빈 슬롯 수다(0이면 부르지 않는다). `slots`가 0이면 지금처럼 `free_workers`다 |
+| 띄우기 | `slots` 1 이상일 때 `dispatch_made` 대신 `launch_remote(root, 해시들)`. 해시마다 이름 오름차순 첫 빈 슬롯 `remote<n>`을 골라 `TICKET_NAME=remote<n>`을 환경에 넣고 `bash <root>/workers/<기준 워커>.sh remote <해시>`를 분리 실행한다(`start_new_session=True`, stdin `/dev/null`, stdout-stderr은 `<root>/workers/cron.log`에 덧붙임). 기다리지 않는다. 기준 워커는 `workers/*.sh` 이름 오름차순 첫 번째다 - 그 스크립트의 `TICKET_ENGINE` - `TICKET_ONTOLOGY` - `TICKET_CONTEXT`를 물려받기 위해서다. 고른 슬롯은 이번 sync에서 다시 안 쓴다. 기준 워커가 없거나 슬롯이 떨어지면 남은 해시는 띄우지 않는다(cron이 집는다) |
+| 이어 띄우기 | sync마다 `fetch_answers` 다음에 `<root>/tickets/*.md` 중 열린(접미사 없는) 것 가운데 fm `remote_job:`이 있는 것을 만든 시각 순으로 모아 `launch_remote`에 넘긴다. 후보 판정(deps - `awaiting`)은 `tick.sh remote`가 한다 |
+| 로그 | `remote.py`는 띄운 것마다 `log("launch <해시> remote<n>")`, 실패는 `log("launch <해시>: <사유>")` 한 줄. 어떤 실패도 예외로 올리지 않고 `claim_jobs`의 rc와 `last-error`를 바꾸지 않는다 |
+| `tick.sh remote H` | `tick H`와 같다. 다른 점은 넷이다. (1) 원격 sync 블록(`remote.py tick`)을 건너뛴다. (2) 워커 락 이름이 `TICKET_NAME`(=`remote<n>`)이라 락을 못 잡으면 `SKIP` 로그를 남기고 끝난다. (3) H가 후보가 아니면 아무것도 안 하고 끝난다(`tick H`와 같다). (4) `TICKET_CWD`는 `~/.config/dira/run/remote-cwd/<루트 sha1 8자>/remote<n>/`(없으면 만든다) - 기준 워커의 git 워크트리를 원격 세션과 나눠 쓰지 않는다. 세션 재활용(REUSE)은 끈다 - 다음 티켓은 다음 sync가 다시 띄운다 |
+| owner | `<페르소나> / remote<n>-<sid 8자>`. reap의 `_worker_lock_live`가 슬롯 락을 그대로 본다. 프롬프트 꼬리의 안내 문장에 "워커 스크립트가 필요하면 `<기준 워커>.sh`를 쓴다" 한 문장을 더한다(`workers/remote<n>.sh`는 없다) |
+| 살아 있음 신호 | heartbeat `projects` 각 항목에 `remote_slots`(빈 슬롯 수, 0 이상 정수)를 싣는다. `slots`가 0인 루트는 싣지 않는다. `workers[].busy`는 `workers/*.sh` 이름만 보므로 원격 슬롯 세션은 안 잡힌다 - 그대로 둔다 |
+| §API 표 | P478 §API의 heartbeat 행에 `remote_slots?`를, `jobs/claim` 행에 `max`의 뜻을 이 스펙과 함께 고쳤다. 갈래 서버가 모르는 필드는 무시하므로 하위 호환이다 |
+| 매뉴얼 | `remote.md`(ko-en) "웹에서 누른 작업이 늦게 시작하는 이유" 절. 원격 작업은 로컬 워커가 바빠도 다음 시계(길게는 30초쯤)에 원격 슬롯에서 시작하고, 동시에 도는 수는 `remote.json`의 `slots`(기본 2)라는 점, `0`이면 종전처럼 쉬는 워커를 기다린다는 점 |
+
+#### 안 하는 것
+
+- 상주 데몬, 잡기 간격(30초) 단축.
+- `dispatch.py` - `tickets.py` 수정. 워커 cron이 원격 작업 티켓을 집는 종전 길은 막지 않는다(대비책이다).
+- 갈래 서버 수신과 화면 - 갈래 티켓 `bf38866b`가 하위 호환으로 맡는다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P499-1 | 엔진 - `tick.sh` `remote H` 명령(원격 sync 건너뜀 - 슬롯 락 - `TICKET_CWD` - REUSE 끔 - 프롬프트 한 문장) | developer | - | 발행 예정 |
+| P499-2 | 엔진 - `remote.py` `slots` - 도는 슬롯 수 - `claim_jobs` `max` - `launch_remote` - 이어 띄우기 - heartbeat `remote_slots` - connect 기본값 + `test_remote.py` | developer | - | 발행 예정 |
+| P499-3 | 매뉴얼 - `remote.md`(ko-en) 위 매뉴얼 행 | writer | - | 발행 예정 |
+| P499-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P499-1, P499-2 | 발행 예정 |
+
+**네 장이다.** P499-1과 P499-2는 위 표의 명령 형식(`TICKET_NAME=remote<n>` + `<기준 워커>.sh remote <해시>`)으로
+만나므로 서로 기다리지 않는다. designer 0장 - dira 화면이 없다. 에픽 `P478`에 붙인다.
+
+#### 수용조건
+
+- [ ] `python3 test_remote.py`가 통과한다.
+- [ ] `slots: 2`인 루트에서 워커 락이 전부 잡혀 있어도(idle 워커 0), 가짜 서버가 받은 `jobs/claim` 본문의 `max`가 2이고, 작업 둘을 주면 `sync --root R` 한 번 뒤 `sync.log`에 `launch <해시1> remote1`과 `launch <해시2> remote2`가 있다(테스트는 기준 워커 자리에 부른 인자와 `TICKET_NAME`을 적는 가짜 스크립트를 둬도 된다).
+- [ ] 같은 루트에서 `remote1` 락이 산 pid로 잡혀 있으면 `max`가 1이고 heartbeat의 그 프로젝트 `remote_slots`가 1이다.
+- [ ] `slots: 0`이면 `max`가 `free_workers`와 같고, heartbeat에 `remote_slots`가 없으며, 띄우기는 P492처럼 `dispatch.py`를 부른다.
+- [ ] 답(`GET answers`)이 `awaiting` stem을 채우고 그 원격 작업 티켓이 열린 `.md`면, 같은 sync에서 `launch <그 해시> remote<n>`이 남는다.
+- [ ] 실제 큐에서 `TICKET_NAME=remote1 bash workers/<기준 워커>.sh remote <열린 원격 작업 해시>`를 돌리면 그 티켓이 `.wip`이 되고 fm `owner:`가 `<페르소나> / remote1-`로 시작하며, 세션 cwd가 `~/.config/dira/run/remote-cwd/` 아래다. 세션이 도는 동안 `workers/<기준 워커>.sh reap`을 돌려도 그 티켓은 거둬지지 않는다.
+- [ ] 이 컴퓨터에서 갈래에 연결된 상태로 로컬 워커가 모두 바쁠 때 갈래 화면에서 작업을 발행하면 그 세션이 발행 뒤 40초 안에 시작된다(`sync.log`의 `launch` 시각 - 발행 시각). 갈래 서버가 아직 배포 전이면 이 줄은 판정불가로 적는다.
+- [ ] P499 커밋들의 `git show --stat`에 `dispatch.py` - `tickets.py`가 없다.
+
 ### P498. 요구를 접수한 순간 쓸 수 있는 워커가 있으면 그 요구를 바로 디스패치한다 (요구 `995d7402`, 왕복 0회)
 
 사람 요구: *"요구 접수할 때 지금 워커 점유 가능한 상태면 접수한 티켓 바로 디스패치되게 해주세요"*.
@@ -10193,7 +10275,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | 런타임 (R2) | 등록 단위는 컴퓨터 하나 x AI 도구 하나다. 도구는 `~/.config/dira/bin/engines/`의 엔진(`claude` `codex` `agy` `grok`) 중 실재하는 것이다. 버전은 sync마다 `<도구> --version`(시간 상한 5초). 로그인 점검은 연결 때, 6시간마다, 그리고 그 도구로 돈 세션이 인증 오류(`token-rotate.sh`가 이미 판정하는 그 오류)로 끝난 직후에 최소 프롬프트 한 번(시간 상한 60초)으로 한다. 실패한 도구는 `needs_check`로 보고하고 그 도구로는 작업을 안 잡는다 |
 | 살아 있음 (R3) | 신호 주기는 크론과 같은 30초다(sync 1회 = 신호 1회). 서버의 끊김 기준은 300초를 권한다 - 30초 신호 열 번 연속 실패다. 끊긴 런타임의 작업을 서버가 돌려받은 뒤 런타임이 그 작업의 상태를 올리면 서버는 `410`으로 답하고, 런타임은 그 로컬 티켓에 `## 블록` 없이 fm `remote_revoked: true`만 달고 더는 올리지 않는다 |
 | 30초 간극 | 신호 본문에 워커마다 `next_dispatch_at`(다음 크론 시각, ISO 8601)과 `busy`(지금 쥔 해시 또는 null)를 싣는다. 갈래 화면은 이 값으로 `N초 뒤 시작` 같은 상태를 그린다. dira는 상주 프로세스를 띄우지 않는다 |
-| 작업 잡기 (R1) | `POST jobs/claim`이 준 작업마다 로컬 티켓 `tickets/<새 8자 해시>.md`를 만든다(`<root>/.remote-tmp-<hash>`에 쓴 뒤 rename - 새 파일이라 claim이 아니다). fm은 `ticket`-`title`-`kind: work`-`persona`-`priority`-`duedate`-`remote_job: <job_id>`, 본문은 서버가 준 Markdown 그대로다. 같은 `job_id`의 티켓이 이미 있으면 안 만든다. 한 번에 잡는 수는 그 루트의 빈 워커 수다 |
+| 작업 잡기 (R1) | `POST jobs/claim`이 준 작업마다 로컬 티켓 `tickets/<새 8자 해시>.md`를 만든다(`<root>/.remote-tmp-<hash>`에 쓴 뒤 rename - 새 파일이라 claim이 아니다). fm은 `ticket`-`title`-`kind: work`-`persona`-`priority`-`duedate`-`remote_job: <job_id>`, 본문은 서버가 준 Markdown 그대로다. 같은 `job_id`의 티켓이 이미 있으면 안 만든다. 한 번에 잡는 수는 그 루트의 빈 워커 수다(P499부터 빈 원격 슬롯 수) |
 | 상태 보고 (R1) | `remote_job:`이 있는 티켓만 본다. 파일명과 fm으로 판정한다 - `.wip` = `running`, `.done` = `done`, fm `awaiting:`이 걸려 있고 그 stem이 아직 없으면 `awaiting`, fm `remote_failed:`가 있으면 `failed`(P495 - 본문 `## 블록`은 판정에 안 쓴다, 순서는 P495 §값). 바뀐 것만 올린다(마지막으로 올린 값은 `~/.config/dira/remote/<ws>/state.json`) |
 | 작업 토큰 (R7) | 잡기 응답의 `job_token`을 `~/.config/dira/run/remote-jobs/<hash>.json`(`0600`)에 둔다. `tick.sh`가 그 해시를 디스패치할 때만 세션 환경에 `DIRA_REMOTE_URL`-`DIRA_REMOTE_TOKEN`을 넣는다. 티켓 파일-`cron.log`-세션 로그에 값이 안 남는다. `done`을 올린 뒤와 `410`을 받았을 때만 파일을 지운다(P495). 디스패치 때 파일이 없으면 세션을 안 띄우고 `remote_failed: no-token`으로 닫는다(P495) |
 | 페르소나 MCP (R8) | `personas/<이름>/mcp.json`(claude `--mcp-config` 형식)이 있으면 claude 세션에 `--mcp-config <그 파일>`을 붙인다. P461의 `--strict-mcp-config`는 그대로라 그 페르소나 세션에만 그 서버가 붙는다. 토큰은 파일에 `${DIRA_REMOTE_TOKEN}`으로 적고 값은 환경변수로만 들어간다. claude가 아닌 엔진은 붙이지 않고 로그 한 줄 `MCPSKIP <엔진>` |
@@ -10213,9 +10295,9 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | `POST device/code` | `{machine_name, project?, queue_root?, tools?}` (선택 필드 P485) | `{device_code, user_code, verification_uri, interval, expires_in}` |
 | `POST device/token` | `{device_code}` | 대기 중 `428`, 끝나면 `{workspace_id, runtime_token}` |
 | `POST runtimes` | `{machine_name, project, projects?: [{project, queue_root}], tools: [{name, version, health}]}` - `projects`가 있으면 `project` 대신 이 목록이 런타임의 프로젝트 목록이다(P491) | `{runtime_id}` |
-| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?, next_claim_at?}]}`(P491, P492) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다. `next_claim_at`은 그 루트에서 다음에 `jobs/claim`을 부를 시각(ISO 8601)이다 - 잡은 작업은 같은 sync에서 디스패치되므로(P492) 서버는 쉬는 워커가 있으면 이 값을 발행한 작업의 시작 예정 시각으로 쓸 수 있다  `reads?`(P496)는 원격 읽기가 들어간 런타임이면 `true`다 | `{ok: true}` |
+| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?, next_claim_at?, remote_slots?}]}`(P491, P492, P499) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다. `next_claim_at`은 그 루트에서 다음에 `jobs/claim`을 부를 시각(ISO 8601)이다 - 잡은 작업은 같은 sync에서 디스패치되므로(P492) 서버는 쉬는 워커가 있으면 이 값을 발행한 작업의 시작 예정 시각으로 쓸 수 있다. `remote_slots`(P499)는 그 루트에서 지금 더 띄울 수 있는 원격 슬롯 수(0 이상 정수)다 - 있으면 서버는 쉬는 워커 대신 이 값으로 시작 예정 시각을 그린다(1 이상이면 `next_claim_at`). `reads?`(P496)는 원격 읽기가 들어간 런타임이면 `true`다 | `{ok: true}` |
 | `DELETE runtimes/<id>` | - | `204` |
-| `POST jobs/claim` | `{runtime_id, tools: [이름], max, project?}` - `project`가 있으면 그 프로젝트의 작업만 준다(P491) | `{jobs: [{job_id, title, persona, priority, duedate, body, job_token, job_token_expires_at}]}` |
+| `POST jobs/claim` | `{runtime_id, tools: [이름], max, project?}` - `project`가 있으면 그 프로젝트의 작업만 준다(P491). `max`는 그 루트의 빈 원격 슬롯 수다(P499. 슬롯을 끈 루트는 빈 워커 수) | `{jobs: [{job_id, title, persona, priority, duedate, body, job_token, job_token_expires_at}]}` |
 | `POST jobs/<job_id>/status` | `{state, hash, at, reason?}` - `state`는 `running` `awaiting` `done` `failed`. `failed`는 사람이 더 할 일이 없는 끝에만 쓰고 그때 `reason`(지금은 `no-token`)을 싣는다(P495) | `204`, 돌려받은 작업은 `410` |
 | `POST jobs/<job_id>/events` | `{events: [{at, step, command}]}` | `204` |
 | `POST jobs/<job_id>/questions` | `{stem, markdown}` | `204` |
