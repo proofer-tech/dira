@@ -284,6 +284,20 @@ def t_projects(a):
         return {"projects": []}
 
 
+# ---------------------------------------------------------------- 온톨로지 읽기 (P496)
+
+def ontology_tool(op):
+    def f(a):
+        import ontology_read
+        root = get_root(a)
+        args = {k: v for k, v in a.items() if k != "root"}
+        try:
+            return ontology_read.run(root, op, args)
+        except ValueError as e:
+            raise ToolError(str(e))
+    return f
+
+
 # ---------------------------------------------------------------- 환경변수 (값은 stdin으로만)
 
 def env_run(a, args, value=None):
@@ -366,6 +380,18 @@ TOOLS = {
     "ticket_done": ("`.wip`을 `.done`으로 rename", _s("", H, ["hash"]), t_ticket_done),
     "interject": ("진행중 세션에 참견 한 줄", _s("", {**H, "text": STR}, ["hash", "text"]), t_interject),
     "graph_query": ("graph.py query", _s("", {"question": STR}, ["question"]), t_graph_query),
+    "ontology_objects": ("온톨로지 객체 목록(본문 없음, path 순, cursor로 쪽 넘김)",
+                         _s("", {"types": {"type": "array", "items": STR}, "cursor": STR, "limit": INT}),
+                         ontology_tool("objects")),
+    "ontology_object": ("온톨로지 객체 하나(본문-원문 포함). backlinks: true면 이 객체를 가리키는 관계도",
+                        _s("", {"name": STR, "backlinks": BOOL}, ["name"]), ontology_tool("object")),
+    "ontology_search": ("온톨로지 객체를 이름-제목-속성-본문에서 부분 일치로 검색",
+                        _s("", {"q": STR, "types": {"type": "array", "items": STR}, "limit": INT}, ["q"]),
+                        ontology_tool("search")),
+    "ontology_versions": ("객체의 버전 목록", _s("", {"name": STR}, ["name"]), ontology_tool("versions")),
+    "ontology_version": ("객체의 버전 하나", _s("", {"name": STR, "version": STR}, ["name", "version"]),
+                         ontology_tool("version")),
+    "ontology_schema": ("온톨로지 ObjectType-LinkType 정의", _s(""), ontology_tool("schema")),
     "env_list": ("프로젝트 환경변수 이름 목록(값 없음)", _s(""), t_env_list),
     "env_create": ("환경변수 만들기. 값은 응답에 안 실린다",
                    _s("", {"name": STR, "value": STR}, ["name", "value"]), t_env_create),

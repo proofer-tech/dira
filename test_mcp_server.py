@@ -70,6 +70,23 @@ res, err = call("ticket_done", hash="abcd1234")
 assert not err, res
 assert files("abcd1234") == ["abcd1234.done.md"], files("abcd1234")
 
+# 2b. 온톨로지 도구 여섯 (P496)
+ONT = {"ontology_objects", "ontology_object", "ontology_search", "ontology_versions", "ontology_version",
+       "ontology_schema"}
+assert ONT <= names, ONT - names
+os.makedirs(os.path.join(root, "ontology", "objects", "t"))
+open(os.path.join(root, "ontology", "objects", "t", "o.md"), "w").write("---\nname: o\ntype: t\n---\n\n본문 zq\n")
+sys.path.insert(0, HERE)
+import ontology_read  # noqa: E402
+res, err = call("ontology_object", name="o")
+assert not err and res["result"]["object"]["name"] == "o", res
+assert res == ontology_read.run(root, "object", {"name": "o"}), res
+assert call("ontology_search", q="zq")[0] == ontology_read.run(root, "search", {"q": "zq"})
+assert call("ontology_objects")[0] == ontology_read.run(root, "objects", {})
+assert call("ontology_schema")[0] == ontology_read.run(root, "schema", {})
+res, err = call("ontology_search", q="")
+assert err and "rc" not in res, res  # ValueError -> 도구 오류
+
 # 3. 허용목록
 marker = os.path.join(tmp, "ran")
 open(os.path.join(tmp, "x.sh"), "w").write("touch %s\n" % marker)
