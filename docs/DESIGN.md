@@ -9004,11 +9004,11 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P496-1 | 엔진 - `ontology_read.py` 여섯 조회 - 객체 구조 - `errors`, `graph.py` `ontology_links` 이름 목록 형태, `tick.sh` 굽기 목록 + `test_ontology_read.py` | developer | - | 다음 |
-| P496-2 | 엔진 - `remote.py` `sync-all` 긴 대기 - 읽기 처리 - 신호 `reads: true` - O4 끄기 + `test_remote.py` | developer | P496-1 | 다음 |
-| P496-3 | 엔진 - `mcp_tools.py` 온톨로지 도구 여섯 + `test_mcp_server.py` - `test_mcp_parity.py` | developer | P496-1 | 다음 |
-| P496-4 | 매뉴얼 - `remote.md`(ko-en) 온톨로지가 서버에 사본으로 안 가고 요청 때 읽힌다는 것, MCP 도구 목록 문서에 온톨로지 도구 여섯 | writer | - | 다음 |
-| P496-5 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P496-2, P496-3 | 다음 |
+| P496-1 | 엔진 - `ontology_read.py` 여섯 조회 - 객체 구조 - `errors`, `graph.py` `ontology_links` 이름 목록 형태, `tick.sh` 굽기 목록 + `test_ontology_read.py` | developer | - | 발행 `49d85fb0` |
+| P496-2 | 엔진 - `remote.py` `sync-all` 긴 대기 - 읽기 처리 - 신호 `reads: true` - O4 끄기 + `test_remote.py` | developer | P496-1 | 발행 `7f96dffd` |
+| P496-3 | 엔진 - `mcp_tools.py` 온톨로지 도구 여섯 + `test_mcp_server.py` - `test_mcp_parity.py` | developer | P496-1 | 발행 `29c4042a` |
+| P496-4 | 매뉴얼 - `remote.md`(ko-en) 온톨로지가 서버에 사본으로 안 가고 요청 때 읽힌다는 것, MCP 도구 목록 문서에 온톨로지 도구 여섯 | writer | - | 발행 `50d58e59` |
+| P496-5 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P496-2, P496-3 | 발행 `63007d4a` |
 
 P496-1이 진입점 `run`을 정해야 원격 읽기와 MCP 도구가 그것을 부른다. 매뉴얼은 위 표에 글감이 다 있어 기다리지
 않는다. designer 0장 - dira 화면이 없다. 에픽 `P478`에 붙인다.
