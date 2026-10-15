@@ -20,9 +20,10 @@ import {
   shellValue,
 } from "./paths.ts";
 import { mirrorCore } from "./protocols.ts";
-import { dueAlertOf, isAwaiting, listTickets, statusOf, type DueAlert, type Ticket } from "./queue.ts";
+import { dueAlertOf, isAwaiting, isPolling, listTickets, statusOf, type DueAlert, type Ticket } from "./queue.ts";
 import { ensureGitignoreLine } from "./scaffold.ts";
-import { listWorkers, type Worker } from "./workers.ts";
+import { listWorkers, stallLogs, type Worker } from "./workers.ts";
+import { judgeStall, type Stall } from "./dispatch-stall.ts";
 import { PERSONA_COLORS, slugify, tildePath } from "./urls.ts";
 
 export { slugify };
@@ -808,6 +809,9 @@ export type ProjectSummary = {
   /** 머신 상태(§0-14 — 셸 알림 종 ⑤·⑥). 프로젝트를 못 읽어도 값이 있다 — 머신이 큐보다 넓다.
    *  `machineState()`는 모듈 스코프 값을 읽기만 하므로 여기서 새 I/O가 0이다. */
   machine: MachineState;
+  /** 디스패치가 멎은 이유(§P501). 멎지 않았거나 못 읽었으면 `null`. 워커·티켓은 위에서 이미 읽은 값이고
+   *  새 읽기는 runner.log 꼬리 하나다. */
+  stall: Stall | null;
 };
 
 /** 프로젝트 하나를 훑는다. 경로가 없으면 읽기를 시도하지 않고 사유만 담는다.
@@ -844,6 +848,7 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       }),
       backoff: await backoffOf(tickets, now),
       machine,
+      stall: await stallOf(project.root, workers, tickets, now),
     };
   } catch (e) {
     return {
@@ -859,8 +864,23 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
       due: [],
       backoff: [],
       machine,
+      stall: null,
     };
   }
+}
+
+/** 열린 미할당 티켓과 idle 워커를 `judgeStall`에 넣는다(§P501). 로그를 못 읽어도 던지지 않는다. */
+async function stallOf(root: string, workers: Worker[], tickets: Ticket[], now: Date): Promise<Stall | null> {
+  const open = tickets.filter((t) => t.state === "open" && !t.assigned);
+  if (open.length === 0) return null;
+  const logs = await stallLogs(path.join(root, "workers")).catch(() => null);
+  if (!logs) return null;
+  return judgeStall({
+    workers: workers.map((w) => ({ name: w.name, idle: w.status === "idle", lines: logs.byWorker[w.effName] ?? [] })),
+    watchdog: logs.watchdog,
+    tickets: open.map((t) => ({ hash: t.hash, unmet: t.unmet, awaiting: isAwaiting(t), polling: isPolling(t) })),
+    now: Math.floor(now.getTime() / 1000),
+  });
 }
 
 /** 종 항목 ⑨용 나열(P362-3) — 열린 티켓만 후보다(`select`가 백오프 표식을 거르는 자리와 같은

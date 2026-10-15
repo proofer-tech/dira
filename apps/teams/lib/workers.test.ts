@@ -101,6 +101,7 @@ const {
   unarchivedResumes,
   archivedRows,
   dispatchRoundsForHash,
+  stallLogs,
 } = await import("./workers.ts");
 
 const SFX = { inProgress: ".wip", done: ".done" };
@@ -3489,4 +3490,23 @@ test("P467 - 엔진 칸이 claude로 읽히고 effort가 모델처럼 따로 있
   assert.match(readFileSync(f, "utf8"), /--model sonnet --effort high --input-format .* --thinking-display summarized\)/);
   await assert.rejects(createWorker(root, "w3", "claude", "", "huge"), /effort/);
   assert.strictEqual(existsSync(path.join(root, "workers", "w3.sh")), false);
+});
+
+test("stallLogs - 워커 줄은 최신이 앞, 시각 없는 감시자 줄은 앞 시각 줄의 시각을 빌린다", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "fst-stall-"));
+  writeFileSync(
+    path.join(dir, "runner.log"),
+    [
+      "2026-10-15 22:00:00 [w1] SKIP ps 조회 실패",
+      "2026-10-15 22:00:30 [w1] 상한 - 머신 전체 산 세션 3/3, 이번 tick을 건너뜀",
+      "WATCHDOG diagnose G8 사람 조각 티켓 파일",
+      "WATCHDOG diagnose G2 자력 무시",
+      "",
+    ].join("\n"),
+  );
+  const r = await stallLogs(dir);
+  assert.equal(r.byWorker.w1[0].text, "상한 - 머신 전체 산 세션 3/3, 이번 tick을 건너뜀");
+  assert.equal(r.byWorker.w1.length, 2);
+  assert.deepEqual(r.watchdog, [{ at: r.byWorker.w1[0].at, code: "G8", text: "조각 티켓 파일" }]);
+  assert.deepEqual((await stallLogs(path.join(dir, "none"))).watchdog, []);
 });

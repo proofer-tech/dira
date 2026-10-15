@@ -4,6 +4,8 @@
  *  화면 문구는 `i18n.ts`의 `stall.<key>.line` - `stall.<key>.todo`다(자리표시자 `{n}` 등은
  *  `params`로 호출자가 채운다). 이 파일은 키와 값만 낸다. */
 
+import { t, type Locale } from "./i18n.ts";
+
 export type StallKey =
   | "auth" | "cooldown" | "machineCap" | "personaCap" | "priority"
   | "shellCap" | "watchdog" | "noCandidate" | "notWaking" | "unknown";
@@ -16,7 +18,7 @@ export type StallParams = Record<string, string | number>;
 export type Stall = {
   reason: StallKey;
   params: StallParams;
-  perWorker: { name: string; reason: StallKey; raw: string }[];
+  perWorker: { name: string; reason: StallKey; raw: string; params: StallParams }[];
   watchdog: { code: string; text: string }[];
 };
 
@@ -105,7 +107,13 @@ export function judgeStall(input: {
   return {
     reason,
     params,
-    perWorker: idle.map((w) => ({ name: w.name, reason: w.own?.key ?? reason, raw: w.own?.raw ?? "" })),
+    perWorker: idle.map((w) => ({ name: w.name, reason: w.own?.key ?? reason, raw: w.own?.raw ?? "", params: w.own?.params ?? params })),
     watchdog: dog,
   };
 }
+
+const fill = (text: string, params: StallParams) => text.replace(/\{(\w+)\}/g, (m, k) => String(params[k] ?? m));
+
+/** 한 줄과 할 일 문구 - 사전의 자리표시자를 `params`로 채운다. */
+export const stallLine = (locale: Locale, key: StallKey, params: StallParams) => fill(t(locale, `stall.${key}.line`), params);
+export const stallTodo = (locale: Locale, key: StallKey, params: StallParams) => fill(t(locale, `stall.${key}.todo`), params);

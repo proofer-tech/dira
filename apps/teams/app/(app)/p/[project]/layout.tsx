@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/empty-state";
 import { NextDispatch } from "@/components/next-dispatch";
+import { StallButton } from "@/components/stall-button";
 import {
   ArchiveToggle,
   BrandMark,
@@ -127,6 +128,8 @@ export default async function ProjectLayout({
         idlePeriods: s.workers
           .filter((w) => w.status === "idle")
           .flatMap((w) => (w.cronPeriod ? [w.cronPeriod] : [])),
+        // §P501 디스패치 멈춤 이유. `readSummary`가 이미 읽은 워커·티켓으로 판정한 값이다.
+        stall: s.stall,
       };
     }),
   );
@@ -395,6 +398,7 @@ export default async function ProjectLayout({
               묶는 컴포넌트를 안 만든다 — `// ponytail: 두 번째 자리가 생기면 그때 묶는다` */}
           <div className="ml-auto flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
             <NextDispatch periods={current.idlePeriods} locale={locale} />
+            <StallButton stall={current.stall} project={id} locale={locale} />
             {/* 라벨은 §2 워커 4상태 표의 말이다 — 손으로 적지 않는다(`유휴`를 만들지 않는다).
                 `sr-only` 접두어로 낭독이 `idle 워커 w3 w9`가 된다: 앞에 읽히는 것이 엔진 한도라
                 낱말 하나로 주어를 안 바꾸면 `idle`이 엔진의 상태로 들린다(§38 §접근성) */}

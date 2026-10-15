@@ -1073,6 +1073,47 @@ export type PersonaRun = { hash: string; verb: string; dispatchAt: string; endAt
  *  한 번에 이 5.7MB 파일을 여러 번 연다(§2-14 (7) §성능 예산 "새 파일 읽기가 0회"). 페르소나
  *  페어링을 별도 파서로 새로 두지 않고 이 한 벌의 backward 루프에 얹은 이유도 같다 — 파일을
  *  두 번 훑지 않는다. */
+/** 디스패치 멈춤 판정의 재료(DESIGN.md §P501) - runner.log **꼬리**에서 워커 태그별 줄(시각 epoch초,
+ *  최신이 앞)과 감시자 `WATCHDOG diagnose <코드> 사람 <한 줄>` 줄을 뽑는다. 창이 90초라 꼬리면 된다.
+ *  감시자 줄은 시각 접두가 없다(`watchdog_gates.py`가 그대로 출력) - 바로 앞 시각 줄의 시각을 빌린다.
+ *
+ *  ponytail: 꼬리 256KB 고정. tick이 폭주해 90초치가 이보다 길면 오래된 워커 줄을 놓친다(그때는 판정이
+ *  `notWaking`으로 기운다). */
+const STALL_TAIL = 256 * 1024;
+export const stallLogs = cache(
+  async (
+    workersDir: string,
+  ): Promise<{ byWorker: Record<string, { at: number; text: string }[]>; watchdog: { at: number; code: string; text: string }[] }> => {
+    const byWorker: Record<string, { at: number; text: string }[]> = {};
+    const watchdog: { at: number; code: string; text: string }[] = [];
+    const fh = await open(path.join(workersDir, "runner.log"), "r").catch(() => null);
+    if (!fh) return { byWorker, watchdog };
+    let text = "";
+    try {
+      const { size } = await fh.stat();
+      const len = Math.min(size, STALL_TAIL);
+      const buf = Buffer.alloc(len);
+      await fh.read(buf, 0, len, size - len);
+      text = buf.toString("utf8");
+    } finally {
+      await fh.close();
+    }
+    const lines = text.split("\n");
+    let prevAt = 0; // 위에서 아래로 읽으며 마지막 시각 줄의 시각을 들고 간다
+    for (const line of lines) {
+      const m = /^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d) \[([^\]]+)\] (.*)$/.exec(line);
+      if (m) {
+        prevAt = Math.floor(Date.parse(m[1].replace(" ", "T")) / 1000);
+        (byWorker[m[2]] ??= []).unshift({ at: prevAt, text: m[3] }); // 뒤로 갈수록 최신 - 앞에 끼워 최신이 앞이다
+        continue;
+      }
+      const d = /^WATCHDOG diagnose (\S+) 사람 (.*)$/.exec(line);
+      if (d && prevAt) watchdog.push({ at: prevAt, code: d[1], text: d[2] });
+    }
+    return { byWorker, watchdog };
+  },
+);
+
 /** 회차 카드 한 장의 머리 재료(§2-3 개정 2, 요구 `2aa9bdf0`) — 해시 하나의 `DISPATCH` 줄
  *  하나에 그 sid 안에서의 순번(`n`, `nthInitOffset`이 받는 값)과 종료 짝을 실었다. `endVerb`가
  *  `null`이면 아직 안 닫힌 회차다(`진행 중`). */
