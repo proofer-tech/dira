@@ -1258,5 +1258,102 @@ class WorkspaceRuntime(Base, unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.wsdir(), "manifest.json")))
 
 
+class Wake(Base, unittest.TestCase):
+    """P497-1: sync --now - --report, run_now, 읽기 응답의 wake 처리."""
+    setup_jobs = T.setup_jobs
+    job = T.job
+    tickets = T.tickets
+
+    def wake_setup(self, wake_for_call, jobs_after_wake=True):
+        """wake_for_call(n) -> 읽기 n번째 응답의 wake 목록."""
+        self.setup_jobs([])
+        self.woke = False
+        self.claim_times, self.read_times = [], []
+        calls = {"n": 0}
+
+        def reads(_b):
+            calls["n"] += 1
+            self.read_times.append(time.time())
+            w = wake_for_call(calls["n"])
+            if w:
+                self.woke = True
+            return 200, ({"reads": [], "wake": w} if w else {"reads": []})
+
+        def claim(_b):
+            self.claim_times.append(time.time())
+            return 200, {"jobs": [self.job()] if self.woke and not self.tickets() else []}
+        self.fake.routes[("GET", "reads")] = reads
+        self.fake.routes[("POST", "jobs/claim")] = claim
+        self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = (200, {"ok": True})
+
+    def sync_all(self, secs):
+        os.environ["DIRA_READ_DEADLINE"] = str(time.time() + secs)
+        self.addCleanup(os.environ.pop, "DIRA_READ_DEADLINE", None)
+        r = self.run_remote("sync-all")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        return r
+
+    def test_wake_runs_sync_within_interval_and_claims(self):
+        self.wake_setup(lambda n: [{"project": "proj", "kinds": ["jobs"]}] if n == 1 else None)
+        r = self.sync_all(24)  # 직전 run_child sync가 방금 돌았어도(10초 간격 안) 깨우기는 돈다
+        self.assertIn("REMOTE wake proj jobs", r.stdout)
+        self.assertEqual(len(self.tickets()), 1)
+        self.assertTrue(any("wake=1" in c[1] for c in self.fake.calls if c[1].startswith("reads?")))
+        first_read = self.read_times[0]
+        # 수용조건은 3초 - 자식 sync 시작이 느린 환경을 감안해 넉넉히 둔다
+        self.assertTrue([t for t in self.claim_times if 0 <= t - first_read < 6], (self.claim_times, first_read))
+
+    def test_wake_same_root_at_most_every_2s(self):
+        self.wake_setup(lambda n: [{"project": "proj", "kinds": ["writes"]}])
+        r = self.sync_all(24)
+        n = r.stdout.count("REMOTE wake proj writes")
+        self.assertGreaterEqual(n, 2, r.stdout)
+        self.assertLessEqual(n, 8, r.stdout)  # 긴 대기 약 10초 / 2초
+
+    def test_wake_unknown_project_skipped_and_no_wake_is_plain(self):
+        self.wake_setup(lambda n: [{"project": "nope", "kinds": ["jobs"]}] if n == 1 else None)
+        r = self.sync_all(24)
+        self.assertIn("REMOTE wake-skip nope", r.stdout)
+        self.assertNotIn("REMOTE wake proj", r.stdout)
+        self.assertEqual(self.tickets(), [])
+        self.assertEqual(len([t for t in self.claim_times]), 1)  # run_child sync의 한 번뿐
+
+    def test_now_lock_conflict_rc75_no_last_error(self):
+        self.connect()
+        os.mkdir(os.path.join(self.root, ".remote-sync.lock"))
+        for flag in ("--now", "--report"):
+            self.assertEqual(self.run_remote("sync", "--root", self.root, flag).returncode, 75)
+        self.assertEqual(self.run_remote("sync", "--root", self.root).returncode, 0)  # 플래그 없으면 rc 0
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("remote_t", os.path.join(self.engdir, "remote.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        old = os.environ.get("HOME")
+        os.environ["HOME"] = self.home
+        try:
+            self.assertIs(m.run_now("ws1", self.root, "--now"), False)
+        finally:
+            os.environ["HOME"] = old
+        self.assertFalse(os.path.exists(os.path.join(os.path.dirname(self.cred()), "last-error")))
+
+    def test_report_runs_only_report_steps_and_keeps_stamp(self):
+        self.setup_jobs([[self.job()]])
+        stamp = os.path.join(os.path.dirname(self.cred()), "last-sync")
+        r = self.run_remote("sync", "--root", self.root)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        h = self.tickets()[0][:-3]
+        os.rename(os.path.join(self.root, "tickets", h + ".md"), os.path.join(self.root, "tickets", h + ".wip.md"))
+        os.utime(stamp, (1, 1))
+        before = os.stat(stamp).st_mtime
+        n = len(self.fake.calls)
+        r = self.run_remote("sync", "--root", self.root, "--report")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        paths = [c[1].split("?")[0] for c in self.fake.calls[n:]]
+        self.assertIn("jobs/J1/status", paths)  # 보고는 돈다
+        for bad in ("jobs/claim", "writes", "answers"):
+            self.assertNotIn(bad, paths)
+        self.assertEqual(os.stat(stamp).st_mtime, before)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -602,34 +602,36 @@ def take_lock(lock):
         return False
 
 
-def cmd_sync(root):
+def cmd_sync(root, now=False, report=False):
+    """now: 10초 간격 검사를 건너뛴다. report: 보고 단계 셋만 돌고 last-sync를 안 쓴다. 둘 다 락 충돌이면 rc 75 (P497)."""
     cfg = load_config(root)
     if not cfg:
         return 0
     lock = os.path.join(root, ".remote-sync.lock")
     if not take_lock(lock):
-        return 0
+        return 75 if now or report else 0
     try:
-        try:
-            merge_legacy(cfg["workspace_id"])
-        except (OSError, Unauthorized) as e:
-            log("merge %s: %s" % (type(e).__name__, e))
-        stamp = os.path.join(root_dir(cfg["workspace_id"], root), "last-sync")
-        try:
-            if time.time() - os.stat(stamp).st_mtime < SYNC_INTERVAL:
-                return 0
-        except OSError:
-            pass
-        os.makedirs(os.path.dirname(stamp), exist_ok=True)
-        with open(stamp, "w") as f:
-            f.write(str(time.time()))
+        if not report:
+            try:
+                merge_legacy(cfg["workspace_id"])
+            except (OSError, Unauthorized) as e:
+                log("merge %s: %s" % (type(e).__name__, e))
+            stamp = os.path.join(root_dir(cfg["workspace_id"], root), "last-sync")
+            try:
+                if not now and time.time() - os.stat(stamp).st_mtime < SYNC_INTERVAL:
+                    return 0
+            except OSError:
+                pass
+            os.makedirs(os.path.dirname(stamp), exist_ok=True)
+            with open(stamp, "w") as f:
+                f.write(str(time.time()))
         token = load_token(cfg["workspace_id"])
         if not token:
             log("no-credentials")
             return 0
         ctx = Ctx(root, cfg, token)
         fail = None
-        for step in STEPS:
+        for step in ((report_status, report_events, report_questions) if report else STEPS):
             try:
                 step(ctx)
             except Unauthorized:
@@ -1509,13 +1511,16 @@ def prune_roots(ws):
             shutil.rmtree(os.path.join(base, k), ignore_errors=True)
 
 
-def run_child(ws, qr):
-    """루트 하나의 sync를 자식 프로세스로 돌리고 결과를 그 루트의 last-error에 적는다."""
+def run_child(ws, qr, flag=None):
+    """루트 하나의 sync를 자식 프로세스로 돌리고 결과를 그 루트의 last-error에 적는다.
+    flag(--now/--report)가 있고 rc 75(다른 sync가 돌고 있음)면 last-error를 안 건드리고 False (P497)."""
     import signal
-    p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "sync", "--root", qr],
+    p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "sync", "--root", qr] + ([flag] if flag else []),
                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True)
     try:
         out, err = p.communicate(timeout=child_timeout())
+        if flag and p.returncode == 75:
+            return False
         msg = "" if p.returncode == 0 else (
             ([l for l in err.splitlines() if l.strip()] or ["rc %d" % p.returncode])[-1])
     except subprocess.TimeoutExpired:
@@ -1535,11 +1540,18 @@ def run_child(ws, qr):
             os.unlink(path)
         except FileNotFoundError:
             pass
+    return True
+
+
+def run_now(ws, qr, flag):
+    return run_child(ws, qr, flag)
 
 
 # ---- 원격 읽기 긴 대기 (P496) ----
 
 READ_MARGIN = 5  # 다음 시계 시각 5초 전까지만 기다린다
+WAKE_GAP = 2  # 초. 같은 루트의 깨우기 sync는 시작 뒤 이 시간 안이면 건너뛴다
+WAKE_CUTOFF = 3  # 초. 마감까지 이만큼이 안 남았으면 새 sync를 안 띄운다
 
 
 def read_deadline():
@@ -1570,15 +1582,35 @@ def answer_read(item, projs):
         return {"error": "%s: %s" % (type(e).__name__, e)}
 
 
+def handle_wake(ws, wake, last, deadline):
+    """서버의 깨우기. 목록에 있는 프로젝트의 큐 루트를 --now로 돌린다. 같은 루트는 WAKE_GAP 안이면 건너뛴다."""
+    for w in wake if isinstance(wake, list) else []:
+        if not isinstance(w, dict):
+            continue
+        proj = str(w.get("project"))
+        hit = [p for p in list_projects(ws) if p["project"] == w.get("project")]
+        if not hit:
+            log("wake-skip " + proj)
+            continue
+        qr = hit[0]["queue_root"]
+        if deadline - time.time() < WAKE_CUTOFF or time.time() - last.get(qr, 0) < WAKE_GAP:
+            continue
+        last[qr] = time.time()
+        kinds = w.get("kinds") if isinstance(w.get("kinds"), list) else []
+        log("wake %s %s" % (proj, ",".join(str(k) for k in kinds)))
+        run_now(ws, qr, "--now")
+
+
 def read_loop(ws, rt, token, deadline):
     server, rid = rt.get("server") or "", rt["runtime_id"]
     projs = list_projects(ws)
+    last = {}
     try:
         while True:
             wait = min(25, int(deadline - time.time() - 2))
             if wait < 1:
                 return
-            st, body = http(server, "GET", "reads?runtime_id=%s&wait=%d" % (rid, wait), None, token,
+            st, body = http(server, "GET", "reads?runtime_id=%s&wait=%d&wake=1" % (rid, wait), None, token,
                             timeout=wait + 10)
             if st in (404, 405):
                 log("reads %s %d" % (ws, st))
@@ -1596,6 +1628,7 @@ def read_loop(ws, rt, token, deadline):
                     continue
                 http(server, "POST", "reads/%s" % urllib.parse.quote(str(it["read_id"]), safe=""),
                      answer_read(it, projs), token)  # 410은 조용히 넘어간다
+            handle_wake(ws, body.get("wake"), last, deadline)
     except Unauthorized:
         log("unauthorized " + ws)
     except Exception as e:
@@ -1676,6 +1709,9 @@ def main(argv=None):
             p.add_argument("--workspace")
             p.add_argument("--new", action="store_true")
         p.add_argument("--root", default=os.environ.get("TICKET_ROOT"))
+        if name == "sync":
+            p.add_argument("--now", action="store_true")
+            p.add_argument("--report", action="store_true")
     p = sub.add_parser("notoken")
     p.add_argument("path")
     p = sub.add_parser("check-health")
@@ -1700,7 +1736,7 @@ def main(argv=None):
         return bundle_cmd(root, a.cmd)
     if a.cmd == "tick":
         return cmd_tick(root)
-    return cmd_sync(root)
+    return cmd_sync(root, a.now, a.report)
 
 
 if __name__ == "__main__":
