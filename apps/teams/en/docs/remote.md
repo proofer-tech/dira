@@ -193,7 +193,8 @@ worker fetched it, its session starts in that same sync.
 After it finishes syncing, the clock keeps a connection to the server open and waits until 5
 seconds before the next clock tick. This is called the long wait, and it takes up about 25 of every
 30 seconds. If you start a job on the web during the long wait, the server wakes this computer and
-the clock syncs that project right away. The job comes down and starts within 3 seconds. The long
+the clock syncs that project right away. The job comes down and starts within 3 seconds. Answers to questions and ontology edits made on the
+web come down the same way, within 3 seconds. The long
 wait runs inside the same process cron started and ends before the next tick, so there is still no
 process that stays running.
 
