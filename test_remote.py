@@ -805,8 +805,8 @@ class Tools(Base, unittest.TestCase):
         self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = (200, {"ok": True})
         r, dt = self.sync_all_deadline(20)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertLess(dt, 10)
-        self.assertTrue([c for c in self.fake.calls if c[0] == "GET" and c[1].startswith("reads?")])
+        # P497: 감시 스레드는 마감까지 돌므로 시간은 재지 않고, 읽기 요청을 되풀이하지 않는지만 본다
+        self.assertEqual(len([c for c in self.fake.calls if c[0] == "GET" and c[1].startswith("reads?")]), 1)
 
     def write_op(self, writes):
         self.posts = {}
@@ -1353,6 +1353,87 @@ class Wake(Base, unittest.TestCase):
         for bad in ("jobs/claim", "writes", "answers"):
             self.assertNotIn(bad, paths)
         self.assertEqual(os.stat(stamp).st_mtime, before)
+
+
+class Watch(Base, unittest.TestCase):
+    """P497-2: 긴 대기 중 감시 스레드가 원격 작업 티켓 변화를 바로 보고한다."""
+    setup_jobs = T.setup_jobs
+    job = T.job
+    tickets = T.tickets
+    wip_job = T.wip_job
+    sync = T.sync
+
+    def start(self, reads_ok):
+        tdir, h, p = self.wip_job()
+        self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = (200, {"ok": True})
+        if reads_ok:
+            self.fake.routes[("GET", "reads")] = (200, {"reads": []})
+        self.times = {}
+        for key, route in (("status", "jobs/J1/status"), ("events", "jobs/J1/events")):
+            self.fake.routes[("POST", route)] = (lambda k: lambda b: (
+                self.times.setdefault(k, []).append((time.time(), b)) or (204, None)))(key)
+        self.claims = 0
+
+        def claim(_b):
+            self.claims += 1
+            return 200, {"jobs": []}
+        self.fake.routes[("POST", "jobs/claim")] = claim
+        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron,
+                   DIRA_READ_DEADLINE=str(time.time() + 40))
+        env.pop("TICKET_ONTOLOGY", None)
+        self.proc = subprocess.Popen([sys.executable, os.path.join(self.engdir, "remote.py"), "sync-all"],
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
+        self.addCleanup(lambda: (self.proc.kill(), self.proc.wait(), time.sleep(3)))  # 자식 sync가 끝난 뒤 임시 디렉터리를 지운다
+        end = time.time() + 30
+        while not [c for c in self.fake.calls if c[1].startswith("reads?")]:  # 긴 대기가 시작됐다 - 감시 스레드도 같이 뜬다
+            self.assertLess(time.time(), end)
+            time.sleep(0.2)
+        time.sleep(1)  # 기준 서명을 잰다
+        self.claims0 = self.claims
+        return tdir, h, p
+
+    def waitfor(self, key, secs):
+        end = time.time() + secs
+        while time.time() < end and not self.times.get(key):
+            time.sleep(0.1)
+
+    def done_flow(self, reads_ok):
+        tdir, h, p = self.start(reads_ok)
+        t0 = time.time()
+        os.rename(p, os.path.join(tdir, h + ".done.md"))
+        self.waitfor("status", 10)
+        got = self.times.get("status")
+        self.assertTrue(got, "status 보고가 안 왔다")
+        self.assertEqual(got[0][1]["state"], "done")
+        self.assertLess(got[0][0] - t0, 6)  # 수용조건은 3초 - 자식 sync 시작이 느린 환경을 감안해 넉넉히 둔다
+        self.assertEqual(self.claims, self.claims0)  # 바로 보고는 작업을 다시 잡지 않는다
+
+    def test_done_rename_reported_fast_without_claim(self):
+        self.done_flow(True)
+
+    def test_watch_runs_when_reads_404(self):
+        self.done_flow(False)
+
+    def test_log_growth_reported_and_rate_limited(self):
+        tdir, h, p = self.start(True)
+        logs = os.path.join(self.root, "workers", "logs")
+        os.makedirs(logs, exist_ok=True)
+        lp = os.path.join(logs, "20261011-000000-w1-%s.log" % h)
+        t0 = time.time()
+        for i in range(8):  # 1초마다 다른 Bash 명령 - 줄마다 이벤트가 된다
+            with open(lp, "a") as f:
+                f.write(json.dumps({"type": "assistant", "message": {"content": [
+                    {"type": "tool_use", "name": "Bash", "input": {"command": "echo %d" % i}}]}}) + "\n")
+            if i == 0:
+                self.waitfor("events", 8)
+                self.assertTrue(self.times.get("events"), "events 보고가 안 왔다")
+                self.assertLess(self.times["events"][0][0] - t0, 8)  # 수용조건은 6초
+            else:
+                time.sleep(1)
+        out, _ = self.proc.communicate(timeout=60)
+        n = out.count("REMOTE report-now proj")
+        self.assertGreaterEqual(n, 1, out)
+        self.assertLessEqual(n, 3, out)  # 약 8초 동안 5초에 한 번
 
 
 if __name__ == "__main__":

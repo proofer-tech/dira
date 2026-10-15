@@ -5,6 +5,7 @@
 """
 import argparse
 import datetime
+import glob
 import hashlib
 import json
 import os
@@ -1635,12 +1636,73 @@ def read_loop(ws, rt, token, deadline):
         log("reads %s %s: %s" % (ws, type(e).__name__, e))
 
 
+# ---- 로컬 작업 티켓 변화 바로 보고 (P497) ----
+
+WATCH_LOG_GAP = 5  # 초. 세션 로그만 자랐을 때 같은 루트의 보고 sync 간격
+
+
+def watch_sigs(ws):
+    """루트마다 (티켓 서명, 로그 크기 합). 대상은 jobs_dir() 토큰 파일의 해시 중 그 루트 tickets/에 파일이 있는 것."""
+    try:
+        hashes = [n[:-5] for n in os.listdir(jobs_dir()) if re.fullmatch(r"[0-9a-f]{8}\.json", n)]
+    except OSError:
+        hashes = []
+    out = {}
+    for p in list_projects(ws):
+        qr, tsig, lsize = p["queue_root"], [], 0
+        for h in hashes:
+            found = []
+            for n in (h + ".md", h + ".wip.md", h + ".done.md"):
+                try:
+                    st = os.stat(os.path.join(qr, "tickets", n))
+                    found.append((n, st.st_mtime_ns, st.st_size))
+                except OSError:
+                    pass
+            if not found:
+                continue
+            tsig += found
+            for lp in glob.glob(os.path.join(qr, "workers", "logs", "*-%s.log" % h)):
+                try:
+                    lsize += os.stat(lp).st_size
+                except OSError:
+                    pass
+        out[qr] = (sorted(tsig), lsize, p["project"])
+    return out
+
+
+def watch_loop(ws, deadline):
+    """1초마다 서명을 다시 재서 바뀐 루트의 보고 단계만 바로 돈다. 마감에 멈춘다."""
+    try:
+        base = watch_sigs(ws)  # 시작할 때는 보고하지 않는다 - 시계 sync가 방금 돌았다
+        last = {}
+        while deadline - time.time() > 1:
+            time.sleep(1)
+            if deadline - time.time() < WAKE_CUTOFF:
+                return
+            for qr, cur in watch_sigs(ws).items():
+                old = base.get(qr)
+                if old is None:
+                    base[qr] = cur
+                    continue
+                if cur[:2] == old[:2]:
+                    continue
+                if cur[0] == old[0] and time.time() - last.get(qr, 0) < WATCH_LOG_GAP:
+                    continue
+                last[qr] = time.time()
+                log("report-now " + str(cur[2]))
+                if run_now(ws, qr, "--report"):
+                    base[qr] = cur
+    except Exception as e:
+        log("watch %s %s: %s" % (ws, type(e).__name__, e))
+
+
 def long_wait(workspaces):
     import threading
     deadline = read_deadline()
     if deadline - time.time() < (1 if os.environ.get("DIRA_READ_DEADLINE") else READ_MARGIN):
         return  # 마감까지 5초가 안 남았으면 안 기다린다
     ts = [threading.Thread(target=read_loop, args=(ws, rt, token, deadline)) for ws, rt, token in workspaces]
+    ts += [threading.Thread(target=watch_loop, args=(ws, deadline)) for ws, _, _ in workspaces]
     for t in ts:
         t.start()
     for t in ts:
