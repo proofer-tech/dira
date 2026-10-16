@@ -8938,6 +8938,198 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P505. 범용 프로젝트 마이그레이션 - 업데이트가 프로젝트 형식을 바꾸면 디스패치 전에 화면을 블러로 덮고 등록 프로젝트를 모두 옮긴다 (요구 `3d36e56d`, 왕복 0회)
+
+사람 요구(임한솔, 2026-10-16): *"이번 업데이트 적용 시 dira 구동 전 화면을 블러로 덮고 프로젝트 마이그레이션을
+진행하는 과정도 기능으로 만들어서 적용해주세요. 앞으로 마이그레이션 작업이 있으면 활용할 수 있도록 범용성
+챙겨주시고요."* 첫 사용처는 같은 날 들어온 APM 전환 요청 `f39120fd`이고, 그 변환 내용은 그 요청의 에픽이
+이 틀 위에 항목 하나로 싣는다.
+
+#### 사람이 정한 것 (되묻지 않는다)
+
+- 블러 오버레이로 화면을 덮은 상태에서 마이그레이션이 돈다. 사람은 그동안 dira를 조작하지 않는다.
+- 범용이어야 한다. 이번 APM 전환은 첫 마이그레이션 항목일 뿐이다.
+- 엔진 개정 방향은 승인됐다. dira 프로젝트에 먼저 적용하고 QA 통과 뒤 나머지 프로젝트에 적용한다.
+  프로젝트별 추가 승인은 받지 않는다.
+- 백업은 zip으로 묶지 않는다. 원본 파일을 풀어진 상태로 폴더에 보관한다(사람의 상시 규칙).
+
+#### 실측 (2026-10-16, 저장소 읽기)
+
+- 지금 프로젝트 형식을 바꾸는 장치는 `apps/teams/lib/protocols.ts`의 `mirrorCore`(서버 기동
+  `instrumentation.ts`와 `addProject`에서 CORE*.md만 맞춘다)와 `scaffold.ts`(새 프로젝트만, `O_EXCL`)뿐이다.
+  기존 프로젝트의 AGENTS.md - 페르소나 - 스쿼드를 바꾸는 경로는 없다. `instrumentation.ts`의 `migrateCron`(P489-2)이
+  한 번짜리 손 마이그레이션의 선례다.
+- 엔진은 앱 번들 `Resources/engine/`에 들어가고, `apps/desktop/main.ts` `extractEngine()`이 앱 버전 마커가 다를 때
+  userData로 다시 꺼낸다. 엔진 업데이트는 곧 앱 재기동이고, 그때 서버(`instrumentation.ts` `register()`)도 새로 뜬다.
+  소스에서 돌 때(dira 프로젝트 자신)는 저장소가 엔진이라 `git pull`만으로 엔진이 바뀐다.
+- 디스패치는 cron이 `workers/<w>.sh` -> `tick.sh`를 부르고, 앱이 꺼져 있어도 돈다. 그래서 claim을 막는 판정은
+  앱이 아니라 엔진(`tick.sh`)에 있어야 한다. 원격 슬롯은 `remote.py claim_jobs`가 잡고 `tick.sh remote`로 돈다.
+- 번들 `extraResources`는 파일을 하나씩 나열한다. `dispatch.py`가 빠져 설치본이 멎은 일이 있었다 - 새 엔진 파일은
+  목록과 `dist` 스크립트의 존재 검사에 함께 넣어야 한다.
+- 등록 프로젝트 9개(`~/.config/dira/gui-projects.json` `projects[].root`), 루트는 각각 `/Users/hsol/Projects/<이름>/.dira`.
+
+#### 결정
+
+1. **항목은 엔진 저장소의 파이썬 파일 하나다.** `migrations/NNNN_<slug>.py`. 엔진의 의존성 0 약속대로 python3 표준
+   라이브러리만 쓴다. 새 항목을 더하는 일은 이 폴더에 파일 하나를 추가하는 것으로 끝난다(번들 목록은 폴더째 싣는다).
+2. **러너도 하나다.** `migrate.py`(엔진 저장소 루트, `tick.sh` 옆)가 CLI이자 유일한 실행기다. 앱은 이 CLI를 자식
+   프로세스로 띄우고 상태 파일을 읽어 그릴 뿐이고, 원격 기계와 CI도 같은 CLI를 쓴다. 적용 로직이 두 언어에 생기지 않는다.
+3. **claim 차단은 기록을 보는 판정이다.** `tick.sh`가 claim 전에 `migrate.py gate <루트>`를 부른다. 미적용 항목이 있거나
+   러너가 돌고 있으면 그 tick은 claim하지 않는다. 앱이 켜져 있든 아니든, 반쯤 적용됐든 건너뛰었든 같은 판정 하나로 막힌다.
+4. **"dira 먼저, QA 뒤 나머지"는 항목의 `ROLLOUT` 값으로 싣는다.** `canary`인 항목은 레지스트리 id가 `dira`인 프로젝트에만
+   돌고, QA가 `migrate.py promote <id>`를 돌린 뒤에야 나머지에 돈다. 아직 승격 전인 프로젝트는 그 항목에 대해 "보류"이고
+   보류는 디스패치를 막지 않는다 - 그 기간에 엔진이 옛 형식도 읽어야 한다는 것은 그 항목을 싣는 에픽의 몫이다.
+5. **진행 중 세션은 죽이지 않고 기다린다.** 러너는 프로젝트마다 살아 있는 `.wip` 세션이 끝나기를 기다린 뒤 그 프로젝트를
+   적용한다. 상한은 20분이고, 넘으면 오버레이가 사람에게 "20분 더 기다리기"와 "이 프로젝트 건너뛰기"를 묻는다. 기다리는
+   동안에도 새 claim은 막혀 있으므로 세션 수는 줄기만 한다. 세션을 자동으로 죽이는 안은 버렸다 - 죽인 세션의 반쯤 쓴
+   작업을 복구하는 비용이 기다리는 비용보다 크다.
+6. **실패는 그 프로젝트 하나에 가둔다.** 항목마다 적용 전에 바뀔 파일을 원본 그대로 백업하고, 적용이나 검증이 실패하면
+   그 항목의 백업으로 되돌린 뒤 그 프로젝트의 남은 항목을 멈추고 다음 프로젝트로 간다. 머신 전역 항목이 실패하면 모든
+   프로젝트가 막힌다(전역 항목은 모두의 전제이기 때문이다).
+7. **action-log는 쓰지 않는다.** 프로젝트의 action-log 규약은 온톨로지 볼트의 스키마 - 객체 변경 기록이다. 마이그레이션
+   기록은 아래 `migrate.log`에 남긴다. 항목이 온톨로지 파일을 바꾸면 그 항목이 action-log 한 줄을 직접 쓴다.
+
+주도성 5 판단: 엔진 수정이다(`tick.sh` 게이트 한 자리, `remote.py` claim 앞 한 자리, 새 파일 `migrate.py` -
+`migrations/`). 사람이 요구에서 엔진 개정 방향을 승인했다. 새 외부 의존성은 없다.
+
+#### 값 - 항목 파일 형식
+
+| 이름 | 필수 | 값 |
+|---|---|---|
+| 파일 이름 | 예 | `migrations/NNNN_<slug>.py`. `NNNN`은 0001부터 네 자리, 적용 순서는 이 번호 오름차순이다. 번호가 겹치면 러너가 rc 2로 거절한다 |
+| `ID` | 예 | 문자열 `"NNNN-<slug>"`. 파일 이름과 맞지 않으면 rc 2 |
+| `DESC` | 예 | 한 줄 설명(한국어). 오버레이 - `list`에 그대로 뜬다 |
+| `DESC_EN` | 예 | 한 줄 설명(영어). 오버레이가 en 로케일에서 쓴다 |
+| `SCOPE` | 예 | `"project"`(등록 프로젝트마다) 또는 `"machine"`(이 컴퓨터에 한 번) |
+| `ROLLOUT` | 아니오 | `"all"`(기본) 또는 `"canary"`(결정 4) |
+| `REVERSIBLE` | 예 | 참이면 적용이 끝난 뒤에도 `revert`로 되돌릴 수 있다. 거짓이면 실패 시 자동 복원만 하고 `revert`는 거절한다 |
+| `targets(ctx)` | 예 | 이 항목이 만들거나 고치거나 지울 수 있는 파일의 절대경로 목록. 백업과 dry-run이 이 목록을 쓴다. 목록 밖 파일을 바꾸는 것은 항목의 버그다 |
+| `apply(ctx)` | 예 | 적용. **멱등**이어야 한다 - 이미 적용된 상태에서 다시 불러도 결과 파일이 같다. 예외를 올리면 실패다 |
+| `verify(ctx)` | 예 | 적용 결과 검사. 예외(`AssertionError` 포함)를 올리면 실패다 |
+| `ctx` | - | `ctx.root`(큐 루트 `.dira`, machine이면 `None`), `ctx.project_dir`(루트의 부모, machine이면 `None`), `ctx.project_id`(레지스트리 id), `ctx.local`(`$TICKET_LOCAL` 또는 `~/.config/dira`), `ctx.engine`(`migrate.py`가 있는 디렉터리), `ctx.log(text)`(그 프로젝트 `migrate.log`에 한 줄) |
+
+예시 항목 `migrations/0001_migrations_readme.py`(`SCOPE project`, `ROLLOUT all`, `REVERSIBLE` 참): 큐 루트에
+`migrations/README.md`를 둔다. 본문은 "이 폴더는 dira 마이그레이션의 적용 기록 - 백업 - 로그다. 손으로 고치지 않는다."와
+영문 같은 뜻 한 줄이다. 이미 같은 본문이면 아무것도 쓰지 않는다. 틀을 실제 9개 프로젝트에서 한 번 돌려 보는 것이 목적이다.
+
+#### 값 - 기록 위치
+
+| 자리 | 값 |
+|---|---|
+| 프로젝트 기록 | `<루트>/migrations/applied.json` - `{"<id>": {"state": "ok" 또는 "failed" 또는 "skipped" 또는 "broken", "at": ISO8601, "backup": 경로, "error": 한 줄}}`. 쓰기는 임시 파일 다음 `os.replace` |
+| 머신 기록 | `$LOCAL/migrations/applied.json`, 같은 형식 |
+| 백업 | `<루트>/migrations/backup/<id>/<UTC 초>/` 아래에 `targets` 중 있던 파일을 **원본 그대로**(`shutil.copy2`) 프로젝트 기준 상대경로로 복사한다. 같은 폴더의 `manifest.json`에 `{"existed": [...], "absent": [...]}`(절대경로). machine 항목은 `$LOCAL/migrations/backup/...`. zip - tar 등 묶음 파일을 만들지 않는다. 지우지 않는다(정리는 사람 몫) |
+| 진행 표식 | 항목 적용 직전에 `<루트>/migrations/inflight.json` `{"id", "backup", "pid"}`를 쓰고, 기록을 남긴 뒤 지운다. 러너가 시작할 때 이 파일이 있고 pid가 죽어 있으면 그 백업으로 먼저 되돌린다(죽은 러너의 반쯤 적용 복구) |
+| 로그 | `<루트>/migrations/migrate.log`(machine은 `$LOCAL/migrations/migrate.log`). 한 줄 형식 `<ISO8601> START <id>` 와 `<ISO8601> END <id> result=<ok - failed - skipped - restored - broken> backup=<경로> [error=<한 줄>]` |
+| 러너 락 | `$LOCAL/run/migrate.lock` 디렉터리(mkdir) 안 `pid`. 산 pid면 다른 러너는 rc 3으로 끝난다. 죽은 pid면 회수한다 |
+| 상태 파일 | `$LOCAL/run/migrate-status.json` - 러너가 바뀔 때마다 원자적으로 쓴다. `{"pid", "started_at", "finished_at" 또는 null, "rows": [{"key": 레지스트리 id 또는 "machine", "name", "root", "state", "item", "desc", "desc_en", "sessions", "waited_s", "error", "log", "backup"}]}` |
+| 승격 | `$LOCAL/migrations/promoted/<id>` 빈 파일 |
+
+`state` 판정: 기록이 `ok`면 적용됨, 항목이 `canary`이고 승격 전이며 프로젝트 id가 `dira`가 아니면 보류, 나머지(기록
+없음 - `failed` - `skipped` - `broken` - 진행 표식 있음)는 미적용이다.
+
+#### 값 - 디스패치 차단
+
+| 자리 | 값 |
+|---|---|
+| 게이트 명령 | `migrate.py gate <루트>`. rc 0이면 통과, rc 1이면 stdout 한 줄을 내고 막는다. 러너 락에 산 pid가 있으면 `마이그레이션 진행 중`, 아니면 이 루트(그리고 machine)의 첫 미적용 항목으로 `마이그레이션 미적용 <id>`. 보류는 막지 않는다 |
+| `tick.sh` | 워커 락을 잡은 다음, `select` 전(`CANDS=` 줄 앞)에 부른다. rc 1이면 `log "SKIP <그 한 줄>"` 다음 `exit 0`. `tick`과 `remote` 두 명령 모두 지난다. 게이트 실행 자체가 실패하면(파이썬 오류, rc 2 이상) `log "WARN 마이그레이션 게이트 실패"` 후 **막는다** - 판정을 못 하면 반쯤 적용된 프로젝트일 수 있기 때문이다 |
+| `remote.py` | `claim_jobs` 전에 그 원격 루트로 `migrate.py apply --root <루트>`를 한 번 돌린다(원격 기계에는 화면이 없다 - 헤드리스 경로). 그 뒤 `migrate.py gate <루트>`가 rc 1이면 그 워크스페이스의 `jobs/claim`을 보내지 않고 `claim-skip migration <한 줄>`을 로그한다 |
+| 멈춤 이유 | P501 `dispatch-stall.ts` `RULES` 맨 앞에 키 `migration`을 더한다. 패턴 `^SKIP 마이그레이션 (진행 중|미적용 (\S+))`, params `{id}`(진행 중이면 빈 문자열). 사전 `stall.migration.line` = `마이그레이션 미적용 {id}` / `Migration not applied {id}`, `stall.migration.todo` = 앱을 다시 열거나 `migrate.py apply --root <루트>`를 돌린다는 한 줄(ko-en). 진행 중일 때는 오버레이가 덮고 있으므로 같은 키를 써도 된다 |
+
+#### 값 - 언제 도는가
+
+| 계기 | 동작 |
+|---|---|
+| 서버 기동(`instrumentation.ts` `register()`, `mirrorCore` 앞) | `migrate.py check --all`이 rc 1이면 `migrate.py apply --all --status <상태 파일>`을 분리된 자식 프로세스로 띄운다. 기다리지 않는다 - 차단은 게이트가 하고 화면은 오버레이가 한다 |
+| 화면이 떠 있는 동안 | 오버레이 컴포넌트가 `GET /api/migrations`를 5초마다(오버레이가 보일 때는 1초마다) 부른다. 서버는 상태 파일과 `check --all` 결과를 돌려주고, 미적용(건너뜀 제외)이 있는데 러너가 없으면 위와 같이 러너를 띄운다. 소스에서 돌 때 `git pull`로 생긴 새 항목이 여기서 잡힌다 |
+| 헤드리스 | 원격 기계는 `remote.py`가 위 표대로, CI와 사람은 아래 CLI로 |
+
+`check --all`은 건너뜀(`skipped`)을 미적용으로 세지 않는다 - 사람이 건너뛴 프로젝트 때문에 오버레이가 다시 뜨지 않게
+하기 위해서다. 게이트는 건너뜀도 막는다.
+
+#### 값 - 화면 (오버레이)
+
+`apps/teams/components/migration-overlay.tsx` 하나를 최상위 레이아웃에 둔다. 보이는 조건은 상태 파일의 `rows`에
+`완료`와 `건너뜀`이 아닌 행이 하나라도 있는 것이다.
+
+| 자리 | 값 |
+|---|---|
+| 덮기 | `fixed inset-0`, 최상위 z, 뒤 화면 `backdrop-blur`. 클릭 - 스크롤 - 키 입력이 뒤로 가지 않는다(포커스를 오버레이 안에 가둔다, Esc 무시) |
+| 머리 | `dira를 업데이트하는 중입니다` / `Updating dira`. 한 줄 부제: 끝나면 저절로 닫힌다는 안내 |
+| 행 | 프로젝트마다 한 행, machine 항목이 있으면 맨 위에 `이 컴퓨터` / `This computer` 행 |
+| 상태 `대기` | 회색 점, 프로젝트 이름 |
+| 상태 `세션 대기` | `진행 중인 세션 {n}개가 끝나기를 기다립니다 ({mm:ss})`. 20분을 넘기면 버튼 둘: `20분 더 기다리기` - `이 프로젝트 건너뛰기` |
+| 상태 `진행` | 스피너, 현재 항목 `ID`와 `DESC`(en은 `DESC_EN`) |
+| 상태 `완료` | 체크 표시 |
+| 상태 `실패` | 원인 요약 한 줄(`error`), 로그 경로와 백업 경로(복사 가능한 글자), 버튼 둘: `다시 시도` - `이 프로젝트 건너뛰기` |
+| 상태 `건너뜀` | 회색 글자 `건너뜀 - 이 프로젝트는 디스패치하지 않습니다` |
+| 걷힘 | 모든 행이 `완료` 또는 `건너뜀`이면 1초 뒤 저절로 닫힌다 |
+| 문구 | 전부 `i18n.ts` 사전 키 `migration.*`(ko-en) |
+| API | `GET /api/migrations` -> `{status, pending}`. `POST /api/migrations` `{action: "retry", key}` -> `migrate.py apply --root <루트>` 자식 프로세스, `{action: "skip", key}` -> `migrate.py skip --root <루트>`, `{action: "wait", key}` -> 상태 파일과 별도로 `$LOCAL/run/migrate-wait-<key>` 파일 mtime을 지금으로 바꿔 러너가 대기 상한을 20분 늘리게 한다. `key`는 레지스트리 id만 받고 경로는 서버가 레지스트리에서 찾는다(클라이언트가 보낸 경로를 쓰지 않는다) |
+
+#### 값 - CLI (`python3 migrate.py ...`)
+
+| 명령 | 하는 일 | rc |
+|---|---|---|
+| `list [--root R - --all] [--json]` | 항목마다 프로젝트별 상태(적용됨 - 미적용 - 실패 - 건너뜀 - 깨짐 - 보류)를 표로 | 0 |
+| `check [--root R - --all]` | 미적용(건너뜀 제외)이 있으면 `<key> <id>` 줄을 낸다 | 0 없음, 1 있음 |
+| `gate <루트>` | 위 "디스패치 차단" 표 | 0 통과, 1 막음 |
+| `dry-run [--root R - --all] [--id ID]` | 미적용 항목마다 `targets`를 `있음`/`없음` 표시와 함께 낸다. 파일을 하나도 바꾸지 않고 기록 - 백업 - 로그도 쓰지 않는다 | 0 |
+| `apply [--root R - --all] [--id ID] [--status F]` | 러너 락 -> 진행 표식 복구 -> machine 항목 -> 프로젝트마다(세션 대기 -> 항목마다 백업 - 적용 - 검증 - 기록) | 0 전부 적용, 1 실패나 건너뜀이 남음, 3 다른 러너 |
+| `skip --root R` | 그 프로젝트의 미적용 항목을 `skipped`로 기록 | 0 |
+| `revert --root R --id ID` | 마지막 백업으로 되돌리고 기록을 지운다. `REVERSIBLE` 거짓이면 거절 | 0, 거절 1 |
+| `promote ID` | 승격 파일을 만든다 | 0 |
+
+`--root`를 주면 machine 항목도 함께 본다. `--all`은 레지스트리(`$LOCAL/gui-projects.json` `projects[].root`)를 읽는다.
+항목 폴더는 환경변수 `DIRA_MIGRATIONS_DIR`이 있으면 그 경로(테스트용), 없으면 `migrate.py` 옆 `migrations/`다.
+세션 판정은 `tickets.py`의 `in_progress`와 같은 기준(`.wip`이고 fm `pid`가 살아 있음)이다.
+
+#### 값 - 실패와 복원
+
+| 경우 | 동작 |
+|---|---|
+| `apply` 또는 `verify` 예외 | 그 항목 백업으로 복원(`existed`는 복사해 되돌리고 `absent`는 지운다), 기록 `failed` + `error`(예외의 마지막 줄), 로그 `result=restored`. 그 프로젝트의 다음 항목은 돌리지 않는다. 다음 프로젝트로 간다 |
+| 복원도 실패 | 기록 `broken`, 로그 `result=broken`. 게이트가 계속 막고 오버레이는 `실패`로 보이며 오류 줄에 `복원 실패`가 붙는다 |
+| 러너가 죽음 | 다음 러너가 진행 표식으로 복원한다. 그 사이에도 기록이 `ok`가 아니므로 게이트가 막는다 |
+| machine 항목 실패 | 같은 복원. 프로젝트 항목은 돌리지 않는다 - 모든 프로젝트가 미적용으로 막힌다 |
+| 백업 실패(디스크 등) | 적용하지 않고 `failed` |
+
+#### 안 하는 것
+
+- APM 변환 내용. `f39120fd`의 에픽이 이 틀 위에 항목 하나로 싣는다.
+- 사용자 개인 `~/.claude`를 바꾸는 항목.
+- 백업 자동 정리.
+- 진행 중 세션을 자동으로 죽이기(결정 5).
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P505-1 | 엔진 - `migrate.py` 러너와 CLI 전부(기록 - 백업 - 복원 - 진행 표식 - 로그 - 락 - 상태 파일 - 세션 대기), 예시 항목 `0001`, `test_migrate.py`, 번들 `extraResources`에 `migrate.py`와 `migrations/` 폴더 + `dist` 존재 검사 | developer | - | 발행 |
+| P505-2 | 엔진 - `tick.sh` 게이트(`tick` - `remote`) + `remote.py` claim 전 헤드리스 적용과 건너뛰기 + 테스트 | developer | P505-1 | 발행 |
+| P505-3 | 앱 - 서버 기동 시 러너, `/api/migrations` GET - POST, 블러 오버레이, `migration.*` 사전 ko-en, `judgeStall` `migration` 키 + 테스트 | developer | - | 발행 |
+| P505-4 | 개발자 문서 - `docs/design/마이그레이션.md` "마이그레이션 항목 쓰는 법"(위 항목 형식 - 멱등 - targets - canary와 promote - 테스트 방법) | writer | - | 발행 |
+| P505-5 | 매뉴얼 - 사용자용 ko-en: `install.md` 업데이트 절에 오버레이와 건너뛰기, `troubleshooting.md` `멈춤:` 표에 `migration` 행, `ref-cli.md`에 `migrate.py` | writer | - | 발행 |
+| P505-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P505-1, P505-2, P505-3 | 발행 |
+
+**여섯 장이다.** P505-3은 상태 파일 형식과 게이트 줄이 이 표에 정해져 있어 러너 없이 착수한다(가짜 상태 파일로
+그린다). P505-2만 `migrate.py gate`를 실제로 불러야 테스트가 되므로 P505-1을 기다린다. designer 0장 - 오버레이는 위
+표의 상태 여섯 가지가 전부이고 기존 다이얼로그 부품으로 그린다. APM 항목(`f39120fd` 에픽)은 P505-1 뒤에 착수한다.
+
+#### 수용조건
+
+- [ ] (a) 레지스트리에 임시 프로젝트 둘을 등록하고 미적용 항목을 둔 채 앱을 켜면, 첫 화면에 블러 오버레이가 뜨고 두 행이 `대기`-`진행`-`완료`를 거친 뒤 오버레이가 저절로 걷힌다. 그동안 두 프로젝트의 `workers/runner.log`에 `DISPATCH` 줄이 없고 `SKIP 마이그레이션` 줄이 있으며, 걷힌 뒤 첫 `DISPATCH`의 시각이 마지막 `END ... result=ok` 줄보다 뒤다.
+- [ ] (b) `migrate.py apply --root R`를 두 번 돌리면 둘째는 rc 0이고 아무 항목도 `START`하지 않으며, 두 실행 뒤 `targets` 파일의 sha256이 첫 실행 직후와 같다. 기록을 지우고 다시 돌려도 `targets`의 sha256이 같다(멱등).
+- [ ] (c) `DIRA_MIGRATIONS_DIR`에 `verify`가 프로젝트 B에서만 실패하는 항목을 두고 `apply --all`을 돌리면, B의 `targets`가 적용 전 sha256으로 돌아가고 기록이 `failed`이며, A의 기록은 `ok`다. rc는 1이다.
+- [ ] (d) (c) 뒤 B를 `skip`하면 `migrate.py gate <B 루트>`가 rc 1과 `마이그레이션 미적용 <id>`를 내고, B의 워커 tick은 `SKIP 마이그레이션 미적용 <id>`를 남기며 claim하지 않는다. 앱 status bar에 `멈춤: 마이그레이션 미적용 <id>`가 보인다. A는 정상 디스패치된다.
+- [ ] (e) `migrate.py dry-run --all`이 미적용 항목마다 바뀔 파일의 절대경로를 낸다. 실행 전후 `find <루트> -newer <기준 파일>`이 비어 있다(아무것도 안 바뀐다).
+- [ ] (f) (c)의 백업 폴더에 `.zip` - `.tar` - `.gz` 파일이 없고, 원본 파일이 상대경로 그대로 있으며 sha256이 적용 전 원본과 같다. `manifest.json`이 있다.
+- [ ] 적용 중에 러너를 `kill -9`하면 그 프로젝트 게이트가 rc 1이고, 다음 `apply`가 시작할 때 백업으로 복원한 뒤 다시 적용해 `ok`로 끝난다.
+- [ ] `ROLLOUT = "canary"` 항목은 `promote` 전에는 `dira` 프로젝트에만 적용되고 다른 프로젝트의 게이트는 rc 0이다. `promote <id>` 뒤 `check --all`이 다른 프로젝트들을 미적용으로 낸다.
+- [ ] 프로젝트에 살아 있는 `.wip` 세션이 있으면 그 행이 `세션 대기`로 보이고 세션이 끝난 뒤 적용된다. 그동안 새 claim은 없다.
+- [ ] 패키징한 앱의 `Contents/Resources/engine/`에 `migrate.py`와 `migrations/0001_migrations_readme.py`가 있다(`pnpm run dist`의 존재 검사가 통과한다).
+- [ ] `python3 test_migrate.py`, 게이트를 고친 엔진 테스트, `cd apps/teams && pnpm test`, `pnpm exec tsc --noEmit`이 통과한다.
+- [ ] 9개 등록 프로젝트에서 앱을 한 번 재기동하면 예시 항목 `0001`이 모두 `ok`이고 각 큐 루트에 `migrations/README.md`가 있다.
+
 ### P504. 원격 큐 - 원격 읽기는 런타임이 켜져 있는 동안 늘 받는다 - 읽기 전용 상주 프로세스와 object 이름 일괄 조회 (요구 `ec92852b`, 왕복 0회)
 
 갈래 큐가 넘긴 요청이다(갈래 정본 `서비스/아키텍처/dira협의요구사항.md` R21, 갈래 티켓 `5c5c2bf3`). 사람
