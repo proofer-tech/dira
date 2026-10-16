@@ -38,6 +38,49 @@ has appeared. The engine itself needs that dialog, so go ahead and allow it.
 `python3` and `bash` already ship with macOS. The engine uses nothing but the standard library
 of those two, so there is no package to install.
 
+## The screen blurs after an update
+
+> As of 2026-10-16 this screen is still being built. The `migrate.py` commands below already work.
+
+Some updates change the file format inside your project folders. When that happens, the whole
+screen blurs the next time you open the app, and an `Updating dira` window sits on top. Nothing
+is broken. dira is moving each registered project to the new format one at a time, and the window
+closes by itself when it is done. Leave it alone until then. While it runs, no worker in any
+project picks up a new ticket.
+
+The window has one row per project. A grey dot means the project is waiting its turn, a spinner
+shows the item being applied right now, and a check mark means it is done. If a row says
+`Waiting for {n} running sessions to finish`, that project still has sessions running. dira does
+not cut them off; it waits for them to end and then moves the project. After 20 minutes two buttons
+appear. Press `Wait 20 more minutes` if the sessions look close to done, or `Skip this project` to
+deal with it later.
+
+**If a row fails**, it shows a one-line cause, the log path and the backup path. The failed project
+has already been put back the way it was before, and the other projects carry on. If the cause is
+something you can fix (a full disk, say), fix it and press `Retry`. If you cannot tell what went
+wrong, or do not want to spend the time now, press `Skip this project`. A skipped project's row
+reads `Skipped - this project will not dispatch`, and nobody picks up its tickets until you apply it.
+The other projects run as usual.
+
+**Backups** stay in each project under
+`<project>/.dira/migrations/backup/<item ID>/<time>/`. The files from before the change are there
+as they were, not zipped, at the same paths they had inside the project. dira never deletes this
+folder, so remove it yourself once you no longer need it. What was done is written one line at a
+time, with timestamps, in `<project>/.dira/migrations/migrate.log`.
+
+**To apply a skipped project later**, run the following in a terminal. The engine inside the app
+lives in `~/Library/Application Support/dira/engine/`. `<root>` is that project's `.dira` folder.
+
+```bash
+cd ~/Library/Application\ Support/dira/engine
+python3 migrate.py list --root <root>                # find the item IDs left as skipped
+python3 migrate.py apply --root <root> --id <item ID>  # apply that item
+```
+
+If several items were skipped, run it once per ID. `apply` without `--id` leaves skipped items as
+they are. Once every remaining item is applied, that project dispatches again. The full command
+list is in [CLI](/docs/ref-cli#migrate-py-project-migration).
+
 ## Running the engine without the app
 
 For when you do not need the screen, or you are running on Linux. This route clones the repo

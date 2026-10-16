@@ -53,6 +53,29 @@ inside, and the ones a person uses directly are about `handclaim` and `find`.
 That said, the places a person touches the queue day to day are covered by the worker script's
 `list`, `dryrun`, and `unassign`, plus `handclaim`.
 
+## `migrate.py` - project migration
+
+Moves the registered projects to a new format when an update changes it. The app calls this on its
+own at launch and shows the progress on a blurred screen ([The screen blurs after an
+update](/docs/install#the-screen-blurs-after-an-update)). You run it by hand mostly to apply a
+skipped project again, or on a machine with no screen. The file is `migrate.py` in the engine
+folder; the engine inside the app lives in `~/Library/Application Support/dira/engine/`.
+
+| Command | Meaning | rc |
+|---|---|---|
+| `list [--root <root> \| --all] [--json]` | Shows a table of each item's state per project (applied - not applied - failed - skipped - broken - on hold) | 0 |
+| `check [--root <root> \| --all]` | Prints a `<project> <item ID>` line for each project with items left to apply. Skipped items do not count | 0 none, 1 some |
+| `gate <root>` | Decides whether that project may dispatch. When it blocks, it prints the reason in one line. Skipped items block too | 0 pass, 1 block |
+| `dry-run [--root <root> \| --all] [--id <ID>]` | Lists, for each item to apply, the files it would change, marked present or absent. Changes no file | 0 |
+| `apply [--root <root> \| --all] [--id <ID>] [--status <file>]` | Applies. For each project it waits for running sessions to finish, then backs up, applies and checks each item. A skipped item is applied only when you pass its ID with `--id` | 0 all applied, 1 failed or skipped items remain, 3 another apply is running |
+| `skip --root <root>` | Records the project's remaining items as skipped. Same as `Skip this project` on screen | 0 |
+| `revert --root <root> --id <ID>` | Restores that item's last backup and deletes its applied record. Refuses items that cannot be reverted | 0, 1 refused |
+| `promote <ID>` | Releases an item that first goes to the dira project only to the other projects as well. Until then it shows as on hold elsewhere, and on hold does not block dispatch | 0 |
+
+With `--root`, items that apply once to the whole computer are checked too. `--all` means every
+project registered in the app. The applied records, backups and log for each project stay under
+`<root>/migrations/`.
+
 ## `dira env` - using project environment variables from a session
 
 > As of 2026-10-10 the commands in this section and the session start notice are still being built.

@@ -32,15 +32,16 @@ bottom.
 
 | Order | Key | The line after `Stalled:` | What to do |
 |---|---|---|---|
-| 1 | `auth` | `{engine} has no auth token` | `Add a token in Settings > Authentication and it starts on the next tick` ([Authentication](/docs/auth)) |
-| 2 | `cooldown` | `Account limit - clears in {n}s` | `It clears by waiting. To run now, turn on another account in Settings > Authentication` |
-| 3 | `machineCap` | `Machine-wide sessions {a}/{b} - other projects are using the slots` | `It clears when another session ends. To run now, raise Settings > Workers > Machine-wide session limit` ([How many to run at once](/docs/concurrency)) |
-| 4 | `personaCap` | `{persona} limit {a}/{b}` | `It clears when that persona's in-progress ticket ends. Change the limit on the Personas screen` |
-| 5 | `priority` | `Priority 1 ticket {hash} blocks other tickets until it ends` | `It clears when {hash} ends. If it should not block, lower that ticket's priority`. The `Open ticket` link opens that ticket |
-| 6 | `shellCap` | `{n} shells piled up, resting` | `The watchdog cleans up on the next tick. Nothing for you to do` |
-| 7 | `watchdog` | The watchdog's line as written | `The watchdog cannot fix this itself. A person fixes what the sentence above points at` |
-| 8 | `noCandidate` | `No ticket can start - waiting on deps {d}, awaiting answer {w}, polling {p}` | `Answer the awaiting tickets or wait for the dependencies to finish`. The `Show awaiting tickets` link shows only Awaiting answer tickets on the board |
-| 9 | `notWaking` | `No idle worker woke for 90 seconds` | `Check the defect marks on the Workers screen (no cron line - no exec bit)`. The `Open Workers` link opens the Workers screen ([It is on cron but never wakes](#it-is-on-cron-but-never-wakes)) |
+| 1 | `migration` | `Migration not applied {id}` | `Reopen the app and it carries on applying. Without the app, run python3 migrate.py apply --root <root>` ([The screen blurs after an update](/docs/install#the-screen-blurs-after-an-update)) |
+| 2 | `auth` | `{engine} has no auth token` | `Add a token in Settings > Authentication and it starts on the next tick` ([Authentication](/docs/auth)) |
+| 3 | `cooldown` | `Account limit - clears in {n}s` | `It clears by waiting. To run now, turn on another account in Settings > Authentication` |
+| 4 | `machineCap` | `Machine-wide sessions {a}/{b} - other projects are using the slots` | `It clears when another session ends. To run now, raise Settings > Workers > Machine-wide session limit` ([How many to run at once](/docs/concurrency)) |
+| 5 | `personaCap` | `{persona} limit {a}/{b}` | `It clears when that persona's in-progress ticket ends. Change the limit on the Personas screen` |
+| 6 | `priority` | `Priority 1 ticket {hash} blocks other tickets until it ends` | `It clears when {hash} ends. If it should not block, lower that ticket's priority`. The `Open ticket` link opens that ticket |
+| 7 | `shellCap` | `{n} shells piled up, resting` | `The watchdog cleans up on the next tick. Nothing for you to do` |
+| 8 | `watchdog` | The watchdog's line as written | `The watchdog cannot fix this itself. A person fixes what the sentence above points at` |
+| 9 | `noCandidate` | `No ticket can start - waiting on deps {d}, awaiting answer {w}, polling {p}` | `Answer the awaiting tickets or wait for the dependencies to finish`. The `Show awaiting tickets` link shows only Awaiting answer tickets on the board |
+| 10 | `notWaking` | `No idle worker woke for 90 seconds` | `Check the defect marks on the Workers screen (no cron line - no exec bit)`. The `Open Workers` link opens the Workers screen ([It is on cron but never wakes](#it-is-on-cron-but-never-wakes)) |
 | - | `unknown` | `Unknown reason - raw: {raw}` | `Paste the raw line into the home chat and ask` |
 
 For the reasons that clear by waiting (`cooldown` - `machineCap` - `personaCap` - `priority` -
@@ -49,6 +50,11 @@ and the piled-up shells are all still there after the app comes back. If you do 
 `noCandidate` is not a fault. Every remaining ticket is waiting on a prerequisite, an answer or a
 polling condition, and the next ticket starts once one of those comes through ([It is Open and
 nobody claims it](#it-is-open-and-nobody-claims-it)).
+
+As of 2026-10-16 the `migration` line is still being built. `migration` means an update changed the project format and that project has not been moved yet. If
+the move is under way the screen is blurred, so wait for it to finish. If the screen is clear and the
+line is still there, the project was skipped or the move failed. A skipped item only applies when you
+give `apply` an `--id`. The steps are in [Install](/docs/install#the-screen-blurs-after-an-update).
 
 `unknown` means the line is not in the table. The screen then shows the raw line as it is instead
 of guessing a reason. The popover has no fix-it buttons either. The to-do only points at the
