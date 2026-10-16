@@ -8938,6 +8938,79 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P503. agy가 인증을 못 찾으면 크롬 로그인 창을 계속 띄우지 않고, 한 번 멈춰서 사람에게 알린다 (요구 `c0e09297`, 왕복 0회)
+
+사람 요구: *"지금 agy 인증방식에 문제가 있습니다. 사용 시 크롬에 로그인 화면이 무한으로 뜹니다."*
+
+#### 실측 (2026-10-16, 이 머신)
+
+- 고정 경로 사본 `~/.config/dira/bin/engines/agy`는 1.3.6이고, 원본 `~/.local/bin/agy`는 1.2.14다.
+  `agy.stamp`는 원본의 mtime과 크기(`1790919223 187281024`)와 일치하는데 사본의 크기는
+  183407440이고 mtime은 2026-10-16 04:18이다. agy의 자동 업데이트가 **자기가 실행된 경로인
+  사본을 덮어썼다**는 뜻이다. stamp가 원본과 맞으니 `refresh_fixed_engine()`은 다시 굽지 않는다.
+  워커가 부르는 agy와 사람이 터미널에서 로그인한 agy가 서로 다른 버전이 된 상태다.
+- 두 바이너리는 서명이 같다(Google `EQHXZ8M8AV`, designated requirement 동일). 그러나 1.3.6에는
+  1.2.14에 없는 `needs-auth-cache` 문자열이 있다. 인증 캐시를 찾는 방식이 버전 사이에서 바뀌었을
+  가능성이 있다.
+- 두 버전 모두 `Print mode: silent auth` - `Opening browser` - `Please sign in` 문자열을 담고 있다.
+  silent auth가 실패하면 브라우저 OAuth로 넘어간다. P460 이후 cron 워커의 agy는 `agy-gui.sh`가
+  사람 GUI 세션에서 실행하므로 브라우저가 **실제로 사람 화면에 뜬다**.
+- `agy-gui.sh`는 인증 실패를 감지하지 않는다. rc 파일이 생길 때까지 상한 없이 기다리고,
+  끝나면 tick은 평범한 FAIL로 처리해 티켓을 백로그로 돌린다. 다음 tick이 같은 티켓을 다시 디스패치하고
+  크롬 창이 또 뜬다. 엔진 쿨다운도 걸리지 않는다. "무한으로 뜬다"는 이 반복이다.
+- 이 세션은 `Background` 세션이라 로그인 키체인을 볼 수 없어서 원인을 하나로 확정하지 못했다.
+  아래 결정은 원인이 어느 쪽이든 반복을 끊도록 세웠다.
+
+#### 결정
+
+1. **agy는 사본을 굽지 않는다.** 자기 경로를 덮어쓰는 엔진이라 사본이 원본과 갈라진다.
+   `refresh_fixed_engine()`의 굽기 목록에서 agy를 빼고, 남은 `engines/agy`와 부속 파일
+   (`agy.stamp`)은 지운다. 라우터는 `dira agy`를 받으면 `engines/agy.src`에 적힌 실체 경로를
+   exec하고, 그 경로가 실행 가능하지 않으면 종전대로 PATH의 `agy`로 떨어진다. `agy.src`는
+   굽기 대신 실체 경로만 적는 파일로 남는다. 사람이 터미널에서 로그인한 그 바이너리를 워커도 부른다.
+2. **인증 실패는 기다리지 않고 바로 끝낸다.** `agy-gui.sh`가 잡의 stdout과 stderr를 0.2초
+   주기로 읽다가 인증 실패 표식을 보면 잡을 즉시 `bootout`하고, stderr에
+   `agy-gui: agy 로그인 필요 - 맥 화면의 터미널에서 agy를 한 번 띄워 로그인을 마친다` 한 줄을 남긴 뒤
+   종료 코드 77로 끝난다. 표식 목록의 정본은 `agy-gui.sh` 상단의 배열 하나다. 초기값은
+   `Opening browser`, `Please sign in`, `authentication failed`이고, 구현 티켓이 Aqua 세션 실측으로
+   보정한다.
+3. **77이면 agy 엔진에 쿨다운을 건다.** tick이 agy 세션의 종료 코드 77을 보면 `arm_cdown`으로
+   1800초 창을 걸고 `NOTE agy 로그인 필요 - 1800초 쿨다운` 줄을 남긴다. 티켓은 종전대로 백로그로
+   돌아가지만, 창이 열려 있는 동안은 agy 후보가 디스패치되지 않는다. 그래서 크롬 창은 30분에 많아야
+   한 번 뜬다. 다른 엔진 후보는 계속 돈다(`ENGOVER`가 종전대로 가른다).
+4. **사람에게 남는 일은 하나다.** 맥 화면의 터미널에서 `agy`를 한 번 띄워 로그인을 마친다.
+   매뉴얼 `apps/teams/docs/auth.md` §agy에 증상(크롬 로그인 창이 반복해서 뜬다)과 처방을 적는다.
+
+#### 엔진 수정 승인
+
+`tick.sh`(굽기 목록에서 agy 제외, 라우터 본문의 agy 분기, 종료 코드 77 쿨다운 한 갈래) -
+`agy-gui.sh`(표식 감시) - `test_agy_gui.py` - `test_fixed_engine*.py`만 연다.
+
+주도성 5 판단: 사람 승인 없이 PM이 이 엔진 수정을 승인한다. 반복 창이 사람 화면을 계속 가리는
+장애라 기다리는 비용이 더 크다. 사람이 거절하면 P503-1과 P503-2를 되돌린다.
+
+#### 수용조건
+
+- [ ] `refresh_fixed_engine()`을 돈 뒤 `ls ~/.config/dira/bin/engines/agy`가 없다고 나오고,
+  `cat ~/.config/dira/bin/engines/agy.src`가 `command -v agy`의 실체 경로를 낸다.
+- [ ] 라우터를 `dira agy --version`으로 부르면 `"$(cat engines/agy.src)" --version`과 같은 값이 나온다.
+  `agy.src`가 가리키는 경로가 실행 가능하지 않은 픽스처에서는 PATH의 `agy` 스텁이 불린다.
+- [ ] 잡 stdout에 `Opening browser`를 내고 잠드는 스텁 엔진을 `agy-gui.sh`로 부르면 5초 안에 종료 코드
+  77로 끝나고, stderr에 `agy 로그인 필요`가 있고, 끝난 뒤 `launchctl list | grep -c agy-gui`가 0이다.
+- [ ] 표식이 없는 스텁(`echo ok`)은 종전대로 stdout `ok`와 종료 코드 0을 돌려준다.
+- [ ] agy 세션이 77로 끝나는 tick 픽스처에서 `runner.log`에 `agy 로그인 필요` NOTE가 남고, 쿨다운 파일
+  `cooldown-agy`가 생기며, 바로 다음 tick에서 agy 후보는 `SKIP 엔진 쿨다운`이고 claude 후보는 디스패치된다.
+- [ ] `apps/teams/docs/auth.md` §agy에 "크롬 로그인 창이 반복해서 뜨면" 처방이 있고 `agy 로그인 필요`
+  로그 줄을 그대로 인용한다.
+- [ ] 이 머신의 Aqua 세션에서 agy 페르소나에 `echo ok`류 티켓을 디스패치하면 크롬 창 없이 DONE으로 끝난다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P503-1 | 엔진 - agy 사본 굽기 중단, 라우터가 `agy.src` 실체 경로를 exec | developer | - | 발행 |
+| P503-2 | 엔진 - `agy-gui.sh` 인증 실패 감지(77)와 tick의 agy 쿨다운 | developer | - | 발행 |
+| P503-3 | 매뉴얼 - auth.md §agy에 반복 로그인 창 처방 | writer | P503-2 | 발행 |
+| P503-4 | QA - 이 머신 Aqua 세션 실디스패치 검증 | qa | P503-1, P503-2 | 발행 |
+
 ### P502. 회고가 에픽 메모리도 가리킨다 - 08-18 다이어트에서 빠진 쓰기 지시를 CORE.md에 되살린다 (요구 `91e049fa`, 왕복 0회)
 
 사람 요구: *"에픽 메모리가 잘 안쓰이는데 쓸모가없어서 안쓰이는건지, 아님 제대로 지침이 안되어있어서
