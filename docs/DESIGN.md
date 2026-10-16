@@ -8938,6 +8938,106 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P504. 원격 큐 - 원격 읽기는 런타임이 켜져 있는 동안 늘 받는다 - 읽기 전용 상주 프로세스와 object 이름 일괄 조회 (요구 `ec92852b`, 왕복 0회)
+
+갈래 큐가 넘긴 요청이다(갈래 정본 `서비스/아키텍처/dira협의요구사항.md` R21, 갈래 티켓 `5c5c2bf3`). 사람
+요구(임한솔): *"이 글감의 사실 검증하는걸 언제나 최대 3초내에 끝마치고싶은데"*, *"타임아웃은 의미가없어요.
+실패하는건 오래걸리는것보다 더 큰 오류입니다"*. 사람은 이 요구에 한해 "상주 데몬은 만들지 않는다"(P478,
+P491)를 풀었다 - 읽기만 받는 상주 프로세스는 두어도 되고, 동기화와 작업 잡기는 지금처럼 시계가 돌린다.
+
+#### 실측 (2026-10-16)
+
+- 갈래 글감 화면의 사실 칸 읽기가 14~18초 걸렸다. 갈래 서버는 인용한 이름마다 `object` 읽기를 넣고 답을
+  기다린다. 로그의 `wait=9`~`wait=19`는 P500-1 설치 전 모습이다(설치본 `remote.py`가 2026-10-16 11:37에
+  갱신됐다).
+- P500 뒤에도 틈이 셋 남는다. (1) 긴 대기 마감이 다음 시계 1초 전이고, 다음 `sync-all`은 로그 회전 -
+  합치기 - 신호를 마친 뒤에야 긴 대기를 연다. 신호가 느리면 그만큼 길어진다. (2) cron이 늦거나 빠지면
+  (잠자기, 부하) 그 30초 전체가 빈다. (3) `read_loop`는 한 응답의 답을 모두 보낸 뒤에야 다음 `GET reads`를
+  연다(P500 결정 4).
+- 온톨로지 해석은 작다. with-cto 객체 532개를 `load_objects`로 0.04~0.1초에 읽었고, P500-2 캐시 뒤에는 그보다
+  작다. 느린 원인은 해석이 아니라 가져가는 쪽이 없는 시간이다.
+
+#### 결정
+
+둘 다 받는다.
+
+1. **읽기 전용 상주 프로세스를 둔다.** `remote.py reads`가 launchd 사용자 에이전트(`KeepAlive`)로 늘 돌며
+   워크스페이스마다 `GET reads`를 끊김 없이 연다. 시계가 띄우던 긴 대기(P496 - P497 - P500)가 마감 없이
+   이 프로세스로 옮겨 간다 - 읽기, 깨우기, 작업 티켓 감시를 함께 맡는다. 신호 - 루트 sync - 작업 잡기는 그대로
+   시계(`sync-all`)가 한다. 상주 프로세스가 살아 있으면 시계는 긴 대기를 건너뛰고, 죽어 있거나 launchd가
+   없는 컴퓨터면 시계가 지금처럼 긴 대기를 한다 - 상주 프로세스가 실패해도 지금보다 나빠지지 않는다.
+   "시계 실행을 겹치게 하기"는 버렸다 - 같은 런타임의 `GET reads` 둘이 겹칠 때 서버가 어떻게 나누는지에
+   기대야 하고, cron이 빠지는 틈은 그대로 남는다.
+2. **답하기가 다음 `GET reads`를 막지 않는다.** 받은 항목은 워크스페이스마다 하나인 스레드 풀(최대 8)에
+   넘기고 곧바로 다음 `GET reads`를 연다. 각 항목은 끝나는 대로 `POST reads/<id>`를 보낸다. P500 결정 4의
+   "모두 보낸 뒤 다음 GET"을 이것으로 바꾼다. 시계 긴 대기도 같은 `read_loop`를 쓴다.
+3. **`object`가 이름 목록을 받는다.** args `{names: [...], backlinks?}`면 `load_objects` 한 번과 관계 색인
+   한 번으로 모두 답한다. 지원하는 런타임은 신호 최상위에 `read_names: true`를 싣고, 갈래 서버는 이 값이
+   있을 때만 `names`를 보낸다. 갈래 제안 형식을 그대로 받았다.
+
+주도성 5 판단: 엔진 수정이다. `remote.py`(P478이 사람 승인을 받은 범위)와 `ontology_read.py`(P496) 안에서
+끝나고, `tick.sh` - `tickets.py` - `dispatch.py`는 안 건드린다. launchd 에이전트는 이 컴퓨터에 새로 생기는
+상주 프로세스이고, 사람이 R21에서 읽기 수신에 한해 허락했다. 새 외부 의존성은 없다(`launchctl`은 macOS
+기본 명령, `fcntl`은 표준 라이브러리).
+
+#### 값 - 구현자가 그대로 옮겨 적는다
+
+| 자리 | 값 |
+|---|---|
+| 명령 | `remote.py reads`. 인자 없음. `<cfg_home>/.reads.pid`를 열어 `fcntl.flock(LOCK_EX - LOCK_NB)`을 잡고 pid를 쓴다. 못 잡으면 다른 상주 프로세스가 있으므로 rc 0으로 바로 끝낸다. 락은 프로세스가 죽으면 OS가 푼다 |
+| 살아 있음 판정 | `reader_alive()` - `.reads.pid`를 열어 `flock(LOCK_SH - LOCK_NB)`이 실패하면 살아 있다. 파일이 없거나 잡히면(잡았으면 바로 푼다) 죽어 있다 |
+| 주 루프 | 2초마다 `cfg_home()` 아래 워크스페이스를 훑는다(`sync_all`과 같은 조건: 점으로 시작하지 않는 디렉터리, `load_runtime` - `load_token`이 둘 다 있음). 새 워크스페이스면 그 워크스페이스의 읽기 스레드를 띄우고, 런타임이나 토큰이 사라진 워크스페이스는 스레드에 멈추라고 알린다(`threading.Event`) |
+| 워크스페이스 스레드 | `.read-<ws>.lock`(P500 읽기 락, mkdir)을 잡는다. 시계의 긴 대기가 쥐고 있으면 0.5초 간격으로 기다린다 - 그 긴 대기는 다음 시계 1초 전에 끝난다. 잡은 뒤에는 10초마다 `os.utime`으로 mtime을 갱신한다(`LOCK_STALE` 120초에 치워지지 않게). 락 안에서 `read_loop`와 `watch_loop`를 마감 없이 돌린다(아래 마감 행). 멈추라는 알림이나 프로세스 종료에 락을 푼다 |
+| 마감 | `read_loop` - `watch_loop`의 `deadline`에 `None`을 받는다. `None`이면 마감이 없다: `read_loop`의 `wait`는 25, `watch_loop`와 `handle_wake`의 `WAKE_CUTOFF` 검사는 건너뛴다. 시계 긴 대기는 지금처럼 `read_deadline()` 값을 넘긴다 |
+| 오류 뒤 | 상주 모드에서 `read_loop`가 `404` - `405` - 그 밖의 `4xx` - 네트워크 오류로 돌아오면 그 워크스페이스는 2초 뒤 다시 연다. 연속 실패마다 두 배로 늘리고 상한은 30초, `GET reads`가 한 번 `200`이면 2초로 되돌린다. `Unauthorized`는 60초 뒤 토큰을 다시 읽고 연다(재연결하면 토큰이 바뀐다). 로그는 실패 종류가 바뀔 때만 한 줄 |
+| 답하기 | `read_loop`는 워크스페이스마다 `concurrent.futures.ThreadPoolExecutor(max_workers=8)` 하나를 두고, 유효 항목마다 "`answer_read` 다음 `POST reads/<id>`"를 한 작업으로 넘긴 뒤 기다리지 않고 `handle_wake`와 다음 `GET reads`로 간다. `read_loop`가 끝날 때 `shutdown(wait=True)`. 410은 조용히 넘어간다 |
+| 깨우기 - 감시 | 상주 모드도 `handle_wake` - `watch_loop`를 그대로 쓴다. 둘이 띄우는 루트 sync는 지금처럼 `run_child` 자식 프로세스이고 루트 락(`.remote-sync.lock`)이 시계의 sync와 겹치지 않게 막는다. `_wake_threads`의 끝난 스레드는 다음 깨우기에서 지운다 |
+| 시계 쪽 | `sync_all`의 `start_long_wait`는 `reader_alive()`이면 빈 목록을 돌려준다(로그 없음). 나머지 순서는 P500 그대로다 |
+| 코드 갱신 | 주 루프가 `remote.py` - `ontology_read.py`(`__file__` 옆)의 mtime을 시작 때 기억했다가 바뀌면 모든 스레드에 멈추라고 알리고, 락을 푼 뒤 rc 0으로 끝낸다. launchd가 새 코드로 다시 띄운다 |
+| 로그 | `<cfg_home>/reads.log`. 상주 프로세스가 직접 열어 `sys.stdout` - `sys.stderr`를 바꾼다. 주 루프에서 1 MB를 넘으면 `reads.log.1`로 옮기고 다시 연다 |
+| launchd 에이전트 | Label `dev.dira.remote-reads`, 파일 `~/Library/LaunchAgents/dev.dira.remote-reads.plist`. `ProgramArguments` = [`sys.executable`(설치하는 그 python3의 절대경로), `remote.py`의 절대경로, `reads`], `RunAtLoad` true, `KeepAlive` true, `ThrottleInterval` 5, `StandardOutPath` - `StandardErrorPath` = `<cfg_home>/reads.launchd.log`(시작 전 실패만 여기에 남는다) |
+| 설치 | `ensure_reader()` - `sys.platform`이 `darwin`이 아니면 아무것도 안 하고 False. plist가 없거나 내용(위 값)이 다르면 쓰고 `launchctl bootout gui/<uid>/dev.dira.remote-reads`(실패 무시) 다음 `launchctl bootstrap gui/<uid> <plist>`. 같으면 아무것도 안 한다. 부르는 자리는 `ensure_clock()`을 부르는 두 곳(`cmd_connect` 끝, `cmd_tick`)이다 - 앱 릴리스로 엔진 경로나 python3가 바뀌면 다음 tick이 plist를 고친다 |
+| 해제 | `remove_reader()` - `remove_clock()`을 부르는 자리(마지막 런타임 disconnect)에서 `launchctl bootout` 다음 plist 삭제 |
+| 테스트 자리 | 환경변수 `DIRA_LAUNCHD_DIR`이 있으면 `~/Library/LaunchAgents` 대신 그 디렉터리에 plist를 쓰고 `launchctl`을 부르지 않는다(`DIRA_CRONTAB_FILE`과 같은 방식). `DIRA_READS_ONCE`가 있으면 상주 프로세스가 그 초만큼 돈 뒤 스스로 끝낸다 |
+| `object` - 이름 목록 | args `{names, backlinks?}`. `name`과 `names`는 둘 중 하나만이고 둘 다 있거나 둘 다 없으면 `ValueError`. `names`는 비지 않은 문자열 1~200개의 목록이고 아니면 `ValueError`. 각 이름은 NFC로 맞춘다. `load_objects` 한 번, `backlinks`면 `to`별 관계 색인 한 번을 만든다. 결과 `{objects: [{name, object, backlinks?}]}` - 순서와 개수는 `names`와 같고(겹친 이름도 그 자리마다 답한다), `name`은 요청에 온 값 그대로, `object`는 `name` 조회의 `object`와 같은 모양이며 없으면 `null`이다. `backlinks: true`면 항목마다 `name` 조회와 같은 모양의 `backlinks`를 싣고, `object`가 `null`이면 `[]`이다. `errors`는 `name` 조회처럼 `[]`이다 |
+| 신호 | heartbeat 본문 최상위에 `read_names: true`를 `reads: true` 옆에 더한다 |
+| MCP 도구 | 이번 범위 밖이다. `ontology_object` 도구는 `name`만 받는다 |
+| §API 표 | P478 §API의 heartbeat 행에 `read_names?`를, `GET reads` 행에 상주 수신 한 줄을 이 스펙과 함께 고쳤다. P496 §값 `object` 행에 이 스펙을 가리키는 한 줄을 더했다. 갈래 서버가 모르는 필드는 무시하고 `names`는 `read_names`가 있을 때만 오므로 하위 호환이다 |
+| 매뉴얼 | `remote.md`(ko-en)의 컴퓨터 시계 - 원격 읽기 절. 읽기는 시계와 별도로 늘 받는 프로세스(`dev.dira.remote-reads`)가 맡는다는 점, 그 프로세스가 없으면 시계가 대신 받는다는 점, 로그 자리(`reads.log`), 확인 명령 `launchctl print gui/$(id -u)/dev.dira.remote-reads`, 끄는 법은 마지막 연결 해제라는 점. P500이 적은 "빈 시간이 30초 중 약 1초" 문장을 이에 맞춘다 |
+
+#### 안 하는 것
+
+- 동기화 - 작업 잡기 - 신호를 상주 프로세스로 옮기기. 사람이 시계에 남기라고 했다.
+- Linux systemd 등 macOS 밖의 상주 수단. 그곳에서는 시계 긴 대기가 지금처럼 받는다.
+- MCP `ontology_object`의 `names`, `search` 등 다른 op의 일괄 조회.
+- 갈래 서버 쪽(연결 판정, 요청 넣기, 100ms 확인 간격) - 갈래 큐가 맡는다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P504-1 | 엔진 - `ontology_read.py` `object`의 `names` + `remote.py` heartbeat `read_names` + 테스트 | developer | - | 발행 예정 |
+| P504-2 | 엔진 - `remote.py reads` 상주 프로세스 - launchd 설치 - 해제 - 마감 없는 `read_loop` - 기다리지 않는 답하기 - 시계 쪽 건너뛰기 + `test_remote.py` | developer | - | 발행 예정 |
+| P504-3 | 매뉴얼 - `remote.md`(ko-en) 위 매뉴얼 행 | writer | - | 발행 예정 |
+| P504-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P504-1, P504-2 | 발행 예정 |
+
+**네 장이다.** P504-1과 P504-2는 `remote.py`에서 고치는 자리가 달라(신호 본문 한 줄 대 읽기 절) 서로
+기다리지 않는다. 매뉴얼은 위 표에 글감이 다 있어 기다리지 않는다. designer 0장 - dira 화면이 없다. 에픽
+`P478`에 붙인다.
+
+#### 수용조건
+
+- [ ] `python3 test_remote.py`와 `python3 test_ontology_read.py`가 통과한다.
+- [ ] 객체 500개인 임시 온톨로지에서 `ontology_read.run(root, "object", {"names": [있는 이름 A, 없는 이름 X, A]})`의 `result.objects`가 길이 3이고 순서대로 `name`이 A - X - A, 둘째의 `object`가 `null`, 첫째의 `object`가 `run(root, "object", {"name": A})["result"]["object"]`와 같다. 이 호출 동안 `load_objects`가 정확히 한 번 불린다.
+- [ ] `{"names": [...], "backlinks": true}`면 각 항목의 `backlinks`가 같은 이름의 `name` 조회 `backlinks`와 같고, 없는 이름은 `[]`다.
+- [ ] `{"name": "A", "names": ["A"]}` - `{}` - `{"names": []}` - 201개 목록이 모두 `ValueError`다.
+- [ ] `remote.py sync-all` 한 번에 가짜 서버가 받은 heartbeat 최상위에 `read_names: true`와 `reads: true`가 있다.
+- [ ] `DIRA_LAUNCHD_DIR`를 둔 상태로 `remote.py tick --root <연결된 루트>`를 돌리면 그 디렉터리에 `dev.dira.remote-reads.plist`가 생기고 `ProgramArguments` 마지막이 `reads`, `KeepAlive`가 true다. 마지막 루트를 disconnect하면 그 파일이 사라진다.
+- [ ] 가짜 서버에 `DIRA_READS_ONCE=10`으로 `remote.py reads`를 띄우고 2초 뒤 읽기 하나를 넣으면, 서버가 그 읽기를 내준 시각이 넣은 시각 뒤 1초 안이다. 읽기를 넣는 시각을 0초 - 7초 - 9초로 바꿔도 같다(시계 경계와 무관).
+- [ ] 같은 조건에서 `answer_read`가 항목마다 3초 걸리게 바꿔 끼우고 읽기 둘을 1초 간격으로 넣으면, 둘째가 첫째의 답을 기다리지 않고 넣은 뒤 1초 안에 내줘진다.
+- [ ] 상주 프로세스가 도는 동안 `remote.py sync-all`을 돌리면 가짜 서버가 받은 `GET reads`가 상주 프로세스의 것뿐이고(시계 쪽 긴 대기 없음), heartbeat와 `jobs/claim`은 그대로 온다. 상주 프로세스를 죽인 뒤 `sync-all`은 P500처럼 긴 대기를 한다.
+- [ ] `remote.py reads`를 둘 띄우면 둘째가 1초 안에 rc 0으로 끝난다.
+- [ ] 상주 프로세스가 도는 동안 그 `remote.py`의 mtime을 바꾸면 5초 안에 rc 0으로 끝나고 `.read-<ws>.lock`이 사라진다.
+- [ ] P504 커밋들의 `git show --stat`에 `tick.sh` - `tickets.py` - `dispatch.py`가 없다.
+
 ### P503. agy가 인증을 못 찾으면 크롬 로그인 창을 계속 띄우지 않고, 한 번 멈춰서 사람에게 알린다 (요구 `c0e09297`, 왕복 0회)
 
 사람 요구: *"지금 agy 인증방식에 문제가 있습니다. 사용 시 크롬에 로그인 화면이 무한으로 뜹니다."*
@@ -9529,7 +9629,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 | `links` | `[{type, to, props}]`. 맵 형태(`links:` 아래 `  <관계>:` 아래 `    - ...[[대상]]`)는 `ontology_links` 결과 그대로이고, `property:`가 있으면 `props: {property: <값>}`, 없으면 `{}`. 이름 목록 형태(`links:` 바로 아래 `  - "[[대상]]"`)는 `type: "links"`다. `graph.py` `ontology_links`가 이 형태도 읽도록 고쳐 같은 결과를 낸다(그래서 `graph.py` 간선에도 `rel: links`가 생긴다) |
 | `errors` | 해석하지 못한 파일은 건너뛰지 않고 `{path, reason}`으로 싣는다. `reason`은 `not-utf8`(UTF-8로 못 읽음) - `no-frontmatter`(첫 줄이 `---`가 아님) - `unclosed-frontmatter`(닫는 `---` 없음) - `duplicate-name`(같은 `name`이 다른 경로에 또 있음, 경로순 첫 파일만 객체가 되고 나머지가 오류) - `read-failed`(그 밖의 읽기 실패) 다섯이다. 오류 파일은 객체 목록에 안 들어간다 |
 | `objects` | args `{types?, cursor?, limit?}`. `objects/` 아래 객체를 `path` 순으로, `types`가 있으면 그 타입만. `limit` 기본 200, 최대 1,000(넘으면 1,000). `cursor`는 직전 쪽의 마지막 `path`이고 그보다 뒤부터 준다. 남았으면 `cursor`, 끝이면 키가 없다. 본문은 안 싣는다. `errors`는 첫 쪽(`cursor` 없음)에만 전부 싣는다 |
-| `object` | args `{name, backlinks?}`. 객체 구조에 `body`(fm 뒤 본문, 앞 빈 줄 하나 제거)와 `content`(파일 원문)를 더해 `{object}`. 없으면 `{object: null}`. `backlinks: true`면 `objects/` 전체에서 `to`가 그 이름인 관계를 `{from, type, props}` 목록으로 싣는다 |
+| `object` | args `{name, backlinks?}`. 객체 구조에 `body`(fm 뒤 본문, 앞 빈 줄 하나 제거)와 `content`(파일 원문)를 더해 `{object}`. 없으면 `{object: null}`. `backlinks: true`면 `objects/` 전체에서 `to`가 그 이름인 관계를 `{from, type, props}` 목록으로 싣는다. 이름 목록 `{names, backlinks?}`는 P504 §값 |
 | `search` | args `{q, types?, limit?}`. `q`를 NFC - casefold해서 이름 - 제목 - 속성 값 - 본문에서 부분 일치로 찾는다. 이름이나 제목에서 맞은 것이 먼저, 그 안은 `path` 순. `limit` 기본 20, 최대 100. 항목은 객체 구조 + `excerpt`(처음 맞은 자리 앞뒤로 합쳐 100자 안팎, 줄바꿈은 공백). `q`가 비면 `ValueError` |
 | `versions` | args `{name}`. `versions/*/<name>/*.md`를 `{version, path, sha256, at}` 목록으로, `version`은 파일 이름에서 `.md`를 뗀 것이고 `version` 문자열 순이다. `at`은 파일 mtime의 ISO 8601(오프셋 포함) |
 | `version` | args `{name, version}`. `{content, sha256}`, 없으면 `{content: null}` |
@@ -10620,7 +10720,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | `POST device/code` | `{machine_name, project?, queue_root?, tools?}` (선택 필드 P485) | `{device_code, user_code, verification_uri, interval, expires_in}` |
 | `POST device/token` | `{device_code}` | 대기 중 `428`, 끝나면 `{workspace_id, runtime_token}` |
 | `POST runtimes` | `{machine_name, project, projects?: [{project, queue_root}], tools: [{name, version, health}]}` - `projects`가 있으면 `project` 대신 이 목록이 런타임의 프로젝트 목록이다(P491) | `{runtime_id}` |
-| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?, next_claim_at?, remote_slots?}]}`(P491, P492, P499) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다. `next_claim_at`은 그 루트에서 다음에 `jobs/claim`을 부를 시각(ISO 8601)이다 - 잡은 작업은 같은 sync에서 디스패치되므로(P492) 서버는 쉬는 워커가 있으면 이 값을 발행한 작업의 시작 예정 시각으로 쓸 수 있다. `remote_slots`(P499)는 그 루트에서 지금 더 띄울 수 있는 원격 슬롯 수(0 이상 정수)다 - 있으면 서버는 쉬는 워커 대신 이 값으로 시작 예정 시각을 그린다(1 이상이면 `next_claim_at`). `reads?`(P496)는 원격 읽기가 들어간 런타임이면 `true`다 | `{ok: true}` |
+| `POST runtimes/<id>/heartbeat` | `{tools, workers: [{name, busy, next_dispatch_at}]}` 또는 `{tools, projects: [{project, workers: [...], error?, next_claim_at?, remote_slots?}]}`(P491, P492, P499) - `projects`가 있으면 이 목록이 프로젝트 목록을 갱신하고, `error`는 그 루트의 sync 실패 한 줄이다. `next_claim_at`은 그 루트에서 다음에 `jobs/claim`을 부를 시각(ISO 8601)이다 - 잡은 작업은 같은 sync에서 디스패치되므로(P492) 서버는 쉬는 워커가 있으면 이 값을 발행한 작업의 시작 예정 시각으로 쓸 수 있다. `remote_slots`(P499)는 그 루트에서 지금 더 띄울 수 있는 원격 슬롯 수(0 이상 정수)다 - 있으면 서버는 쉬는 워커 대신 이 값으로 시작 예정 시각을 그린다(1 이상이면 `next_claim_at`). `reads?`(P496)는 원격 읽기가 들어간 런타임이면 `true`다. `read_names?`(P504)는 `object` 읽기가 `names`(이름 목록)를 받는 런타임이면 `true`다 - 서버는 이 값이 있을 때만 `names`를 보낸다 | `{ok: true}` |
 | `DELETE runtimes/<id>` | - | `204` |
 | `POST jobs/claim` | `{runtime_id, tools: [이름], max, project?}` - `project`가 있으면 그 프로젝트의 작업만 준다(P491). `max`는 그 루트의 빈 원격 슬롯 수다(P499. 슬롯을 끈 루트는 빈 워커 수) | `{jobs: [{job_id, title, persona, priority, duedate, body, job_token, job_token_expires_at}]}` |
 | `POST jobs/<job_id>/status` | `{state, hash, at, reason?}` - `state`는 `running` `awaiting` `done` `failed`. `failed`는 사람이 더 할 일이 없는 끝에만 쓰고 그때 `reason`(지금은 `no-token`)을 싣는다(P495) | `204`, 돌려받은 작업은 `410` |
@@ -10628,7 +10728,7 @@ writer는 글자가 위 표에 정해져 있어 구현을 기다리지 않는다
 | `POST jobs/<job_id>/questions` | `{stem, markdown}` | `204` |
 | `GET answers?runtime_id=&project=` | - (`project`는 선택, 있으면 그 프로젝트의 답만. P491) | `{answers: [{job_id, stem, markdown}]}` |
 | `PUT objects?project=` | P496부터 런타임이 부르지 않는다(O4 끔). 옛 런타임이 부르면 서버는 저장하지 않고 `204`. (`project`는 선택, 있으면 그 프로젝트의 사본. P491) `{changes: [{path, sha256, content}` 또는 `{path, deleted: true}]}` | `204` |
-| `GET reads?runtime_id=&project=&wait=<초>&wake=1` | - (P496. `wait`는 0-25, 요청이 없으면 그 시간까지 기다렸다가 빈 목록. `project`는 선택이고 런타임은 빼고 부른다 - 빼면 그 런타임의 모든 프로젝트. `wake=1`(P497)이면 서버는 (런타임, 프로젝트)마다 마지막 `jobs/claim` - `GET writes` - `GET answers` 시각 뒤에 생긴 일이 있을 때 기다리지 않고 바로 답한다. 없으면 P496과 같다) | `{reads: [{read_id, op, args, project}], wake?: [{project, kinds: ["jobs" - "writes" - "answers"]}]}` - `op`와 `args`, 결과 형식은 P496 §값, `wake` 처리는 P497 §값 |
+| `GET reads?runtime_id=&project=&wait=<초>&wake=1` | - (P496. `wait`는 0-25, 요청이 없으면 그 시간까지 기다렸다가 빈 목록. `project`는 선택이고 런타임은 빼고 부른다 - 빼면 그 런타임의 모든 프로젝트. `wake=1`(P497)이면 서버는 (런타임, 프로젝트)마다 마지막 `jobs/claim` - `GET writes` - `GET answers` 시각 뒤에 생긴 일이 있을 때 기다리지 않고 바로 답한다. 없으면 P496과 같다) | `{reads: [{read_id, op, args, project}], wake?: [{project, kinds: ["jobs" - "writes" - "answers"]}]}` - `op`와 `args`, 결과 형식은 P496 §값, `wake` 처리는 P497 §값. P504부터 macOS 런타임은 상주 프로세스가 이 요청을 끊김 없이 다시 연다(앞 응답의 답을 기다리지 않는다) |
 | `POST reads/<read_id>` | `{result, errors?: [{path, reason}]}` 또는 `{error}` (P496) | `204`, 이미 지난 요청이면 `410` |
 | `GET writes?runtime_id=&project=` | - (`project`는 선택, 있으면 그 프로젝트의 쓰기만. P491) | `{writes: [{op_id, path, base_sha256, content}]}` |
 | `POST writes/<op_id>` | `{result: applied` 또는 `conflict, sha256}` | `204` |
