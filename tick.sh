@@ -935,6 +935,18 @@ fi
 # --- 티켓 선정: 상태접미사 없고 session_id 비어있는 것, 유효 우선순위 높은 순(§1-3) ---
 # select가 이미 `(-effective, birth, path)`로 정렬해 준다(tickets.py scan()) - 여기는
 # 그 순서를 그대로 훑을 뿐이다.
+#
+# 마이그레이션 게이트(P505): 미적용 항목이 있거나 러너가 돌고 있으면 claim하지 않는다.
+# tick과 remote 모두 지난다. 판정 자체가 실패(rc 2 이상, 파이썬 오류)하면 막는다 -
+# 판정을 못 하면 반쯤 적용된 프로젝트일 수 있다.
+GATERC=0
+[ "$CMD" = "tick" ] && { GATEOUT=$(python3 "$CODE/migrate.py" gate "$TICKET_ROOT" 2>/dev/null); GATERC=$?; }
+if [ "$GATERC" = 1 ]; then
+  log "SKIP ${GATEOUT:-마이그레이션 미적용}"; exit 0
+elif [ "$GATERC" != 0 ]; then
+  log "WARN 마이그레이션 게이트 실패 rc=$GATERC"; exit 0
+fi
+
 CANDS=$(python3 "$PY" select "$TICKET_ROOT") || { log "ERROR select 실패"; exit 1; }
 
 # §1-5 갈래 B — 지목 디스패치: 후보 목록을 그 해시 하나로 좁힌다(무수정 tick과 다른 점 전부).

@@ -13,6 +13,7 @@
 임시 큐에서만 판정한다(도그푸딩 큐에서 엔진을 실험하지 않는다). 엔진을 실제로 부르지 않고
 `tick.sh dryrun`이 찍는 프롬프트로 본다. 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import json
 import os
 import shutil

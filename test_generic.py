@@ -4,6 +4,7 @@
 워커(<루트>/workers/<이름>.sh) -> tick.sh -> tickets.py 전 구간을 실제로 태운다.
 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import sys
 import shutil

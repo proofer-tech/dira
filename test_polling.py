@@ -2,6 +2,7 @@
 """폴링 대기(§폴링 대기) 자체검증 - 수용조건 1번부터 11번까지. 화면(12·13)은 이 티켓이
 아니다(`4be14983`). 진짜 claude를 부르지 않는다 - argv 기반 즉시 성공 가짜 엔진 하나로
 DISPATCH 여부만 본다. 실패하면 assert로 죽는다."""
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import re
 import glob

@@ -27,6 +27,7 @@
 stdin 첫 줄(프라임 JSON)을 파일로 받아 적는 가짜 스트림 엔진으로 본다(test_inbox.py 선례).
 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import json
 import shutil
@@ -87,7 +88,7 @@ try:
     # 엔진 사본 - tick.sh는 자기 위치에서 tickets.py와 protocols/를 유도한다(tick.sh:19).
     code = os.path.join(tmp, "engine")
     os.makedirs(code)
-    for f in ("tick.sh", "tickets.py"):
+    for f in ("tick.sh", "tickets.py", "migrate.py"):
         shutil.copy2(os.path.join(HERE, f), os.path.join(code, f))
     tick = os.path.join(code, "tick.sh")
 

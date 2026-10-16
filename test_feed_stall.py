@@ -8,6 +8,7 @@ setpid·감시자·wait이 통째로 안 돌아 티켓이 진행중에 영구 �
 
 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import shutil
 import subprocess

@@ -5,6 +5,7 @@ claim 뒤 persona:로 기록되고, 프롬프트에 스쿼드 블록·rules가 �
 docs/DESIGN.md §5-5 §개정 §검증의 (E1)~(E15)를 전부 단언으로 세운다. 임시 큐 + 가짜
 스트리밍 엔진에서 낸다(§제약 1 - 도그푸딩으로 안 잰다). 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import inspect
 import os
 import re

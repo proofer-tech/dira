@@ -3,6 +3,7 @@
 `## 진행 계획`에 완료(`- [x]`)도 취소(`~~`)도 아닌 항목이 남았으면 `FAIL`이고 티켓이 열린
 이름으로 돌아온다. 진짜 claude를 부르지 않는다 - test_wip_after_ok.py와 같은 가짜 엔진으로
 tick.sh의 종료 로그 분기만 본다. 실패하면 assert로 죽는다."""
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import sys
 import shutil

@@ -5,6 +5,7 @@ env-store.ts, 가짜 암호화기)를 node로 띄워 판정한다. node가 없�
 ENV-4(빈 값/여러 줄/동시 revision 교체)와 ENV-6(선택 주입/종료 코드/취소/예약어/없는 이름/
 앱 종료/가림), 라우터(tick.sh가 굽는 dira)를 본다. 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import hashlib
 import json
 import os

@@ -10,6 +10,7 @@
 도구가 실제로 찾아내는 모양과 같은지를 판정한다 - 그 모양은 실제 claude 세션으로 수동
 확인했다(`## 결과` 참고). 임시 큐에서만 돈다. 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import shutil
 import subprocess

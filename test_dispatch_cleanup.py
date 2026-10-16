@@ -7,6 +7,7 @@
 "주인" 티켓은 그 경로 문자열을 본문에 담은 실제 큐 파일이다. 열림(미배정) 티켓 하나만 두고
 그것이 디스패치 대상이자 동시에 "미배정 주인" 시나리오를 겸한다 - 다른 주인들은 이미
 `.wip`/`.done`이라 선정 후보가 아니다. 실패하면 assert로 죽는다."""
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import shutil
 import subprocess

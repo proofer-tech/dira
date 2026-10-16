@@ -5,6 +5,7 @@
 도그푸딩으로 쓰지 않는다(수용조건 5). 정상 경로 - non-ff 1회 재시도 - 두 번째 거부 - 커밋할
 것 없음 넷과, 인자 없는 기존 경로 - `classify`가 안 갈렸다는 것까지 잰다(수용조건 1-4).
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import atexit
 import os
 import shutil

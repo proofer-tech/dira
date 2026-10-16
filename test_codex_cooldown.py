@@ -4,6 +4,7 @@
 가짜 엔진(`codex`, `claude`)이 `msg` 파일 내용을 최상위 error 줄로 내고 rc 1로 죽는다.
 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import json
 import os
 import shutil

@@ -84,8 +84,11 @@ class Base:
         # remote.py 옆 dispatch.py가 진짜면 워커가 뜬다 - 엔진 사본 디렉터리에 부른 인자만 적는 가짜를 둔다
         self.engdir = os.path.join(self.tmp.name, "eng")
         os.makedirs(self.engdir)
-        for f in ("remote.py", "ontology_read.py", "graph.py"):
+        for f in ("remote.py", "migrate.py", "ontology_read.py", "graph.py"):
             shutil.copy(os.path.join(HERE, f), self.engdir)
+        # 마이그레이션 게이트(P505)는 빈 항목 폴더로 통과시킨다 - 항목이 필요한 시험이 이 폴더를 채운다
+        self.migdir = os.path.join(self.tmp.name, "mig")
+        os.makedirs(self.migdir)
         self.dlog = os.path.join(self.tmp.name, "dispatch.log")
         with open(os.path.join(self.engdir, "dispatch.py"), "w") as f:
             f.write("import json, sys\nopen(%r, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
@@ -95,7 +98,8 @@ class Base:
         self.addCleanup(self.tmp.cleanup)
 
     def run_remote(self, *args):
-        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron)
+        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron, TICKET_LOCAL=os.path.join(self.home, ".config", "dira"),
+                   DIRA_MIGRATIONS_DIR=self.migdir)
         env.pop("TICKET_ONTOLOGY", None)
 
         env.pop("TICKET_ONTOLOGY", None)  # 실제 온톨로지를 건드리지 않는다
@@ -278,6 +282,39 @@ class T(Base, unittest.TestCase):
 
     def tickets(self):
         return sorted(os.listdir(os.path.join(self.root, "tickets")))
+
+    ITEM = ('import os\nID = "0001-touch"; DESC = "d"; DESC_EN = "e"; SCOPE = "project"; REVERSIBLE = True\n'
+            'def targets(ctx): return [os.path.join(ctx.root, "m.txt")]\n'
+            'def apply(ctx):\n    if os.path.exists(os.path.join(ctx.root, "FAIL")): raise RuntimeError("boom")\n'
+            '    open(targets(ctx)[0], "w").write("x")\n'
+            'def verify(ctx): assert os.path.exists(targets(ctx)[0])\n')
+
+    def claims(self):
+        return [c for c in self.fake.calls if c[1] == "jobs/claim"]
+
+    def test_claim_applies_pending_migration_first(self):
+        open(os.path.join(self.migdir, "0001_touch.py"), "w").write(self.ITEM)
+        self.setup_jobs([[self.job()]])
+        r = self.sync()
+        self.assertTrue(os.path.exists(os.path.join(self.root, "m.txt")), r.stdout)
+        self.assertEqual(len(self.claims()), 1)
+        self.assertNotIn("claim-skip migration", r.stdout)
+
+    def test_claim_skipped_when_migration_apply_fails(self):
+        open(os.path.join(self.migdir, "0001_touch.py"), "w").write(self.ITEM)
+        open(os.path.join(self.root, "FAIL"), "w").close()
+        self.setup_jobs([[self.job()]])
+        r = self.sync()
+        self.assertEqual(self.claims(), [])
+        self.assertIn("claim-skip migration 마이그레이션 미적용 0001-touch", r.stdout)
+        self.assertEqual(self.tickets(), [])
+
+    def test_claim_skipped_when_migrate_broken(self):
+        self.setup_jobs([[self.job()]])
+        open(os.path.join(self.engdir, "migrate.py"), "w").write("raise SystemExit(2)\n")
+        r = self.sync()
+        self.assertEqual(self.claims(), [])
+        self.assertIn("claim-skip migration 마이그레이션 게이트 실패", r.stdout)
 
     def test_claim_creates_ticket_once_with_token_file(self):
         self.setup_jobs([[self.job()], [self.job()]])

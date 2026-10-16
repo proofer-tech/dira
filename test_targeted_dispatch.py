@@ -15,6 +15,7 @@
 ②·⑤ 이외의 게이트·정렬은 test_priority.py·test_duedate.py가 이미 잰다 - 여기서 다시 안 짠다.
 가짜 엔진(test_unassign_force.py·test_priority.py와 같은 관용구)만 쓴다. 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import datetime
 import os
 import re

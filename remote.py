@@ -468,6 +468,25 @@ def free_slots(root):
     return slots, [n for n in range(1, slots + 1) if not slot_busy(root, n)]
 
 
+def migration_block(root):
+    """claim 전 마이그레이션(P505). 헤드리스라 이 루트에 apply를 한 번 돌린 뒤 gate를 본다.
+    막는 이유 한 줄을 돌려주고, 통과면 None. 실행 자체가 실패해도 막는다(tick.sh 게이트와 같다)."""
+    mig = os.path.join(os.path.dirname(os.path.realpath(__file__)), "migrate.py")
+    out = ""
+    for cmd in (["apply", "--root", root], ["gate", root]):
+        try:
+            # ponytail: apply는 이 루트의 .wip 세션이 끝나기를 기다린다(상한 20분). sync가 그만큼 붙잡힌다
+            r = subprocess.run([sys.executable, mig, *cmd], capture_output=True, text=True)
+        except OSError as e:
+            return "마이그레이션 게이트 실패 %s" % e
+        if cmd[0] == "gate":
+            out = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
+            if r.returncode == 0:
+                return None
+            return out if r.returncode == 1 and out else "마이그레이션 게이트 실패 rc=%d" % r.returncode
+    return None
+
+
 def claim_jobs(ctx):
     slots, idle = free_slots(ctx.root)
     free = len(idle) if slots >= 1 else free_workers(ctx.root)
@@ -476,6 +495,10 @@ def claim_jobs(ctx):
     tools = claim_tools(ctx.ws)
     if not tools:
         return  # 로그인 점검을 통과한 도구가 없으면 작업을 안 잡는다
+    why = migration_block(ctx.root)
+    if why:
+        log("claim-skip migration %s" % why)
+        return
     body = {"runtime_id": ctx.runtime_id, "tools": tools, "max": free}
     if ctx.project:
         body["project"] = ctx.project

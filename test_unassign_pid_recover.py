@@ -10,6 +10,7 @@
 다시 세우므로(17행) `$HOME`만 픽스처로 돌리면 실제 `/bin/ps`는 안 건드린다.
 도그푸딩 큐를 건드리지 않는다 - 전부 임시 큐다. 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import shutil
 import stat

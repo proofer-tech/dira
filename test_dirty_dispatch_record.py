@@ -4,6 +4,7 @@
 "$TICKET_CWD"` 전)에 워커 워크트리의 `git status --porcelain` 경로를
 `$LOCAL/run/dirty-<티켓 해시>`에 한 줄씩 적고, 깨끗하면 그 파일을 안 만들거나 지우는지 잰다.
 `test_dispatch_cleanup.py`의 harness를 그대로 이식했다. 실패하면 assert로 죽는다."""
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import shutil
 import subprocess

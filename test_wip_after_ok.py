@@ -3,6 +3,7 @@
 `result` 줄이 `ok`로 끝나도 티켓이 `.wip`으로 남아 있으면 `DONE`이 아니다. 진짜 claude를
 부르지 않는다 - 세션의 파일 조작(닫기 / 블록 남기기 / unassign / 아무 것도 안 하기)만
 흉내내는 가짜 엔진 하나로 tick.sh의 종료 로그 분기를 본다. 실패하면 assert로 죽는다."""
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import os
 import sys
 import shutil

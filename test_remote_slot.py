@@ -6,6 +6,7 @@
 ② 후보가 아니면(이미 .wip) 아무것도 안 띄우고 rc 0.
 가짜 엔진(비스트리밍)만 쓴다. 실패하면 assert로 죽는다.
 """
+__import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
 import datetime
 import os
 import re
