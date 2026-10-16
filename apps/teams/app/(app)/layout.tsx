@@ -7,6 +7,7 @@ import { FeedbackDialog } from "@/components/feedback-dialog";
 import { LinkInterceptor } from "@/components/link-interceptor";
 import { DesktopFindBar } from "@/components/find-bar";
 import { UpdateToast } from "@/components/update-toast";
+import { MigrationOverlay } from "@/components/migration-overlay";
 import { RoutePending } from "@/components/route-pending";
 import { ScreenView } from "@/components/project-switcher";
 import { readKeymap, readLanguage } from "@/lib/projects";
@@ -84,6 +85,8 @@ export default async function RootLayout({
               {/* §0-22 - §비주얼 §65. `{children}` 뒤 - 헤더의 `sticky z-50`과 DOM 순서로
                   갈리는 같은 `z-50`이다(§65 ②) */}
               <RoutePending />
+              {/* P505 - 최상위 z로 화면 전체를 덮는다. `LanguageProvider` 안이어야 사전을 읽는다 */}
+              <MigrationOverlay />
             </KeymapProvider>
           </LanguageProvider>
         </TooltipProvider>

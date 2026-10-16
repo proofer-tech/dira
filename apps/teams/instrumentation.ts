@@ -12,6 +12,10 @@ export async function register() {
   const { registerShutdownHandlers } = await import("./lib/pty.ts");
   registerShutdownHandlers(); // §11-1 §개정 — SIGTERM·SIGINT·정상 exit에서 열린 pty를 전부 죽인다
   if (isLandingOnly()) return; // 공개 배포는 등록된 프로젝트가 없다 — 레지스트리 읽기 0회
+  // P505: 미적용 마이그레이션이 있으면 러너를 분리 프로세스로 띄운다(기다리지 않는다 - 차단은 게이트, 화면은 오버레이).
+  // mirrorCore보다 먼저다.
+  const { ensureRunner } = await import("./lib/migrations.ts");
+  await ensureRunner(true).catch(() => {});
   const { readProjects, resolveConfig } = await import("./lib/projects.ts");
   const { mirrorCore } = await import("./lib/protocols.ts");
   const projects = await readProjects().catch(() => []);

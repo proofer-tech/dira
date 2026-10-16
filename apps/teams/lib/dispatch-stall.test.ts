@@ -65,3 +65,10 @@ test("일시 현상 줄은 건너뛰고 그 앞 줄을 본다", () => {
   assert.equal(s?.reason, "machineCap");
   assert.deepEqual(s?.params, { a: 3, b: 3 });
 });
+
+test("키 migration - id를 뽑고 다른 키보다 앞선다 (P505)", () => {
+  const s = run([w("w1", [10, "SKIP 마이그레이션 미적용 0001-x"]), w("w2", [10, "SKIP AUTH 대기 claude"])]);
+  assert.equal(s?.reason, "migration");
+  assert.deepEqual(s?.params, { id: "0001-x" });
+  assert.equal(run([w("w1", [10, "SKIP 마이그레이션 진행 중"])])?.params.id, "");
+});
