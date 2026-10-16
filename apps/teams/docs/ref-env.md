@@ -43,5 +43,9 @@
 | 변수 | 기본값 | 뜻 |
 |---|---|---|
 | `TICKET_LOCAL` | `~/.config/dira` | 토큰(`oauth-token`)과 워커 락(`run/`)을 두는 디렉터리. 큐 루트가 공유 드라이브에 있어도 이 경로는 이 머신에만 존재합니다 |
+| `DIRA_APM_NO_INSTALL` | (없음) | `1`이면 워커가 claim 전에 설치 상태를 확인할 때, lock과 달라도 `apm` 설치를 시도하지 않고 바로 멈춥니다. 설치 실패를 재현하는 테스트에서 씁니다 |
+
+dira가 까는 apm CLI는 `~/.config/dira/tools/apm/<버전>/`에 있습니다. 버전은 엔진 파일
+`apm-version`이 정하고, 사용자 PATH의 `apm`은 쓰지 않습니다([설치](/docs/install) §패키지 설치 - apm).
 
 다음은 [CLI](/docs/ref-cli)입니다.
