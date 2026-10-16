@@ -269,6 +269,12 @@ export default function Landing({
               <span className="font-mono text-xs">{createdInfo.gitRepoError}</span>
             </p>
           )}
+          {createdInfo.apmError && (
+            <p className="text-muted-foreground">
+              {t("landing.result.apmErrorPrefix")}{" "}
+              <span className="font-mono text-xs">{createdInfo.apmError}</span>
+            </p>
+          )}
           <p className="text-muted-foreground">
             {t("landing.result.skillsLabel")}{" "}
             <span className="font-mono text-xs">

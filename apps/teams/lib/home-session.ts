@@ -112,7 +112,7 @@ import { listBrowserPoolSlots } from "./browser-pool.ts";
 import { ptyStatuses, terminalTail } from "./pty.ts";
 import { findStream, findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
-import { engineCell, listWorkers, workerOf, type Worker } from "./workers.ts";
+import { engineCell, engineRepo, listWorkers, workerOf, type Worker } from "./workers.ts";
 
 /** 세션에 존재하는 도구 전부. **쉼표 한 토큰**이다(머리 주석의 variadic 함정). §7-5(요구
  *  `ea5e6f4d`)가 `Bash`의 쓰기 제한(옛 `BASH_ALLOWED`)을 걷어냈지만 이 상수 자체는 그대로다 —
@@ -964,8 +964,15 @@ export const HOME_PERSONA = "archive-manager";
  *  **메모리 블록은 상수 크기다**(§7-6 결정 3 §블록 크기가 장수와 무관해진다) — 요소는 ①
  *  `memory/` 절대경로 ② 무엇이 쌓인 곳인지 한 줄 ③ `grep` 검색 방법(`[[링크]]`는 `grep -rl` 1홉)
  *  셋뿐이고 `tick.sh`의 `MEMBLOCK` 문장을 그대로 쓴다(§7-6 결정 1 §문장은 구현이 쓴다). */
-export async function personaBlock(personasDir: string, name: string = HOME_PERSONA): Promise<string> {
-  const dir = path.join(personasDir, name);
+export async function personaBlock(
+  personasDir: string,
+  name: string = HOME_PERSONA,
+  projectDir?: string,
+): Promise<string> {
+  const memBase = path.join(personasDir, name); // memory/는 항상 지금 자리다(패키지 밖 로컬 상태)
+  // P506-4 - PROFILE.md - skills.md는 `dira_apm.py resolve persona`가 준 디렉터리에서 읽는다.
+  // rc 3(`dira-team/apm.yml` 없음)이든 그 밖의 실패든 지금 경로로 간다.
+  const dir = (projectDir && (await resolvePersonaDir(projectDir, name))) || memBase;
   const read = (...p: string[]) => readFile(path.join(dir, ...p), "utf8").catch(() => null);
 
   const profile = await read("PROFILE.md");
@@ -973,7 +980,7 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
 
   const skills = await read("skills.md");
   // 글롭이 한 단계인 것은 tick.sh와 같다(`memory/<하위>/x.md`는 안 읽는다) — 존재만 잰다, 본문은 안 읽는다.
-  const memDir = path.join(dir, "memory");
+  const memDir = path.join(memBase, "memory");
   const hasMemory = (await readdir(memDir).catch(() => [] as string[])).some((n) => n.endsWith(".md"));
 
   return [
@@ -997,6 +1004,20 @@ export async function personaBlock(personasDir: string, name: string = HOME_PERS
         ]
       : []),
   ].join("\n");
+}
+
+/** `dira_apm.py resolve <프로젝트> persona <이름>` - 디렉터리 한 줄, 실패(rc != 0)면 null. */
+function resolvePersonaDir(projectDir: string, name: string): Promise<string | null> {
+  const repo = engineRepo();
+  if ("error" in repo) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    execFile(
+      "python3",
+      [path.join(repo.path, "dira_apm.py"), "resolve", projectDir, "persona", name],
+      { timeout: 8000 },
+      (err, stdout) => resolve(err ? null : stdout.trim() || null),
+    );
+  });
 }
 
 /** 페르소나 + 스냅샷 + 경계 + 질문. **순수 함수다**(fs를 안 탄다 — 읽기는 `personaBlock`이
@@ -1292,7 +1313,7 @@ export async function ask(
     snapshot,
     q,
     showOntology ? ontology : "",
-    config?.personas ? await personaBlock(config.personas, persona ?? HOME_PERSONA) : "",
+    config?.personas ? await personaBlock(config.personas, persona ?? HOME_PERSONA, path.dirname(project.root)) : "",
     await envBlockOf(project.root),
   );
   const locale = await readLanguage(); // 위 §언어 층 둘 — 못 읽으면 `ko`로 흡수한다(같은 판정)

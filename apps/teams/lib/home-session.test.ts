@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -549,6 +549,32 @@ test("personaBlock — 세 조각이 tick.sh:265와 같은 순서로 · 없으�
 
   // ④ 이름이 다르면 아무것도 없다 — 고정 페르소나 하나만 읽는다
   assert.strictEqual(await personaBlock(personas, "pm"), "");
+});
+
+test("personaBlock — dira-team이 있으면 resolve 디렉터리에서, 없으면 지금 경로에서 PROFILE을 읽고 memory는 지금 자리다", async () => {
+  const project = mkdtempSync(path.join(tmpdir(), "ha-team-"));
+  tmps.push(project);
+  const personas = path.join(project, ".dira", "personas");
+  mkdirSync(path.join(personas, "pm", "memory"), { recursive: true });
+  writeFileSync(path.join(personas, "pm", "PROFILE.md"), "옛 자리 프로필\n");
+  writeFileSync(path.join(personas, "pm", "memory", "a.md"), "기억\n");
+
+  // 없는 경우 - dira-team/apm.yml이 없으면 rc 3이고 지금 경로 그대로다
+  const old = await personaBlock(personas, "pm", project);
+  assert.ok(old.includes("옛 자리 프로필"));
+
+  // 있는 경우 - 로컬 페르소나 패키지가 이긴다. memory는 여전히 .dira/personas 아래다
+  const pkg = path.join(realpathSync(project), "dira-team", "personas", "pm");
+  mkdirSync(pkg, { recursive: true });
+  writeFileSync(path.join(project, "dira-team", "apm.yml"), "name: t\nversion: 1.0.0\n");
+  writeFileSync(path.join(pkg, "apm.yml"), "name: persona-pm\nversion: 1.0.0\n");
+  writeFileSync(path.join(pkg, "PROFILE.md"), "패키지 프로필\n");
+  writeFileSync(path.join(pkg, "skills.md"), "- `x` - 스킬\n");
+  const now = await personaBlock(personas, "pm", project);
+  assert.ok(now.includes("패키지 프로필") && !now.includes("옛 자리 프로필"));
+  assert.ok(now.includes(path.join(pkg, "PROFILE.md")), "머리 경로가 새 위치를 가리켜야 한다");
+  assert.ok(now.includes("- `x` - 스킬"));
+  assert.ok(now.includes(path.join(personas, "pm", "memory")), "memory는 지금 자리다");
 });
 
 test("toolFlags — §7-5: 경로 스코프가 통째로 없고 --dangerously-skip-permissions가 있다 (요구 `ea5e6f4d`)", () => {

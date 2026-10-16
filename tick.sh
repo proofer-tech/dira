@@ -1635,8 +1635,11 @@ fi
 # 결정 8-b) - dmg 배포에는 "엔진 레포"가 없어 새 프로젝트가 코어를 자기 큐에 품는다.
 # 둘 다 없으면 WARN만 남기고 넘어간다 - 디스패치를 세우는 쪽이 더 나쁘다(프로토콜 인라인과 같다).
 CORE="$TICKET_ROOT/protocols/CORE.md"
-[ -r "$CORE" ] || CORE="$TICKET_CWD/protocols/CORE.md"
-[ -r "$CORE" ] || CORE="$CODE/protocols/CORE.md"
+# 엔진 사본(<엔진>/protocols/CORE.md)은 P506-4가 지웠다 - 큐 사본(materialize 결과)이 없으면
+# 공용 패키지(resolve protocols)에서 읽는다. dira-team/apm.yml이 없으면(rc 3) 빈 값이라 WARN으로 간다.
+if [ ! -r "$CORE" ]; then
+  _CP="$(python3 "$CODE/dira_apm.py" resolve "$(dirname "$TICKET_ROOT")" protocols 2>/dev/null)" && CORE="$_CP/CORE.md"
+fi
 if [ -r "$CORE" ]; then
   PROMPT="===== CORE.md ($(wtpath "$CORE")) =====
 $(cat "$CORE")

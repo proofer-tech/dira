@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
 
@@ -403,21 +403,27 @@ test("addProject — 프로젝트 디렉터리 쓰기 금지(chmod 500)여도 �
   assert.ok(!existsSync(path.join(project, ".gitignore"))); // 쓰기가 실패했으니 파일도 없다
 });
 
-test("addProject — vendored 큐(CORE.md 있음)는 등록 시 엔진 코어로 미러링된다", async (t) => {
+test("addProject — dira-team이 있는 큐는 등록 시 materialize로 공용 코어가 큐에 놓인다 (P506-4)", async (t) => {
   t.after(() => void delete process.env.DIRA_ENGINE);
   const engine = mkdtempSync(path.join(tmpdir(), "fst-engine-"));
   roots.push(engine);
   writeFileSync(path.join(engine, "tick.sh"), "");
-  mkdirSync(path.join(engine, "protocols"));
-  writeFileSync(path.join(engine, "protocols", "CORE.md"), "엔진 코어\n");
+  copyFileSync(path.join(process.cwd(), "..", "..", "dira_apm.py"), path.join(engine, "dira_apm.py"));
+  writeFileSync(path.join(engine, "apm-version"), "0.0.0\n");
   process.env.DIRA_ENGINE = engine;
 
   const root = newQueue({ "w1.sh": "" });
+  const team = path.join(path.dirname(root), "dira-team");
+  const pkg = path.join(team, "apm_modules", "o", "dira-protocols");
+  mkdirSync(pkg, { recursive: true });
+  writeFileSync(path.join(team, "apm.yml"), "name: t\nversion: 1.0.0\n");
+  writeFileSync(path.join(pkg, "apm.yml"), "name: dira-protocols\nversion: 1.0.0\n");
+  writeFileSync(path.join(pkg, "CORE.md"), "공용 코어\n");
   mkdirSync(path.join(root, "protocols"));
   writeFileSync(path.join(root, "protocols", "CORE.md"), "낡은 사본\n");
 
   await addProject("미러", root, "mirror-test");
-  assert.strictEqual(readFileSync(path.join(root, "protocols", "CORE.md"), "utf8"), "엔진 코어\n");
+  assert.ok(readFileSync(path.join(root, "protocols", "CORE.md"), "utf8").endsWith("\n공용 코어\n"));
 });
 
 test("projectPath — 전환은 같은 화면 종류를 유지한다", () => {

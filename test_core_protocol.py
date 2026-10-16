@@ -52,8 +52,10 @@ try:
     os.makedirs(code)
     for f in ("tick.sh", "tickets.py"):
         shutil.copy2(os.path.join(HERE, f), os.path.join(code, f))
+    shutil.copy2(os.path.join(HERE, "dira_apm.py"), os.path.join(code, "dira_apm.py"))
+    shutil.copy2(os.path.join(HERE, "apm-version"), os.path.join(code, "apm-version"))
     tick = os.path.join(code, "tick.sh")
-    core = os.path.join(code, "protocols", "CORE.md")
+    core = os.path.join(tmp, "dira-team", "protocols", "CORE.md")  # resolve protocols가 주는 로컬 패키지
 
     root = os.path.join(tmp, "dira")
     local = os.path.join(tmp, "local")
@@ -76,6 +78,7 @@ try:
     assert len(w) == 1 and "코어 프로토콜 없음" in w[0], "코어 없음 WARN이 한 줄이 아니다: {}".format(w)
 
     # 2) 코어가 있으면 통째로 실린다 — 큐 AGENTS.md 앞에, 그리고 프롬프트 맨 앞에.
+    write(os.path.join(tmp, "dira-team", "apm.yml"), "name: t-team\nversion: 1.0.0\n")
     write(core, "# 코어\n코어-본문-마커\n")
     got = dryrun(worker, local)
     block = "===== CORE.md ({}) =====\n# 코어\n코어-본문-마커\n===== 코어 프로토콜 끝 =====\n\n".format(core)
@@ -90,7 +93,7 @@ try:
     assert warns(root) == w, "코어가 있는데 WARN이 늘었다: {}".format(warns(root))
 
     # 3) 이 레포의 진짜 코어에는 프로젝트 층 자리표시자가 없다(§프롬프트 층 결정 2·3).
-    with open(os.path.join(HERE, "protocols", "CORE.md"), encoding="utf-8") as f:
+    with open(os.path.join(HERE, "packages", "dira-protocols", "CORE.md"), encoding="utf-8") as f:
         real = f.read()
     for ph in ("<프로젝트>", "<통합 브랜치>"):
         assert ph not in real, "코어에 프로젝트 층 자리표시자가 남아 있다: {}".format(ph)

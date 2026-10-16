@@ -357,6 +357,8 @@ export type CreateState = RegisterState & {
     denyCurrentBranchNote?: string;
     /** 저장소 생성이 실패한 사유 한 줄(P493) - 만들기는 막지 않는다. */
     gitRepoError?: string;
+    /** `dira_apm.py install` 실패 사유 한 줄(P506-4) - 만들기는 막지 않는다. */
+    apmError?: string;
     /** 새 프로젝트가 스킬 다섯을 받아서 태어난 결과(§새 프로젝트가 스킬을 갖고 태어난다, 결정 9)
      *  — 깐 수 · 이미 있어 건너뛴 수 · 실패한 수. 등록 경로(`registerProject`)는 이 자리 자체가
      *  없다(스킬을 하나도 안 깐다, 결정 1). */
@@ -430,6 +432,7 @@ export async function createProject(
       ontologyError,
       denyCurrentBranchNote: made.denyCurrentBranchNote,
       gitRepoError: made.gitRepoError,
+      apmError: made.apmError,
       registerCmd: cronRegisterCmd({ path: workerPath }),
       skills: { installed: 0, skipped: 0, failed: 0 },
     };

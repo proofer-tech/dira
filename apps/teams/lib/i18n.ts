@@ -485,6 +485,8 @@ export const ko: Record<string, string> = {
   "stall.personaCap.todo": "그 페르소나의 진행중 티켓이 끝나면 풀립니다. 상한은 페르소나 화면에서 바꿉니다",
   "stall.migration.line": "마이그레이션 미적용 {id}",
   "stall.migration.todo": "앱을 다시 열면 이어서 적용합니다. 앱 없이 돌릴 때는 python3 migrate.py apply --root <루트>를 실행합니다",
+  "stall.apm.line": "패키지 설치 상태가 lock과 다릅니다 {detail}",
+  "stall.apm.todo": "python3 dira_apm.py install <프로젝트 루트>를 실행해 lock대로 다시 설치합니다. 그래도 다르면 dira-team/apm.lock.yaml을 확인합니다",
   "attachment.openPreview": "미리보기 크게 보기",
   "attachment.openInNewTab": "새 탭에서 열기",
   "migration.title": "dira를 업데이트하는 중입니다",
@@ -2674,6 +2676,7 @@ export const ko: Record<string, string> = {
   "landing.result.ontologyFailedTitle": "온톨로지 자리를 정하지 못했습니다",
   "landing.result.ontologyFailedLink": "온톨로지 화면에서 다시 정하세요",
   "landing.result.denyCurrentBranchNotePrefix": "받는 트리의 receive.denyCurrentBranch가 이미 다른 값입니다 — 그대로 두었습니다:",
+  "landing.result.apmErrorPrefix": "페르소나와 프로토콜 패키지를 설치하지 못했습니다. 연결을 확인하고 다시 설치하면 채워집니다:",
   "landing.result.gitRepoErrorPrefix": "프로젝트 폴더에 git 저장소를 만들지 못했습니다. 워커가 전용 워크트리를 만들 수 없으니 직접 git init과 첫 커밋을 해 주세요:",
   "landing.result.skillsLabel": "스킬 (깐 · 건너뜀 · 실패)",
 
@@ -3415,6 +3418,8 @@ export const en: Record<string, string> = {
   "stall.personaCap.todo": "It clears when that persona's in-progress ticket ends. Change the limit on the Personas screen",
   "stall.migration.line": "Migration not applied {id}",
   "stall.migration.todo": "Reopen the app and it carries on applying. Without the app, run python3 migrate.py apply --root <root>",
+  "stall.apm.line": "Package install differs from the lock {detail}",
+  "stall.apm.todo": "Run python3 dira_apm.py install <project root> to reinstall as locked. If it still differs, check dira-team/apm.lock.yaml",
   "attachment.openPreview": "Open preview",
   "attachment.openInNewTab": "Open in new tab",
   "migration.title": "Updating dira",
@@ -5619,6 +5624,7 @@ export const en: Record<string, string> = {
   "landing.result.ontologyFailedTitle": "Couldn't set the ontology location",
   "landing.result.ontologyFailedLink": "Set it again from the ontology screen",
   "landing.result.denyCurrentBranchNotePrefix": "receive.denyCurrentBranch on the receiving tree is already a different value — left it alone:",
+  "landing.result.apmErrorPrefix": "Could not install the persona and protocol packages. Check your connection and install again to fill them in:",
   "landing.result.gitRepoErrorPrefix": "Could not create a git repository in the project folder. Workers cannot make their worktree, so run git init and a first commit yourself:",
   "landing.result.skillsLabel": "Skills (installed · skipped · failed)",
 

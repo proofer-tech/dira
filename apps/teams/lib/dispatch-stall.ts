@@ -7,7 +7,7 @@
 import { t, type Locale } from "./i18n.ts";
 
 export type StallKey =
-  | "migration" | "auth" | "cooldown" | "machineCap" | "personaCap" | "priority"
+  | "migration" | "apm" | "auth" | "cooldown" | "machineCap" | "personaCap" | "priority"
   | "shellCap" | "watchdog" | "noCandidate" | "notWaking" | "unknown";
 
 export type StallLine = { at: number; text: string };
@@ -28,6 +28,7 @@ const RECENT = 90;
 /** 순서 1-6이 우선순위다. 위에서 먼저 걸린 것을 쓴다. */
 const RULES: { key: StallKey; re: RegExp; params: (m: RegExpMatchArray) => StallParams }[] = [
   { key: "migration", re: /^SKIP 마이그레이션 (?:진행 중|미적용 (\S+))/, params: (m) => ({ id: m[1] ?? "" }) },
+  { key: "apm", re: /^SKIP apm 설치 상태가 lock과 다르다(?: - (.*))?$/, params: (m) => ({ detail: m[1] ?? "" }) },
   { key: "auth", re: /^SKIP AUTH 대기 (\S+)/, params: (m) => ({ engine: m[1] }) },
   { key: "cooldown", re: /^SKIP 엔진 쿨다운 · (\d+)초 남음/, params: (m) => ({ n: +m[1] }) },
   { key: "machineCap", re: /^상한 - 머신 전체 산 세션 (\d+)\/(\d+)/, params: (m) => ({ a: +m[1], b: +m[2] }) },

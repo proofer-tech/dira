@@ -146,7 +146,7 @@ rename이 그 자체로 락이기 때문**이다(아래 [동작](#동작) 참조
 | `archives:` | | 아카이브 대상 stem 하나. `deps:`와 달리 목록(`[...]`)이 아니다 |
 | `session_id:` `assigned_at:` `owner:` `attempts:` `pid:` `claimed_at:` `transcript:` `inbox:` | | 디스패처가 쓴다. 사람이 건드리지 않는다 - 새 티켓에 `session_id:`가 있으면 할당된 것으로 보여 영영 디스패치되지 않는다 |
 
-티켓을 손으로 쓸 때의 문법과 함정은 [`protocols/CORE-TICKETS.md`](protocols/CORE-TICKETS.md)가
+티켓을 손으로 쓸 때의 문법과 함정은 [`packages/dira-protocols/CORE-TICKETS.md`](packages/dira-protocols/CORE-TICKETS.md)가
 정본이다 - frontmatter가 깨진 티켓은 에러를 내지 않는다. **조용히 큐에서 안 보인다.**
 
 **큐는 하나다.** 역할별 수신함(`to-<역할>/`)도 분류별 디렉터리(`request/`-`work/`)도 없다 -
@@ -228,9 +228,9 @@ rename이 그 자체로 락이기 때문**이다(아래 [동작](#동작) 참조
 
 여기 예시는 뼈대만 담았다. 바로 쓸 수 있는 실물 `AGENTS.md`는 [§템플릿](#템플릿)에 있다.
 
-프로토콜 위에 한 층이 더 있다. 엔진 레포의 [`protocols/CORE.md`](protocols/CORE.md)는 엔진
+프로토콜 위에 한 층이 더 있다. 공용 패키지 [`packages/dira-protocols/CORE.md`](packages/dira-protocols/CORE.md)는 엔진
 자신이 읽는 계약(파일명 상태, claim, `## 블록`)이라 모든 프롬프트의 **맨 앞**에 실린다 - 큐 쪽에
-`protocols/CORE.md` 사본이 있으면 그걸 먼저 쓰고, 없으면 엔진 레포 것으로 폴백한다.
+`protocols/CORE.md` 사본(`dira_apm.py materialize` 결과)이 있으면 그걸 먼저 쓰고, 없으면 `dira_apm.py resolve protocols`가 가리키는 패키지 것으로 폴백한다.
 
 프롬프트 조립 순서는 **코어 프로토콜 -> 페르소나(프로필-스킬-메모리) -> 온톨로지(큐에
 `ontology/`가 있으면) -> 협업 프로토콜 -> 티켓 지시 -> 참조 컨텍스트**다. `dryrun`이 실제
@@ -242,7 +242,7 @@ rename이 그 자체로 락이기 때문**이다(아래 [동작](#동작) 참조
 출발점을 제공한다.
 
 ```
-protocols/CORE-TICKETS.md          <- 티켓 문법. 엔진 레포의 것이라 복사하지 않는다
+protocols/CORE-TICKETS.md          <- 티켓 문법. 공용 패키지의 것을 materialize가 놓는다
 templates/
   protocols/AGENTS.md              <- 큐를 다루는 규약. 전원 프롬프트에 실린다
   protocols/tickets.md             <- 티켓 쪼개는 기준. 문법은 위 코어를 읽는다

@@ -72,3 +72,9 @@ test("키 migration - id를 뽑고 다른 키보다 앞선다 (P505)", () => {
   assert.deepEqual(s?.params, { id: "0001-x" });
   assert.equal(run([w("w1", [10, "SKIP 마이그레이션 진행 중"])])?.params.id, "");
 });
+
+test("키 apm - SKIP apm 설치 상태가 lock과 다르다 줄을 번역하고 auth보다 앞선다", () => {
+  const s = run([w("w1", [10, "SKIP apm 설치 상태가 lock과 다르다 - x"]), w("w2", [10, "SKIP AUTH 대기 claude"])]);
+  assert.equal(s?.reason, "apm");
+  assert.deepEqual(s?.params, { detail: "x" });
+});

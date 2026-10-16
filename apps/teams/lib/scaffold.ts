@@ -31,33 +31,40 @@ const execFileP = promisify(execFile);
  *  §4-18 폴백도 이 함수를 불러야 하는데 `workers.ts`가 `scaffold.ts`를 부르면 순환 임포트다). */
 export { engineRepo };
 
-/** `templates/` 아래 경로가 곧 `.dira/` 아래 경로다(1:1). §0-3 스캐폴딩 집합 중 복사본들. */
-const TEMPLATE_FILES = [
-  "protocols/AGENTS.md",
-  "protocols/tickets.md",
-  "protocols/ontology.md",
-  "protocols/워크트리.md",
-  "protocols/재디스패치-복구.md",
-  "protocols/push-거부.md",
-  "protocols/세션-종료.md",
-  "protocols/한도.md",
-  "protocols/질문-형식.md",
-  "protocols/회고-예산.md",
-  "protocols/완료-트리거.md",
-  "protocols/cdp.md",
-  "protocols/epics.md",
-  "protocols/스쿼드-설계.md",
-  "protocols/스쿼드-점검.md",
-  "personas/pm/PROFILE.md",
-  "personas/developer/PROFILE.md",
-  "personas/qa/PROFILE.md",
-  "personas/designer/PROFILE.md",
-  "personas/writer/PROFILE.md",
-  "personas/archive-manager/PROFILE.md",
-  "squads/default/members",
-  "watchdog_gates.py",
-  "watchdog_alert.py",
-];
+/** `templates/` 아래 경로가 곧 `.dira/` 아래 경로다(1:1). §0-3 스캐폴딩 집합 중 복사본들.
+ *  프로토콜 - 페르소나 - 스쿼드는 P506-4가 APM 패키지(`dira-team/`)로 옮겼다. */
+const TEMPLATE_FILES = ["watchdog_gates.py", "watchdog_alert.py"];
+
+/** 공용 패키지는 GitHub 태그로 고정한다(P506 결정 2 - 태그는 `<패키지>-v<버전>`). */
+const PUBLIC_PKG_REPO = "proofer-tech/dira/packages";
+const DIRA_TEAM_APM_YML = `name: dira-team
+version: 1.0.0
+targets: [claude]
+dependencies:
+  apm:
+    - ${PUBLIC_PKG_REPO}/dira-protocols#dira-protocols-v1.0.0
+    - ${PUBLIC_PKG_REPO}/squad-default#squad-default-v1.0.0
+    - ./protocols
+`;
+const DIRA_TEAM_PROTOCOLS_APM_YML = "name: project-protocols\nversion: 1.0.0\ndescription: 이 프로젝트의 AGENTS.md와 공용 문서를 바꿔 쓴 파일\n";
+const DIRA_TEAM_GITIGNORE = "apm_modules/\n.claude/\n.agents/\n";
+
+/** `dira_apm.py <명령> <프로젝트>`를 부른다. 큐 루트를 `TICKET_ROOT`로 줘서 materialize가 그 큐에 쓴다.
+ *  실패하면 던진다 - 부르는 쪽이 사유를 화면에 올릴지 고른다. */
+export async function runApm(cmd: string, project: string, queueRoot: string): Promise<void> {
+  const repo = engineRepo();
+  if ("error" in repo) throw new Error(repo.error);
+  try {
+    await execFileP("python3", [path.join(repo.path, "dira_apm.py"), cmd, project], {
+      env: { ...process.env, TICKET_ROOT: queueRoot },
+      timeout: 300_000,
+    });
+  } catch (e) {
+    const x = e as { stderr?: string; stdout?: string; message?: string };
+    const out = (x.stderr?.trim() || x.stdout?.trim() || x.message || String(e)).split("\n").filter(Boolean);
+    throw new Error(out[out.length - 1] ?? "dira_apm.py 실패");
+  }
+}
 
 /** 자리표시자 3종 치환(§0-3 표). **문자열을 그대로 바꾼다** — 정규식도 템플릿 엔진도 안 쓴다.
  *  `specDoc`이 비면 `<프로젝트 스펙 문서>`는 **손대지 않는다**(선택 필드다. 프로젝트 시작 시점에
@@ -231,6 +238,8 @@ export async function scaffold(
   denyCurrentBranchNote?: string;
   /** 저장소 생성이 실패한 사유 한 줄(P493) - 결과 패널이 보여준다. 생성은 막지 않는다. */
   gitRepoError?: string;
+  /** `dira_apm.py install` 실패 사유 한 줄(P506-4) - 결과 패널이 보여준다. 생성은 막지 않는다. */
+  apmError?: string;
 }> {
   const repo = engineRepo(locale);
   if ("error" in repo) throw new Error(repo.error);
@@ -272,13 +281,27 @@ export async function scaffold(
     await put(rel, fillPlaceholders(text, { project, branch: opts.branch, specDoc: opts.specDoc }));
   }
 
-  // 코어(§프롬프트 층 결정 8-a) — 원본은 `<엔진>/protocols/`다. `templates/`에 사본을 두지 않는다
-  // (정본 1벌). 자리표시자 치환 없음, `TEMPLATE_FILES`는 손대지 않는다(그 1:1 매핑은 templates/ 전용).
-  const coreNames = (await readdir(path.join(repo.path, "protocols"))).filter((n) => n.startsWith("CORE"));
-  for (const name of coreNames) {
-    const text = await readFile(path.join(repo.path, "protocols", name), "utf8");
-    await put(path.join("protocols", name), text);
-  }
+  // P506-4 - 프로토콜은 파일 복사 대신 `dira-team/` 패키지 선언이다. 공용 문서는 install이 받아
+  // materialize가 `.dira/protocols/`에 쓰고, AGENTS.md만 이 프로젝트의 로컬 패키지로 둔다.
+  const putTeam = async (rel: string, text: string) => {
+    const file = path.join(project, "dira-team", rel);
+    await mkdir(path.dirname(file), { recursive: true });
+    try {
+      await writeFile(file, text, { flag: "wx" });
+      written.push(path.join("dira-team", rel));
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+      skipped.push(path.join("dira-team", rel));
+    }
+  };
+  const agentsTemplate = await readFile(path.join(repo.path, "packages/dira-protocols/AGENTS.template.md"), "utf8");
+  await putTeam("apm.yml", DIRA_TEAM_APM_YML);
+  await putTeam(
+    "protocols/AGENTS.md",
+    fillPlaceholders(agentsTemplate, { project, branch: opts.branch, specDoc: opts.specDoc }),
+  );
+  await putTeam("protocols/apm.yml", DIRA_TEAM_PROTOCOLS_APM_YML);
+  await putTeam(".gitignore", DIRA_TEAM_GITIGNORE);
 
   // 첫 워커. 필수는 마지막 source 한 줄뿐이고, 그 줄이 없으면 워커는 아무것도 아니다.
   // **`TICKET_CWD="<루트>/worktrees/w1"`을 넣는다**(§워커는 언제나 자기 워크트리에서 일한다
@@ -332,6 +355,20 @@ export async function scaffold(
 
   // `receive.denyCurrentBranch`(결정 6) — `.gitignore`와 같은 처분, 실패해도 던지지 않는다.
   const deny = await ensureDenyCurrentBranch(project);
+
+  // P506-4 - 패키지 설치. materialize가 공용 문서를 `.dira/protocols/`에 쓴다. 네트워크나 apm이
+  // 없어 실패해도 스캐폴딩은 성공이다(사유만 올린다) - 나중에 tick의 check가 다시 설치를 시도한다.
+  let apmError: string | undefined;
+  try {
+    const lsProtocols = () => readdir(path.join(root, "protocols")).catch(() => [] as string[]);
+    const had = new Set(await lsProtocols());
+    await runApm("install", project, root);
+    for (const name of await lsProtocols()) {
+      if (!had.has(name)) written.push(path.join(".dira/protocols", name));
+    }
+  } catch (e) {
+    apmError = (e as Error).message;
+  }
   return {
     root,
     repo: repo.path,
@@ -339,5 +376,6 @@ export async function scaffold(
     skipped,
     ...(deny.status === "conflict" ? { denyCurrentBranchNote: deny.value } : {}),
     ...(gitRepoError ? { gitRepoError } : {}),
+    ...(apmError ? { apmError } : {}),
   };
 }

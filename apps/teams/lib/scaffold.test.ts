@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import { chmod, cp, mkdtemp, mkdir, readdir, readFile, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { existsSync, readlinkSync, realpathSync, statSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readlinkSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -24,35 +24,32 @@ import {
   WATCHDOG_SH,
 } from "./workers.ts";
 
+/** P506-4 - 가짜 apm. `install`이면 엔진의 packages/dira-protocols를 apm_modules로 복사한다(네트워크 없이
+ *  진짜 설치와 같은 자리에 같은 내용을 놓는다). 나머지 명령은 성공만 한다. */
+const FAKE_APM = path.join(realpathSync(tmpdirSync()), "apm");
+function tmpdirSync() {
+  const d = mkdtempSync(path.join(tmpdir(), "fake-apm-"));
+  writeFileSync(
+    path.join(d, "apm"),
+    `#!/bin/sh\n[ "$1" = install ] && mkdir -p apm_modules/o && cp -R "${path.resolve(process.cwd(), "..", "..", "packages", "dira-protocols")}" apm_modules/o/\nexit 0\n`,
+  );
+  chmodSync(path.join(d, "apm"), 0o755);
+  return d;
+}
+process.env.DIRA_APM_BIN = FAKE_APM;
+
+/** install(materialize) 뒤 `.dira/protocols/`에 놓이는 이름 - 공용 패키지 파일 + 로컬 AGENTS.md. */
+const PROTOCOL_NAMES = [
+  ...readdirSync(path.resolve(process.cwd(), "..", "..", "packages", "dira-protocols")).filter(
+    (n) => n !== "apm.yml" && n !== "AGENTS.template.md",
+  ),
+  "AGENTS.md",
+].map((n) => `.dira/protocols/${n}`);
+const TEAM_FILES = ["dira-team/apm.yml", "dira-team/protocols/AGENTS.md", "dira-team/protocols/apm.yml", "dira-team/.gitignore"];
+
 /** §0-3 스캐폴딩 집합. **이 목록이 계약이다** — 여기 없는 파일을 쓰면 실패한다. */
 const SET = [
   ".dira/tickets/",
-  ".dira/protocols/AGENTS.md",
-  ".dira/protocols/tickets.md",
-  ".dira/protocols/ontology.md",
-  ".dira/protocols/워크트리.md",
-  ".dira/protocols/재디스패치-복구.md",
-  ".dira/protocols/push-거부.md",
-  ".dira/protocols/세션-종료.md",
-  ".dira/protocols/한도.md",
-  ".dira/protocols/질문-형식.md",
-  ".dira/protocols/회고-예산.md",
-  ".dira/protocols/완료-트리거.md",
-  ".dira/protocols/cdp.md",
-  ".dira/protocols/epics.md",
-  ".dira/protocols/스쿼드-설계.md",
-  ".dira/protocols/스쿼드-점검.md",
-  ".dira/protocols/CORE.md",
-  ".dira/protocols/CORE-TICKETS.md",
-  ".dira/protocols/CORE-MEMORY.md",
-  ".dira/protocols/CORE-DISPATCH.md",
-  ".dira/personas/pm/PROFILE.md",
-  ".dira/personas/developer/PROFILE.md",
-  ".dira/personas/qa/PROFILE.md",
-  ".dira/personas/designer/PROFILE.md",
-  ".dira/personas/writer/PROFILE.md",
-  ".dira/personas/archive-manager/PROFILE.md",
-  ".dira/squads/default/members",
   ".dira/watchdog_gates.py",
   ".dira/watchdog_alert.py",
   ".dira/workers/w1.sh",
@@ -100,7 +97,7 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
 
   // ① 만들어진 파일 목록 = §0-3 집합 + §0-19의 `.gitignore`(specDoc 없이 — ③을 같은 트리에서 본다)
   const first = await scaffold(project, { branch: "main" });
-  assert.deepEqual(first.written.sort(), [...SET, ".gitignore", ".git"].sort());
+  assert.deepEqual(first.written.sort(), [...SET, ...TEAM_FILES, ...PROTOCOL_NAMES, ".gitignore", ".git"].sort());
   assert.deepEqual(first.skipped, []);
   assert.equal(await readFile(path.join(project, ".gitignore"), "utf8"), ".dira\n");
   // 다음 단계(registerCron·addProject)가 쓰는 값 — 부르는 쪽이 경로를 다시 조립하지 않는다.
@@ -120,8 +117,8 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   // ③-1 ontology.md — 자리표시자 없는 파일이라 템플릿과 바이트가 같아야 한다(경로 존재만으론
   // 빈 파일도 통과한다).
   const ontology = await readFile(path.join(project, ".dira/protocols/ontology.md"), "utf8");
-  const ontologyTemplate = await readFile(path.join(repo.path, "templates/protocols/ontology.md"), "utf8");
-  assert.equal(ontology, ontologyTemplate);
+  const ontologyTemplate = await readFile(path.join(repo.path, "packages/dira-protocols/ontology.md"), "utf8");
+  assert.equal(ontology.split("\n").slice(1).join("\n"), ontologyTemplate); // 첫 줄은 materialize 표식
 
   // (P428-6) watchdog_gates.py · watchdog_alert.py — 치환이 python을 안 깨뜨렸다는 판정.
   // 자리표시자 없는 파일이라 바이트도 원본과 같아야 한다.
@@ -132,10 +129,17 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
     execFileSync("python3", ["-c", "import ast,sys;ast.parse(open(sys.argv[1]).read())", path.join(project, ".dira", name)]);
   }
 
-  // (D1) 기본 스쿼드 default — 이름 넷, 역할 칸 없음, 끝이 개행 하나, rules는 안 만든다
-  const members = await readFile(path.join(project, ".dira/squads/default/members"), "utf8");
-  assert.equal(members, "pm\ndeveloper\nqa\ndesigner\nwriter\n");
-  await assert.rejects(() => stat(path.join(project, ".dira/squads/default/rules")));
+  // (P506-4) dira-team - 공용 패키지는 git 태그 의존성이고 AGENTS.md만 로컬 패키지다
+  const teamYml = await readFile(path.join(project, "dira-team/apm.yml"), "utf8");
+  assert.match(teamYml, /dira-protocols#dira-protocols-v1\.0\.0/);
+  assert.match(teamYml, /squad-default#squad-default-v1\.0\.0/);
+  const localAgents = await readFile(path.join(project, "dira-team/protocols/AGENTS.md"), "utf8");
+  assert.doesNotMatch(localAgents, /<프로젝트>|<통합 브랜치>/);
+  assert.ok(localAgents.includes("git rebase main"));
+  // install 뒤 큐 CORE.md는 공용 CORE.md와 표식 줄 빼고 같다
+  const core = await readFile(path.join(project, ".dira/protocols/CORE.md"), "utf8");
+  assert.equal(core.split("\n").slice(1).join("\n"), await readFile(path.join(repo.path, "packages/dira-protocols/CORE.md"), "utf8"));
+  assert.equal(first.apmError, undefined);
 
   // ⑤ w1.sh — TICKET_CWD가 표준 자리(§워커는 언제나 자기 워크트리에서 일한다 결정 1),
   // tick.sh 절대경로, 755
@@ -219,12 +223,12 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
 
   // ④ 두 번 돌리면 전부 skipped이고 내용이 안 바뀐다
   const second = await scaffold(project, { branch: "other", specDoc: "docs/S.md" });
-  assert.deepEqual(second.skipped.sort(), [...SET, ".gitignore"].sort());
+  assert.deepEqual(second.skipped.sort(), [...SET, ...TEAM_FILES, ".gitignore"].sort());
   assert.deepEqual(second.written, []);
   assert.equal(await readFile(agents, "utf8"), before);
   assert.equal(await readFile(path.join(project, ".gitignore"), "utf8"), ".dira\n");
-  // (D2) 소급 0 — 재실행해도 members 내용이 안 갈린다
-  assert.equal(await readFile(path.join(project, ".dira/squads/default/members"), "utf8"), members);
+  // (D2) 소급 0 — 재실행해도 dira-team/apm.yml 내용이 안 갈린다
+  assert.equal(await readFile(path.join(project, "dira-team/apm.yml"), "utf8"), teamYml);
 });
 
 /** P438-1 — `ensureBrowseHooks` 단독 호출. 스캐폴딩을 거치지 않은 기존 큐(§0-3 이전에 만든
@@ -301,29 +305,6 @@ test("ensureGitignoreLine — 네 갈래 + 개행 없는 파일 + 실패해도 �
   });
   await chmod(dir4, 0o500);
   assert.equal(await ensureGitignoreLine(dir4), "failed");
-});
-
-/** §프롬프트 층 결정 8-a — 원본은 `<엔진>/protocols/`, `templates/`에 사본을 두지 않는다. */
-test("scaffold — CORE*.md는 엔진 protocols/에서 그대로 복사, templates/에는 사본이 없다", async (t) => {
-  const repo = engineRepo();
-  assert.ok("path" in repo, `엔진 레포를 못 찾았다: ${JSON.stringify(repo)}`);
-
-  const dir = await tmp();
-  t.after(() => rm(dir, { recursive: true, force: true }));
-  const project = path.join(dir, "myproject");
-
-  await scaffold(project, { branch: "main" });
-
-  const names = (await readdir(path.join(repo.path, "protocols"))).filter((n) => n.startsWith("CORE"));
-  assert.ok(names.length > 0);
-  for (const name of names) {
-    const orig = await readFile(path.join(repo.path, "protocols", name), "utf8");
-    const copy = await readFile(path.join(project, ".dira/protocols", name), "utf8");
-    assert.equal(copy, orig, `${name}이 원본과 달라야 안 된다`); // 자리표시자 치환 없음
-  }
-
-  // templates/에는 사본이 없다 — 정본은 엔진 protocols/ 하나
-  await assert.rejects(() => readFile(path.join(repo.path, "templates/protocols", names[0]), "utf8"));
 });
 
 /** DESIGN.md §데스크톱 앱 §고정하는 것 8 — 판정은 "`extraResources`가 `engine/`으로 나르는 것만으로

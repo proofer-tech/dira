@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert";
 import {
+  copyFileSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -188,7 +189,7 @@ test("mtime이 안 바뀐 저장은 지금처럼 쓰이고, 그 사이 바뀌면
 test("코어는 엔진 레포에서 읽고, 못 읽으면 사유다. 쓰는 경로는 없다", async (t) => {
   t.after(() => void delete process.env.DIRA_ENGINE);
   const engine = path.join(tmp, "engine");
-  const coreDir = path.join(engine, "protocols");
+  const coreDir = path.join(engine, "packages", "dira-protocols");
   mkdirSync(engine, { recursive: true });
   process.env.DIRA_ENGINE = engine;
   const full = path.join(coreDir, "CORE.md");
@@ -206,7 +207,7 @@ test("코어는 엔진 레포에서 읽고, 못 읽으면 사유다. 쓰는 경�
   assert.ok("error" in noDir && noDir.error.includes("ENOENT"), "무엇이 왜 안 됐는지 남아야 한다");
 
   // ②' 디렉터리는 있는데 `.md`가 하나도 없다 → 이것도 사유다(빈 트리로 조용히 넘기지 않는다)
-  mkdirSync(coreDir);
+  mkdirSync(coreDir, { recursive: true });
   writeFileSync(path.join(coreDir, "메모.txt"), "코어가 아니다\n");
   const noMd = await readCore(shared);
   assert.ok("error" in noMd && noMd.error.includes(coreDir), `사유에 경로가 없다: ${JSON.stringify(noMd)}`);
@@ -231,7 +232,7 @@ test("코어는 엔진 레포에서 읽고, 못 읽으면 사유다. 쓰는 경�
 test("코어는 한 장이 아니다 — 디렉터리의 *.md 전부 · CORE.md가 먼저 · 재귀 없음", async (t) => {
   t.after(() => void delete process.env.DIRA_ENGINE);
   const engine = path.join(tmp, "engine-multi");
-  const coreDir = path.join(engine, "protocols");
+  const coreDir = path.join(engine, "packages", "dira-protocols");
   mkdirSync(path.join(coreDir, "부속"), { recursive: true });
   writeFileSync(path.join(engine, "tick.sh"), "");
   process.env.DIRA_ENGINE = engine;
@@ -266,7 +267,7 @@ test("vendored 큐 — 큐 protocols/CORE.md가 있으면 엔진 대신 큐 사�
   t.after(() => void delete process.env.DIRA_ENGINE);
   // 엔진도 같이 세운다 — vendored 우선이 "엔진이 없어서 어쩔 수 없이"가 아니라는 걸 보이려고.
   const engine = path.join(tmp, "engine-vendored");
-  const engineCoreDir = path.join(engine, "protocols");
+  const engineCoreDir = path.join(engine, "packages", "dira-protocols");
   mkdirSync(engineCoreDir, { recursive: true });
   writeFileSync(path.join(engine, "tick.sh"), "");
   writeFileSync(path.join(engineCoreDir, "CORE.md"), "엔진 원본\n");
@@ -297,7 +298,7 @@ test("vendored 큐 — 큐 protocols/CORE.md가 있으면 엔진 대신 큐 사�
 test("vendored 안 된 큐(이 큐)에서는 종전대로 엔진 경로·본문이다", async (t) => {
   t.after(() => void delete process.env.DIRA_ENGINE);
   const engine = path.join(tmp, "engine-fallback");
-  const coreDir = path.join(engine, "protocols");
+  const coreDir = path.join(engine, "packages", "dira-protocols");
   mkdirSync(coreDir, { recursive: true });
   writeFileSync(path.join(engine, "tick.sh"), "");
   writeFileSync(path.join(coreDir, "CORE.md"), "엔진 원본\n");
@@ -341,58 +342,63 @@ test("최상위 CORE*.md는 listTree에 안 뜬다 — 저장·삭제·이름변
   // 여기서는 "안 보인다"만 고정한다.
 });
 
-// ── 미러링 (§프롬프트 층 결정 8-c) ───────────────────────────────────────────
+// ── 미러링 (P506-4 - dira_apm.py materialize) ───────────────────────────────
 
-test("CORE.md가 없는 큐(폴백)는 미러링이 아무것도 안 쓴다", async (t) => {
-  t.after(() => void delete process.env.DIRA_ENGINE);
-  const engine = path.join(tmp, "engine-fallback");
-  mkdirSync(path.join(engine, "protocols"), { recursive: true });
+const MARK = "<!-- dira_apm materialize: 고치지 말고 dira-team/protocols 또는 packages/dira-protocols를 고친다 -->";
+
+/** 진짜 dira_apm.py를 얹은 가짜 엔진 + 프로젝트. `team`이면 dira-team을 만든다. */
+function mirrorSetup(name: string, team: boolean) {
+  const engine = path.join(tmp, name, "engine");
+  mkdirSync(engine, { recursive: true });
   writeFileSync(path.join(engine, "tick.sh"), "");
-  writeFileSync(path.join(engine, "protocols", "CORE.md"), "엔진 코어\n");
+  copyFileSync(path.join(process.cwd(), "..", "..", "dira_apm.py"), path.join(engine, "dira_apm.py"));
+  writeFileSync(path.join(engine, "apm-version"), "0.0.0\n");
   process.env.DIRA_ENGINE = engine;
 
-  const queue = path.join(tmp, "mirror-fallback-queue", "protocols");
+  const project = path.join(tmp, name, "proj");
+  const queue = path.join(project, ".dira", "protocols");
   mkdirSync(queue, { recursive: true });
+  if (team) {
+    const t = path.join(project, "dira-team");
+    mkdirSync(path.join(t, "protocols"), { recursive: true });
+    mkdirSync(path.join(t, "apm_modules", "o", "dira-protocols"), { recursive: true });
+    writeFileSync(path.join(t, "apm.yml"), "name: t\nversion: 1.0.0\n");
+    writeFileSync(path.join(t, "protocols", "apm.yml"), "name: project-protocols\nversion: 1.0.0\n");
+    writeFileSync(path.join(t, "protocols", "AGENTS.md"), "프로젝트 문서\n");
+    writeFileSync(path.join(t, "apm_modules", "o", "dira-protocols", "apm.yml"), "name: dira-protocols\nversion: 1.0.0\n");
+    writeFileSync(path.join(t, "apm_modules", "o", "dira-protocols", "CORE.md"), "공용 코어\n");
+  }
+  return queue;
+}
+
+test("dira-team이 없는 큐(옛 배치)는 미러링이 아무것도 안 쓴다", async (t) => {
+  t.after(() => void delete process.env.DIRA_ENGINE);
+  const queue = mirrorSetup("mirror-old", false);
   writeFileSync(path.join(queue, "AGENTS.md"), "프로젝트 문서\n");
 
   await mirrorCore(queue);
   assert.deepStrictEqual(readdirSync(queue).sort(), ["AGENTS.md"]); // CORE.md가 새로 생기지 않는다
 });
 
-test("vendored 큐(CORE.md 있음) — 덮고, 새 형제를 만들고, 없어진 CORE-*.md를 지운다", async (t) => {
+test("dira-team이 있는 큐 - 공용 코어와 로컬 AGENTS.md를 표식과 함께 쓰고 큐 전용 파일은 둔다", async (t) => {
   t.after(() => void delete process.env.DIRA_ENGINE);
-  const engine = path.join(tmp, "engine-mirror");
-  const coreDir = path.join(engine, "protocols");
-  mkdirSync(coreDir, { recursive: true });
-  writeFileSync(path.join(engine, "tick.sh"), "");
-  writeFileSync(path.join(coreDir, "CORE.md"), "엔진 코어 v2\n");
-  writeFileSync(path.join(coreDir, "CORE-NEW.md"), "새 형제\n");
-  process.env.DIRA_ENGINE = engine;
-
-  const queue = path.join(tmp, "mirror-vendored-queue", "protocols");
-  mkdirSync(queue, { recursive: true });
-  writeFileSync(path.join(queue, "CORE.md"), "사람이 지우려 했던 옛 코어\n"); // 사람 편집 흔적
-  writeFileSync(path.join(queue, "CORE-OLD.md"), "엔진에서 없어진 형제\n"); // 지워져야 한다
-  writeFileSync(path.join(queue, "AGENTS.md"), "프로젝트 문서\n"); // 편집 가능한 층 — 안 건드린다
+  const queue = mirrorSetup("mirror-team", true);
+  writeFileSync(path.join(queue, "qa-scratch-1.md"), "큐 전용\n");
 
   await mirrorCore(queue);
 
-  assert.strictEqual(readFileSync(path.join(queue, "CORE.md"), "utf8"), "엔진 코어 v2\n");
-  assert.strictEqual(readFileSync(path.join(queue, "CORE-NEW.md"), "utf8"), "새 형제\n");
-  assert.strictEqual(readFileSync(path.join(queue, "AGENTS.md"), "utf8"), "프로젝트 문서\n");
-  assert.deepStrictEqual(readdirSync(queue).sort(), ["AGENTS.md", "CORE-NEW.md", "CORE.md"]);
+  assert.strictEqual(readFileSync(path.join(queue, "CORE.md"), "utf8"), `${MARK}\n공용 코어\n`);
+  assert.strictEqual(readFileSync(path.join(queue, "AGENTS.md"), "utf8"), `${MARK}\n프로젝트 문서\n`);
+  assert.strictEqual(readFileSync(path.join(queue, "qa-scratch-1.md"), "utf8"), "큐 전용\n");
 });
 
-test("엔진을 못 찾으면 vendored 큐도 손대지 않는다", async (t) => {
+test("엔진을 못 찾으면 dira-team 큐도 손대지 않는다", async (t) => {
   t.after(() => void delete process.env.DIRA_ENGINE);
+  const queue = mirrorSetup("mirror-orphan", true);
   process.env.DIRA_ENGINE = path.join(tmp, "없는엔진");
 
-  const queue = path.join(tmp, "mirror-orphan-queue", "protocols");
-  mkdirSync(queue, { recursive: true });
-  writeFileSync(path.join(queue, "CORE.md"), "그대로여야 한다\n");
-
   await mirrorCore(queue);
-  assert.strictEqual(readFileSync(path.join(queue, "CORE.md"), "utf8"), "그대로여야 한다\n");
+  assert.deepStrictEqual(readdirSync(queue), []);
 });
 
 test("nestTree — 빈 트리는 빈 배열이다", () => {
