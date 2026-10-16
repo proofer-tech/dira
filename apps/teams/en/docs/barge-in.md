@@ -62,9 +62,14 @@ language the screen is in.
 What the session reads is that block, exactly as shown. But when you read the message back on screen
 after sending it, the note line and the path lines are gone and the attachment shows up as a preview
 instead. Image files (`png`, `jpg`, `jpeg`, `gif`, `webp`, `avif`) come out as thumbnails.
-Everything else, `svg` included, is a filename chip with a clip on it. Either one opens the original
-in a new tab. The exception is a box where you edit the text. There the block still reads as raw
-text, and **deleting those lines is how you take an attachment back off.**
+Everything else, `svg` included, is a filename chip with a clip on it. Click a thumbnail and a window
+opens over the screen with the image at its original size. Nothing is shrunk to fit, so you can read
+the small text in a large screenshot, and when the image is bigger than the screen you scroll across
+and down inside the window to see all of it. Close the window with `Esc`, a click outside, or the X,
+and you stay on the screen you were on. To zoom in the browser or save the file, click
+`Open in new tab` in the window's header. A chip opens the original straight in a new tab. The
+exception is a box where you edit the text. There the block still reads as raw text, and
+**deleting those lines is how you take an attachment back off.**
 
 - Files land in `<queue root>/attachments/`. Eight hex characters go in front of the filename, so
   attaching the same name twice never overwrites. **Nothing is deleted automatically.** Ticket
