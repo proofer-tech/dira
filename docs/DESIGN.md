@@ -8938,6 +8938,339 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P506. 엔진 표준화 - APM을 기본으로 탑재해 개발 환경, 페르소나, 스쿼드, 프로토콜을 apm.yml과 lock으로 고정하고 등록 프로젝트 9개를 옮긴다 (요구 `f39120fd`, 왕복 0회)
+
+사람 요구(임한솔, 2026-10-16): *"dira teams 프로젝트에 APM을 기본으로 탑재하고 사용하도록 하고 기존 프로젝트들을
+마이그레이션 시켜주세요. 프로젝트 개발 용도로도 사용하고 / 각 프로젝트의 페르소나 스킬과 지침(프롬프트), 스쿼드
+프롬프트를 관리하는데에도 활용해주세요. dira 엔진 표준화의 방향입니다."* 프로젝트 마이그레이션은 같은 날 들어온
+범용 마이그레이션 요구 `3d36e56d`의 장치(P505, 블러 오버레이 + `migrate.py` 러너)로 실행한다. 이 에픽은 그
+장치에 싣는 항목 `0002`의 내용을 정하고, 장치 자체는 P505가 정한다.
+
+#### 사람이 정한 것 (되묻지 않는다)
+
+1. 마켓은 남기고 백엔드를 APM으로 바꾼다. 마켓 화면(가져오기, 배포, 업데이트 배지, 즐겨찾기)은 유지한다.
+   배포는 APM 패키지 발행(semver), 가져오기는 apm.yml 의존성 추가와 설치, 레지스트리의 정수 `market.v`는
+   lockfile의 해석 결과로 대체한다. "항상 최신 설치"는 없앤다. 고정이 기본이다.
+2. 공용 페르소나, 스쿼드, 프로토콜 패키지의 정본은 dira 저장소 안 `packages/`다. 프로젝트는 git 의존성과
+   태그로 고정해 설치한다. 프로젝트 고유 페르소나는 그 프로젝트 저장소 안의 로컬 패키지로 둔다.
+3. 엔진 개정(tick.sh, tickets.py, apps/teams/lib/home-session.ts 포함) 방향은 승인됐다. dira 프로젝트에 먼저
+   적용하고 QA 통과 뒤 나머지 8개(stocky, stream, proofer-tech, hsol-info, hravengers, pofol, gallae,
+   with-cto)를 순차 적용한다. 프로젝트별 추가 승인은 받지 않는다.
+4. 프로젝트 마이그레이션은 `3d36e56d`의 블러 오버레이 마이그레이션 기능으로 실행한다.
+
+#### 실측 (2026-10-16)
+
+- 스킬은 머신 전역이다. `~/.claude/skills/<이름>`에 GUI import로 깔리고, 페르소나 `skills.md`의 이름 목록을
+  tick.sh(`SKILLBLOCK` 다음 `PLUGDIR` 루프)가 세션 임시 `--plugin-dir`(`$LOCAL/run/skillplugin-$SID/`)로
+  묶는다. 버전, 고정, 프로젝트 범위가 없다.
+- 페르소나(PROFILE.md, skills.md, engine, memory/, limit, mcp.json)와 스쿼드(members, rules)는 `.dira/`에
+  있고 `.dira`는 gitignore다. 커밋되는 것은 `templates/personas`(PROFILE.md만, 영어)와 `templates/squads`뿐이다.
+  큐 사본은 한국어이고 프로젝트마다 내용이 갈라졌다(dira 큐 pm PROFILE은 `docs/DESIGN.md` - `apps/teams/`를 직접
+  가리킨다).
+- 프로토콜은 세 군데를 손으로 맞춘다: `.dira/protocols`(큐 사본), `templates/protocols`, `scaffold.ts`
+  `TEMPLATE_FILES`. CORE*.md만 엔진 `protocols/`가 정본이고 `mirrorCore`가 큐로 맞춘다. dira 큐 사본과 템플릿을
+  견주면 15장 중 11장이 다르다.
+- 마켓(`apps/teams/lib/market.ts`)은 `~/.config/dira/market`에 정수 버전 폴더로 PROFILE.md와 skills.md(스쿼드는
+  members)만 담는다. lock, 해시, diff가 없고 가져오기는 늘 latest다. 레지스트리(`gui-projects.json`)에는
+  `market.personas.<이름> = {owner, name, v}`가 남는다.
+- claude 워커는 `--setting-sources project,local --strict-mcp-config`로 뜬다. 워크트리의 `.claude/`는 읽히고
+  사용자 `~/.claude`는 안 읽힌다. gallae와 stocky 저장소에는 이미 `.claude/skills/`가 커밋돼 있다.
+- 이 기계의 `python3`는 3.9.13이다. apm-cli는 Python 3.10 이상이 필요하다. `uv`(`~/.local/bin/uv`)와 `pipx`는 있다.
+- 등록 프로젝트 9개 중 페르소나 디렉터리가 있는 곳: 전부. 스쿼드가 없는 곳: stocky, proofer-tech.
+  gallae와 with-cto는 페르소나가 10개다.
+
+#### APM에서 확인한 사실 (2026-10-16, llms-full.txt와 PyPI)
+
+| 항목 | 값 |
+|---|---|
+| 버전 | `apm-cli` 0.33.0(2026-10-02), `requires_python >=3.10`. 1.0 전이고 호환이 자주 깨진다 |
+| 선언 | `apm.yml`: `name` - `version` 필수, `dependencies.apm` - `dependencies.mcp`, `devDependencies`, `targets`. 로컬 경로 의존성 `./packages/x` 지원 |
+| git 의존성 | `owner/repo/<하위경로>#<ref>` 또는 `{git, path, ref}`. semver 범위는 태그(`{name}-v{version}`)에서 고른다 |
+| lock | `apm.lock.yaml`. 의존성마다 `resolved_commit` - `content_hash` - `deployed_files` - `deployed_file_hashes`, 로컬 의존성은 `local_path`와 `local_deployed_file_hashes` |
+| 재현 | `apm install --frozen`(lock만으로 설치, 드리프트면 쓰기 전에 rc 1, 로컬 경로 의존성은 건너뜀), `apm audit`(설치 안 함, 캐시만), `apm audit --ci`(내용 무결성 + 빈 디렉터리 재설치 비교, 실패면 rc 1) |
+| 위치 | `apm install --root DIR`이면 `apm_modules`, lock, 타깃 산출물이 DIR 아래에 생긴다. `apm.yml`은 현재 디렉터리에서 읽는다 |
+| 패키지 안 | `.apm/skills/<이름>/SKILL.md`, `.apm/instructions/*.instructions.md`, `.apm/prompts/`, `.apm/agents/`, `.apm/hooks/`. 그 밖의 파일은 배포하지 않고 `apm_modules/` 안에만 둔다 |
+| 타깃 | claude: 스킬 `.claude/skills/<이름>/`, 지시 `.claude/rules/`. codex: 스킬 `.agents/skills/`, 지시는 `AGENTS.md`로 합쳐진다. grok-build: `.grok/` |
+| 함정 | #1120(열림): 같은 이름 스킬은 나중 설치가 조용히 덮는다. #3143(열림): `.apm/context`가 `apm_modules`를 가리킨 채 남는다. MCP 정적 `env` 값은 파일에 그대로 쓰인다 |
+
+#### 결정
+
+1. **선언 파일이 둘이다.** 저장소 루트 `apm.yml`은 개발 환경(모든 워커와 사람이 쓰는 스킬, MCP, 훅)이고
+   산출물이 루트 `.claude/`로 배포돼 워크트리마다 git으로 따라간다. `dira-team/apm.yml`은 dira가 읽는
+   페르소나, 스쿼드, 프로토콜이고 dira가 `dira-team/` 안에서 설치한다. 한 파일에 합치면 모든 페르소나의 스킬이
+   루트 `.claude/skills/`로 배포돼 워커마다 다른 스킬 집합이라는 지금 의미가 깨진다.
+2. **페르소나 하나 = 패키지 하나, PROFILE.md와 skills.md는 배포하지 않는 패키지 파일이다.** dira가 설치 위치에서
+   직접 읽어 프롬프트에 싣는다. `skills.md` 텍스트(이름 + 설명 한 줄)는 지금처럼 프롬프트 블록으로 남고, 그
+   이름의 실체는 그 페르소나 패키지의 `.apm/skills/` 또는 그 패키지의 `dependencies.apm`이 공급한다.
+   `~/.claude/skills`는 더 이상 읽지 않는다.
+3. **세션 plugin-dir는 남기고 출처만 바꾼다.** 링크 대상이 `~/.claude/skills/<이름>`에서
+   `dira-team/.claude/skills/<이름>`(APM이 배포한 결과)으로 바뀐다. 페르소나마다 다른 스킬 집합이 유지된다.
+4. **같은 이름 스킬은 설치 뒤 검사가 실패시킨다.** APM에 실패 옵션이 없다(#1120). `dira_apm.py check`가
+   `dira-team/apm_modules/` 아래 모든 패키지의 스킬 이름과 각 로컬 패키지의 `.apm/skills/`를 모아, 한 이름이
+   두 패키지에서 오면 두 패키지 이름을 적고 rc 1이다. 루트 `apm.yml`도 같은 검사를 받는다.
+5. **dira가 apm CLI를 고정 설치한다.** 엔진 파일 `apm-version`(한 줄, 지금 `0.33.0`)이 정본이다.
+   `~/.config/dira/tools/apm/<버전>/`에 `uv tool install --python 3.12 apm-cli==<버전>`(`UV_TOOL_DIR` -
+   `UV_TOOL_BIN_DIR`를 그 디렉터리로)로 깐다. `uv`가 없으면 3.10 이상 `python3.x`를 찾아 그 디렉터리에
+   venv를 만들고 `pip install apm-cli==<버전>`이다. 둘 다 없으면 설치 실패이고 이유는 아래 멈춤 줄로 보인다(결정 6).
+   사용자 PATH의 `apm`은 쓰지 않는다.
+6. **확인은 tick이 하고, 불일치면 한 번 설치를 시도한 뒤 멈춘다.** tick은 claim 전에 `dira_apm.py check
+   <프로젝트>`를 부른다(결과는 lock 파일 mtime - 크기와 `apm_modules` 디렉터리 mtime을 열쇠로 캐시한다).
+   불일치면 같은 lock 해시당 한 번 `dira_apm.py install --frozen`을 시도하고, 그래도 다르면 그 프로젝트는 claim
+   하지 않고 `SKIP apm 설치 상태가 lock과 다르다 - <요약 한 줄>`을 runner.log에 남긴다. 환경변수 `DIRA_APM_NO_INSTALL=1`이면 설치
+   시도를 건너뛴다(테스트 자리, P504 `DIRA_LAUNCHD_DIR`와 같은 방식). P501 `dispatch-stall.ts`
+   `RULES`에 키 `apm`(패턴 `^SKIP apm 설치 상태가 lock과 다르다`)을 P505 `migration` 다음에 더해 `멈춤: 패키지 설치가
+   lock과 다릅니다`로 번역하고, 할 일은 `python3 dira_apm.py install <프로젝트>`다. 게이트 순서는 P505 게이트 다음이다.
+7. **프로토콜 두 벌을 없앤다.** 공용 정본은 `packages/dira-protocols/`(CORE*.md와 공용 형제 문서) 하나다.
+   AGENTS.md는 프로젝트마다 다르므로 프로젝트 로컬 패키지 `dira-team/protocols/`에 둔다. 프로젝트가 공용 문서를
+   바꿔 쓰고 있으면 같은 이름 파일을 로컬 패키지에 두고, 로컬이 이긴다. `.dira/protocols/`는 지우지 않고
+   `dira_apm.py materialize`가 설치 결과(공용 위에 로컬을 덮은 것)로 다시 쓴다 - 문서와 프롬프트에 흩어진
+   `.dira/protocols/<파일>` 참조를 고치지 않기 위해서다. 그 디렉터리의 파일은 첫 줄에
+   `<!-- dira_apm materialize: 고치지 말고 dira-team/protocols 또는 packages/dira-protocols를 고친다 -->`를 단다.
+   `templates/protocols`, `templates/personas`, `templates/squads`, 엔진 `protocols/CORE*.md`는
+   `packages/`로 옮긴 뒤 지운다. `templates/hooks`와 `watchdog_*.py`는 이번 범위가 아니다.
+8. **영어 템플릿과 한국어 큐 사본은 합치지 않는다.** 공용 `packages/persona-<이름>`의 정본은 지금
+   `templates/personas`(영어)이고 새 프로젝트의 출발점이다. 각 프로젝트 큐 사본은 그 프로젝트에 맞게 갈라진
+   글이므로 마이그레이션이 그 프로젝트의 로컬 패키지로 **바이트 그대로** 옮긴다. 합치면 9개 프로젝트의
+   프롬프트가 바뀌어 수용조건 (d)를 지킬 수 없다. 공용 페르소나 패키지에는 skills.md가 없던 지금 상태를 그대로
+   옮긴다(빈 스킬 집합).
+9. **dira 저장소 자신은 공용 패키지를 로컬 경로로 건다.** `dira-team/apm.yml`이 `../packages/dira-protocols`를
+   가리킨다. 다른 8개 프로젝트는 `proofer-tech/dira/packages/<패키지>#<패키지>-v<semver>` git 의존성이다. 태그는
+   사람이 원격(origin)에 push한다(원격 push는 사람 몫). P506-12는 `git ls-remote origin 'refs/tags/dira-protocols-v*'`로
+   태그가 보일 때까지 폴링 대기(`폴링-대기.md`)하고, 블록으로 쓰지 않는다.
+10. **비 claude 엔진.** codex: APM codex 타깃이 스킬을 `.agents/skills/`로 낸다. 워크트리에 깔면 모든 codex
+    페르소나가 같은 집합을 받으므로, 페르소나별 세션 디렉터리로 줄 수 있는지 실측해 정한다(P506-6). 받을 수
+    있으면 받게 하고, 못 받으면 지금처럼 skills.md 블록 없이 PROFILE - AGENTS - CORE 텍스트만 준다. grok과 agy는
+    이번 범위에서 지금처럼 텍스트만 받는다.
+11. **진행 중 세션과 차단은 P505를 따른다.** claim 차단은 P505 게이트, 진행 중 세션은 P505 결정 5(기다림, 상한
+    20분), 백업 - 복원은 P505 `targets(ctx)`와 백업 표다.
+12. **dira 먼저는 P505 `ROLLOUT = "canary"`로 싣는다.** 항목 `0002`는 canary이고, QA(P506-11) 통과 뒤
+    `migrate.py promote 0002-apm-packages`가 나머지 8개를 연다. 보류 기간에 엔진은 옛 배치도 읽는다 - `resolve`가
+    rc 3(`dira-team/apm.yml` 없음)이면 tick.sh와 앱은 지금 경로를 그대로 쓴다.
+13. **공용 패키지는 GitHub `proofer-tech/dira`(공개 저장소)에서 받는다.** 인증 없이 깔린다. 원격 슬롯 기계도 같다.
+
+주도성 5 판단: 새 외부 의존성 둘(`apm-cli`, 그 설치 수단 `uv`)을 들인다. 엔진 의존성 0 원칙은 tick.sh -
+tickets.py - `dira_apm.py`가 bash와 python3 표준 라이브러리만 쓴다는 뜻으로 유지되고, apm은 claude - codex처럼
+엔진이 부르는 외부 실행 파일로 취급한다. 사람이 엔진 개정 방향을 승인했다(위 3).
+
+#### 구조 - dira 저장소 `packages/`
+
+```
+packages/
+  dira-protocols/        apm.yml, CORE.md, CORE-*.md, tickets.md, 워크트리.md, ... (공용 형제 문서),
+                         AGENTS.template.md (scaffold 출발점, 자리표시자 그대로)
+  persona-pm/            apm.yml, PROFILE.md
+  persona-developer/     (pm과 같은 꼴) - qa, designer, writer, archive-manager도 각각 하나
+  squad-default/         apm.yml(dependencies.apm에 멤버 persona-* 다섯), members
+```
+
+패키지 이름은 `dira-protocols`, `persona-<이름>`, `squad-<이름>`이다. 버전은 `templates/`에서 옮길 때 `1.0.0`이고
+태그는 `<패키지>-v<버전>`이다.
+
+#### 구조 - 프로젝트 저장소
+
+```
+<프로젝트>/
+  apm.yml, apm.lock.yaml     개발 환경. 산출물 .claude/ 등은 커밋한다
+  dira-team/
+    apm.yml, apm.lock.yaml   dira가 읽는 것. 커밋한다
+    personas/<이름>/         로컬 페르소나 패키지: apm.yml, PROFILE.md, skills.md, .apm/skills/<스킬>/ (있으면)
+    squads/<이름>/           로컬 스쿼드 패키지: apm.yml, members, rules (있으면)
+    protocols/               로컬 프로토콜 패키지: apm.yml, AGENTS.md, 공용을 바꿔 쓴 파일
+    skills/<이름>/           출처를 모르는 스킬을 옮겨 둔 로컬 패키지 (마이그레이션이 만든다)
+    market/<kind>/<owner>/<name>/   마켓에서 받은 패키지 사본 (커밋한다, 아래 마켓)
+    apm_modules/ .claude/ .agents/  설치 결과. gitignore
+  .dira/personas/<이름>/    memory/, limit, engine, mcp.json 만 남는다 (패키지 밖 로컬 상태)
+  .dira/protocols/          materialize 결과
+```
+
+`dira-team/apm.yml` 예시(stocky):
+
+```yaml
+name: stocky-team
+version: 1.0.0
+targets: [claude]
+dependencies:
+  apm:
+    - proofer-tech/dira/packages/dira-protocols#dira-protocols-v1.0.0
+    - ./protocols
+    - ./personas/pm
+    - ./personas/developer
+    - ./personas/qa
+    - ./personas/designer
+    - ./personas/archive-manager
+    - ./market/persona/dira/writer
+```
+
+로컬 페르소나 패키지 `dira-team/personas/pm/apm.yml` 예시:
+
+```yaml
+name: persona-pm
+version: 1.0.0
+dependencies:
+  apm:
+    - ../../skills/brainstorming
+    - <owner>/<repo>/skills/<이름>#v1.0.0
+```
+
+루트 개발 환경 `apm.yml` 예시(gallae, 지금 커밋된 `.claude/skills/neon` - `neon-postgres`를 루트 패키지 자신의
+`.apm/skills/`로 옮긴 꼴):
+
+```yaml
+name: gallae
+version: 1.0.0
+targets: [claude]
+dependencies:
+  apm: []
+  mcp: []
+```
+
+#### 엔진 - `dira_apm.py` (새 엔진 파일, 표준 라이브러리만)
+
+| 명령 | 하는 일 |
+|---|---|
+| `ensure-cli` | `apm-version`의 버전이 `~/.config/dira/tools/apm/<버전>/bin/apm`에 있는지 보고 없으면 결정 5대로 깐다. 경로 한 줄을 출력한다 |
+| `install <프로젝트 루트> [--frozen]` | 루트 `apm.yml`이 있으면 거기서, `dira-team/apm.yml`이 있으면 거기서 `apm install`(기본 `--frozen`). 이어서 `check`와 `materialize` |
+| `check <프로젝트 루트>` | 두 곳 각각 `apm audit`(설치 안 함) + 결정 4의 이름 충돌 검사 + 페르소나마다 skills.md 이름이 그 패키지 폐포에 있는지. 어긋남마다 한 줄, 있으면 rc 1 |
+| `resolve <프로젝트 루트> <persona\|squad\|protocols> [이름]` | 그 패키지의 디렉터리 절대경로 한 줄. 로컬(`dira-team/<kind>s/<이름>`)이 먼저, 없으면 `apm_modules` 안에서 `name`이 맞는 패키지. 같은 이름이 둘이면 rc 1. `dira-team/apm.yml`이 없으면 rc 3(옛 배치) |
+| `materialize <프로젝트 루트>` | `.dira/protocols/`를 공용 위에 로컬을 덮은 결과로 다시 쓴다. 공용에 없는 큐 전용 파일(`qa-scratch-*.md` 등)은 지우지 않는다 |
+| `skills <프로젝트 루트> <페르소나>` | 그 페르소나 skills.md 이름 중 `dira-team/.claude/skills/<이름>/SKILL.md`가 있는 것의 절대경로를 한 줄씩 |
+
+#### 엔진 - 주입 경로
+
+| 읽는 것 | 지금 | 바뀐 뒤 (`resolve`가 rc 3이면 지금 그대로) |
+|---|---|---|
+| PROFILE.md, skills.md | `$TICKET_ROOT/personas/<p>/` (tick.sh), `personaBlock(personasDir)` (home-session.ts) | `resolve persona <p>` 디렉터리 |
+| 스킬 plugin-dir 링크 대상 | `~/.claude/skills/<이름>` | `dira_apm.py skills`가 준 경로 |
+| memory/, limit, engine, mcp.json | `$TICKET_ROOT/personas/<p>/` | 그대로 |
+| 스쿼드 members, rules | `$TICKET_ROOT/squads/*/` | `dira-team/squads/*/`와 `apm_modules` 안 `squad-*` (이름이 같으면 로컬) |
+| AGENTS.md, 형제 문서 | `$TICKET_ROOT/protocols/` | 그대로(`materialize` 결과) |
+| CORE.md | `$TICKET_ROOT/protocols/CORE.md`, 없으면 `$TICKET_CWD/protocols/CORE.md` | `$TICKET_ROOT/protocols/CORE.md`(`materialize` 결과), 없으면 `resolve protocols` 아래 `CORE.md` |
+
+- 프롬프트 블록 머리의 `(<경로>)`는 새 위치를 가리킨다. 그 밖의 바이트는 같아야 한다(수용조건 (d)).
+- 인라인 예산(AGENTS 6,500 B, CORE 3,500 B, 페르소나 5,000 B)과 그 검사 대상 파일이 새 위치로 옮겨 간다.
+  상한 값은 그대로다.
+- `dryrun`은 `프롬프트:` 다음 줄에 `스킬: <이름> <이름> ...`(plugin-dir에 링크한 이름, 정렬, 없으면 `-`)을 찍는다.
+- `mirrorCore`와 `scaffold.ts`는 파일 복사를 그만둔다. scaffold는 `dira-team/apm.yml`(공용 `dira-protocols`,
+  `squad-default`를 git 의존성으로)과 `dira-team/protocols/AGENTS.md`(`AGENTS.template.md`에 자리표시자를 채운 것)를
+  쓰고 `dira_apm.py install`을 부른다. `mirrorCore`는 `dira_apm.py materialize`를 부르는 함수가 된다.
+- 페르소나 화면과 스쿼드 화면의 읽기 - 쓰기는 `resolve`가 준 디렉터리로 간다. 로컬 패키지면 그 파일을 고치고,
+  `apm_modules` 안 패키지면 쓰기를 막고 "공용 패키지입니다. 고치려면 로컬로 복사"를 보인다(복사 = 로컬 패키지로
+  옮기고 `dira-team/apm.yml`의 의존성을 로컬 경로로 바꿈).
+
+#### 마켓 - 현행 -> APM
+
+| 동작 | 지금 | 바뀐 뒤 |
+|---|---|---|
+| 저장소 | `~/.config/dira/market/<kind>s/<owner>/<name>/v<정수>/` | `~/.config/dira/market/<kind>s/<owner>/<name>/<semver>/` 안에 APM 패키지 한 벌(apm.yml + PROFILE.md + skills.md, 또는 members + rules). `meta.json`은 `versions` 목록만 |
+| 배포 | `latest + 1` 폴더 | 사람이 고른 올림(patch / minor / major, 기본 patch)으로 새 semver 폴더. 그 프로젝트 로컬 패키지를 그대로 복사하고 `apm.yml`의 `version`을 그 값으로 쓴다 |
+| 가져오기 | latest를 큐 `.dira/personas/<n>/`에 덮고 레지스트리 `market.v` 기록 | 고른 버전을 `dira-team/market/<kind>/<owner>/<name>/`로 복사하고 `dira-team/apm.yml`에 로컬 의존성 한 줄을 더한 뒤 `dira_apm.py install`. 결과는 그 apm.yml과 lock에 남는다. 레지스트리 `market` 키는 쓰지 않는다 |
+| 업데이트 배지 | 설치 `v` < `latest` | 받은 사본 `apm.yml`의 `version` < 저장소의 가장 높은 semver |
+| 업데이트 | latest를 다시 덮음 | 새 버전과 받은 사본의 파일별 diff를 먼저 보이고, 사람이 `받기`를 누르면 사본을 바꾸고 install. 받은 뒤 저장소에 더 새 버전이 생겨도 사본은 그대로다(배지만 뜬다) |
+| 즐겨찾기 | `favorites.json` | 그대로 |
+| owner `dira` 항목 | 같은 폴더 저장소 | `packages/`의 패키지와 그 태그. 가져오기는 git 의존성 한 줄(`proofer-tech/dira/packages/<패키지>#<패키지>-v<버전>`) |
+
+마켓 사본을 git 의존성 대신 로컬 복사로 두는 이유: 마켓 저장소는 이 기계의 디렉터리라, git 의존성으로 걸면 다른
+기계(원격 슬롯)에서 lock을 재현할 수 없다(수용조건 (a)). 사본을 커밋하면 어느 기계에서나 같은 해시로 깔린다.
+
+#### 마이그레이션 항목 `migrations/0002_apm_packages.py` (P505 형식)
+
+`ID = "0002-apm-packages"`, `SCOPE = "project"`, `ROLLOUT = "canary"`, `REVERSIBLE = True`. `targets(ctx)`는
+아래 1에서 백업하는 파일과 3 - 6 - 7에서 만드는 파일 전부다.
+
+적용 순서:
+
+1. 백업: `.dira/personas/*/PROFILE.md` - `skills.md`, `.dira/squads/`, `.dira/protocols/`, 저장소 루트 `.gitignore`와
+   `.claude/skills/`는 P505 러너가 `targets`대로 원본 그대로 백업한다. 레지스트리 `gui-projects.json`은 머신 파일이라
+   항목이 그 프로젝트 `market` 키만 `<루트>/migrations/backup/0002-apm-packages/market.json`에 따로 적어 둔다. `memory/`는 읽지도 옮기지도
+   않는다.
+2. 기준 프롬프트: 페르소나마다 아래 비교 기준의 dryrun을 떠 둔다.
+3. `dira-team/` 생성: `dira-team/apm.yml`의 공용 의존성은 그 프로젝트가 dira 저장소 자신이면(`packages/dira-protocols/`가
+   있으면) 로컬 경로, 아니면 git 태그다(결정 9). 페르소나마다 로컬 패키지(PROFILE.md, skills.md 바이트 그대로), 스쿼드마다 로컬 패키지
+   (members, rules 그대로), 로컬 프로토콜 패키지(AGENTS.md + 공용 `dira-protocols`와 내용이 다른 형제 문서 전부).
+4. 스킬: 각 skills.md의 `- \`이름\`` 줄 중 `~/.claude/skills/<이름>/SKILL.md`가 있는 것만 대상이다. 그 디렉터리를
+   `dira-team/skills/<이름>/.apm/skills/<이름>/`로 복사한 로컬 패키지(`name: skill-<이름>`)를 만들고 그 페르소나
+   패키지 의존성에 건다. `~/.agents/.skill-lock.json`에 출처(`sourceUrl`, `skillPath`)가 있으면 그 패키지
+   `apm.yml`의 `description`에 적는다. git 의존성으로 바로 걸지 않는 이유: 그 기록에는 커밋이 없고 폴더 해시만 있어,
+   지금 쓰는 내용과 같은 것이 깔린다고 보장할 수 없다. git 의존성으로 바꾸는 것은 마이그레이션 뒤 사람이나 마켓의
+   일이다. 지금 `~/.claude/skills`에 없는 이름(`(gstack)` 꼬리표 등)은 지금처럼 텍스트로만 남는다.
+5. 마켓 기록: 레지스트리 `market.<kind>.<n> = {owner, name, v}`는 `dira-team/market/...` 사본(`version: <v>.0.0`)과
+   의존성 한 줄로 바꾸고 레지스트리 키를 지운다. 사본 내용은 마켓 저장소가 아니라 그 프로젝트 큐에 지금 깔린
+   PROFILE.md - skills.md다(받은 뒤 고쳤을 수 있고, 프롬프트가 같아야 한다). 마켓 저장소의 `v<정수>` 폴더는
+   옮기지 않는다 - 새 `market.ts`가 `v<정수>`를 `<정수>.0.0`으로 읽는다.
+6. 개발 환경: 저장소 루트에 `apm.yml`이 없으면 만든다. 이미 커밋된 `.claude/skills/<이름>/`이 있으면 루트
+   `.apm/skills/<이름>/`로 옮기고, install이 같은 자리로 다시 배포한다(배포 결과는 바이트가 같아야 한다).
+   `.claude/` 아래 skills 밖의 파일(settings.json, hooks)은 건드리지 않는다.
+7. `.gitignore`에 `dira-team/apm_modules/`, `dira-team/.claude/`, `dira-team/.agents/`를 더하고
+   `dira_apm.py install`. `check`가 rc 0이어야 한다.
+8. `.dira/personas/*/PROFILE.md` - `skills.md`와 `.dira/squads/`를 지운다(정본이 둘이 되지 않게). `materialize`.
+9. 검증(`verify`): `check` rc 0, 페르소나마다 dryrun을 다시 떠서 2와 같음. 하나라도 다르면 예외를 올리고 P505
+   러너가 그 프로젝트를 백업으로 되돌린다. 다른 페르소나 표는 `ctx.log`로 남긴다.
+10. 그 프로젝트 저장소에 `apm.yml` - `apm.lock.yaml` - `.apm/` - `.claude/skills/` - `dira-team/` - `.gitignore`만 커밋한다(메시지 `dira - APM 전환 (P506)`). 검증이 끝난 뒤 `apply`의 마지막 일이고, 이미 같은 트리면 커밋하지
+   않는다(멱등). push는 하지 않는다(사람 몫). `revert`는 파일을 백업으로 되돌린 뒤 그 커밋이 HEAD 조상이면 되돌림
+   커밋 하나를 더 낸다.
+
+**대상 범위.** canary라 처음에는 레지스트리 id `dira` 하나다. P506-12가 QA 통과 뒤 `promote`로 나머지 8개를 연다.
+
+**dryrun 비교 기준.** 페르소나마다 표본 티켓 한 장(`kind: work`, `persona: <이름>`, 본문 고정 `## Goal\n표본\n`)을
+임시 루트(그 프로젝트 `.dira`에서 `tickets/`만 빈 것으로 바꾼 사본)에 두고 `tick.sh dryrun`을 돌린다. 비교 대상은
+`프롬프트:` 이후 전부와 `스킬:` 줄이다. 맞추기 전에 두 가지만 지운다: (1) `===== ... (<경로>) =====` 머리 줄 괄호
+안의 경로를 `<경로>`로 (2) 변환 전에 연달아 두 번 뜬 dryrun끼리 서로 다른 줄(시각, 세션 id 등). 나머지는 바이트
+비교다.
+
+#### 안 하는 것
+
+- 페르소나 memory/, limit, engine, mcp.json을 패키지에 넣기. 페르소나 MCP를 `dependencies.mcp`로 옮기기.
+- 사용자 개인 `~/.claude` 설정을 옮기거나 지우기. `~/.claude/skills`는 마이그레이션이 읽기만 한다.
+- OAuth 커넥터 연결 재현. 필요 커넥터 선언과 연결 여부 확인까지만 한다.
+- `apm publish`(실험 기능 레지스트리). 공용은 git 태그, 마켓은 이 기계 저장소다.
+- grok과 agy 엔진의 스킬 수령. `templates/hooks`와 `watchdog_*.py`의 패키지화.
+- 마이그레이션 장치(러너, 오버레이, CLI, claim 차단) - P505의 몫이다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P506-1 | 엔진 - `apm-version` + `dira_apm.py`(`ensure-cli` - `install` - `check` - `resolve` - `materialize` - `skills`) + `test_dira_apm.py` | developer | - | 발행 |
+| P506-2 | 패키지 - `packages/`(dira-protocols, persona-* 여섯, squad-default)를 `templates/personas` - `templates/squads` - `templates/protocols` - `protocols/CORE*.md`에서 복사해 만든다(옛 자리는 P506-4가 지운다) | developer | - | 발행 |
+| P506-3 | 엔진 - tick.sh 주입(PROFILE - skills - 스쿼드 - CORE를 `resolve`로, plugin-dir 출처, `dryrun` `스킬:` 줄, claim 전 `check`와 SKIP 줄) | developer | P506-1 | 발행 |
+| P506-4 | 앱 - `home-session.ts` `personaBlock`, `mirrorCore` - `scaffold.ts`의 apm 전환, 옛 `templates/` 세 폴더와 `protocols/CORE*.md` 삭제, 번들 `extraResources`에 `packages/` - `dira_apm.py` - `apm-version`, `judgeStall` `apm` 키 + ko-en 사전 키 | developer | P506-1, P506-2 | 발행 |
+| P506-5 | 앱 - 페르소나 - 스쿼드 화면 읽기 - 쓰기를 `resolve` 위치로, 공용 패키지 쓰기 막기와 로컬로 복사 | developer | P506-1 | 발행 |
+| P506-6 | 엔진 - codex 스킬 실측(페르소나별 `.agents/skills` 또는 `CODEX_HOME`)과 결과 적용, 이 표 결정 10에 실측 결과 기록 | developer | P506-3 | 발행 |
+| P506-7 | 앱 - 마켓 백엔드(semver 저장소, 배포 올림, 가져오기 = 사본 + 의존성 + install, diff 뒤 업데이트) | developer | P506-1 | 발행 |
+| P506-8 | 마이그레이션 항목 `0002-apm-packages` - 위 1~10과 dryrun 비교 + 테스트, dira 프로젝트에 적용 | developer | P506-2, P506-3, P505-1 | 발행 |
+| P506-9 | 개발 환경 - dira 저장소 루트 `apm.yml` - lock, `.github/workflows/ci.yml`에 apm 설치와 `apm audit --ci` | developer | P506-1 | 발행 |
+| P506-10 | 매뉴얼 - ko-en personas, squads, protocols, install, ref-env, market 절 | writer | - | 발행 |
+| P506-11 | QA - dira 프로젝트 기준 아래 수용조건 (a)(b)(c)(e)(f)(g)와 dira의 (d)를 `kind: tc`로 판정 | qa | P506-3, P506-4, P506-7, P506-8, P506-9 | 발행 |
+| P506-12 | 적용 - `migrate.py promote 0002-apm-packages`, 나머지 8개 적용, 프로젝트별 (d) 표 보고 | developer | P506-11 | 발행 |
+| P506-13 | QA - 나머지 8개 프로젝트의 (d)와 (b) 판정 | qa | P506-12 | 발행 |
+
+**열세 장이다.** P506-1과 P506-2는 서로 기다리지 않는다(`dira_apm.py`는 임시 패키지로 시험한다). P506-8은
+P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 다 있어 기다리지
+않는다. designer 0장 - 새로 생기는 화면 요소는 마켓 업데이트 전 diff 하나이고, 파일별 줄 단위 텍스트 목록으로 충분하다.
+
+#### 수용조건
+
+- [ ] (a) 깨끗한 기계(또는 `HOME`을 빈 디렉터리로 바꾼 셸)에서 dira 저장소를 clone하고
+  `python3 dira_apm.py install <clone>` 한 번을 돌리면, apm CLI가 `~/.config/dira/tools/apm/0.33.0/`에 깔리고
+  `dira-team/apm.lock.yaml`의 패키지마다 `content_hash`와 설치 결과가 같다(`check`가 rc 0). 페르소나 스킬이
+  `dira-team/.claude/skills/<이름>/SKILL.md`로 있다.
+- [ ] (b) 설치 뒤 `dira-team/apm_modules/` 안 파일 하나를 바꾸면 `dira_apm.py check`가 rc 1과 그 패키지 이름을
+  낸다. 그 상태로 `DIRA_APM_NO_INSTALL=1`을 두면 그 프로젝트의 다음 tick은 claim하지 않고 runner.log에
+  `SKIP apm 설치 상태가 lock과 다르다`가 남으며, status bar에 `멈춤: 패키지 설치가 lock과 다릅니다`가 뜬다.
+- [ ] (c) 마켓에서 페르소나 X 1.0.0을 가져오면 `dira-team/apm.yml`에 `./market/persona/<owner>/X` 한 줄과
+  `dira-team/market/persona/<owner>/X/apm.yml`의 `version: 1.0.0`이 남고 lock이 그것을 담는다. 이어서 X 1.1.0을
+  배포하면 업데이트 배지가 뜨지만 사본은 1.0.0 그대로이고, 업데이트를 누르면 diff가 먼저 보인다.
+- [ ] (d) 9개 프로젝트 모두 페르소나마다 위 비교 기준으로 변환 전후 dryrun이 같다. 보고는 프로젝트별 표
+  (페르소나, 같음/다름)다.
+- [ ] (e) `~/.claude/skills`를 잠시 다른 이름으로 바꿔 둔 상태에서 skills.md에 로컬 스킬이 있는 페르소나 티켓을
+  `dryrun`하면 `스킬:` 줄에 그 이름이 있고, 실제 claude 세션에서 그 스킬이 Skill 도구로 불린다.
+- [ ] (f) 같은 이름 스킬을 가진 패키지 둘을 `dira-team/apm.yml`에 걸고 install하면 `check`가 rc 1이고 두 패키지
+  이름을 적는다. 덮인 쪽으로 조용히 진행하지 않는다.
+- [ ] (g) `packages/dira-protocols/CORE.md`에 한 줄을 더하고 `dira_apm.py install ~/Projects/dira`를 돌리면
+  `.dira/protocols/CORE.md`와 다음 dryrun 프롬프트에 그 줄이 있다. 같은 변경을 위해 `templates/` -
+  `scaffold.ts` - 엔진 `protocols/`를 고칠 일이 없다(`git ls-files templates/protocols protocols/CORE.md`가 비어 있다).
+- [ ] 새 프로젝트를 GUI로 만들면 `dira-team/apm.yml`이 생기고 install이 끝난 뒤 첫 dryrun에 CORE와 AGENTS가 실린다.
+- [ ] `python3 test_dira_apm.py`, `cd apps/teams && pnpm test`, `pnpm exec tsc --noEmit`이 통과한다. CI가
+  `apm audit --ci`를 돈다.
+
 ### P505. 범용 프로젝트 마이그레이션 - 업데이트가 프로젝트 형식을 바꾸면 디스패치 전에 화면을 블러로 덮고 등록 프로젝트를 모두 옮긴다 (요구 `3d36e56d`, 왕복 0회)
 
 사람 요구(임한솔, 2026-10-16): *"이번 업데이트 적용 시 dira 구동 전 화면을 블러로 덮고 프로젝트 마이그레이션을
