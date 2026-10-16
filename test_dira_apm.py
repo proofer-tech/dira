@@ -56,6 +56,8 @@ class T(unittest.TestCase):
         w(pd / "skills.md", "- `x` - ok\n")
         self.assertEqual(run("check", self.root)[0], 0)
         w(pd / "skills.md", "- `x` - ok\n- `ghost` - 없음\n")
+        self.assertEqual(run("check", self.root)[0], 0)  # 어느 패키지에도 없는 이름은 텍스트로만 남는다
+        pkg(self.team / "skills/ghost", "skill-ghost", skills=["ghost"])  # 깔려 있는데 폐포에 없으면 오류
         rc, out, _ = run("check", self.root)
         self.assertEqual(rc, 1)
         self.assertIn("ghost", out)
@@ -129,7 +131,7 @@ class TickT(unittest.TestCase):
 
     def tick(self, cmd, **env):
         e = dict(os.environ, TICKET_LOCAL=str(self.local), HOME=str(self.tmp / "home"),
-                 DIRA_APM_BIN=str(FAKE), DIRA_APM_NO_INSTALL="1", **env)
+                 DIRA_APM_BIN=str(FAKE), DIRA_APM_NO_INSTALL="1", DIRA_MIGRATIONS_DIR="/nonexistent-migrations", **env)
         return subprocess.run([str(self.root / "workers/w1.sh"), cmd], capture_output=True, text=True, env=e, timeout=120)
 
     def test_dryrun_apm_layout(self):

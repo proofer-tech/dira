@@ -198,7 +198,8 @@ def check(root):
                 for c in closure(pd, site):
                     have.update(skills_of(c))
                 for s in skill_names(pd / "skills.md"):
-                    if s not in have:
+                    # 어느 패키지에도 없는 이름(이 기계에 안 깔린 스킬)은 지금처럼 텍스트로만 남는다. 깔려 있는데 폐포에 없을 때만 오류다.
+                    if s not in have and s in owners:
                         bad.append("페르소나 %s: skills.md의 %s가 패키지 폐포에 없다" % (pd.name, s))
     for b in bad:
         print(b)
