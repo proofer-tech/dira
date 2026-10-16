@@ -85,6 +85,55 @@ separately to the three engines `claude`, `codex`, and `grok`. `agy` is left out
 only one account. The story of tokens growing along with your workers is in [How many to run at
 once](/docs/concurrency) §Tokens and collisions.
 
+## agy - the engine that runs only while you are logged in to the Mac
+
+agy does not put a token into the app. Its authentication lives in the macOS login keychain, and
+the app only borrows it. So before agy workers run, a person has two things to do ahead of time.
+
+1. **Check that the agy CLI is on PATH.** Type `command -v agy` in a terminal. One line with a
+   path means it is. If the `agy` row in `Settings` › `Authentication` says `Not installed`, this
+   step is missing. If it still says so after you installed it, quit the app and open it again.
+2. **Launch `agy` once on the Mac's own screen and finish logging in.** Run `agy` in a terminal and
+   go through the login it shows to the end. The authentication is then saved in the login
+   keychain. Do it in a terminal on the screen of the Mac you sit in front of, not in a remote
+   shell.
+
+dira does not run agy with an API key (`GEMINI_API_KEY`). That is billed per token, so dira calls
+`agy -p` as is, with the account you logged in with.
+
+A worker started by cron cannot open the login keychain itself. So dira hands the agy command over
+to the screen where a person is logged in, runs it there, and takes back only the result. This
+comes with one condition. **While you are logged out of the Mac, agy workers do not run.** The
+session then ends right away instead of waiting, and the log gets this line.
+
+```text
+agy-gui: GUI 세션 없음 - 로그인한 상태에서만 agy 워커가 돈다
+```
+
+When you see it, log in to the Mac again. agy workers run again from the next dispatch. If
+authentication still stops them after you log in, do step 2 again.
+
+### When a Chrome login window keeps opening
+
+When agy cannot find the saved authentication, it opens Chrome and asks you to log in again.
+Because a worker launched that agy, the window opens on your screen. dira cuts the session as soon
+as it sees this, and leaves the two lines below in the log. The first appears when the session is
+cut, the second right after it in `runner.log`. The lines are in Korean as the engine writes them.
+
+```text
+agy-gui: agy 로그인 필요 - 맥 화면의 터미널에서 agy를 한 번 띄워 로그인을 마친다
+NOTE agy 로그인 필요 - 1800초 쿨다운
+```
+
+The first line says what to do: launch agy once in a terminal on the Mac's screen and finish
+logging in. Sit at that Mac, run `agy` in a terminal there, and finish the login to the end. It is
+the same as step 2 above. You can close the window already open in Chrome.
+
+The ticket that was cut goes back to the backlog. For the next 30 minutes no ticket goes to an agy
+worker, so the Chrome window opens at most once every 30 minutes. Workers on other engines keep
+running in the meantime. Once you have logged in, agy workers take tickets again from the first
+dispatch after the 30 minutes are up.
+
 ## The notification bell - the first item when there is no token
 
 Before you get to live through "the workers are running and nothing is happening," the screen
