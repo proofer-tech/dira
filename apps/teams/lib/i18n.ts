@@ -1105,6 +1105,10 @@ export const ko: Record<string, string> = {
   // `personas/actions.ts`는 서버 액션-모듈 함수라 로케일이 안 닿는 벽이다(§0-16 §장치, developer
   // memory `i18n 서버 문자열은 로케일이 없다`) - `t("ko", ...)`로 고정해 부른다.
   "persona.error.unknownProjectPrefix": "등록되지 않은 프로젝트입니다:",
+  "persona.shared.notice": "공용 패키지입니다. 고치려면 로컬로 복사",
+  "persona.shared.copy": "로컬로 복사",
+  "persona.shared.copying": "복사하는 중",
+  "persona.shared.blockedPrefix": "공용 패키지라 저장할 수 없습니다. 로컬로 복사한 뒤 고치세요:",
   "persona.error.squadNameTakenPrefix": "이미 있는 스쿼드 이름입니다:",
   "persona.trash.badEntryPrefix": "휴지통 항목 이름이 아닙니다:",
   "persona.trash.personaExists": "같은 이름의 페르소나가 이미 있습니다",
@@ -3732,6 +3736,10 @@ export const en: Record<string, string> = {
   // actions.ts · lib/skills.ts - 서버 액션-모듈 함수라 `t("ko", ...)`로 고정해 부르는 벽이다.
   // 지금은 화면에 한국어로 뜨지만 사전은 타고 있다 - 벽이 걷히는 날 이 줄들이 그대로 뜬다.
   "persona.error.unknownProjectPrefix": "Not a registered project:",
+  "persona.shared.notice": "This is a shared package. Copy it locally to edit",
+  "persona.shared.copy": "Copy locally",
+  "persona.shared.copying": "Copying",
+  "persona.shared.blockedPrefix": "This is a shared package and can't be saved. Copy it locally first:",
   "persona.error.squadNameTakenPrefix": "That squad name is taken:",
   "persona.trash.badEntryPrefix": "Not a trash entry name:",
   "persona.trash.personaExists": "A persona with that name already exists",

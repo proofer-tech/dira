@@ -9,6 +9,7 @@
  *  검증(이름 규칙 · 기준 디렉터리 접두)은 `lib/projects.ts`에 있다. 이 파일이 하는 일은
  *  프로젝트 id → 해석된 디렉터리와, Error를 직렬화 가능한 결과로 바꾸는 것뿐이다. */
 import { revalidatePath } from "next/cache";
+import { copyToLocal, resolveHome, type ApmKind, type Home } from "@/lib/apm";
 import { DEFAULT_LOCALE, t, wrap, type Locale } from "@/lib/i18n";
 import {
   createPersona,
@@ -81,6 +82,33 @@ async function squadsDirFor(projectId: string): Promise<string> {
   return squadsDir(project);
 }
 
+/** 쓰기 위치. `dira-team/`의 공용(`apm_modules`) 패키지면 거절한다(P506-5) - 서버가 막는다. */
+async function writableHome(projectId: string, kind: ApmKind, name: string): Promise<Home> {
+  const project = await getProject(projectId);
+  if (!project) throw new Error(wrap(t("ko", "persona.error.unknownProjectPrefix"), projectId, ""));
+  const base = kind === "persona" ? (await resolveConfig(project)).personas : squadsDir(project);
+  const home = await resolveHome(project.root, kind, name, base);
+  if (home.shared) throw new Error(wrap(t("ko", "persona.shared.blockedPrefix"), name, ""));
+  return home;
+}
+
+/** `로컬로 복사` - 공용 패키지를 `dira-team/<kind>s/<이름>/`로 옮기고 apm.yml 의존성을 로컬 경로로 바꾼 뒤 install. */
+export async function copySharedToLocalAction(
+  projectId: string,
+  kind: ApmKind,
+  name: string,
+): Promise<PersonaResult> {
+  try {
+    const project = await getProject(projectId);
+    if (!project) throw new Error(wrap(t("ko", "persona.error.unknownProjectPrefix"), projectId, ""));
+    await copyToLocal(project.root, kind, name);
+    revalidatePath(`/p/${projectId}/personas`);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 function fail(e: unknown): PersonaResult {
   return { ok: false, message: (e as Error).message };
 }
@@ -91,7 +119,8 @@ export async function savePersonaAction(
   body: string,
 ): Promise<PersonaResult> {
   try {
-    await savePersona(await personasDir(projectId), name, body);
+    const home = await writableHome(projectId, "persona", name);
+    await savePersona(home.base, home.name, body);
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true };
   } catch (e) {
@@ -103,7 +132,11 @@ export async function savePersonaAction(
  *  지나 낸 절대경로만 받는다(`lib/projects.ts`). */
 export async function openPersonaProfileAction(projectId: string, name: string): Promise<OpenResult> {
   try {
-    const full = await personaFilePath(await personasDir(projectId), name, "PROFILE.md");
+    const project = await getProject(projectId);
+    const home = project
+      ? await resolveHome(project.root, "persona", name, await personasDir(projectId))
+      : { base: await personasDir(projectId), name };
+    const full = await personaFilePath(home.base, home.name, "PROFILE.md");
     return await openInApp(full);
   } catch (e) {
     return { ok: false, message: (e as Error).message };
@@ -148,7 +181,8 @@ export async function saveSquadMembersAction(
   members: SquadMember[],
 ): Promise<PersonaResult> {
   try {
-    await saveSquadMembers(await squadsDirFor(projectId), name, members);
+    const home = await writableHome(projectId, "squad", name);
+    await saveSquadMembers(home.base, home.name, members);
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true };
   } catch (e) {
@@ -163,7 +197,8 @@ export async function saveSquadRulesAction(
   rules: string,
 ): Promise<PersonaResult> {
   try {
-    await saveSquadRules(await squadsDirFor(projectId), name, rules);
+    const home = await writableHome(projectId, "squad", name);
+    await saveSquadRules(home.base, home.name, rules);
     revalidatePath(`/p/${projectId}/personas`);
     return { ok: true };
   } catch (e) {
@@ -227,8 +262,10 @@ export async function savePersonaSkillsAction(
 ): Promise<PersonaResult & { skills?: Skill[]; chars?: number; offSkills?: Skill[] }> {
   try {
     const dir = await personasDir(projectId);
+    // skills.md는 `resolve` 위치, skills-off.md는 지금 자리(주입되지 않는 화면 상태)다.
+    const home = await writableHome(projectId, "persona", name);
     const [{ skills: currentActive }, { skills: currentOff }, installed] = await Promise.all([
-      readPersonaSkillsFile(dir, name),
+      readPersonaSkillsFile(home.base, home.name),
       readPersonaOffSkillsFile(dir, name),
       listInstalledSkills(),
     ]);
@@ -239,12 +276,12 @@ export async function savePersonaSkillsAction(
       (s) => !activeNames.has(s.name),
     );
     await Promise.all([
-      writePersonaSkills(dir, name, newActive),
+      writePersonaSkills(home.base, home.name, newActive),
       writePersonaOffSkills(dir, name, newOff),
     ]);
     revalidatePath(`/p/${projectId}/personas`);
     const [active, off] = await Promise.all([
-      readPersonaSkillsFile(dir, name),
+      readPersonaSkillsFile(home.base, home.name),
       readPersonaOffSkillsFile(dir, name),
     ]);
     return { ok: true, skills: active.skills, chars: active.chars, offSkills: off.skills };

@@ -31,6 +31,7 @@ import {
   openPersonaProfileAction,
   purgeTrashAction,
   restoreTrashAction,
+  copySharedToLocalAction,
   savePersonaAction,
   savePersonaEngineAction,
   savePersonaLimitAction,
@@ -178,6 +179,8 @@ export type PersonaRow = {
   /** 마켓 배포 이력·가져간 기록·갱신 배지(§원본에서 보는 기록, 티켓 `1c06035e`) —
    *  `marketRecord`(`lib/market.ts`)가 이 렌더에서 이미 뽑아 둔 것. */
   market: MarketRecord;
+  /** `dira-team/apm_modules` 안 공용 패키지다(P506-5) - 저장을 막고 `로컬로 복사`를 보인다 */
+  shared: boolean;
 };
 
 /** 서버가 읽어 넘긴 스쿼드 한 항목(DESIGN.md §5-5). 색·자수·스킬·메모리·상한이 **없다** —
@@ -190,6 +193,8 @@ export type SquadRow = {
   rules: string;
   /** 멤버 중 `personas/`에 `PROFILE.md`가 없는 이름이 있다(§5-5 §경고) */
   missingProfile: boolean;
+  /** `PersonaRow.shared`와 같다 */
+  shared: boolean;
   /** 마켓 배포 이력·가져간 기록·갱신 배지(§원본에서 보는 기록, 티켓 `1c06035e`) — `PersonaRow.market`과 같다. */
   market: MarketRecord;
 };
@@ -207,6 +212,36 @@ function Failure({ title, message }: { title: string; message: string }) {
       <AlertTitle>{title}</AlertTitle>
       <AlertDescription>
         <span className="font-mono text-xs break-all">{message}</span>
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+/** 공용 패키지 안내 + `로컬로 복사`(P506-5). 복사는 서버가 하고 끝나면 화면을 다시 읽는다. */
+function SharedNotice({ projectId, kind, name }: { projectId: string; kind: "persona" | "squad"; name: string }) {
+  const t = useT();
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  return (
+    <Alert>
+      <AlertDescription className="flex flex-wrap items-center gap-3">
+        <span>{t("persona.shared.notice")}</span>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          onClick={() =>
+            start(async () => {
+              const r = await copySharedToLocalAction(projectId, kind, name);
+              if (r.ok) router.refresh();
+              else setError(r.message ?? "");
+            })
+          }
+        >
+          {pending ? t("persona.shared.copying") : t("persona.shared.copy")}
+        </Button>
+        {error && <span className="font-mono text-xs break-all text-destructive">{error}</span>}
       </AlertDescription>
     </Alert>
   );
@@ -1709,6 +1744,7 @@ function PersonaDetail({
               onEngineSaved={onEngineSaved}
             />
 
+            {row.shared && <SharedNotice projectId={projectId} kind="persona" name={row.name} />}
             <MarkdownEditor
               name="body"
               defaultValue={edit.body}
@@ -1726,7 +1762,7 @@ function PersonaDetail({
               )}
               <Button
                 size="sm"
-                disabled={pending || !dirty}
+                disabled={pending || !dirty || row.shared}
                 onClick={() =>
                   start(async () => {
                     const body = edit.body;
@@ -2195,6 +2231,7 @@ function SquadDetail({
       {/* `rules` — 사이드카 둘째(§5-5 §개정). 리더 세션 프롬프트에만 실린다, 없어도 된다.
           모양은 §비주얼 §61 (12)가 정한다 — `Textarea` 한 면이다: `rules`는 md가 아니고
           (파서 없음), 렌더되는 자리가 앱에 0개다(유일한 독자가 리더 세션의 프롬프트다). */}
+      {row.shared && <SharedNotice projectId={projectId} kind="squad" name={row.name} />}
       <section className="space-y-2 border-t pt-3">
         <h3 className="flex items-center gap-2 text-sm font-medium">
           {t("persona.squad.rulesHeading")}
@@ -2223,7 +2260,7 @@ function SquadDetail({
           )}
           <Button
             size="sm"
-            disabled={rulesPending || !rulesDirty}
+            disabled={rulesPending || !rulesDirty || row.shared}
             onClick={() =>
               startRules(async () => {
                 const r = await saveSquadRulesAction(projectId, row.name, edit.rules);
@@ -2325,7 +2362,7 @@ function SquadDetail({
           )}
           <Button
             size="sm"
-            disabled={membersPending || !isMembersDirty}
+            disabled={membersPending || !isMembersDirty || row.shared}
             onClick={() =>
               startMembers(async () => {
                 const r = await saveSquadMembersAction(projectId, row.name, orderedMembers);

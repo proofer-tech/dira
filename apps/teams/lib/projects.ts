@@ -1212,7 +1212,7 @@ function parseSquadMemberLine(line: string): SquadMember {
   return { name: m[1], role: m[2].trim() };
 }
 
-async function readSquadMembers(dir: string, name: string): Promise<SquadMember[]> {
+export async function readSquadMembers(dir: string, name: string): Promise<SquadMember[]> {
   const file = await squadMembersPath(dir, name);
   const text = await readFile(file, "utf8").catch(() => "");
   return text
@@ -1222,7 +1222,7 @@ async function readSquadMembers(dir: string, name: string): Promise<SquadMember[
     .map(parseSquadMemberLine);
 }
 
-async function readSquadRules(dir: string, name: string): Promise<string> {
+export async function readSquadRules(dir: string, name: string): Promise<string> {
   const file = await squadRulesPath(dir, name);
   return await readFile(file, "utf8").catch(() => "");
 }

@@ -24,6 +24,7 @@ import { TitleRefs } from "@/components/queue-ref";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
+import { overlayPersonas, overlaySquads } from "@/lib/apm";
 import { t } from "@/lib/i18n";
 import { marketRecord } from "@/lib/market";
 import { personaActivity } from "@/lib/persona-activity";
@@ -104,13 +105,16 @@ export default async function Personas({
   // `holding`은 이 힌트에 안 쓰이므로 티켓을 안 넘긴다(listWorkers 기본값 그대로).
   // 스쿼드(§5-5)는 같은 렌더에 실린다 — 페르소나 목록과 같은 왕복이어야 "프로필 없는 멤버"
   // 표식이 그 자리에서 바로 갈린다(스쿼드 후보 수와 무관하게 이 화면 렌더 한 번에 한다).
-  const [personas, installed, workers, squadList, trashList] = await Promise.all([
+  const [personaList, installed, workers, squadListOld, trashList] = await Promise.all([
     listPersonas(config.personas, tickets),
     listInstalledSkills(),
     listWorkers(project.root),
     listSquads(squadsDir(project)),
     listTrashAll(config.personas, squadsDir(project)),
   ]);
+  // 새 체계(`dira-team/`)면 PROFILE - skills - members - rules 는 `resolve` 위치에서 읽는다(P506-5).
+  const { personas, homes } = await overlayPersonas(project.root, config.personas, personaList, tickets);
+  const squadList = await overlaySquads(project.root, squadsDir(project), squadListOld);
   const squads = await Promise.all(
     squadList.map(async (s) => ({
       ...s,
@@ -136,7 +140,7 @@ export default async function Personas({
       // 요청당 1회다(위 `lastLogByWorker` 호출과 같은 경로 — 새 파일 읽기가 안 늘어난다).
       const [{ skills, chars }, { skills: rawOff }, { memories }, limit, engine, activity, market] =
         await Promise.all([
-          readPersonaSkillsFile(config.personas, p.name),
+          readPersonaSkillsFile(homes.get(p.name)!.base, homes.get(p.name)!.name),
           readPersonaOffSkillsFile(config.personas, p.name),
           readPersonaMemory(config.personas, p.name),
           readPersonaLimit(config.personas, p.name),
