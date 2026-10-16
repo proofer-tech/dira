@@ -1,0 +1,16 @@
+name: dira-team
+version: 1.0.0
+targets: [claude]
+dependencies:
+  apm:
+    - ../packages/dira-protocols
+    - ./protocols
+    - ./personas/archive-manager
+    - ./personas/designer
+    - ./personas/developer
+    - ./personas/pm
+    - ./personas/qa
+    - ./personas/translator
+    - ./personas/writer
+    - ./squads/default
+    - ./squads/qa469

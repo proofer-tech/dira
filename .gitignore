@@ -53,3 +53,6 @@ graphify-out/
 
 # APM dependencies
 apm_modules/
+dira-team/apm_modules/
+dira-team/.claude/
+dira-team/.agents/
