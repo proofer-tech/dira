@@ -9014,10 +9014,10 @@ P491)를 풀었다 - 읽기만 받는 상주 프로세스는 두어도 되고, �
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P504-1 | 엔진 - `ontology_read.py` `object`의 `names` + `remote.py` heartbeat `read_names` + 테스트 | developer | - | 발행 예정 |
-| P504-2 | 엔진 - `remote.py reads` 상주 프로세스 - launchd 설치 - 해제 - 마감 없는 `read_loop` - 기다리지 않는 답하기 - 시계 쪽 건너뛰기 + `test_remote.py` | developer | - | 발행 예정 |
-| P504-3 | 매뉴얼 - `remote.md`(ko-en) 위 매뉴얼 행 | writer | - | 발행 예정 |
-| P504-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P504-1, P504-2 | 발행 예정 |
+| P504-1 | 엔진 - `ontology_read.py` `object`의 `names` + `remote.py` heartbeat `read_names` + 테스트 | developer | - | 발행 `c05cc818` |
+| P504-2 | 엔진 - `remote.py reads` 상주 프로세스 - launchd 설치 - 해제 - 마감 없는 `read_loop` - 기다리지 않는 답하기 - 시계 쪽 건너뛰기 + `test_remote.py` | developer | - | 발행 `563612f7` |
+| P504-3 | 매뉴얼 - `remote.md`(ko-en) 위 매뉴얼 행 | writer | - | 발행 `9bfe83d8` |
+| P504-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P504-1, P504-2 | 발행 `04b3037f` |
 
 **네 장이다.** P504-1과 P504-2는 `remote.py`에서 고치는 자리가 달라(신호 본문 한 줄 대 읽기 절) 서로
 기다리지 않는다. 매뉴얼은 위 표에 글감이 다 있어 기다리지 않는다. designer 0장 - dira 화면이 없다. 에픽
