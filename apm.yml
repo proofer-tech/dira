@@ -1,0 +1,6 @@
+name: dira
+version: 1.0.0
+targets: [claude]
+dependencies:
+  apm:
+    - ./packages/dira-protocols
