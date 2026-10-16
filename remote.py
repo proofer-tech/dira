@@ -1256,7 +1256,7 @@ def signal_body(ws, projs=None):
         if err:
             e["error"] = err.encode("utf-8")[:ERROR_MAX].decode("utf-8", "ignore")
         entries.append(e)
-    return {"tools": tools_payload(ws, refresh_health(ws)), "projects": entries, "reads": True}
+    return {"tools": tools_payload(ws, refresh_health(ws)), "projects": entries, "reads": True, "read_names": True}
 
 
 def send_signal(server, rid, token, ws, projs=None):

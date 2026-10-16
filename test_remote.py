@@ -919,6 +919,7 @@ class Tools(Base, unittest.TestCase):
         self.assertFalse([c for c in self.fake.calls if c[0] == "PUT"])
         hb = [c for c in self.fake.calls if c[1] == "runtimes/rt1/heartbeat"][-1][2]
         self.assertIs(hb["reads"], True)
+        self.assertIs(hb["read_names"], True)
 
     def test_reads_404_does_not_wait(self):
         self.ont_setup()
@@ -1184,7 +1185,7 @@ class WorkspaceRuntime(Base, unittest.TestCase):
                 os.utime(os.path.join(d, "last-sync"), (t, t))
         self.assertEqual(self.run_remote("sync-all").returncode, 0)
         hb = self.calls("POST", "runtimes/rt1/heartbeat")[-1][2]
-        self.assertEqual(set(hb), {"tools", "projects", "reads"})
+        self.assertEqual(set(hb), {"tools", "projects", "reads", "read_names"})
         byname = {p["project"]: p for p in hb["projects"]}
         self.assertEqual(set(byname), {"proj", "pro j2"})
         self.assertNotIn("error", byname["proj"])

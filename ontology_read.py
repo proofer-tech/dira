@@ -173,19 +173,50 @@ def op_objects(root, args):
     return {"result": res, "errors": [] if cursor else errors}
 
 
+def object_shape(hit):
+    return dict(public(hit), body=hit["_body"], content=hit["_content"])
+
+
 def op_object(root, args):
-    name = nfc(args.get("name") or "")
-    if not name:
-        raise ValueError("name이 비었다")
+    name, names = args.get("name"), args.get("names")
+    if (name is None or name == "") == (names is None):
+        raise ValueError("name과 names 중 하나만 있어야 한다")
+    if names is not None:
+        if (not isinstance(names, list) or not 1 <= len(names) <= 200
+                or not all(isinstance(n, str) and n for n in names)):
+            raise ValueError("names는 비지 않은 문자열 1~200개의 목록이어야 한다")
+    else:
+        name = nfc(name or "")
+        if not name:
+            raise ValueError("name이 비었다")
     objs, _ = load_objects(root)
-    hit = next((o for o in objs if o["name"] == name), None)
-    if hit is None:
+    by_name = {}
+    for o in objs:
+        by_name.setdefault(o["name"], o)  # 첫 객체가 이긴다(next와 같다)
+    back = {}
+    if args.get("backlinks"):
+        for o in objs:
+            for l in o["links"]:
+                back.setdefault(l["to"], []).append({"from": o["name"], "type": l["type"], "props": l["props"]})
+
+    def one(n):
+        hit = by_name.get(n)
+        return None if hit is None else object_shape(hit)
+
+    if names is not None:
+        items = []
+        for raw in names:
+            item = {"name": raw, "object": one(nfc(raw))}
+            if args.get("backlinks"):
+                item["backlinks"] = back.get(nfc(raw), []) if item["object"] is not None else []
+            items.append(item)
+        return {"result": {"objects": items}, "errors": []}
+    obj = one(name)
+    if obj is None:
         return {"result": {"object": None}, "errors": []}
-    obj = dict(public(hit), body=hit["_body"], content=hit["_content"])
     res = {"object": obj}
     if args.get("backlinks"):
-        res["backlinks"] = [{"from": o["name"], "type": l["type"], "props": l["props"]}
-                            for o in objs for l in o["links"] if l["to"] == name]
+        res["backlinks"] = back.get(name, [])
     return {"result": res, "errors": []}
 
 

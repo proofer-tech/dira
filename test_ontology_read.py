@@ -79,6 +79,36 @@ try:
     assert "backlinks" not in run(tmp, "object", {"name": "갑"})["result"]
     print("PASS object sha256 - content - backlinks - 없는 이름")
 
+    # object names (P504)
+    _real_lo, _n = R.load_objects, []
+    R.load_objects = lambda r: (_n.append(1), _real_lo(r))[1]
+    try:
+        for ex in (False, True):
+            ar = {"names": ["갑", "없음", "갑"]}
+            if ex:
+                ar["backlinks"] = True
+            del _n[:]
+            got = run(tmp, "object", ar)
+            assert len(_n) == 1, _n
+            objs3 = got["result"]["objects"]
+            assert [x["name"] for x in objs3] == ["갑", "없음", "갑"] and got["errors"] == []
+            one = run(tmp, "object", {"name": "갑", "backlinks": ex})["result"]
+            assert objs3[1]["object"] is None and objs3[0]["object"] == one["object"] == objs3[2]["object"]
+            if ex:
+                assert objs3[0]["backlinks"] == one["backlinks"] != [] and objs3[1]["backlinks"] == []
+            else:
+                assert "backlinks" not in objs3[0]
+    finally:
+        R.load_objects = _real_lo
+    for bad in ({}, {"names": []}, {"name": "갑", "names": ["갑"]}, {"names": ["x"] * 201}, {"names": ["갑", ""]}, {"names": "갑"}):
+        try:
+            run(tmp, "object", bad)
+            raise AssertionError("통과했다: %r" % (bad,))
+        except ValueError:
+            pass
+    assert len(run(tmp, "object", {"names": ["갑"] * 200})["result"]["objects"]) == 200
+    print("PASS object names - 순서 - null - load 1회 - backlinks - ValueError")
+
     # search: 이름 맞은 것이 먼저
     write(tmp, "objects/문서/z.md", "---\nname: Zeta\n---\n\nalpha 본문 NEEDLE 끝\n")
     write(tmp, "objects/문서/a.md", "---\nname: needle-name\n---\n\n무관\n")
