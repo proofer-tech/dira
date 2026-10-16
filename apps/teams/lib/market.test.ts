@@ -27,7 +27,13 @@ const {
   missingMarketMembers,
   missingSquadMembers,
   needsUpdate,
-  nextVersion,
+  bumpVersion,
+  compareSemver,
+  importToTeam,
+  lineDiff,
+  parseSemver,
+  previewTeamUpdate,
+  teamImports,
   parseMarketItemId,
   projectsThatImported,
   readFavorites,
@@ -113,7 +119,7 @@ test("listMarketItems · getMarketItem — 심어 둔 페르소나를 목록·�
   const items = await listMarketItems("persona");
   assert.equal(items.length, 1);
   assert.equal(items[0].id, "persona:dira/writer");
-  assert.equal(items[0].latest, 2);
+  assert.equal(items[0].latest, "2.0.0"); // 옛 v2 폴더와 정수 meta를 2.0.0으로 읽는다
   assert.equal(items[0].favorite, false);
 
   const detail = await getMarketItem("persona", "dira", "writer");
@@ -156,10 +162,21 @@ test("listInstalls — installs.jsonl이 없으면 빈 목록, 깨진 줄은 건
 
 // ── 배포 ─────────────────────────────────────────────────────────────────────
 
-test("nextVersion — 첫 배포는 1, 그 뒤로 latest + 1", () => {
-  assert.equal(nextVersion(null), 1);
-  assert.equal(nextVersion(1), 2);
-  assert.equal(nextVersion(5), 6);
+test("compareSemver · parseSemver — 숫자로 견주고 옛 v3과 정수는 3.0.0이다", () => {
+  assert.ok(compareSemver("1.10.0", "1.9.9") > 0); // 문자열 비교면 거꾸로다
+  assert.ok(compareSemver("v3", "2.9.9") > 0);
+  assert.equal(compareSemver("v3", "3.0.0"), 0);
+  assert.equal(compareSemver(3, "3.0.0"), 0);
+  assert.deepEqual(parseSemver("v3"), [3, 0, 0]);
+  assert.equal(parseSemver("latest"), null);
+});
+
+test("bumpVersion — 첫 배포는 1.0.0, patch - minor - major 올림", () => {
+  assert.equal(bumpVersion(null, "major"), "1.0.0");
+  assert.equal(bumpVersion("1.2.3"), "1.2.4");
+  assert.equal(bumpVersion("1.2.3", "patch"), "1.2.4");
+  assert.equal(bumpVersion("1.2.3", "minor"), "1.3.0");
+  assert.equal(bumpVersion("1.2.3", "major"), "2.0.0");
 });
 
 test("missingMarketMembers — 마켓에 없는 이름만 순서대로 뽑는다", () => {
@@ -219,7 +236,7 @@ test("deployPersona — 배포마다 버전이 늘고 옛 버전 파일은 그�
       "첫 배포",
       ["신규"],
     );
-    assert.equal(v1.latest, 1);
+    assert.equal(v1.latest, "1.0.0");
     assert.equal(v1.versions[0].note, "첫 배포");
 
     // 같은 내용을 다시 배포해도 버전이 둘로 는다(동일성으로 안 합친다).
@@ -231,7 +248,7 @@ test("deployPersona — 배포마다 버전이 늘고 옛 버전 파일은 그�
       "두 번째",
       ["신규"],
     );
-    assert.equal(v2.latest, 2);
+    assert.equal(v2.latest, "1.0.1");
     assert.equal(v2.versions.length, 2);
 
     const detail = await getMarketItem("persona", "dira", "newbie");
@@ -239,7 +256,7 @@ test("deployPersona — 배포마다 버전이 늘고 옛 버전 파일은 그�
     assert.equal(detail?.skills, "## 스킬\n");
 
     const v1Profile = readFileSync(
-      path.join(marketDir(), "personas", "dira", "newbie", "v1", "PROFILE.md"),
+      path.join(marketDir(), "personas", "dira", "newbie", "1.0.0", "PROFILE.md"),
       "utf8",
     );
     assert.equal(v1Profile, "# v1\n");
@@ -268,12 +285,12 @@ test("deploySquad — members 한 장을 담고 버전이 늘어난다", async (
   process.env.TICKET_LOCAL = local;
   try {
     const v1 = await deploySquad("dira", "dira teams", "default", "pm\ndeveloper\n", "첫 배포", []);
-    assert.equal(v1.latest, 1);
+    assert.equal(v1.latest, "1.0.0");
     const detail = await getMarketItem("squad", "dira", "default");
     assert.equal(detail?.members, "pm\ndeveloper\n");
 
     const v2 = await deploySquad("dira", "dira teams", "default", "pm\ndeveloper\n", "멤버 추가 예정", []);
-    assert.equal(v2.latest, 2);
+    assert.equal(v2.latest, "1.0.1");
   } finally {
     process.env.TICKET_LOCAL = prev;
   }
@@ -364,7 +381,7 @@ test("marketRecord — 이 프로젝트가 배포한 적 있으면 그 버전 �
   try {
     seedPersona("dira", "writer", 2);
     const rec = await marketRecord("persona", "dira", "writer");
-    assert.equal(rec.deploy?.latest, 2);
+    assert.equal(rec.deploy?.latest, "2.0.0");
     assert.equal(rec.deploy?.versions.length, 2);
     assert.equal(rec.update, null); // importEntry를 안 넘겼으니 갱신 판정 자체가 없다
   } finally {
@@ -379,7 +396,7 @@ test("marketRecord — importEntry가 있고 원본이 더 새 버전이면 upda
   try {
     seedPersona("dira", "writer", 3);
     const rec = await marketRecord("persona", "pofol", "writer", { owner: "dira", name: "writer", v: 1 });
-    assert.deepEqual(rec.update, { owner: "dira", name: "writer", installedVersion: 1, latestVersion: 3 });
+    assert.deepEqual(rec.update, { owner: "dira", name: "writer", installedVersion: "1.0.0", latestVersion: "3.0.0" });
   } finally {
     process.env.TICKET_LOCAL = prev;
   }
@@ -422,4 +439,83 @@ test("projectsThatImported — owner·name이 맞는 레지스트리 칸이 있�
   assert.deepEqual(projectsThatImported("persona", "dira", "writer", projects), ["pofol"]);
   assert.deepEqual(projectsThatImported("squad", "dira", "default", projects), ["acme"]);
   assert.deepEqual(projectsThatImported("persona", "dira", "reviewer", projects), []);
+});
+
+// ── dira-team 프로젝트 가져오기 (P506-7) ─────────────────────────────────────────
+
+const APM_YML = "name: team\nversion: 1.0.0\ndependencies:\n  apm:\n    - ./existing\n";
+
+function teamRoot(): { queue: string; team: string } {
+  const repo = mkdtempSync(path.join(tmpdir(), "fst-market-team-"));
+  const team = path.join(repo, "dira-team");
+  mkdirSync(team, { recursive: true });
+  writeFileSync(path.join(team, "apm.yml"), APM_YML, "utf8");
+  return { queue: path.join(repo, ".dira"), team };
+}
+
+test("importToTeam — 사본과 apm.yml 한 줄이 남고 저장소가 올라가도 사본은 그대로, 배지가 뜨고, diff가 먼저 나온다", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-market-team-local-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  try {
+    const { queue, team } = teamRoot();
+    await deployPersona("pofol", "pofol", "X", { profile: "# X\n줄1\n", skills: null }, "첫", []);
+    const r = await importToTeam("persona", "pofol", "X", queue, "X");
+    assert.deepEqual(r, { ok: true, version: "1.0.0", coImported: [], missingInMarket: [] });
+    assert.match(readFileSync(path.join(team, "apm.yml"), "utf8"), /^ {4}- \.\/market\/persona\/pofol\/X$/m);
+    const copy = path.join(team, "market/persona/pofol/X");
+    assert.match(readFileSync(path.join(copy, "apm.yml"), "utf8"), /^version: 1\.0\.0$/m);
+    assert.equal(readFileSync(path.join(copy, "PROFILE.md"), "utf8"), "# X\n줄1\n");
+
+    // 같은 줄을 두 번 걸지 않는다. 덮어쓰기 없이는 conflict.
+    assert.deepEqual(await importToTeam("persona", "pofol", "X", queue, "X"), { ok: false, reason: "conflict" });
+    assert.equal(readFileSync(path.join(team, "apm.yml"), "utf8").match(/market\/persona\/pofol\/X/g)!.length, 1);
+
+    // 1.1.0 배포 - 사본은 1.0.0 그대로, 배지는 받은 사본 version < 저장소 최고.
+    await deployPersona("pofol", "pofol", "X", { profile: "# X\n줄1\n줄2\n", skills: null }, "둘", [], "minor");
+    assert.match(readFileSync(path.join(copy, "apm.yml"), "utf8"), /^version: 1\.0\.0$/m);
+    const imports = await teamImports(queue);
+    assert.deepEqual(imports.personas.X, { owner: "pofol", name: "X", v: "1.0.0" });
+    const rec = await marketRecord("persona", "other", "X", imports.personas.X);
+    assert.deepEqual(rec.update, { owner: "pofol", name: "X", installedVersion: "1.0.0", latestVersion: "1.1.0" });
+
+    // 업데이트 전 diff: 받기 전이라 사본은 아직 그대로다.
+    const pv = await previewTeamUpdate("persona", "pofol", "X", queue);
+    assert.equal(pv?.version, "1.1.0");
+    assert.deepEqual(pv?.files.map((f) => [f.file, f.status]), [["PROFILE.md", "changed"], ["apm.yml", "changed"]]);
+    assert.deepEqual(pv?.files[0].lines.filter((l) => l.sign !== " "), [{ sign: "+", text: "줄2" }]);
+    assert.equal(readFileSync(path.join(copy, "PROFILE.md"), "utf8"), "# X\n줄1\n");
+
+    // 받기 = overwrite 가져오기. 사본이 1.1.0이 되고 배지가 꺼진다.
+    assert.equal((await importToTeam("persona", "pofol", "X", queue, "X", true)).ok, true);
+    assert.equal((await teamImports(queue)).personas.X.v, "1.1.0");
+    assert.equal(readFileSync(path.join(copy, "PROFILE.md"), "utf8"), "# X\n줄1\n줄2\n");
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+  }
+});
+
+test("importToTeam — owner dira는 사본 없이 packages git 의존성 한 줄이다", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-market-team-dira-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  try {
+    const { queue, team } = teamRoot();
+    await deployPersona("dira", "dira", "writer", { profile: "# w\n", skills: null }, "첫", []);
+    await importToTeam("persona", "dira", "writer", queue, "writer");
+    assert.match(
+      readFileSync(path.join(team, "apm.yml"), "utf8"),
+      /^ {4}- proofer-tech\/dira\/packages\/persona-writer#persona-writer-v1\.0\.0$/m,
+    );
+    assert.equal((await teamImports(queue)).personas.writer.v, "1.0.0");
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+  }
+});
+
+test("lineDiff — 바뀐 줄만 +/-로 나온다", () => {
+  assert.deepEqual(lineDiff("a\nb", "a\nc").filter((l) => l.sign !== " "), [
+    { sign: "-", text: "b" },
+    { sign: "+", text: "c" },
+  ]);
 });

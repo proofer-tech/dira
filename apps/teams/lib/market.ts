@@ -9,15 +9,17 @@
  *
  *  경로 조립은 `lib/paths.ts`의 기존 방어(`resolveWithin` · `NAME_RE` · `PROJECT_ID_RE`)를
  *  그대로 쓴다 — 새 방어를 따로 만들지 않는다. */
-import { appendFile, mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NAME_RE, PROJECT_ID_RE, localDir, resolveWithin } from "./paths.ts";
-import { personaNames, squadNames } from "./projects.ts";
+import { setDependency, teamOf } from "./apm.ts";
+import { personaNames, squadNames, type MarketInstallEntry } from "./projects.ts";
 export { matchesMarketSearch } from "./market-search.ts";
 
 export type MarketKind = "persona" | "squad";
 
-export type MarketVersion = { v: number; at: string; note: string };
+/** `v`는 semver 문자열이다. 옛 `v<정수>` 폴더와 meta의 정수는 읽을 때 `<정수>.0.0`으로 바꾼다. */
+export type MarketVersion = { v: string; at: string; note: string };
 
 /** `meta.json` 한 장의 모양 그대로(DESIGN.md §저장 자리). */
 export type MarketMeta = {
@@ -26,7 +28,7 @@ export type MarketMeta = {
   ownerName: string;
   name: string;
   tags: string[];
-  latest: number;
+  latest: string; // 파일에는 없다 - 읽을 때 versions의 가장 높은 semver로 채운다
   versions: MarketVersion[];
 };
 
@@ -46,10 +48,39 @@ export type MarketInstall = {
   kind: MarketKind;
   owner: string;
   name: string;
-  v: number;
+  v: string | number; // 옛 줄은 정수
   project: string;
   as: string;
 };
+
+// ── semver ───────────────────────────────────────────────────────────────────
+
+export type Bump = "patch" | "minor" | "major";
+
+/** `1.2.3`, 정수 `3`, 옛 폴더 이름 `v3`을 `[major, minor, patch]`로. 아니면 `null`. */
+export function parseSemver(v: string | number): [number, number, number] | null {
+  const m = /^v?(\d+)(?:\.(\d+)\.(\d+))?$/.exec(String(v));
+  return m ? [Number(m[1]), Number(m[2] ?? 0), Number(m[3] ?? 0)] : null;
+}
+
+export function toSemver(v: string | number): string {
+  const p = parseSemver(v);
+  if (!p) throw new Error(`semver가 아니다: ${v}`);
+  return p.join(".");
+}
+
+export function compareSemver(a: string | number, b: string | number): number {
+  const x = parseSemver(a) ?? [0, 0, 0];
+  const y = parseSemver(b) ?? [0, 0, 0];
+  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
+}
+
+/** 첫 배포(`latest`가 `null`)는 올림과 무관하게 `1.0.0`이다. */
+export function bumpVersion(latest: string | null, bump: Bump = "patch"): string {
+  if (latest === null) return "1.0.0";
+  const [a, b, c] = parseSemver(latest)!;
+  return bump === "major" ? `${a + 1}.0.0` : bump === "minor" ? `${a}.${b + 1}.0` : `${a}.${b}.${c + 1}`;
+}
 
 // ── 저장 자리 ────────────────────────────────────────────────────────────────
 
@@ -111,17 +142,28 @@ async function itemDirForWrite(kind: MarketKind, owner: string, name: string): P
 async function writeMetaAtomic(dir: string, meta: MarketMeta): Promise<void> {
   const file = path.join(dir, "meta.json");
   const tmp = path.join(dir, `.meta.json.tmp-${process.pid}-${Date.now()}`);
-  await writeFile(tmp, JSON.stringify(meta, null, 2), "utf8");
+  const { latest: _latest, ...onDisk } = meta; // 파일에는 versions 목록만 둔다
+  await writeFile(tmp, JSON.stringify(onDisk, null, 2), "utf8");
   await rename(tmp, file);
 }
 
 async function readMeta(dir: string): Promise<MarketMeta | null> {
   try {
-    const raw = await readFile(path.join(dir, "meta.json"), "utf8");
-    return JSON.parse(raw) as MarketMeta;
+    const raw = JSON.parse(await readFile(path.join(dir, "meta.json"), "utf8")) as MarketMeta;
+    const versions = (raw.versions ?? []).map((x) => ({ ...x, v: toSemver(x.v) }));
+    const latest = versions.map((x) => x.v).sort(compareSemver).pop();
+    return latest ? { ...raw, versions, latest } : null;
   } catch {
     return null;
   }
+}
+
+/** 버전 폴더. `<semver>/`가 없고 옛 `v<정수>/`가 있으면 그것을 쓴다(`N.0.0`만 옛 폴더가 될 수 있다). */
+async function versionPath(dir: string, ver: string): Promise<string> {
+  const direct = path.join(dir, ver);
+  if (await stat(direct).then((x) => x.isDirectory(), () => false)) return direct;
+  const m = /^(\d+)\.0\.0$/.exec(ver);
+  return m ? path.join(dir, `v${m[1]}`) : direct;
 }
 
 // ── 목록 · 상세 ──────────────────────────────────────────────────────────────
@@ -168,12 +210,13 @@ export async function getMarketItem(
   kind: MarketKind,
   owner: string,
   name: string,
+  version?: string,
 ): Promise<MarketItemDetail | null> {
   const dir = await itemDir(kind, owner, name);
   if (!dir) return null;
   const meta = await readMeta(dir);
   if (!meta) return null;
-  const versionDir = path.join(dir, `v${meta.latest}`);
+  const versionDir = await versionPath(dir, version ? toSemver(version) : meta.latest);
   const readOrNull = (file: string) => readFile(path.join(versionDir, file), "utf8").catch(() => null);
   const [profile, skills, members] = await Promise.all([
     kind === "persona" ? readOrNull("PROFILE.md") : Promise.resolve(null),
@@ -229,8 +272,8 @@ export async function toggleFavorite(id: string): Promise<string[]> {
 
 /** 설치된 버전이 최신보다 낮으면 갱신이 있다. 파일을 안 읽는 순수 함수 — 레지스트리의
  *  설치 버전과 이 항목의 `meta.json.latest`를 호출자가 골라 넘긴다. */
-export function needsUpdate(installedVersion: number, latest: number): boolean {
-  return installedVersion < latest;
+export function needsUpdate(installedVersion: number | string, latest: number | string): boolean {
+  return compareSemver(installedVersion, latest) < 0;
 }
 
 // ── 원본에서 보는 기록 (DESIGN.md §원본에서 보는 기록, 티켓 `1c06035e`) ────────────
@@ -240,9 +283,9 @@ export function needsUpdate(installedVersion: number, latest: number): boolean {
  *  기록의 "아직 배포 안 함"). `update`는 이 페르소나-스쿼드가 마켓에서 가져온 것이고 원본이
  *  그 뒤 더 배포했을 때만 채워진다 — 그 밖에는 `null`이라 배지가 안 뜬다. */
 export type MarketRecord = {
-  deploy: { latest: number; versions: MarketVersion[] } | null;
+  deploy: { latest: string; versions: MarketVersion[] } | null;
   installs: MarketInstall[];
-  update: { owner: string; name: string; installedVersion: number; latestVersion: number } | null;
+  update: { owner: string; name: string; installedVersion: string; latestVersion: string } | null;
 };
 
 /** 한 페르소나-스쿼드가 든 마켓 기록 전부를 한 번에 모은다. `owner`는 언제나 이 프로젝트
@@ -254,7 +297,7 @@ export async function marketRecord(
   kind: MarketKind,
   projectId: string,
   name: string,
-  importEntry?: { owner: string; name: string; v: number },
+  importEntry?: { owner: string; name: string; v: number | string },
 ): Promise<MarketRecord> {
   const [own, installs, source] = await Promise.all([
     getMarketItem(kind, projectId, name),
@@ -266,7 +309,7 @@ export async function marketRecord(
       ? {
           owner: importEntry.owner,
           name: importEntry.name,
-          installedVersion: importEntry.v,
+          installedVersion: toSemver(importEntry.v),
           latestVersion: source.latest,
         }
       : null;
@@ -279,12 +322,6 @@ export async function marketRecord(
 
 // ── 배포 (DESIGN.md §배포) ───────────────────────────────────────────────────
 
-/** 다음 버전 번호. 첫 배포가 `1`, 그 뒤로 `latest + 1`(§계약 §버전). 파일을 안 읽는 순수
- *  함수 — `meta.json`이 없으면(첫 배포) `latest`로 `null`을 넘긴다. */
-export function nextVersion(latest: number | null): number {
-  return latest === null ? 1 : latest + 1;
-}
-
 /** 스쿼드 멤버 중 같은 소유 프로젝트의 마켓에 없는 이름을 뽑는다(§배포 §스쿼드 배포 1).
  *  파일을 안 읽는 순수 함수 — 목록 둘을 호출자가 넘긴다. */
 export function missingMarketMembers(memberNames: string[], marketPersonaNames: string[]): string[] {
@@ -292,17 +329,21 @@ export function missingMarketMembers(memberNames: string[], marketPersonaNames: 
   return memberNames.filter((n) => !have.has(n));
 }
 
+/** 버전 폴더 하나에 들어가는 APM 패키지 선언. */
+const packageYml = (kind: MarketKind, name: string, version: string) =>
+  `name: ${kind}-${name}\nversion: ${version}\ndescription: dira market ${kind} ${name}\n`;
+
 function requireNote(note: string): string {
   const trimmed = note.trim();
   if (trimmed === "") throw new Error("노트가 없으면 배포할 수 없다 — 한 줄을 적어야 한다");
   return trimmed;
 }
 
-function appendVersion(meta: MarketMeta | null, v: number, note: string): MarketVersion[] {
+function appendVersion(meta: MarketMeta | null, v: string, note: string): MarketVersion[] {
   return [...(meta?.versions ?? []), { v, at: new Date().toISOString(), note }];
 }
 
-/** 페르소나 배포 한 벌 — `PROFILE.md` + `skills.md`(§계약 §담는 것). 버전 디렉터리는
+/** 페르소나 배포 한 벌 — `PROFILE.md` + `skills.md`(§계약 §담는 것). 버전 디렉터리(`<semver>/`)는
  *  `mkdir(recursive: false)`로 먼저 만든다 — 같은 번호가 이미 있으면 그 자리에서 실패한다.
  *  `meta.json`은 임시 파일에 쓴 뒤 `rename`으로 갈아 끼운다.
  *  // ponytail: 머신 한 대에서 사람이 누르는 버튼이라 잠금 장치를 안 둔다. 두 창이 같은 항목을
@@ -317,14 +358,16 @@ export async function deployPersona(
   files: { profile: string | null; skills: string | null },
   note: string,
   tags: string[],
+  bump: Bump = "patch",
 ): Promise<MarketMeta> {
   const trimmedNote = requireNote(note);
   if (files.profile === null) throw new Error(`${name}에 PROFILE.md가 없어 배포할 수 없다`);
   const dir = await itemDirForWrite("persona", owner, name);
   const meta = await readMeta(dir);
-  const v = nextVersion(meta?.latest ?? null);
-  const versionDir = path.join(dir, `v${v}`);
+  const v = bumpVersion(meta?.latest ?? null, bump);
+  const versionDir = path.join(dir, v);
   await mkdir(versionDir, { recursive: false });
+  await writeFile(path.join(versionDir, "apm.yml"), packageYml("persona", name, v), "utf8");
   await writeFile(path.join(versionDir, "PROFILE.md"), files.profile, "utf8");
   if (files.skills !== null) await writeFile(path.join(versionDir, "skills.md"), files.skills, "utf8");
   const nextMeta: MarketMeta = {
@@ -351,13 +394,15 @@ export async function deploySquad(
   members: string,
   note: string,
   tags: string[],
+  bump: Bump = "patch",
 ): Promise<MarketMeta> {
   const trimmedNote = requireNote(note);
   const dir = await itemDirForWrite("squad", owner, name);
   const meta = await readMeta(dir);
-  const v = nextVersion(meta?.latest ?? null);
-  const versionDir = path.join(dir, `v${v}`);
+  const v = bumpVersion(meta?.latest ?? null, bump);
+  const versionDir = path.join(dir, v);
   await mkdir(versionDir, { recursive: false });
+  await writeFile(path.join(versionDir, "apm.yml"), packageYml("squad", name, v), "utf8");
   await writeFile(path.join(versionDir, "members"), members, "utf8");
   const nextMeta: MarketMeta = {
     kind: "squad",
@@ -499,4 +544,158 @@ export function projectsThatImported(
   return projects
     .filter((p) => Object.values(p.market?.[bucket] ?? {}).some((e) => e.owner === owner && e.name === name))
     .map((p) => p.name);
+}
+
+// ── 가져오기 - dira-team 프로젝트 (DESIGN.md P506 "마켓 - 현행 -> APM") ─────────────
+
+/** 옛 규칙의 `dira-team/`이 없는 프로젝트는 위 `importPersona` - `importSquad`와 레지스트리 `market`을 그대로 쓴다.
+ *  있는 프로젝트는 사본 + apm.yml 한 줄이고 lock은 호출자가 `installTeam`으로 쓴다. 레지스트리는 안 쓴다. */
+const GIT_DEP = (kind: MarketKind, name: string, v: string) =>
+  `proofer-tech/dira/packages/${kind}-${name}#${kind}-${name}-v${v}`;
+const GIT_DEP_RE = /^proofer-tech\/dira\/packages\/(persona|squad)-([^#]+)#.*-v(\d+\.\d+\.\d+)$/;
+
+const copyDir = (team: string, kind: MarketKind, owner: string, name: string) =>
+  path.join(team, "market", kind, owner, name);
+
+/** 마켓 버전 폴더의 파일 이름들(최상위만). */
+async function packageFiles(dir: string): Promise<string[]> {
+  const ents = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  return ents.filter((e) => e.isFile() && !e.name.startsWith(".")).map((e) => e.name).sort();
+}
+
+/** 사본 한 벌을 쓴다(있던 파일은 지우고 새 버전 파일로 바꾼다). `apm.yml`의 `name`은 받는 이름으로 고친다. */
+async function writeCopy(dest: string, kind: MarketKind, asName: string, from: string): Promise<void> {
+  await rm(dest, { recursive: true, force: true });
+  await mkdir(dest, { recursive: true });
+  for (const f of await packageFiles(from)) {
+    let body = await readFile(path.join(from, f), "utf8");
+    if (f === "apm.yml") body = body.replace(/^name:.*$/m, `name: ${kind}-${asName}`);
+    await writeFile(path.join(dest, f), body, "utf8");
+  }
+}
+
+/** 이 항목의 `version`(기본 최신) 폴더. 마켓에 없으면 `null`. */
+async function sourceDir(kind: MarketKind, owner: string, name: string, version?: string) {
+  const dir = await itemDir(kind, owner, name);
+  const meta = dir ? await readMeta(dir) : null;
+  if (!dir || !meta) return null;
+  const v = version ? toSemver(version) : meta.latest;
+  if (!meta.versions.some((x) => x.v === v)) return null;
+  return { dir: await versionPath(dir, v), version: v };
+}
+
+export type TeamImportResult =
+  | { ok: true; version: string; coImported: string[]; missingInMarket: string[] }
+  | { ok: false; reason: ImportReason };
+
+/** `dira-team/` 프로젝트로 가져온다. `overwrite`가 없으면 사본이 이미 있을 때 `conflict`다.
+ *  owner `dira`는 사본 없이 `packages/`의 git 의존성 한 줄이다(받는 이름은 원래 이름이어야 한다).
+ *  스쿼드는 대상에 없는 멤버 페르소나를 같은 소유자의 마켓에서 같이 가져온다. `apm install`은 부르지 않는다. */
+export async function importToTeam(
+  kind: MarketKind,
+  owner: string,
+  name: string,
+  queueRoot: string,
+  asName: string,
+  overwrite = false,
+  version?: string,
+  existingPersonas: string[] = [],
+): Promise<TeamImportResult> {
+  if (!NAME_RE.test(asName)) return { ok: false, reason: "invalidName" };
+  const src = await sourceDir(kind, owner, name, version);
+  if (!src) return { ok: false, reason: "notFound" };
+  const team = teamOf(queueRoot);
+  const yml = path.join(team, "apm.yml");
+  const out = { coImported: [] as string[], missingInMarket: [] as string[] };
+  if (owner === "dira") {
+    await setDependency(yml, GIT_DEP(kind, name, src.version), (d) => GIT_DEP_RE.exec(d)?.[1] === kind && GIT_DEP_RE.exec(d)?.[2] === name);
+    return { ok: true, version: src.version, ...out };
+  }
+  const dest = copyDir(team, kind, owner, asName);
+  if (!overwrite && (await stat(dest).then(() => true, () => false))) return { ok: false, reason: "conflict" };
+  if (kind === "squad") {
+    const members = squadMemberNames(await readFile(path.join(src.dir, "members"), "utf8").catch(() => ""));
+    for (const m of members.filter((n) => !existingPersonas.includes(n))) {
+      const r = await importToTeam("persona", owner, m, queueRoot, m);
+      if (r.ok) out.coImported.push(m);
+      else if (r.reason !== "conflict") out.missingInMarket.push(m);
+    }
+  }
+  await writeCopy(dest, kind, asName, src.dir);
+  await setDependency(yml, `./market/${kind}/${owner}/${asName}`);
+  return { ok: true, version: src.version, ...out };
+}
+
+/** `dira-team/`에 받아 둔 항목 - 이름 -> `{owner, name, v}`. 사본의 `apm.yml` `version`과 `owner`가 `dira`인 git 의존성의 태그가 `v`다. */
+export async function teamImports(queueRoot: string): Promise<{ personas: Record<string, MarketInstallEntry>; squads: Record<string, MarketInstallEntry> }> {
+  const team = teamOf(queueRoot);
+  const out = { personas: {} as Record<string, MarketInstallEntry>, squads: {} as Record<string, MarketInstallEntry> };
+  for (const kind of ["persona", "squad"] as const) {
+    const bucket = kind === "persona" ? out.personas : out.squads;
+    const root = path.join(team, "market", kind);
+    for (const owner of await subdirNames(root, PROJECT_ID_RE))
+      for (const n of await subdirNames(path.join(root, owner), NAME_RE)) {
+        const ver = /^version:\s*['"]?([^\s'"]+)/m.exec(
+          await readFile(path.join(root, owner, n, "apm.yml"), "utf8").catch(() => ""),
+        )?.[1];
+        // 같은 이름이 두 소유자에게서 오면 사본 이름이 겹치지 않도록 소유자별 폴더이고 여기서는 먼저 나온 것이 이긴다.
+        if (ver && parseSemver(ver) && !bucket[n]) bucket[n] = { owner, name: n, v: ver };
+      }
+  }
+  for (const line of (await readFile(path.join(team, "apm.yml"), "utf8").catch(() => "")).split("\n")) {
+    const m = GIT_DEP_RE.exec(/^\s+-\s+['"]?([^\s'"]+)/.exec(line)?.[1] ?? "");
+    if (m) (m[1] === "persona" ? out.personas : out.squads)[m[2]] = { owner: "dira", name: m[2], v: m[3] };
+  }
+  return out;
+}
+
+export type FileDiff = { file: string; status: "added" | "removed" | "changed"; lines: { sign: " " | "+" | "-"; text: string }[] };
+
+/** 줄 단위 diff(LCS). // ponytail: O(n*m) - 프로필 파일 크기라 충분하다. */
+export function lineDiff(a: string, b: string): FileDiff["lines"] {
+  const x = a === "" ? [] : a.split("\n");
+  const y = b === "" ? [] : b.split("\n");
+  const L = Array.from({ length: x.length + 1 }, () => new Array<number>(y.length + 1).fill(0));
+  for (let i = x.length - 1; i >= 0; i--)
+    for (let j = y.length - 1; j >= 0; j--)
+      L[i][j] = x[i] === y[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out: FileDiff["lines"] = [];
+  let i = 0, j = 0;
+  while (i < x.length && j < y.length) {
+    if (x[i] === y[j]) out.push({ sign: " ", text: x[i++] }), j++;
+    else if (L[i + 1][j] >= L[i][j + 1]) out.push({ sign: "-", text: x[i++] });
+    else out.push({ sign: "+", text: y[j++] });
+  }
+  while (i < x.length) out.push({ sign: "-", text: x[i++] });
+  while (j < y.length) out.push({ sign: "+", text: y[j++] });
+  return out;
+}
+
+/** 받아 둔 사본과 저장소 최신(또는 `version`)의 파일별 diff. 바뀐 파일만 담는다.
+ *  `apm.yml`은 `name`만 받는 이름으로 고쳐 쓰는 파일이라 `name` 줄 차이는 세지 않는다. */
+export async function previewTeamUpdate(
+  kind: MarketKind,
+  owner: string,
+  name: string,
+  queueRoot: string,
+  version?: string,
+): Promise<{ version: string; files: FileDiff[] } | null> {
+  const src = await sourceDir(kind, owner, name, version);
+  if (!src) return null;
+  const copy = copyDir(teamOf(queueRoot), kind, owner, name);
+  const norm = (f: string, t: string) => (f === "apm.yml" ? t.replace(/^name:.*\n/m, "") : t);
+  const files: FileDiff[] = [];
+  const names = new Set([...(await packageFiles(src.dir)), ...(await packageFiles(copy))]);
+  for (const f of [...names].sort()) {
+    const [before, after] = await Promise.all(
+      [copy, src.dir].map((d) => readFile(path.join(d, f), "utf8").then((t) => norm(f, t), () => null)),
+    );
+    if (before === after) continue;
+    files.push({
+      file: f,
+      status: before === null ? "added" : after === null ? "removed" : "changed",
+      lines: lineDiff(before ?? "", after ?? ""),
+    });
+  }
+  return { version: src.version, files };
 }

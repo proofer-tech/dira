@@ -46,7 +46,7 @@ import {
   deploySquadAction,
   missingSquadMembersAction,
 } from "@/app/(app)/p/[project]/personas/market-actions";
-import { importPersonaAction, importSquadAction } from "@/app/(app)/market/actions";
+import { importPersonaAction, importSquadAction, previewMarketUpdateAction } from "@/app/(app)/market/actions";
 import type { SquadMember } from "@/lib/projects";
 import { Markdown } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
@@ -1278,6 +1278,7 @@ function DeployButton({
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState("");
   const [tags, setTags] = useState("");
+  const [bump, setBump] = useState<"patch" | "minor" | "major">("patch");
   const [missing, setMissing] = useState<string[] | null>(null);
   const [result, setResult] = useState<{ ok: boolean; message?: string } | null>(null);
   const [pending, start] = useTransition();
@@ -1285,6 +1286,7 @@ function DeployButton({
   const reset = () => {
     setNote("");
     setTags("");
+    setBump("patch");
     setMissing(null);
     setResult(null);
   };
@@ -1299,8 +1301,8 @@ function DeployButton({
     start(async () => {
       const r =
         kind === "persona"
-          ? await deployPersonaAction(projectId, name, note, tagList())
-          : await deploySquadAction(projectId, name, note, tagList());
+          ? await deployPersonaAction(projectId, name, note, tagList(), bump)
+          : await deploySquadAction(projectId, name, note, tagList(), bump);
       setResult(r);
       if (shouldResetDeployForm(r)) {
         setOpen(false);
@@ -1392,6 +1394,21 @@ function DeployButton({
               )}
             </div>
             <div className="space-y-2">
+              <Label htmlFor="market-deploy-bump">{t("market.deploy.bumpLabel")}</Label>
+              <select
+                id="market-deploy-bump"
+                value={bump}
+                onChange={(e) => setBump(e.target.value as typeof bump)}
+                className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-sm"
+              >
+                {(["patch", "minor", "major"] as const).map((b) => (
+                  <option key={b} value={b}>
+                    {t(`market.deploy.bump.${b}`)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="market-deploy-tags">{t("market.deploy.tagsLabel")}</Label>
               <Input
                 id="market-deploy-tags"
@@ -1436,6 +1453,7 @@ function UpdateBadge({
   const [open, setOpen] = useState(false);
   const [result, setResult] = useState<{ ok: boolean; message?: string } | null>(null);
   const [pending, start] = useTransition();
+  const [diff, setDiff] = useState<Awaited<ReturnType<typeof previewMarketUpdateAction>> | "loading" | undefined>();
 
   const refetch = () =>
     start(async () => {
@@ -1452,7 +1470,14 @@ function UpdateBadge({
       open={open}
       onOpenChange={(o) => {
         setOpen(o);
-        if (!o) setResult(null);
+        if (!o) {
+          setResult(null);
+          setDiff(undefined);
+        } else {
+          // `dira-team/` 프로젝트면 받기 전에 파일별 diff를 먼저 보인다. 아니면 null이라 옛 확인 문구다.
+          setDiff("loading");
+          void previewMarketUpdateAction(kind, update.owner, update.name, projectId).then(setDiff, () => setDiff(null));
+        }
       }}
     >
       <AlertDialogTrigger
@@ -1470,14 +1495,42 @@ function UpdateBadge({
         <AlertDialogHeader>
           <AlertDialogTitle>{t("market.update.confirmTitle")}</AlertDialogTitle>
           <AlertDialogDescription>
-            {t("market.update.confirmBodyPrefix")} v{update.latestVersion} {t("market.update.confirmBodySuffix")}
+            {diff && diff !== "loading"
+              ? t("market.update.diffBody")
+              : `${t("market.update.confirmBodyPrefix")} v${update.latestVersion} ${t("market.update.confirmBodySuffix")}`}
           </AlertDialogDescription>
         </AlertDialogHeader>
+        {diff === "loading" && <p className="text-xs text-muted-foreground">{t("market.update.diffLoading")}</p>}
+        {diff && diff !== "loading" && (
+          <div className="max-h-80 space-y-3 overflow-y-auto">
+            <h3 className="text-xs font-medium text-muted-foreground">
+              {t("market.update.diffTitle")} · v{update.installedVersion} → v{diff.version}
+            </h3>
+            {diff.files.length === 0 && <p className="text-xs">{t("market.update.diffNone")}</p>}
+            {diff.files.map((f) => (
+              <div key={f.file} className="space-y-1">
+                <div className="font-mono text-xs">
+                  {f.file}{" "}
+                  <span className="text-muted-foreground">
+                    {t(f.status === "added" ? "market.update.diffAdded" : f.status === "removed" ? "market.update.diffRemoved" : "market.update.diffChanged")}
+                  </span>
+                </div>
+                <pre className="overflow-x-auto rounded-md bg-muted p-2 font-mono text-xs">
+                  {f.lines.map((l, i) => (
+                    <div key={i} className={l.sign === "+" ? "text-emerald-600" : l.sign === "-" ? "text-red-600" : "text-muted-foreground"}>
+                      {l.sign} {l.text}
+                    </div>
+                  ))}
+                </pre>
+              </div>
+            ))}
+          </div>
+        )}
         {result && !result.ok && <Failure title={t("market.update.failedTitle")} message={result.message ?? ""} />}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={pending}>{t("common.cancel")}</AlertDialogCancel>
-          <AlertDialogAction disabled={pending} onClick={refetch}>
-            {pending ? t("market.deploy.submitting") : t("market.update.confirmAction")}
+          <AlertDialogAction disabled={pending || diff === "loading"} onClick={refetch}>
+            {pending ? t("market.deploy.submitting") : diff && diff !== "loading" ? t("market.update.takeAction") : t("market.update.confirmAction")}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -19,6 +19,7 @@ import {
   deploySquad,
   listMarketItems,
   missingMarketMembers,
+  type Bump,
   type MarketMeta,
 } from "@/lib/market";
 import {
@@ -69,11 +70,12 @@ export async function deployPersonaAction(
   name: string,
   note: string,
   tags: string[],
+  bump: Bump = "patch",
 ): Promise<DeployResult> {
   try {
     const project = await requireProject(projectId);
     const files = await readPersonaFiles(await personasDir(projectId), name);
-    const meta = await deployPersona(project.id, project.name, name, files, note, tags);
+    const meta = await deployPersona(project.id, project.name, name, files, note, tags, bump);
     revalidatePath(`/p/${projectId}/personas`);
     revalidatePath("/market");
     return { ok: true, meta };
@@ -111,6 +113,7 @@ export async function deploySquadAction(
   squadName: string,
   note: string,
   tags: string[],
+  bump: Bump = "patch",
 ): Promise<DeployResult> {
   try {
     const project = await requireProject(projectId);
@@ -123,7 +126,7 @@ export async function deploySquadAction(
     );
     for (const memberName of missing) {
       const files = await readPersonaFiles(pDir, memberName);
-      await deployPersona(project.id, project.name, memberName, files, note, tags);
+      await deployPersona(project.id, project.name, memberName, files, note, tags, bump);
     }
     const meta = await deploySquad(
       project.id,
@@ -132,6 +135,7 @@ export async function deploySquadAction(
       squadMembersFileText(squad.members),
       note,
       tags,
+      bump,
     );
     revalidatePath(`/p/${projectId}/personas`);
     revalidatePath("/market");

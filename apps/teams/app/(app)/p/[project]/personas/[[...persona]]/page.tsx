@@ -24,9 +24,9 @@ import { TitleRefs } from "@/components/queue-ref";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
-import { overlayPersonas, overlaySquads } from "@/lib/apm";
+import { hasTeam, overlayPersonas, overlaySquads } from "@/lib/apm";
 import { t } from "@/lib/i18n";
-import { marketRecord } from "@/lib/market";
+import { marketRecord, teamImports } from "@/lib/market";
 import { personaActivity } from "@/lib/persona-activity";
 import { listTickets } from "@/lib/queue";
 import { decodeHash } from "@/lib/urls";
@@ -114,6 +114,8 @@ export default async function Personas({
   ]);
   // 새 체계(`dira-team/`)면 PROFILE - skills - members - rules 는 `resolve` 위치에서 읽는다(P506-5).
   const { personas, homes } = await overlayPersonas(project.root, config.personas, personaList, tickets);
+  // `dira-team/`이면 받아 둔 것의 출처는 레지스트리가 아니라 사본과 apm.yml이다(레지스트리 `market`은 안 쓴다).
+  const imports = hasTeam(project.root) ? await teamImports(project.root) : project.market;
   const squadList = await overlaySquads(project.root, squadsDir(project), squadListOld);
   const squads = await Promise.all(
     squadList.map(async (s) => ({
@@ -122,7 +124,7 @@ export default async function Personas({
       // 없으면(body === null) "프로필 없다"는 하나의 사실이다.
       missingProfile: s.members.some((m) => !personas.some((p) => p.name === m.name && p.body !== null)),
       // 원본에서 보는 기록(§원본에서 보는 기록, 티켓 `1c06035e`) — 배포 이력·가져간 기록·갱신 배지.
-      market: await marketRecord("squad", id, s.name, project.market?.squads?.[s.name]),
+      market: await marketRecord("squad", id, s.name, imports?.squads?.[s.name]),
     })),
   );
   const engineHint = personaEngineHint(
@@ -147,7 +149,7 @@ export default async function Personas({
           readPersonaEngine(config.personas, p.name),
           personaActivity(p.name, tickets, project.root, config),
           // 원본에서 보는 기록(§원본에서 보는 기록, 티켓 `1c06035e`) — 배포 이력·가져간 기록·갱신 배지.
-          marketRecord("persona", id, p.name, project.market?.personas?.[p.name]),
+          marketRecord("persona", id, p.name, imports?.personas?.[p.name]),
         ]);
       // 손으로 두 파일에 같은 이름을 넣어 두면 활성이 이긴다(§5-1 §충돌) — 화면은 그 이름을
       // 활성으로 한 번만 그린다. 파일 자체는 다음 저장이 고친다(savePersonaSkillsAction).

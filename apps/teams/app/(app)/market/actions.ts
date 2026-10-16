@@ -17,14 +17,19 @@ import {
   getMarketItem,
   importPersona,
   importSquad,
+  importToTeam,
   listMarketItems,
+  previewTeamUpdate,
   projectsThatImported,
+  teamImports,
+  type FileDiff,
   toggleFavorite,
   type ImportReason,
   type MarketItem,
   type MarketItemDetail,
   type MarketKind,
 } from "@/lib/market";
+import { hasTeam, installTeam, packageNames } from "@/lib/apm";
 import { getProject, readProjects, resolveConfig, setMarketInstall, squadsDir } from "@/lib/projects";
 
 export type ImportResult =
@@ -38,7 +43,11 @@ export type MarketCardItem = MarketItem & { profileFirstLine: string; installedI
 export async function loadMarketPaneData(
   locale: Locale,
 ): Promise<{ items: MarketCardItem[]; projects: { id: string; name: string }[] }> {
-  const [items, projects] = await Promise.all([listMarketItems(), readProjects(locale)]);
+  const [items, rawProjects] = await Promise.all([listMarketItems(), readProjects(locale)]);
+  // `dira-team/` 프로젝트의 가져간 기록은 레지스트리가 아니라 그 프로젝트의 apm.yml과 사본이다.
+  const projects = await Promise.all(
+    rawProjects.map(async (p) => (hasTeam(p.root) ? { ...p, market: await teamImports(p.root) } : p)),
+  );
   const rows: MarketCardItem[] = await Promise.all(
     items.map(async (item) => {
       // 스쿼드는 `profile`이 항상 null이라 첫 줄도 항상 빈 문자열이다 — 별도 분기 없이
@@ -60,7 +69,33 @@ function reasonMessage(reason: ImportReason, asName: string, locale: Locale): st
   return t(locale, "market.import.notFound");
 }
 
-/** 페르소나 가져오기. `asName`이 비면 원본 이름을 그대로 쓴다(화면의 기본값과 같은 규칙). */
+/** `dira-team/` 프로젝트의 가져오기 한 벌: 사본 + apm.yml 한 줄 + install. 레지스트리 `market`은 쓰지 않는다. */
+async function importTeam(
+  kind: MarketKind,
+  owner: string,
+  name: string,
+  projectId: string,
+  to: string,
+  overwrite: boolean,
+  locale: Locale,
+  version?: string,
+): Promise<ImportResult> {
+  const project = (await getProject(projectId))!;
+  const existing = kind === "squad" ? await packageNames(project.root, "persona") : [];
+  const r = await importToTeam(kind, owner, name, project.root, to, overwrite, version, existing);
+  if (!r.ok) {
+    if (r.reason === "conflict") return { ok: false, conflict: true, message: t(locale, "market.import.conflict") };
+    return { ok: false, message: reasonMessage(r.reason, to, locale) };
+  }
+  await installTeam(project.root);
+  await appendInstall({ at: new Date().toISOString(), kind, owner, name, v: r.version, project: projectId, as: to });
+  revalidatePath(`/p/${projectId}/personas`);
+  revalidatePath("/market");
+  return { ok: true, as: to, missingInMarket: r.missingInMarket, coImported: r.coImported };
+}
+
+/** 페르소나 가져오기. `asName`이 비면 원본 이름을 그대로 쓴다(화면의 기본값과 같은 규칙).
+ *  `version`을 안 주면 저장소의 최고 버전이다(`dira-team/` 프로젝트만 고를 수 있다). */
 export async function importPersonaAction(
   owner: string,
   name: string,
@@ -68,11 +103,13 @@ export async function importPersonaAction(
   asName: string,
   overwrite = false,
   locale: Locale = DEFAULT_LOCALE,
+  version?: string,
 ): Promise<ImportResult> {
   try {
     const project = await getProject(projectId);
     if (!project) return { ok: false, message: `${t(locale, "projects.unknownProjectIdPrefix")} ${projectId}` };
     const to = asName.trim() || name;
+    if (hasTeam(project.root)) return await importTeam("persona", owner, name, projectId, to, overwrite, locale, version);
     const dir = (await resolveConfig(project)).personas;
     const r = await importPersona(owner, name, dir, to, overwrite);
     if (!r.ok) {
@@ -100,11 +137,13 @@ export async function importSquadAction(
   asName: string,
   overwrite = false,
   locale: Locale = DEFAULT_LOCALE,
+  version?: string,
 ): Promise<ImportResult> {
   try {
     const project = await getProject(projectId);
     if (!project) return { ok: false, message: `${t(locale, "projects.unknownProjectIdPrefix")} ${projectId}` };
     const to = asName.trim() || name;
+    if (hasTeam(project.root)) return await importTeam("squad", owner, name, projectId, to, overwrite, locale, version);
     const config = await resolveConfig(project);
     const r = await importSquad(owner, name, squadsDir(project), config.personas, to, overwrite);
     if (!r.ok) {
@@ -121,6 +160,18 @@ export async function importSquadAction(
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
+}
+
+/** 업데이트 전 diff. `dira-team/` 프로젝트에서만 의미가 있고(사본이 있어야 견줄 수 있다) 아니면 빈 목록이다. */
+export async function previewMarketUpdateAction(
+  kind: MarketKind,
+  owner: string,
+  name: string,
+  projectId: string,
+): Promise<{ version: string; files: FileDiff[] } | null> {
+  const project = await getProject(projectId);
+  if (!project || !hasTeam(project.root)) return null;
+  return previewTeamUpdate(kind, owner, name, project.root);
 }
 
 /** 즐겨찾기 켜기/끄기(§화면, 티켓 `0aac85ef`) — `favorites.json` 읽고 쓰는 유일한 서버 액션.

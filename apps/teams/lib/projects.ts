@@ -45,7 +45,7 @@ export type Project = {
 
 /** 레지스트리 한 칸의 모양 — `{owner, name, v}`(DESIGN.md §저장 자리). `owner`·`name`은 마켓
  *  쪽 원본 식별자이고 `v`는 지금 설치된 버전이다. */
-export type MarketInstallEntry = { owner: string; name: string; v: number };
+export type MarketInstallEntry = { owner: string; name: string; v: number | string };
 
 export type ProjectConfig = {
   personas: string;

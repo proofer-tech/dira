@@ -20,7 +20,7 @@ export type Home = { base: string; name: string; shared: boolean };
 
 /** 프로젝트 저장소 루트 = 큐(`.dira`)의 부모. */
 export const repoOf = (queueRoot: string) => path.dirname(queueRoot);
-const teamOf = (queueRoot: string) => path.join(repoOf(queueRoot), "dira-team");
+export const teamOf = (queueRoot: string) => path.join(repoOf(queueRoot), "dira-team");
 
 export const hasTeam = (queueRoot: string) => existsSync(path.join(teamOf(queueRoot), "apm.yml"));
 
@@ -61,6 +61,12 @@ export async function packageNames(queueRoot: string, kind: ApmKind): Promise<st
   const out = new Set<string>();
   for (const e of await readdir(path.join(team, `${kind}s`), { withFileTypes: true }).catch(() => []))
     if (e.isDirectory() && NAME_RE.test(e.name)) out.add(e.name);
+  // 마켓에서 받은 사본(`market/<kind>/<owner>/<이름>/`)도 로컬 패키지다.
+  const mroot = path.join(team, "market", kind);
+  for (const o of await readdir(mroot, { withFileTypes: true }).catch(() => []))
+    if (o.isDirectory())
+      for (const e of await readdir(path.join(mroot, o.name), { withFileTypes: true }).catch(() => []))
+        if (e.isDirectory() && NAME_RE.test(e.name)) out.add(e.name);
   const walk = async (dir: string, depth: number): Promise<void> => {
     for (const e of await readdir(dir, { withFileTypes: true }).catch(() => [])) {
       if (!e.isDirectory() || e.name === ".git" || e.name === "node_modules") continue;
@@ -87,28 +93,40 @@ export async function copyToLocal(queueRoot: string, kind: ApmKind, name: string
   if (existsSync(dest)) throw new Error("이미 로컬 패키지가 있습니다: " + name);
   const src = path.join(home.base, home.name);
   await cp(src, dest, { recursive: true, errorOnExist: true, force: false });
-  const ymlPath = path.join(team, "apm.yml");
-  const lines = (await readFile(ymlPath, "utf8")).split("\n");
-  const local = `./${kind}s/${name}`;
   const rel = path.relative(path.join(team, "apm_modules"), src).split(path.sep).join("/");
-  let hit = false;
-  const next = lines.map((l) => {
-    const m = /^(\s+-\s+)(['"]?)([^\s'"]+)\2\s*$/.exec(l);
-    if (!hit && m && m[3].split("#")[0] === rel) {
-      hit = true;
-      return `${m[1]}${local}`;
-    }
-    return l;
+  await setDependency(path.join(team, "apm.yml"), `./${kind}s/${name}`, (d) => d.split("#")[0] === rel);
+  await installTeam(queueRoot);
+}
+
+/** `dira-team/apm.yml`의 `dependencies.apm` 목록에 한 줄을 건다. `replaces`가 참인 줄이 있으면 그 줄을
+ *  바꾸고, 같은 줄이 이미 있으면 그대로 두고, 아니면 목록 끝에 붙인다. */
+export async function setDependency(
+  ymlPath: string,
+  line: string,
+  replaces: (existing: string) => boolean = () => false,
+): Promise<void> {
+  const next = (await readFile(ymlPath, "utf8")).split("\n");
+  const dep = /^(\s+-\s+)(['"]?)([^\s'"]+)\2\s*$/;
+  if (next.some((l) => dep.exec(l)?.[3] === line)) return;
+  const hit = next.findIndex((l) => {
+    const m = dep.exec(l);
+    return !!m && replaces(m[3]);
   });
-  if (!hit) {
-    // 간접 의존성이면 직접 의존성으로 올린다 — `apm:` 목록 끝에 붙인다.
+  if (hit >= 0) next[hit] = `${dep.exec(next[hit])![1]}${line}`;
+  else {
     const i = next.findIndex((l) => /^\s+apm:\s*$/.test(l));
     if (i < 0) throw new Error("dira-team/apm.yml에 dependencies.apm 목록이 없습니다");
     let j = i + 1;
     while (j < next.length && /^\s+-\s/.test(next[j])) j++;
-    next.splice(j, 0, `    - ${local}`);
+    next.splice(j, 0, `    - ${line}`);
   }
   await writeFile(ymlPath, next.join("\n"), "utf8");
+}
+
+/** `dira_apm.py install --no-frozen`. 의존성을 바꾼 뒤 lock을 새로 쓴다. */
+export async function installTeam(queueRoot: string): Promise<void> {
+  const py = enginePy();
+  if (!py) throw new Error("dira_apm.py 없음");
   const r = await runPy(py, ["install", repoOf(queueRoot), "--no-frozen"]);
   if (r.rc !== 0) throw new Error("apm install 실패 rc " + r.rc);
 }
