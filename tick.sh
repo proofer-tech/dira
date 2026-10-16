@@ -144,6 +144,12 @@ if [ "${1:-}" = remote ] && [ "$e" = claude ]; then
   [ -f "$d/engines/remote.py" ] && exec python3 "$d/engines/remote.py" "$@"
   echo "dira remote: 클라이언트가 설치되지 않았습니다" >&2; exit 69
 fi
+# P503-1: agy는 사본이 없다(자기 경로를 덮어써 업데이트해 사본이 갈라진다). 실체 경로를 따라간다.
+if [ "$e" = agy ]; then
+  a="$(cat "$d/engines/agy.src" 2>/dev/null)"
+  [ -n "$a" ] && [ -x "$a" ] && exec "$a" "$@"
+  exec agy "$@"
+fi
 [ -x "$d/engines/$e" ] && exec "$d/engines/$e" "$@"
 exec "$e" "$@"'
 refresh_fixed_engine() {
@@ -160,6 +166,12 @@ refresh_fixed_engine() {
     # `$bin.src`에 적어 두고 문자열로 대조한다(`readlink -f`는 BSD에 없어 python3로 낸다).
     real="$(python3 -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$src" 2>/dev/null)"
     [ -n "$real" ] || continue
+    # P503-1: agy는 굽지 않는다 - 실체 경로만 적고 남은 사본과 stamp를 지운다.
+    if [ "$cmd" = agy ]; then
+      [ "$(cat "$bin.src" 2>/dev/null)" = "$real" ] || printf '%s' "$real" > "$bin.src" 2>/dev/null
+      rm -rf "$bin" "$bin.stamp" 2>/dev/null
+      continue
+    fi
     # 경로만으로는 agy처럼 같은 자리를 덮어써 업데이트하는 엔진을 못 잡는다 - 경로가 그대로라
     # 옛 복사본에 영영 머문다(1.1.19 vs 1.2.14 실측). mtime·크기를 `$bin.stamp`에 따로 적는다.
     # `$bin.src` 형식을 안 바꾸는 것은 같은 BIN_DIR을 굽는 설치본 엔진(옛 tick.sh)과 번갈아
