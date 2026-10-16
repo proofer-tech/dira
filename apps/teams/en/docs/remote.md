@@ -145,7 +145,8 @@ and the remaining projects keep syncing on the same runtime.
 
 If it was the workspace's last project, the runtime is released too. dira deletes the runtime on the
 server and removes `runtime.json` and `credentials.json` from the workspace directory. When no
-connected workspace is left on this computer, it also removes the two clock lines from the crontab.
+connected workspace is left on this computer, it also removes the two clock lines from the crontab
+and stops the [read process](#the-always-running-read-process).
 
 The worker's two crontab lines stay. The worker keeps running, but now handles local tickets only. To
 stop the worker too, remove those two lines as described in [cron](/docs/cron).
@@ -182,27 +183,54 @@ If the `sync-all` lines are missing, they come back the next time a worker of a 
 runs. If the lines are there but no heartbeat arrives, the last lines of `sync.log` tell you why.
 Once the log passes 1 MB it is moved to `sync.log.1` and starts fresh.
 
+### The always-running read process
+
+On macOS, one process stays running alongside the clock. It is called `dev.dira.remote-reads`, and
+launchd starts it and restarts it if it dies. It keeps a connection to the server open and takes
+ontology read requests from the web and [wakes](#why-a-job-from-the-web-starts-late). Heartbeats,
+project syncs, and fetching jobs stay with the clock.
+
+It is installed together with the two clock lines when you connect a remote queue. If it goes
+missing, it comes back the next time a worker of a connected project runs. To check that it is
+alive:
+
+```sh
+launchctl print gui/$(id -u)/dev.dira.remote-reads
+tail -n 50 ~/.config/dira/remote/reads.log
+```
+
+If `launchctl print` cannot find the service, or its output has no `state = running`, the process is
+not running. Until it is back, the clock takes reads and wakes in its place, so they do not stop.
+There is just a gap of about 1 second in every 30 when nothing is taken. On a computer that is not
+macOS this process is never installed, and the clock always takes them.
+
+The log is `~/.config/dira/remote/reads.log`, and once it passes 1 MB it is moved to `reads.log.1`.
+If the process fails before it even starts, the reason goes to `reads.launchd.log` in the same
+directory.
+
+There is no command that stops only this process. It goes away together with the two clock lines when
+you [disconnect](#disconnecting) the last remote connection on this computer.
+
 ## Why a job from the web starts late
 
-dira has no process that stays running. Talking to the server is done by processes cron starts every
-30 seconds. One round of that is called a sync, and it happens in two places: the clock above syncs
+Most of the talking to the server is done by processes cron starts every 30 seconds. One round of that is called a sync, and it happens in two places: the clock above syncs
 every project in turn, and each queue's worker syncs its own project right before picking a ticket. A
 job you start on the web comes down to this computer at the next sync, and whether the clock or a
 worker fetched it, its session starts in that same sync.
 
-Right after sending the heartbeat, the clock keeps a connection to the server open and waits until
-1 second before the next clock tick. This is called the long wait, and it takes up about 29 of every
-30 seconds. Project syncs run separately from the long wait, so even a slow sync does not hold back
-the start of the long wait. If you start a job on the web during the long wait, the server wakes
-this computer and the clock syncs that project right away. While that sync runs, the long wait keeps
+Keeping a connection to the server open and waiting for requests is called the long wait. On macOS
+the [read process](#the-always-running-read-process) keeps the long wait going without a break.
+Without that process, the clock does the long wait from right after the heartbeat until 1 second
+before the next clock tick, which takes up about 29 of every 30 seconds. Project syncs run
+separately from the long wait, so even a slow sync does not hold it back. If you start a job on the
+web during the long wait, the server wakes this computer and dira syncs that project right away. While that sync runs, the long wait keeps
 taking the next requests. The job comes down and starts within 3 seconds. Answers to questions and ontology edits made on the
-web come down the same way, within 3 seconds. The long
-wait runs inside the same process cron started and ends before the next tick, so there is still no
-process that stays running.
+web come down the same way, within 3 seconds.
 
-A job started outside the long wait waits for the next clock tick. That covers the gap of about 1
-second between ticks, and also the last 3 seconds of the long wait, when a wake no longer starts a
-new sync. The next tick is a few seconds away, so this does not take long. If a network error keeps
+A job started outside the long wait waits for the next clock tick. While the read process runs, the
+long wait has no gaps; you are outside it only while a dropped connection to the server is being
+reopened. When the clock does the long wait, the gap of about 1 second between ticks is outside it,
+and so are the last 3 seconds of the long wait, when a wake no longer starts a new sync. The next tick is a few seconds away, so this does not take long. If a network error keeps
 the long wait from reaching the server, no wake arrives, the job comes down at the next sync, and you
 may wait up to about 30 seconds.
 
@@ -261,7 +289,7 @@ There are four progress steps: the first time the session reads a file (`read`),
 edits one (`wrote`), when it creates a new ticket (`handoff`), and when it starts waiting for an
 answer (`awaiting`). Each shell command is cut at 2,000 bytes.
 
-During the long wait, the clock checks the remote job's ticket file every second. When the job
+During the long wait, dira checks the remote job's ticket file every second. When the job
 starts, finishes, or leaves a question, the ticket file changes and the state and question go up
 right away. Progress piles up the whole time a session runs, so it goes up at most once every 5
 seconds.
@@ -300,16 +328,20 @@ The ontology is not uploaded to the server as a copy. When you open the ontology
 server sends a read request to this computer, and dira here reads the files at that moment and
 answers. Every request reads the files fresh, so the web shows exactly what is on this computer now.
 
-Read requests are taken by [the computer clock](#the-computer-clock). Right after sending the
-heartbeat, `sync-all` waits for read requests from the server until 1 second before the next clock
-tick and answers each one as it arrives. Reads do not wait for a slow project sync or for a sync
-started by a wake, and several requests that arrive together are answered together. So the web cannot show the ontology when:
+On macOS, read requests are taken by the
+[always-running read process](#the-always-running-read-process). It keeps a connection to the server
+open, answers each request as soon as it arrives, and keeps taking new requests while answers are
+still going out. Without that process, or on a computer that is not macOS,
+[the computer clock](#the-computer-clock) takes them instead. Then `sync-all` waits for requests from
+right after the heartbeat until 1 second before the next clock tick, so for about 1 second in every
+30 no request is taken. Either way, reads do not wait for a slow project sync or for a sync started
+by a wake. The web cannot show the ontology when:
 
 - this computer is off or asleep
 - the network is down
-- the crontab does not have the two clock lines
+- the read process is not running and the crontab does not have the two clock lines either
 
-Once it is back, the ontology shows again from the next clock tick.
+Once it is back, the ontology shows again within about 30 seconds.
 
 Only three folders under the project's ontology location are read.
 
@@ -354,6 +386,7 @@ is also kept in `last-error` in that project's subdirectory, and the next succes
 | `remote_revoked: true` in a ticket's frontmatter | This computer went quiet for too long and the server took the job back. That ticket's state is no longer reported |
 | `remote_failed: no-token` in a ticket's frontmatter | The job's token file was missing, so dira closed the ticket without starting a session. The ticket is `.done` but the work is not, and the server is told `failed`. This computer cannot recreate the token; issue the job again from the remote service |
 | `REMOTE persona-skip <name>` | You have your own persona with that name, so the server's persona was not installed |
+| `launchctl print gui/$(id -u)/dev.dira.remote-reads` cannot find the service | The read process is missing, so the clock is taking reads in its place. It is installed again the next time a worker of a connected project runs. If it is installed and still not running, check `~/.config/dira/remote/reads.launchd.log` |
 | `reads <workspace> <reason>` in `sync.log` | The server does not know read requests, or the network failed, so this clock run takes no more read requests for that workspace. The next clock run tries again |
 
 The login check runs on connect, every 6 hours, and right after a session on that tool ends with an
