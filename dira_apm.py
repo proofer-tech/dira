@@ -136,6 +136,36 @@ def skill_names(md):
     return [m.group(1) for l in p.read_text().splitlines() if (m := SKILL_LINE.match(l))] if p.exists() else []
 
 
+# ponytail: lock 은 줄 단위로만 읽는다. 로컬 경로 의존성(source: local)의 원본 디렉터리와 apm_modules 사본의 내용 해시만 견준다.
+def lock_locals(site):
+    lock = site / "apm.lock.yaml"
+    out, cur = [], {}
+    for line in (lock.read_text().splitlines() if lock.exists() else []):
+        if line.startswith("- "):
+            cur = {}
+            out.append(cur)
+        m = re.match(r"^\s*-?\s*(name|anchored_local_path|local_path):\s*(.+?)\s*$", line)
+        if m and cur is not None:
+            cur[m.group(1)] = m.group(2)
+    res = []
+    for c in out:
+        src = c.get("anchored_local_path") or c.get("local_path")
+        if c.get("name") and src and os.path.isabs(src):
+            res.append((c["name"], Path(src)))
+    return res
+
+
+def drift(site):
+    bad = []
+    have = installed(site)
+    for name, src in lock_locals(site):
+        if not src.is_dir():
+            bad.append("원본 없음: %s (%s)" % (name, src))
+        elif digest(src) not in {digest(d) for d in have.get(name, [])}:
+            bad.append("apm_modules 사본이 원본과 다르다: %s" % name)
+    return bad
+
+
 def check(root):
     bad = []
     apm = None
@@ -145,6 +175,7 @@ def check(root):
         if r.returncode:
             last = (r.stdout + r.stderr).strip().splitlines()[-1:] or ["?"]
             bad.append("%s: apm audit rc %d: %s" % (site.name if site != root else ".", r.returncode, last[0]))
+        bad.extend(drift(site))
         owners = {}
         locs = [d for d in packages(site) if "apm_modules" not in d.parts]
         if site == root:  # 루트는 dira-team을 자기 패키지로 세지 않는다
@@ -245,6 +276,64 @@ def install(root, frozen):
     return rc
 
 
+def listing(root, kind):
+    """<이름>\t<디렉터리> 줄들. 로컬(dira-team/<kind>s/*)이 같은 이름의 설치본을 가린다."""
+    team = root / "dira-team"
+    rows = {}
+    base = team / (kind + "s")
+    for d in sorted(base.iterdir()) if base.is_dir() else []:
+        if d.is_dir():
+            rows[d.name] = d
+    for n, dirs in sorted(installed(team).items()):
+        if n.startswith(kind + "-") and n[len(kind) + 1:] not in rows:
+            rows[n[len(kind) + 1:]] = dirs[0]
+    for n, d in sorted(rows.items()):
+        print("%s\t%s" % (n, d))
+    return 0
+
+
+def gate_key(root):
+    h = hashlib.sha256()
+    for site in sites(root):
+        for p in [site / "apm.lock.yaml", site / "apm.yml"] + sorted((site / "apm_modules").rglob("*")):
+            try:
+                st = p.stat()
+                h.update(("%s %d %d\n" % (p, st.st_mtime_ns, st.st_size)).encode())
+            except OSError:
+                h.update(("%s -\n" % p).encode())
+    return h.hexdigest()
+
+
+def gate(root):
+    """tick 이 claim 전에 부른다. rc 0 통과, 1 불일치(요약 한 줄을 stdout 에). 같은 키로는 성공을 캐시하고 설치는 한 번만 시도한다."""
+    if not sites(root):
+        return 0
+    local = Path(os.environ.get("TICKET_LOCAL") or Path.home() / ".config/dira") / "run"
+    local.mkdir(parents=True, exist_ok=True)
+    state = local / ("apm-gate-" + hashlib.sha256(str(root).encode()).hexdigest()[:12])
+    key = gate_key(root)
+    old = state.read_text().split() if state.exists() else []
+    if old[:2] == [key, "ok"]:
+        return 0
+    import io, contextlib
+    def quiet(f, *a):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = f(*a)
+        return rc, buf.getvalue().strip().splitlines()
+    rc, lines = quiet(check, root)
+    if rc and os.environ.get("DIRA_APM_NO_INSTALL") != "1" and old[:2] != [key, "tried"]:
+        state.write_text(key + " tried")
+        if install(root, True) == 0:
+            rc, lines = quiet(check, root)
+            key = gate_key(root)
+    if rc:
+        print(lines[0] if lines else "check 실패")
+        return 1
+    state.write_text(key + " ok")
+    return 0
+
+
 def main(a):
     if not a:
         sys.exit(__doc__)
@@ -257,6 +346,10 @@ def main(a):
     root = Path(pos[0]).resolve() if pos else None
     if cmd == "install":
         return install(root, "--no-frozen" not in flags)
+    if cmd == "list":
+        return listing(root, pos[1])
+    if cmd == "gate":
+        return gate(root)
     if cmd == "check":
         return check(root)
     if cmd == "materialize":

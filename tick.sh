@@ -964,6 +964,17 @@ fi
 
 [ -z "$CANDS" ] && exit 0
 
+# --- P506 패키지 상태 게이트: claim 전에 dira-team 설치가 lock과 같은지 본다 ---
+# 옛 배치(dira-team/apm.yml 없음)는 gate가 아무것도 안 하고 0이다. 다르면 한 번 설치를 시도하고(gate
+# 안), 그래도 다르면 이번 tick은 아무것도 안 잡는다. DIRA_APM_NO_INSTALL=1이면 설치 시도를 건너뛴다.
+APMROOT="$(dirname "$TICKET_ROOT")"
+if [ "$CMD" = "tick" ] && [ -f "$APMROOT/dira-team/apm.yml" -o -f "$APMROOT/apm.yml" ]; then
+  if ! APMMSG=$(python3 "$CODE/dira_apm.py" gate "$APMROOT" 2>/dev/null); then
+    log "SKIP apm 설치 상태가 lock과 다르다 - ${APMMSG:-check 실패}"
+    exit 0
+  fi
+fi
+
 # --- 선정·claim 임계구역: 페르소나 상한·1 게이트는 여기 없으면 게이트가 아니다 ---
 # 상한(§5-4)은 `personas/<이름>/limit` 한 줄이고 **세는 것과 잡는 것이 한 임계구역**이어야 한다.
 # 지금 구조는 select가 후보를 전부 주고 각 워커가 위에서부터 claim하니 카운트가 claim보다 앞이다.
@@ -1439,13 +1450,27 @@ fi
 # 프로필 본문을 프롬프트 머리에 인라인한다(경로만 주면 세션이 안 읽고 시작할 수 있다).
 # persona가 비어 있으면 페르소나 없는 평범한 에이전트가 그냥 처리한다(정상 경로, 경고 없음).
 # 이름은 있는데 프로필 파일이 없으면 WARN만 남기고 돈다 - 수행 자체는 성립한다.
-PROFILE="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/PROFILE.md"
+# P506: dira-team/apm.yml이 있으면 PROFILE.md·skills.md는 resolve가 준 패키지 디렉터리에서 읽는다.
+# resolve가 rc 3(옛 배치)이거나 못 찾으면 종전 경로 그대로다. memory/·limit·engine·mcp.json은 큐에 남는다.
+APMROOT="$(dirname "$TICKET_ROOT")"
+PDIR="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA"
+APMPERSONAS=""; APMPLIST=""
+if [ -f "$APMROOT/dira-team/apm.yml" ]; then
+  APMPLIST=$(python3 "$CODE/dira_apm.py" list "$APMROOT" persona 2>/dev/null)
+  APMPERSONAS="$APMPLIST"
+  if [ -n "$TPERSONA" ]; then
+    _pd=$(printf '%s\n' "$APMPLIST" | awk -F'\t' -v n="$TPERSONA" '$1==n {print $2; exit}')
+    [ -n "$_pd" ] && [ -r "$_pd/PROFILE.md" ] && PDIR="$_pd" || APMPERSONAS=""
+  fi
+fi
+PROFILE="$PDIR/PROFILE.md"
+SKILLNAMES_SHOWN=""
 if [ -z "$TPERSONA" ]; then
   :
 elif [ -r "$PROFILE" ]; then
   # 스킬 사이드카(같은 디렉터리 skills.md)는 프로필 바로 뒤에 붙는다. 없는 것이 정상이라 WARN 없다.
   # Claude 엔진일 때만이다 - codex엔 스킬 개념이 없어서 "없는 도구를 쓰라"는 문장이 된다.
-  SKILLS="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA/skills.md"
+  SKILLS="$PDIR/skills.md"
   SKILLBLOCK=""
   if [ -r "$SKILLS" ] && [ "$ENGINE_NAME" = "claude" ]; then
     SKILLBLOCK="
@@ -1460,19 +1485,28 @@ $(cat "$SKILLS")
     # + skills/<이름> 심링크)을 만들어 등록한다 - 디스크 실측으로 확인(claude --plugin-dir는
     # 평범한 스킬 디렉터리 심링크만으로는 안 먹고, 이 매니페스트 구조가 있어야 Skill 도구가 찾는다).
     # (gstack) 꼬리표 스킬은 로컬 디렉터리가 없어 자연히 걸러진다 - 따로 안 가린다.
+    # P506: APM 배치면 링크 대상은 `dira_apm.py skills`가 준 경로(dira-team/.claude/skills/<이름>)다.
     SKILLHOME="${TICKET_SKILLS_HOME:-$HOME/.claude/skills}"
     PLUGDIR="$LOCAL/run/skillplugin-$SID"
     PLUGN=0
-    while IFS= read -r _sn; do
-      case "$_sn" in *[!A-Za-z0-9_-]*|"") continue ;; esac
-      [ -r "$SKILLHOME/$_sn/SKILL.md" ] || continue
+    if [ -n "$APMPERSONAS" ]; then
+      SKILLPATHS=$(python3 "$CODE/dira_apm.py" skills "$APMROOT" "$TPERSONA" 2>/dev/null)
+    else
+      SKILLPATHS=$(sed -n 's/^- `\([^`]*\)`.*/\1/p' "$SKILLS" | while IFS= read -r _sn; do
+        [ -n "$_sn" ] && [ -z "${_sn//[A-Za-z0-9_-]/}" ] && [ -r "$SKILLHOME/$_sn/SKILL.md" ] && printf '%s\n' "$SKILLHOME/$_sn"
+        true
+      done)
+    fi
+    while IFS= read -r _sp; do
+      [ -n "$_sp" ] || continue
+      _sn="$(basename "$_sp")"
       [ "$PLUGN" -eq 0 ] && { mkdir -p "$PLUGDIR/.claude-plugin" "$PLUGDIR/skills" || break
         printf '{"name":"%s-skills","version":"0.0.1","description":"persona skills.md sidecar"}\n' \
           "$TPERSONA" > "$PLUGDIR/.claude-plugin/plugin.json"; }
-      ln -sf "$SKILLHOME/$_sn" "$PLUGDIR/skills/$_sn" && PLUGN=$((PLUGN + 1))
-    done <<SKILLNAMES
-$(sed -n 's/^- `\([^`]*\)`.*/\1/p' "$SKILLS")
-SKILLNAMES
+      ln -sf "$_sp" "$PLUGDIR/skills/$_sn" && PLUGN=$((PLUGN + 1)) && SKILLNAMES_SHOWN="$SKILLNAMES_SHOWN $_sn"
+    done <<SKILLPATHS
+$SKILLPATHS
+SKILLPATHS
     if [ "$PLUGN" -gt 0 ]; then
       TICKET_ENGINE+=(--plugin-dir "$PLUGDIR")
     else
@@ -1520,10 +1554,16 @@ fi
 # 꼬리는 이름 없이 `===== 스쿼드 끝 =====` 그대로다. rules는 이 블록 밖의 별도 사이드카 틀이다.
 SQUADBLOCK=""
 RULESBLOCK=""
-if [ -n "$TPERSONA" ] && [ -d "$TICKET_ROOT/squads" ]; then
-  while IFS= read -r sqdir; do
+# P506: dira-team/apm.yml이 있으면 스쿼드 후보는 로컬 dira-team/squads/*와 설치된 squad-*(`list`)이고,
+# 멤버 역할 한 줄은 `list persona`의 디렉터리 PROFILE.md에서 읽는다. 없으면 종전 $TICKET_ROOT/squads다.
+if [ -f "$APMROOT/dira-team/apm.yml" ]; then
+  SQDIRS=$(python3 "$CODE/dira_apm.py" list "$APMROOT" squad 2>/dev/null | awk -F'\t' '{print $1 "|" $2}')
+else
+  SQDIRS=$(find "$TICKET_ROOT/squads" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | while IFS= read -r _d; do printf '%s|%s\n' "$(basename "$_d")" "$_d"; done)
+fi
+if [ -n "$TPERSONA" ] && [ -n "$SQDIRS" ]; then
+  while IFS='|' read -r sqname sqdir; do
     [ -n "$sqdir" ] || continue
-    sqname="$(basename "$sqdir")"
     mfile="$sqdir/members"
     [ -f "$mfile" ] || continue
     ROWS=""; LEADER=""; FOUND=""; FIRST=1
@@ -1535,6 +1575,10 @@ if [ -n "$TPERSONA" ] && [ -d "$TICKET_ROOT/squads" ]; then
       [ -n "$name" ] || continue
       if [ -z "$role" ]; then
         pfile="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$name/PROFILE.md"
+        if [ -n "$APMPLIST" ]; then
+          _pd=$(printf '%s\n' "$APMPLIST" | awk -F'\t' -v n="$name" '$1==n {print $2; exit}')
+          [ -n "$_pd" ] && pfile="$_pd/PROFILE.md"
+        fi
         [ -r "$pfile" ] && role="$(head -1 "$pfile")"
       fi
       TAG=""
@@ -1556,7 +1600,9 @@ $(cat "$sqdir/rules")
 ===== 규칙 끝 =====
 "
     fi
-  done < <(find "$TICKET_ROOT/squads" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
+  done <<SQUADDIRS
+$SQDIRS
+SQUADDIRS
 fi
 [ -n "$RULESBLOCK" ] && PROMPT="$RULESBLOCK
 $PROMPT"
@@ -1649,8 +1695,8 @@ fi
 CORE="$TICKET_ROOT/protocols/CORE.md"
 # 엔진 사본(<엔진>/protocols/CORE.md)은 P506-4가 지웠다 - 큐 사본(materialize 결과)이 없으면
 # 공용 패키지(resolve protocols)에서 읽는다. dira-team/apm.yml이 없으면(rc 3) 빈 값이라 WARN으로 간다.
-if [ ! -r "$CORE" ]; then
-  _CP="$(python3 "$CODE/dira_apm.py" resolve "$(dirname "$TICKET_ROOT")" protocols 2>/dev/null)" && CORE="$_CP/CORE.md"
+if [ ! -r "$CORE" ] && [ -f "$APMROOT/dira-team/apm.yml" ]; then
+  _pp=$(python3 "$CODE/dira_apm.py" resolve "$APMROOT" protocols 2>/dev/null) && [ -r "$_pp/CORE.md" ] && CORE="$_pp/CORE.md"
 fi
 if [ -r "$CORE" ]; then
   PROMPT="===== CORE.md ($(wtpath "$CORE")) =====
@@ -1680,6 +1726,9 @@ if [ "$CMD" = "dryrun" ]; then
   echo "선정: $THASH (kind ${TKIND:--}, 페르소나 ${TPERSONA:-없음})"
   echo "경로: $TPATH"
   echo "엔진: ${TICKET_ENGINE[*]}"
+  # 스킬: 줄은 프롬프트 앞에 둔다 - 프롬프트: 이후 바이트가 종전과 같아야 한다(수용조건 d).
+  _sk="$(printf '%s\n' $SKILLNAMES_SHOWN | LC_ALL=C sort | tr '\n' ' ')"; _sk="${_sk% }"
+  [ -n "$_sk" ] && echo "스킬: $_sk"
   echo "프롬프트: $PROMPT"
   # dryrun은 미리보기라 claim도 세션도 안 한다 - skill plugin-dir(파일시스템 실체)도 미리보기
   # 끝에서 지운다. 안 지우면 dryrun을 반복 호출할 때마다 $LOCAL/run 아래 고아 디렉터리가 쌓인다.

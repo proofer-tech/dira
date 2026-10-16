@@ -26,6 +26,11 @@ def run(*args, env=None):
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
+FAKE = Path(tempfile.mkdtemp()) / "apm"
+FAKE.write_text("#!/bin/sh\nexit 0\n")
+FAKE.chmod(0o755)
+
+
 class T(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -98,8 +103,73 @@ class T(unittest.TestCase):
         self.assertEqual((rc, out), (0, str(self.team / ".claude/skills/has")))
 
 
+TICK = HERE / "tick.sh"
+
+
+class TickT(unittest.TestCase):
+    """tick.sh 주입(P506-3): 임시 큐 + 가짜 claude + 가짜 apm."""
+
+    def setUp(self):
+        self.tmp = Path(os.path.realpath(tempfile.mkdtemp()))
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.tmp, ignore_errors=True))
+        self.proj = self.tmp / "proj"
+        self.root = self.proj / ".dira"
+        self.local = self.tmp / "local"
+        (self.local).mkdir()
+        (self.tmp / "home").mkdir()
+        w(self.tmp / "claude", '#!/bin/bash\nprintf \'{"session_id":"%s","type":"result","is_error":false,"subtype":"success"}\\n\' "$1"\n')
+        (self.tmp / "claude").chmod(0o755)
+        w(self.root / "workers/w1.sh", '#!/bin/bash\nTICKET_NAME="w1"\nTICKET_CWD="%s"\nTICKET_PROMPT_FMT="pick %%s"\n'
+          'TICKET_ENGINE=("%s/claude" "{sid}")\n. "%s"\n' % (self.proj, self.tmp, TICK))
+        (self.root / "workers/w1.sh").chmod(0o755)
+        w(self.local / "oauth-token", "tok")
+        w(self.root / "tickets/7a1b2c3d.md", "---\nticket: 7a1b2c3d\ntitle: t\nkind: work\npersona: dev\n---\n\n## Goal\nx\n")
+        w(self.root / "protocols/CORE.md", "core\n")
+        w(self.root / "personas/dev/PROFILE.md", "# Dev\nold\n")
+
+    def tick(self, cmd, **env):
+        e = dict(os.environ, TICKET_LOCAL=str(self.local), HOME=str(self.tmp / "home"),
+                 DIRA_APM_BIN=str(FAKE), DIRA_APM_NO_INSTALL="1", **env)
+        return subprocess.run([str(self.root / "workers/w1.sh"), cmd], capture_output=True, text=True, env=e, timeout=120)
+
+    def test_dryrun_apm_layout(self):
+        t = self.proj / "dira-team"
+        w(t / "apm.yml", "name: t\nversion: 1.0.0\n")
+        pkg(t / "personas/dev", "persona-dev")
+        w(t / "personas/dev/PROFILE.md", "# Dev\nnew\n")
+        w(t / "personas/dev/skills.md", "- `loc` - 로컬\n")
+        w(t / ".claude/skills/loc/SKILL.md", "x")
+        out = self.tick("dryrun").stdout
+        self.assertIn("PROFILE (%s)" % (t / "personas/dev/PROFILE.md"), out)
+        self.assertIn("\n스킬: loc\n", out)
+
+    def test_dryrun_old_layout(self):  # rc 3 경로: 큐 사본을 읽는다
+        out = self.tick("dryrun").stdout
+        self.assertIn("PROFILE (%s)" % (self.root / "personas/dev/PROFILE.md"), out)
+        self.assertNotIn("\n스킬:", out)  # 종전 바이트 유지: 스킬이 없으면 줄도 없다
+
+    def test_gate_skip_on_drift(self):
+        t = self.proj / "dira-team"
+        src = self.tmp / "src/persona-dev"
+        pkg(src, "persona-dev")
+        w(src / "PROFILE.md", "a")
+        w(t / "apm.yml", "name: t\nversion: 1.0.0\n")
+        w(t / "apm.lock.yaml", "dependencies:\n- repo_url: _local/persona-dev\n  name: persona-dev\n  source: local\n  local_path: %s\n" % src)
+        pkg(t / "apm_modules/_local/persona-dev", "persona-dev")
+        w(t / "apm_modules/_local/persona-dev/PROFILE.md", "a")
+        self.tick("tick")
+        log = (self.root / "workers/runner.log").read_text() if (self.root / "workers/runner.log").exists() else ""
+        self.assertNotIn("SKIP apm", log)
+        w(t / "apm_modules/_local/persona-dev/PROFILE.md", "changed")
+        (self.root / "tickets/7a1b2c3d.done.md").unlink(missing_ok=True) if False else None
+        for f in (self.root / "tickets").iterdir():  # 앞 tick이 티켓을 소비했을 수 있다: 새로 둔다
+            f.unlink()
+        w(self.root / "tickets/8a1b2c3d.md", "---\nticket: 8a1b2c3d\ntitle: t\nkind: work\npersona: dev\n---\n\n## Goal\nx\n")
+        self.tick("tick")
+        log = (self.root / "workers/runner.log").read_text()
+        self.assertIn("SKIP apm 설치 상태가 lock과 다르다", log)
+        self.assertEqual([f.name for f in (self.root / "tickets").iterdir()], ["8a1b2c3d.md"])  # .wip 없음
+
+
 if __name__ == "__main__":
-    FAKE = Path(tempfile.mkdtemp()) / "apm"
-    FAKE.write_text("#!/bin/sh\nexit 0\n")
-    FAKE.chmod(0o755)
     unittest.main()
