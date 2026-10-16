@@ -9060,6 +9060,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 | 위치 | `apm install --root DIR`이면 `apm_modules`, lock, 타깃 산출물이 DIR 아래에 생긴다. `apm.yml`은 현재 디렉터리에서 읽는다 |
 | 패키지 안 | `.apm/skills/<이름>/SKILL.md`, `.apm/instructions/*.instructions.md`, `.apm/prompts/`, `.apm/agents/`, `.apm/hooks/`. 그 밖의 파일은 배포하지 않고 `apm_modules/` 안에만 둔다 |
 | 타깃 | claude: 스킬 `.claude/skills/<이름>/`, 지시 `.claude/rules/`. codex: 스킬 `.agents/skills/`, 지시는 `AGENTS.md`로 합쳐진다. grok-build: `.grok/` |
+| 실측 0.33.0 | 로컬 경로 의존성은 `apm_modules/_local/<해시>/<패키지>` 또는 `_local/<이름>`으로 복사돼 디렉터리 이름이 패키지 이름이 아니다(`apm.yml`의 `name`으로 찾는다). `targets`가 없고 하네스 표지도 없으면 `install`이 거부한다. `audit`은 텍스트 출력이고 rc로만 판정한다 |
 | 함정 | #1120(열림): 같은 이름 스킬은 나중 설치가 조용히 덮는다. #3143(열림): `.apm/context`가 `apm_modules`를 가리킨 채 남는다. MCP 정적 `env` 값은 파일에 그대로 쓰인다 |
 
 #### 결정
