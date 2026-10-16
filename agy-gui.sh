@@ -6,6 +6,10 @@
 # 붙여서 부른다(엔진 argv 전체가 "$@"로 들어온다).
 set -uo pipefail
 
+# P503-2: agy가 silent auth에 실패해 브라우저 OAuth로 넘어갈 때 잡 출력에 나오는 표식.
+# 하나라도 보이면 잡을 바로 끝내고 77로 낸다. 표식의 정본은 이 배열 하나다.
+AUTH_MARKERS=("Opening browser" "Please sign in" "authentication failed" "authentication required")
+
 UIDN="$(id -u)"
 
 # 결정 2: 사람이 로그아웃한 상태면 60초 대기 없이 바로 사유를 낸다.
@@ -75,9 +79,21 @@ if ! launchctl bootstrap "gui/$UIDN" "$PLIST" >/dev/null 2>&1; then
 fi
 
 # rc 파일이 생길 때까지 기다린다 - 상한은 없다(agy 작업 자체가 분 단위로 걸릴 수 있다).
+# P503-2: 기다리는 동안 stdout-stderr에 인증 실패 표식이 나오면 잡을 끊고 77로 끝낸다.
+AUTH_FAIL=0
 while [ ! -f "$RCF" ]; do
+  for m in "${AUTH_MARKERS[@]}"; do
+    if grep -qsF -- "$m" "$OUTF" "$ERRF"; then AUTH_FAIL=1; break; fi
+  done
+  [ "$AUTH_FAIL" = 1 ] && break
   sleep 0.2
 done
+
+if [ "$AUTH_FAIL" = 1 ]; then
+  launchctl bootout "gui/$UIDN/$LABEL" >/dev/null 2>&1
+  echo "agy-gui: agy 로그인 필요 - 맥 화면의 터미널에서 agy를 한 번 띄워 로그인을 마친다" >&2
+  exit 77
+fi
 RC="$(cat "$RCF" 2>/dev/null || echo 1)"
 
 launchctl bootout "gui/$UIDN/$LABEL" >/dev/null 2>&1

@@ -2472,6 +2472,11 @@ if [ -n "${FAILED:-}" ]; then
     case "$RESET" in ''|*[!0-9]*) ;; *) KNOWN=1; [ "$RESET" -gt "$UNTIL" ] && UNTIL="$RESET" ;; esac
     arm_cdown "$UNTIL" "$KNOWN"
     log "NOTE 엔진 불능 - $((UNTIL - NOW))초 쿨다운(복귀 ${RESET:-미상})"
+  elif [ "$ENGINE_NAME" = "agy" ] && [ "$RC" -eq 77 ]; then
+    # P503-2 - agy-gui.sh가 인증 실패 표식을 보고 77로 끝냈다. 안 걸면 다음 tick이 같은 티켓을
+    # 다시 디스패치해 크롬 로그인 창이 또 뜬다. 사람이 로그인할 시간으로 30분을 준다.
+    arm_cdown "$(( $(date +%s) + 1800 ))" 0
+    log "NOTE agy 로그인 필요 - 1800초 쿨다운"
   elif [ "$REASON" = "bad_request" ]; then
     # 엔진은 멀쩡하고 우리가 보낸 요청이 틀렸다 - 창을 걸어 봐야 다음 워커가 같은 요청을 다시
     # 보낼 뿐이다. 창 없이 평범한 FAIL로 떨어뜨려 다른 티켓·다른 엔진은 계속 돌게 둔다.

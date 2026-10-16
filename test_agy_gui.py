@@ -65,13 +65,33 @@ case "$1" in
     esac ;;
   bootout)
     [ -n "${FAKE_BOOTOUT_LOG:-}" ] && echo "$2" >> "$FAKE_BOOTOUT_LOG"
+    jf="${FAKE_JOBS_DIR:-/nonexistent}/${2##*/}"
+    if [ -f "$jf" ]; then kill -9 -- "-$(cat "$jf")" 2>/dev/null; rm -f "$jf"; fi
     exit 0 ;;
   bootstrap)
     [ "${FAKE_BOOTSTRAP_FAIL:-0}" = "1" ] && exit 1
+    # P503-2 - FAKE_JOBS_DIR가 있으면 plist의 잡을 실제로 띄운다(라벨 -> pid 파일).
+    [ -n "${FAKE_JOBS_DIR:-}" ] && python3 "$FAKE_JOBS_PY" "$3" "$FAKE_JOBS_DIR"
     exit 0 ;;
-  list) exit 0 ;;
+  list)
+    for f in "${FAKE_JOBS_DIR:-/nonexistent}"/*; do
+      [ -f "$f" ] && kill -0 "$(cat "$f")" 2>/dev/null && echo "$(cat "$f") 0 $(basename "$f")"
+    done
+    exit 0 ;;
   *) exit 1 ;;
 esac
+"""
+
+# P503-2 - 가짜 launchctl bootstrap이 plist의 잡을 진짜로 띄우는 도우미(새 세션 = 프로세스 그룹).
+FAKE_JOBS_PY = """\
+import os, plistlib, subprocess, sys
+d = plistlib.load(open(sys.argv[1], "rb"))
+env = dict(os.environ, **d.get("EnvironmentVariables", {}))
+p = subprocess.Popen(d["ProgramArguments"], env=env, start_new_session=True,
+                     stdin=open(d["StandardInPath"], "rb"),
+                     stdout=open(d["StandardOutPath"], "wb"),
+                     stderr=open(d["StandardErrorPath"], "wb"))
+open(os.path.join(sys.argv[2], d["Label"]), "w").write(str(p.pid))
 """
 
 STUB_ENGINE = """\
@@ -284,6 +304,51 @@ try:
     assert done, "launchctl 실패인데 티켓 디스패치 자체가 막혔다: " + repr(os.listdir(tickets))
 
     print("OK - launchctl print 실패에도 WARN 없이 디스패치가 끝난다")
+
+    # --- ⑨ P503-2 agy-gui.sh: 인증 표식을 내고 잠드는 잡 -> 5초 안에 77, 잡은 정리된다 ---
+    jobs = os.path.join(tmp, "jobs")
+    os.makedirs(jobs)
+    jobs_py = mkfile(os.path.join(tmp, "jobs.py"), FAKE_JOBS_PY)
+    jenv = dict(os.environ, PATH=os.path.join(home, ".local", "bin") + os.pathsep + os.environ["PATH"],
+                FAKE_MANAGERNAME="Aqua", FAKE_GUI_OK="1", FAKE_JOBS_DIR=jobs, FAKE_JOBS_PY=jobs_py)
+    sleeper = mkfile(os.path.join(tmp, "bin", "auth-sleeper.sh"),
+                     "#!/bin/bash\necho 'Opening browser to sign in'\nsleep 30\n", 0o755)
+    t0 = time.monotonic()
+    r = subprocess.run([AGY_GUI, sleeper], input="", capture_output=True, text=True,
+                       env=jenv, timeout=10)
+    elapsed = time.monotonic() - t0
+    assert r.returncode == 77, "인증 표식인데 종료 코드가 77이 아니다: {}\n{}".format(r.returncode, r.stderr)
+    assert "agy 로그인 필요" in r.stderr, "stderr에 agy 로그인 필요가 없다: " + r.stderr
+    assert elapsed < 5.0, "5초 안에 안 끝났다: {:.2f}s".format(elapsed)
+    lst = subprocess.run(["launchctl", "list"], capture_output=True, text=True, env=jenv).stdout
+    assert lst.count("agy-gui") == 0, "끝난 뒤에도 agy-gui 잡이 남았다: " + lst
+
+    print("OK - 인증 표식이면 5초 안에 77로 끝나고 잡이 남지 않는다")
+
+    # --- ⑩ 표식 없는 스텁(echo ok) -> stdout ok, 종료 코드 0 ---
+    okeng = mkfile(os.path.join(tmp, "bin", "ok.sh"), "#!/bin/bash\necho ok\n", 0o755)
+    r = subprocess.run([AGY_GUI, okeng], input="", capture_output=True, text=True,
+                       env=jenv, timeout=10)
+    assert r.returncode == 0 and r.stdout.strip() == "ok", \
+        "표식 없는 스텁이 ok/0이 아니다: rc={} {!r} {!r}".format(r.returncode, r.stdout, r.stderr)
+
+    print("OK - 표식 없는 스텁은 종전대로 ok/0")
+
+    # --- ⑪ agy 세션이 77로 끝나면 NOTE + cooldown-agy, 다음 tick은 agy SKIP·claude 디스패치 ---
+    eng77 = mkfile(os.path.join(tmp, "bin77", "dira"), "#!/bin/bash\nexit 77\n", 0o755)
+    r = tick_once(eng77, dict(FAKE_MANAGERNAME="Aqua", FAKE_GUI_OK="1"), '"agy" ')
+    log77 = runner_log_text()
+    assert "agy 로그인 필요" in log77, "runner.log에 agy 로그인 필요 NOTE가 없다:\n" + log77
+    cd = os.path.join(local, "run", "cooldown-agy")
+    assert os.path.isfile(cd), "cooldown-agy가 안 생겼다: " + repr(os.listdir(os.path.join(local, "run")))
+    # 다음 tick(티켓 큐는 tick_once가 새로 만든다 - 쿨다운 파일은 유지된다)
+    r = tick_once(eng77, dict(FAKE_MANAGERNAME="Aqua", FAKE_GUI_OK="1"), '"agy" ')
+    assert "SKIP 엔진 쿨다운" in runner_log_text(), "agy 후보가 쿨다운에 안 걸렸다:\n" + runner_log_text()
+    r = tick_once(engine_result, dict(FAKE_MANAGERNAME="Aqua", FAKE_GUI_OK="1"))
+    assert [f for f in os.listdir(tickets) if f.endswith(".done.md")], \
+        "claude 후보가 디스패치되지 않았다:\n" + runner_log_text()
+
+    print("OK - agy 77 -> 쿨다운, agy SKIP, claude 디스패치")
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
     shutil.rmtree(home, ignore_errors=True)
