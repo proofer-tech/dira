@@ -1,0 +1,10 @@
+name: squad-default
+version: 1.0.0
+description: dira squad-default package
+dependencies:
+  apm:
+    - ../persona-pm
+    - ../persona-developer
+    - ../persona-qa
+    - ../persona-designer
+    - ../persona-writer
