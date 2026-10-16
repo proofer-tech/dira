@@ -1321,6 +1321,62 @@ def remove_clock():
         subprocess.run(["crontab", "-"], input=text, text=True, check=True)
 
 
+READER_LABEL = "dev.dira.remote-reads"
+
+
+def reader_plist_path():
+    d = os.environ.get("DIRA_LAUNCHD_DIR") or os.path.join(os.path.expanduser("~"), "Library", "LaunchAgents")
+    return os.path.join(d, READER_LABEL + ".plist")
+
+
+def reader_plist():
+    return {"Label": READER_LABEL,
+            "ProgramArguments": [sys.executable, os.path.abspath(__file__), "reads"],
+            "RunAtLoad": True, "KeepAlive": True, "ThrottleInterval": 5,
+            "StandardOutPath": os.path.join(cfg_home(), "reads.launchd.log"),
+            "StandardErrorPath": os.path.join(cfg_home(), "reads.launchd.log")}
+
+
+def launchctl(*args):
+    if os.environ.get("DIRA_LAUNCHD_DIR"):
+        return
+    try:
+        subprocess.run(["launchctl", *args], capture_output=True)
+    except OSError:
+        pass
+
+
+def ensure_reader():
+    """읽기 전용 상주 프로세스의 launchd 에이전트를 설치한다(P504). macOS가 아니면 False."""
+    import plistlib
+    if sys.platform != "darwin":
+        return False
+    path, want = reader_plist_path(), reader_plist()
+    try:
+        with open(path, "rb") as f:
+            if plistlib.load(f) == want:
+                return True
+    except (OSError, plistlib.InvalidFileException, ValueError):
+        pass
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(cfg_home(), exist_ok=True)
+    with open(path, "wb") as f:
+        plistlib.dump(want, f)
+    target = "gui/%d" % os.getuid()
+    launchctl("bootout", "%s/%s" % (target, READER_LABEL))
+    launchctl("bootstrap", target, path)
+    return True
+
+
+def remove_reader():
+    path = reader_plist_path()
+    launchctl("bootout", "gui/%d/%s" % (os.getuid(), READER_LABEL))
+    try:
+        os.unlink(path)
+    except FileNotFoundError:
+        pass
+
+
 def ensure_worker(root):
     wdir = os.path.join(root, "workers")
     if os.path.isdir(wdir) and any(n.endswith(".sh") for n in os.listdir(wdir)):
@@ -1451,6 +1507,10 @@ def cmd_connect(server, root, workspace=None, new=False):
     if ensure_worker(root):
         print("워커 w1과 크론 두 줄을 만들었습니다")
     ensure_clock()
+    try:
+        ensure_reader()
+    except OSError:
+        pass
     print("연결했습니다. 크론 실행을 위해 전체 디스크 접근 권한을 켜 주세요.")
     print("구독 로그인이면 `claude setup-token`으로 장기 토큰을 만들어 두세요.")
     return 0
@@ -1483,6 +1543,7 @@ def cmd_disconnect(root):
         home = cfg_home()
         if not any(os.path.exists(os.path.join(home, w, "runtime.json")) for w in os.listdir(home)):
             remove_clock()  # 이 컴퓨터에 런타임이 하나도 안 남았다
+            remove_reader()
     print("연결을 해제했습니다")
     return 0
 
@@ -1693,7 +1754,7 @@ def handle_wake(ws, wake, last, deadline):
             log("wake-skip " + proj)
             continue
         qr = hit[0]["queue_root"]
-        if deadline - time.time() < WAKE_CUTOFF or time.time() - last.get(qr, 0) < WAKE_GAP:
+        if (deadline is not None and deadline - time.time() < WAKE_CUTOFF) or time.time() - last.get(qr, 0) < WAKE_GAP:
             continue
         last[qr] = time.time()
         kinds = w.get("kinds") if isinstance(w.get("kinds"), list) else []
@@ -1706,40 +1767,57 @@ def handle_wake(ws, wake, last, deadline):
         t.start()  # 읽기를 막지 않는다 (P500)
 
 
-def read_loop(ws, rt, token, deadline):
+def read_loop(ws, rt, token, deadline, stop=None):
+    """GET reads를 연다. deadline이 None이면 마감 없이(상주, P504) stop이 켜질 때까지 돈다.
+    돌려주는 값 (끝난 까닭, GET reads가 한 번이라도 200이었는지). 상주 모드는 로그를 호출한 쪽이 남긴다."""
     server, rid = rt.get("server") or "", rt["runtime_id"]
-    projs = list_projects(ws)
-    last = {}
+    resident = deadline is None
+    last, ok, kind = {}, False, ""
+    ex = concurrent.futures.ThreadPoolExecutor(max_workers=8)
+
+    def answer(it, projs):
+        http(server, "POST", "reads/%s" % urllib.parse.quote(str(it["read_id"]), safe=""),
+             answer_read(it, projs), token)  # 410은 조용히 넘어간다
+
+    def note(msg):
+        if not resident:
+            log(msg)
     try:
-        while True:
-            wait = min(25, int(deadline - time.time() - 1))
+        while not (stop is not None and stop.is_set()):
+            wait = 25 if resident else min(25, int(deadline - time.time() - 1))
             if wait < 1:
-                return
+                break
             st, body = http(server, "GET", "reads?runtime_id=%s&wait=%d&wake=1" % (rid, wait), None, token,
                             timeout=wait + 10)
             if st in (404, 405):
-                log("reads %s %d" % (ws, st))
-                return
+                note("reads %s %d" % (ws, st))
+                kind = "http %d" % st
+                break
             if st != 200 or not isinstance(body, dict):
                 if st >= 400:
-                    log("reads %s %d" % (ws, st))
-                    return
+                    note("reads %s %d" % (ws, st))
+                    kind = "http %d" % st
+                    break
                 continue
+            ok = True
             items = body.get("reads")
             if not items and not body.get("wake"):
                 time.sleep(0.5)  # 서버가 기다리지 않고 빈 목록을 주면 바쁜 루프가 된다
             valid = [it for it in items if isinstance(it, dict) and it.get("read_id")] if isinstance(items, list) else []
-            if valid:  # 항목을 함께 답하고 끝나는 대로 POST한다. 모두 보낸 뒤 다음 GET (P500)
-                with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
-                    futs = {ex.submit(answer_read, it, projs): it for it in valid}
-                    for f in concurrent.futures.as_completed(futs):
-                        http(server, "POST", "reads/%s" % urllib.parse.quote(str(futs[f]["read_id"]), safe=""),
-                             f.result(), token)  # 410은 조용히 넘어간다
+            if valid:  # 항목마다 풀에 넘기고 기다리지 않고 다음 GET으로 간다 (P504)
+                projs = list_projects(ws)
+                for it in valid:
+                    ex.submit(answer, it, projs)
             handle_wake(ws, body.get("wake"), last, deadline)
     except Unauthorized:
-        log("unauthorized " + ws)
+        note("unauthorized " + ws)
+        kind = "unauthorized"
     except Exception as e:
-        log("reads %s %s: %s" % (ws, type(e).__name__, e))
+        note("reads %s %s: %s" % (ws, type(e).__name__, e))
+        kind = "%s: %s" % (type(e).__name__, e)
+    finally:
+        ex.shutdown(wait=True)
+    return kind, ok
 
 
 # ---- 로컬 작업 티켓 변화 바로 보고 (P497) ----
@@ -1776,14 +1854,18 @@ def watch_sigs(ws):
     return out
 
 
-def watch_loop(ws, deadline):
-    """1초마다 서명을 다시 재서 바뀐 루트의 보고 단계만 바로 돈다. 마감에 멈춘다."""
+def watch_loop(ws, deadline, stop=None):
+    """1초마다 서명을 다시 재서 바뀐 루트의 보고 단계만 바로 돈다. 마감에 멈춘다(None이면 stop까지, P504)."""
     try:
         base = watch_sigs(ws)  # 시작할 때는 보고하지 않는다 - 시계 sync가 방금 돌았다
         last = {}
-        while deadline - time.time() > 1:
-            time.sleep(1)
-            if deadline - time.time() < WAKE_CUTOFF:
+        while deadline is None or deadline - time.time() > 1:
+            if stop is not None:
+                if stop.wait(1):
+                    return
+            else:
+                time.sleep(1)
+            if deadline is not None and deadline - time.time() < WAKE_CUTOFF:
                 return
             for qr, cur in watch_sigs(ws).items():
                 old = base.get(qr)
@@ -1831,7 +1913,7 @@ def read_session(ws, rt, token, deadline):
 def start_long_wait(workspaces):
     """긴 대기 스레드를 띄우고 바로 돌아온다. 마감까지 READ_MARGIN이 안 남았으면 빈 목록."""
     deadline = read_deadline()
-    if deadline - time.time() < READ_MARGIN:
+    if deadline - time.time() < READ_MARGIN or reader_alive():  # 상주 프로세스가 받고 있다 (P504)
         return []
     ts = [threading.Thread(target=read_session, args=(ws, rt, token, deadline)) for ws, rt, token in workspaces]
     for t in ts:
@@ -1908,8 +1990,164 @@ def sync_all():
                 pass
 
 
+# ---- 읽기 전용 상주 프로세스 (P504) ----
+
+def reader_pid_path():
+    return os.path.join(cfg_home(), ".reads.pid")
+
+
+def reader_alive():
+    """상주 프로세스가 .reads.pid 락을 쥐고 있으면 True."""
+    import fcntl
+    try:
+        fd = os.open(reader_pid_path(), os.O_RDONLY)
+    except OSError:
+        return False
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except OSError:
+            return True
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return False
+    finally:
+        os.close(fd)
+
+
+def resident_reads(ws, stop):
+    """한 워크스페이스의 읽기를 마감 없이 연다. 실패하면 2초부터 두 배씩(상한 30초) 쉬고 다시 연다."""
+    delay, last = 2, None
+    while not stop.is_set():
+        rt, token = load_runtime(ws), load_token(ws)
+        if not (rt and token):
+            stop.wait(2)
+            continue
+        kind, ok = read_loop(ws, rt, token, None, stop)
+        if stop.is_set():
+            return
+        if ok:
+            delay = 2
+        if kind != last:
+            log("reads %s %s" % (ws, kind or "ended"))
+            last = kind
+        stop.wait(60 if kind == "unauthorized" else delay)
+        delay = min(delay * 2, 30)
+
+
+def resident_ws(ws, stop, held):
+    """읽기 락 `.read-<ws>.lock` 안에서 읽기와 감시를 돌린다. 락 mtime을 10초마다 갱신한다."""
+    lock = os.path.join(cfg_home(), ".read-%s.lock" % ws)
+    while not take_lock(lock):
+        if stop.wait(0.5):
+            return
+    held.add(lock)
+    try:
+        def watch():
+            while not stop.is_set():
+                watch_loop(ws, None, stop)
+                stop.wait(2)
+        for fn in (lambda: resident_reads(ws, stop), watch):
+            threading.Thread(target=fn, daemon=True).start()
+        while not stop.wait(10):
+            try:
+                os.utime(lock)
+            except OSError:
+                pass
+    finally:
+        held.discard(lock)
+        try:
+            os.rmdir(lock)
+        except OSError:
+            pass
+
+
+def cmd_reads():
+    import fcntl
+    home = cfg_home()
+    os.makedirs(home, exist_ok=True)
+    fd = os.open(reader_pid_path(), os.O_RDWR | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        return 0  # 다른 상주 프로세스가 있다
+    os.ftruncate(fd, 0)
+    os.write(fd, str(os.getpid()).encode())
+    logp = os.path.join(home, "reads.log")
+
+    def open_log():
+        f = open(logp, "a", encoding="utf-8", buffering=1)
+        sys.stdout = sys.stderr = f
+    open_log()
+    here = os.path.dirname(os.path.abspath(__file__))
+    watched = [os.path.join(here, n) for n in ("remote.py", "ontology_read.py")]
+
+    def mtimes():
+        out = []
+        for w in watched:
+            try:
+                out.append(os.stat(w).st_mtime_ns)
+            except OSError:
+                out.append(0)
+        return out
+    base = mtimes()
+    once = os.environ.get("DIRA_READS_ONCE")
+    end = time.time() + float(once) if once else None
+    import signal
+    quit_ = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: quit_.set())  # launchd bootout. 락을 풀고 끝난다
+    workers, held = {}, set()  # ws -> (stop, thread)
+    log("reads start pid %d" % os.getpid())
+    try:
+        while True:
+            if quit_.is_set():
+                break
+            if mtimes() != base:
+                log("reads code changed")
+                break
+            if end is not None and time.time() >= end:
+                break
+            try:
+                if os.stat(logp).st_size > LOG_MAX:
+                    os.replace(logp, logp + ".1")
+                    open_log()
+            except OSError:
+                pass
+            live = set()
+            for ws in sorted(os.listdir(home)):
+                if ws.startswith(".") or not os.path.isdir(os.path.join(home, ws)):
+                    continue
+                if not (load_runtime(ws) and load_token(ws)):
+                    continue
+                live.add(ws)
+                cur = workers.get(ws)
+                if cur is None or not cur[1].is_alive():
+                    ev = threading.Event()
+                    t = threading.Thread(target=resident_ws, args=(ws, ev, held), daemon=True)
+                    workers[ws] = (ev, t)
+                    t.start()
+            for ws in [w for w in workers if w not in live]:
+                workers.pop(ws)[0].set()
+            quit_.wait(2)
+    finally:
+        for ev, _ in workers.values():
+            ev.set()
+        for _, t in workers.values():
+            t.join(3)
+        for lock in list(held):
+            try:
+                os.rmdir(lock)
+            except OSError:
+                pass
+        sys.stdout.flush()
+    os._exit(0)  # 답하기 스레드가 응답을 기다리고 있어도 기다리지 않는다
+
+
 def cmd_tick(root):
     """시계 줄이 있으면 이 큐의 sync만, 못 넣었으면 신호가 끊기지 않게 sync-all."""
+    try:
+        ensure_reader()
+    except OSError:
+        pass
     if ensure_clock():
         return cmd_sync(root)
     return sync_all()
@@ -1919,6 +2157,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(prog="remote.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("sync-all")
+    sub.add_parser("reads")
     for name in ("connect", "disconnect", "sync", "tick", "persona-install", "schema-install"):
         p = sub.add_parser(name)
         if name == "connect":
@@ -1937,6 +2176,8 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if a.cmd == "sync-all":
         return sync_all()
+    if a.cmd == "reads":
+        return cmd_reads()
     if a.cmd == "notoken":
         return cmd_notoken(a.path)
     if a.cmd == "check-health":

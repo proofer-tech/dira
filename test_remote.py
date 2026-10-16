@@ -17,6 +17,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PREFIX = "/api/runtime/v1/"
+# 테스트가 진짜 launchd 에이전트를 설치하지 않게 한다 (P504). 자식 프로세스가 물려받는다
+os.environ.setdefault("DIRA_LAUNCHD_DIR", tempfile.mkdtemp())
 
 
 class Fake:
@@ -1681,6 +1683,148 @@ class Gap(Base, unittest.TestCase):
             os.environ["HOME"] = old
         self.assertEqual(sorted(self.posted), ids)
         self.assertLess(max(self.posted.values()) - served[0], 2)
+
+
+class Resident(Base, unittest.TestCase):
+    """P504-2: launchd 에이전트 설치-해제, 읽기 전용 상주 프로세스(remote.py reads)."""
+    connect = Tools.connect if hasattr(Tools, "connect") else Base.connect
+
+    def setUp(self):
+        super().setUp()
+        self.q, self.enq, self.served, self.posted = [], {}, {}, {}
+        self.procs = []
+        self.addCleanup(self.stop_all)
+        self.connect()
+        ont = os.path.join(self.root, "ontology", "objects", "t")
+        os.makedirs(ont)
+        open(os.path.join(ont, "o1.md"), "w").write("---\nname: o1\ntype: t\n---\nbody\n")
+        self.fake.routes[("POST", "runtimes/rt1/heartbeat")] = (200, {"ok": True})
+
+        def reads(_b):
+            end = time.time() + 20
+            while time.time() < end:
+                if self.q:
+                    it = self.q.pop(0)
+                    self.served[it["read_id"]] = time.time()
+                    return 200, {"reads": [it]}
+                time.sleep(0.02)
+            return 200, {"reads": []}
+        self.fake.routes[("GET", "reads")] = reads
+
+    def stop_all(self):
+        for p in self.procs:
+            if p.poll() is None:
+                p.terminate()
+                try:
+                    p.wait(5)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+
+    def env(self, **kw):
+        e = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron, **kw)
+        e.pop("TICKET_ONTOLOGY", None)
+        return e
+
+    def start_reads(self, once=60):
+        p = subprocess.Popen([sys.executable, os.path.join(self.engdir, "remote.py"), "reads"],
+                             env=self.env(DIRA_READS_ONCE=str(once)), stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+        self.procs.append(p)
+        return p
+
+    def put(self, rid):
+        self.fake.routes[("POST", "reads/" + rid)] = lambda b: (self.posted.__setitem__(rid, time.time()) or (200, {"ok": True}))
+        self.enq[rid] = time.time()
+        self.q.append({"read_id": rid, "op": "object", "args": {"name": "o1"}, "project": "proj"})
+
+    def wait_for(self, cond, secs):
+        end = time.time() + secs
+        while time.time() < end and not cond():
+            time.sleep(0.05)
+        return cond()
+
+    def lockdir(self):
+        return os.path.join(self.home, ".config", "dira", "remote", ".read-ws1.lock")
+
+    @unittest.skipUnless(sys.platform == "darwin", "launchd는 macOS만")
+    def test_plist_install_and_remove(self):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d, True)
+        env = self.env(DIRA_LAUNCHD_DIR=d)
+        run = lambda *a: subprocess.run([sys.executable, os.path.join(self.engdir, "remote.py"), *a],
+                                        capture_output=True, text=True, env=env, timeout=30)
+        self.assertEqual(run("tick", "--root", self.root).returncode, 0)
+        import plistlib
+        path = os.path.join(d, "dev.dira.remote-reads.plist")
+        pl = plistlib.load(open(path, "rb"))
+        self.assertEqual(pl["ProgramArguments"][-1], "reads")
+        self.assertIs(pl["KeepAlive"], True)
+        self.assertEqual(run("disconnect", "--root", self.root).returncode, 0)
+        self.assertFalse(os.path.exists(path))
+
+    def test_receives_within_1s_at_any_offset(self):
+        self.start_reads(60)
+        time.sleep(2)
+        for off in (0, 7, 9):  # 시계 경계(0초 - 30초)와 무관해야 한다
+            time.sleep(off)
+            rid = "a%d" % off
+            self.put(rid)
+            self.assertTrue(self.wait_for(lambda: rid in self.posted, 5), rid)
+            self.assertLess(self.served[rid] - self.enq[rid], 1)
+
+    def test_second_read_not_blocked_by_slow_first(self):
+        with open(os.path.join(self.engdir, "ontology_read.py"), "a") as f:
+            f.write("\n_run = run\n\n\ndef run(root, op, args):\n    import time\n    time.sleep(3)\n    return _run(root, op, args)\n")
+        self.start_reads(60)
+        time.sleep(2)
+        self.put("s1")
+        time.sleep(1)
+        self.put("s2")
+        self.assertTrue(self.wait_for(lambda: "s2" in self.served, 5))
+        self.assertLess(self.served["s2"] - self.enq["s2"], 1)
+        self.assertTrue(self.wait_for(lambda: "s1" in self.posted and "s2" in self.posted, 10))
+
+    def test_sync_all_skips_long_wait_while_resident(self):
+        rp = self.start_reads(60)
+        time.sleep(2)
+        run = lambda: subprocess.run([sys.executable, os.path.join(self.engdir, "remote.py"), "sync-all"],
+                                     capture_output=True, text=True, timeout=60,
+                                     env=self.env(DIRA_READ_DEADLINE=str(time.time() + 14)))
+        t0 = time.time()
+        r = run()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertLess(time.time() - t0, 10)  # 긴 대기가 없다
+        self.assertTrue([c for c in self.fake.calls if c[1] == "runtimes/rt1/heartbeat"])
+        rp.terminate()
+        rp.wait(5)
+        self.assertFalse(os.path.exists(self.lockdir()))
+        for ws_dir in os.listdir(os.path.join(self.home, ".config", "dira", "remote")):
+            lk = os.path.join(self.home, ".config", "dira", "remote", ws_dir, "last-heartbeat")
+            if os.path.exists(lk):
+                os.utime(lk, (1, 1))  # 신호 간격을 비운다
+        t0 = time.time()
+        r = run()
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertGreater(time.time() - t0, 10)  # 죽은 뒤에는 P500처럼 마감까지 기다린다
+
+    def test_second_reads_exits_immediately(self):
+        self.start_reads(60)
+        time.sleep(1.5)
+        py = [sys.executable, os.path.join(self.engdir, "remote.py")]
+        t0 = time.time()
+        subprocess.run(py + ["notoken", "/nonexistent"], env=self.env(), capture_output=True, timeout=30)
+        base = time.time() - t0  # 파이썬 기동 시간. 부하가 큰 컴퓨터에서 절대값 1초는 흔들린다
+        t0 = time.time()
+        r = subprocess.run(py + ["reads"], env=self.env(), capture_output=True, timeout=30)
+        self.assertEqual(r.returncode, 0)
+        self.assertLess(time.time() - t0, base * 2 + 1)
+
+    def test_code_change_exits_and_frees_lock(self):
+        p = self.start_reads(60)
+        self.assertTrue(self.wait_for(lambda: os.path.isdir(self.lockdir()), 5))
+        os.utime(os.path.join(self.engdir, "remote.py"), (time.time() + 5, time.time() + 5))
+        self.assertEqual(p.wait(5), 0)
+        self.assertFalse(os.path.exists(self.lockdir()))
 
 
 if __name__ == "__main__":
