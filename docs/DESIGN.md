@@ -9104,12 +9104,12 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P505-1 | 엔진 - `migrate.py` 러너와 CLI 전부(기록 - 백업 - 복원 - 진행 표식 - 로그 - 락 - 상태 파일 - 세션 대기), 예시 항목 `0001`, `test_migrate.py`, 번들 `extraResources`에 `migrate.py`와 `migrations/` 폴더 + `dist` 존재 검사 | developer | - | 발행 |
-| P505-2 | 엔진 - `tick.sh` 게이트(`tick` - `remote`) + `remote.py` claim 전 헤드리스 적용과 건너뛰기 + 테스트 | developer | P505-1 | 발행 |
-| P505-3 | 앱 - 서버 기동 시 러너, `/api/migrations` GET - POST, 블러 오버레이, `migration.*` 사전 ko-en, `judgeStall` `migration` 키 + 테스트 | developer | - | 발행 |
-| P505-4 | 개발자 문서 - `docs/design/마이그레이션.md` "마이그레이션 항목 쓰는 법"(위 항목 형식 - 멱등 - targets - canary와 promote - 테스트 방법) | writer | - | 발행 |
-| P505-5 | 매뉴얼 - 사용자용 ko-en: `install.md` 업데이트 절에 오버레이와 건너뛰기, `troubleshooting.md` `멈춤:` 표에 `migration` 행, `ref-cli.md`에 `migrate.py` | writer | - | 발행 |
-| P505-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P505-1, P505-2, P505-3 | 발행 |
+| P505-1 | 엔진 - `migrate.py` 러너와 CLI 전부(기록 - 백업 - 복원 - 진행 표식 - 로그 - 락 - 상태 파일 - 세션 대기), 예시 항목 `0001`, `test_migrate.py`, 번들 `extraResources`에 `migrate.py`와 `migrations/` 폴더 + `dist` 존재 검사 | developer | - | 발행 `51920d1e` |
+| P505-2 | 엔진 - `tick.sh` 게이트(`tick` - `remote`) + `remote.py` claim 전 헤드리스 적용과 건너뛰기 + 테스트 | developer | P505-1 | 발행 `bb7e5437` |
+| P505-3 | 앱 - 서버 기동 시 러너, `/api/migrations` GET - POST, 블러 오버레이, `migration.*` 사전 ko-en, `judgeStall` `migration` 키 + 테스트 | developer | - | 발행 `3437d6f9` |
+| P505-4 | 개발자 문서 - `docs/design/마이그레이션.md` "마이그레이션 항목 쓰는 법"(위 항목 형식 - 멱등 - targets - canary와 promote - 테스트 방법) | writer | - | 발행 `558a8209` |
+| P505-5 | 매뉴얼 - 사용자용 ko-en: `install.md` 업데이트 절에 오버레이와 건너뛰기, `troubleshooting.md` `멈춤:` 표에 `migration` 행, `ref-cli.md`에 `migrate.py` | writer | - | 발행 `fcd21810` |
+| P505-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P505-1, P505-2, P505-3 | 발행 `bc3286b8` |
 
 **여섯 장이다.** P505-3은 상태 파일 형식과 게이트 줄이 이 표에 정해져 있어 러너 없이 착수한다(가짜 상태 파일로
 그린다). P505-2만 `migrate.py gate`를 실제로 불러야 테스트가 되므로 P505-1을 기다린다. designer 0장 - 오버레이는 위
