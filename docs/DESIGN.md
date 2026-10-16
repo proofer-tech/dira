@@ -9297,19 +9297,19 @@ dependencies:
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P506-1 | 엔진 - `apm-version` + `dira_apm.py`(`ensure-cli` - `install` - `check` - `resolve` - `materialize` - `skills`) + `test_dira_apm.py` | developer | - | 발행 |
-| P506-2 | 패키지 - `packages/`(dira-protocols, persona-* 여섯, squad-default)를 `templates/personas` - `templates/squads` - `templates/protocols` - `protocols/CORE*.md`에서 복사해 만든다(옛 자리는 P506-4가 지운다) | developer | - | 발행 |
-| P506-3 | 엔진 - tick.sh 주입(PROFILE - skills - 스쿼드 - CORE를 `resolve`로, plugin-dir 출처, `dryrun` `스킬:` 줄, claim 전 `check`와 SKIP 줄) | developer | P506-1 | 발행 |
-| P506-4 | 앱 - `home-session.ts` `personaBlock`, `mirrorCore` - `scaffold.ts`의 apm 전환, 옛 `templates/` 세 폴더와 `protocols/CORE*.md` 삭제, 번들 `extraResources`에 `packages/` - `dira_apm.py` - `apm-version`, `judgeStall` `apm` 키 + ko-en 사전 키 | developer | P506-1, P506-2 | 발행 |
-| P506-5 | 앱 - 페르소나 - 스쿼드 화면 읽기 - 쓰기를 `resolve` 위치로, 공용 패키지 쓰기 막기와 로컬로 복사 | developer | P506-1 | 발행 |
-| P506-6 | 엔진 - codex 스킬 실측(페르소나별 `.agents/skills` 또는 `CODEX_HOME`)과 결과 적용, 이 표 결정 10에 실측 결과 기록 | developer | P506-3 | 발행 |
-| P506-7 | 앱 - 마켓 백엔드(semver 저장소, 배포 올림, 가져오기 = 사본 + 의존성 + install, diff 뒤 업데이트) | developer | P506-1 | 발행 |
-| P506-8 | 마이그레이션 항목 `0002-apm-packages` - 위 1~10과 dryrun 비교 + 테스트, dira 프로젝트에 적용 | developer | P506-2, P506-3, P505-1 | 발행 |
-| P506-9 | 개발 환경 - dira 저장소 루트 `apm.yml` - lock, `.github/workflows/ci.yml`에 apm 설치와 `apm audit --ci` | developer | P506-1 | 발행 |
-| P506-10 | 매뉴얼 - ko-en personas, squads, protocols, install, ref-env, market 절 | writer | - | 발행 |
-| P506-11 | QA - dira 프로젝트 기준 아래 수용조건 (a)(b)(c)(e)(f)(g)와 dira의 (d)를 `kind: tc`로 판정 | qa | P506-3, P506-4, P506-7, P506-8, P506-9 | 발행 |
-| P506-12 | 적용 - `migrate.py promote 0002-apm-packages`, 나머지 8개 적용, 프로젝트별 (d) 표 보고 | developer | P506-11 | 발행 |
-| P506-13 | QA - 나머지 8개 프로젝트의 (d)와 (b) 판정 | qa | P506-12 | 발행 |
+| P506-1 | 엔진 - `apm-version` + `dira_apm.py`(`ensure-cli` - `install` - `check` - `resolve` - `materialize` - `skills`) + `test_dira_apm.py` | developer | - | 발행 `eb99fab7` |
+| P506-2 | 패키지 - `packages/`(dira-protocols, persona-* 여섯, squad-default)를 `templates/personas` - `templates/squads` - `templates/protocols` - `protocols/CORE*.md`에서 복사해 만든다(옛 자리는 P506-4가 지운다) | developer | - | 발행 `fd7cedfa` |
+| P506-3 | 엔진 - tick.sh 주입(PROFILE - skills - 스쿼드 - CORE를 `resolve`로, plugin-dir 출처, `dryrun` `스킬:` 줄, claim 전 `check`와 SKIP 줄) | developer | P506-1 | 발행 `42d14c43` |
+| P506-4 | 앱 - `home-session.ts` `personaBlock`, `mirrorCore` - `scaffold.ts`의 apm 전환, 옛 `templates/` 세 폴더와 `protocols/CORE*.md` 삭제, 번들 `extraResources`에 `packages/` - `dira_apm.py` - `apm-version`, `judgeStall` `apm` 키 + ko-en 사전 키 | developer | P506-1, P506-2 | 발행 `cfebae64` |
+| P506-5 | 앱 - 페르소나 - 스쿼드 화면 읽기 - 쓰기를 `resolve` 위치로, 공용 패키지 쓰기 막기와 로컬로 복사 | developer | P506-1 | 발행 `927a88d6` |
+| P506-6 | 엔진 - codex 스킬 실측(페르소나별 `.agents/skills` 또는 `CODEX_HOME`)과 결과 적용, 이 표 결정 10에 실측 결과 기록 | developer | P506-3 | 발행 `991d747c` |
+| P506-7 | 앱 - 마켓 백엔드(semver 저장소, 배포 올림, 가져오기 = 사본 + 의존성 + install, diff 뒤 업데이트) | developer | P506-1 | 발행 `6089e403` |
+| P506-8 | 마이그레이션 항목 `0002-apm-packages` - 위 1~10과 dryrun 비교 + 테스트, dira 프로젝트에 적용 | developer | P506-2, P506-3, P505-1 | 발행 `fa04647f` |
+| P506-9 | 개발 환경 - dira 저장소 루트 `apm.yml` - lock, `.github/workflows/ci.yml`에 apm 설치와 `apm audit --ci` | developer | P506-1 | 발행 `5ea017e3` |
+| P506-10 | 매뉴얼 - ko-en personas, squads, protocols, install, ref-env, market 절 | writer | - | 발행 `e2ba9f56` |
+| P506-11 | QA - dira 프로젝트 기준 아래 수용조건 (a)(b)(c)(e)(f)(g)와 dira의 (d)를 `kind: tc`로 판정 | qa | P506-3, P506-4, P506-7, P506-8, P506-9 | 발행 `b9bccb6d` |
+| P506-12 | 적용 - `migrate.py promote 0002-apm-packages`, 나머지 8개 적용, 프로젝트별 (d) 표 보고 | developer | P506-11 | 발행 `61229c2d` |
+| P506-13 | QA - 나머지 8개 프로젝트의 (d)와 (b) 판정 | qa | P506-12 | 발행 `193eb3b8` |
 
 **열세 장이다.** P506-1과 P506-2는 서로 기다리지 않는다(`dira_apm.py`는 임시 패키지로 시험한다). P506-8은
 P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 다 있어 기다리지
