@@ -9088,8 +9088,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
    불일치면 같은 lock 해시당 한 번 `dira_apm.py install --frozen`을 시도하고, 그래도 다르면 그 프로젝트는 claim
    하지 않고 `SKIP apm 설치 상태가 lock과 다르다 - <요약 한 줄>`을 runner.log에 남긴다. 환경변수 `DIRA_APM_NO_INSTALL=1`이면 설치
    시도를 건너뛴다(테스트 자리, P504 `DIRA_LAUNCHD_DIR`와 같은 방식). P501 `dispatch-stall.ts`
-   `RULES`에 키 `apm`(패턴 `^SKIP apm 설치 상태가 lock과 다르다`)을 P505 `migration` 다음에 더해 `멈춤: 패키지 설치가
-   lock과 다릅니다`로 번역하고, 할 일은 `python3 dira_apm.py install <프로젝트>`다. 게이트 순서는 P505 게이트 다음이다.
+   `RULES`에 키 `apm`(패턴 `^SKIP apm 설치 상태가 lock과 다르다`)을 P505 `migration` 다음에 더해 `패키지 설치 상태가
+   lock과 다릅니다 <요약>`(사전 키 `stall.apm.line`)으로 번역하고, 할 일은 `python3 dira_apm.py install <프로젝트>`다. 게이트 순서는 P505 게이트 다음이다.
 7. **프로토콜 두 벌을 없앤다.** 공용 정본은 `packages/dira-protocols/`(CORE*.md와 공용 형제 문서) 하나다.
    AGENTS.md는 프로젝트마다 다르므로 프로젝트 로컬 패키지 `dira-team/protocols/`에 둔다. 프로젝트가 공용 문서를
    바꿔 쓰고 있으면 같은 이름 파일을 로컬 패키지에 두고, 로컬이 이긴다. `.dira/protocols/`는 지우지 않고
@@ -9098,6 +9098,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
    `<!-- dira_apm materialize: 고치지 말고 dira-team/protocols 또는 packages/dira-protocols를 고친다 -->`를 단다.
    `templates/protocols`, `templates/personas`, `templates/squads`, 엔진 `protocols/CORE*.md`는
    `packages/`로 옮긴 뒤 지운다. `templates/hooks`와 `watchdog_*.py`는 이번 범위가 아니다.
+   프로토콜 화면의 저장도 이 규칙을 따른다(`1da4410d`): `.dira/protocols/<파일>`을 저장하면 같은 이름의
+   `dira-team/protocols/<파일>`에 쓰고(없으면 만든다 - 공용 문서를 로컬이 덮는 것이다) 이어서 `dira_apm.py
+   materialize`로 큐 사본을 다시 만든다. `dira-team/apm.yml`이 없는 프로젝트(옛 형식)는 종전대로 큐 파일에 쓴다.
 8. **영어 템플릿과 한국어 큐 사본은 합치지 않는다.** 공용 `packages/persona-<이름>`의 정본은 지금
    `templates/personas`(영어)이고 새 프로젝트의 출발점이다. 각 프로젝트 큐 사본은 그 프로젝트에 맞게 갈라진
    글이므로 마이그레이션이 그 프로젝트의 로컬 패키지로 **바이트 그대로** 옮긴다. 합치면 9개 프로젝트의
@@ -9320,6 +9323,8 @@ dependencies:
 | P506-11 | QA - dira 프로젝트 기준 아래 수용조건 (a)(b)(c)(e)(f)(g)와 dira의 (d)를 `kind: tc`로 판정 | qa | P506-3, P506-4, P506-7, P506-8, P506-9 | 발행 `b9bccb6d` |
 | P506-12 | 적용 - `migrate.py promote 0002-apm-packages`, 나머지 8개 적용, 프로젝트별 (d) 표 보고 | developer | P506-11 | 발행 `61229c2d` |
 | P506-13 | QA - 나머지 8개 프로젝트의 (d)와 (b) 판정 | qa | P506-12 | 발행 `193eb3b8` |
+| P506-14 | 앱 - 프로토콜 화면 저장을 `dira-team/protocols/`로 쓰고 materialize(결정 7 끝 문단) | developer | - | 발행 `add70a9d` |
+| P506-15 | 앱 - 마켓 가져오기 버전 고르기(마켓 표 가져오기 줄)와 업데이트 확인 문구의 버전 뒤 공백 | developer | - | 발행 `fd0dc1e3` |
 
 **열세 장이다.** P506-1과 P506-2는 서로 기다리지 않는다(`dira_apm.py`는 임시 패키지로 시험한다). P506-8은
 P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 다 있어 기다리지
