@@ -96,16 +96,21 @@ this line.
 
 (It says: do not edit this; edit `dira-team/protocols` or `packages/dira-protocols`.)
 
-**Make lasting edits in `dira-team/protocols/`.** Saving on this screen changes the file in
-`.dira/protocols/`, and the next dispatch picks it up. But the next install rewrites that file from
-the source and your edit is gone. To use a shared document differently in this project only, put a
-file by the same name in `dira-team/protocols/`, edit it there and commit. From the next install on,
-the local one wins. The shared documents themselves are edited in `packages/dira-protocols/` in the
-dira repository, and each project gets the change only after raising the tag in its
-`dira-team/apm.yml`.
+**What you save on this screen survives the next install.** In a project with `dira-team/apm.yml`,
+saving a file directly under `protocols/` makes dira write the same content to the file of the same
+name in `dira-team/protocols/` and then rebuild the queue's `.dira/protocols/`. The next dispatch
+picks it up. Saving a shared document works the same way: a local file appears in
+`dira-team/protocols/` at that moment, and the local one wins in this project. Saving only writes
+files. Commit the change in `dira-team/protocols/` yourself.
+
+Files inside subfolders, `apm.yml` and `AGENTS.template.md` are the exception. They are saved to the
+queue only, so make lasting edits to them in `dira-team/protocols/` directly. To change a shared
+document for every project, edit it in `packages/dira-protocols/` in the dira repository. Each
+project gets the change only after raising the tag in its `dira-team/apm.yml`.
 
 Rewriting never deletes queue-only files that the shared package does not have. A project without
-`dira-team/apm.yml` keeps the queue's `protocols/` as the source, as before.
+`dira-team/apm.yml` keeps the queue's `protocols/` as the source, as before, and saving on this
+screen changes only that file.
 
 ## The `Inlined in every prompt` badge
 

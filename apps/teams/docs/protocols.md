@@ -91,15 +91,19 @@
 <!-- dira_apm materialize: 고치지 말고 dira-team/protocols 또는 packages/dira-protocols를 고친다 -->
 ```
 
-**오래 남길 수정은 `dira-team/protocols/`에서 합니다.** 이 화면에서 저장하면 `.dira/protocols/`의
-파일이 바뀌고 다음 디스패치부터 실립니다. 하지만 다음 설치 때 그 파일이 정본으로 다시 쓰여서
-고친 내용이 사라집니다. 공용 문서 하나를 이 프로젝트에서만 다르게 쓰고 싶으면 같은 이름의 파일을
-`dira-team/protocols/`에 두고 고친 뒤 커밋하세요. 그 다음 설치부터 로컬 쪽이 이깁니다. 공용 문서
-자체는 dira 저장소의 `packages/dira-protocols/`에서 고칩니다. 각 프로젝트는 `dira-team/apm.yml`에
-적힌 태그를 올려야 그 수정을 받습니다.
+**이 화면에서 저장한 내용은 다음 설치 뒤에도 남습니다.** `dira-team/apm.yml`이 있는 프로젝트에서
+`protocols/` 바로 아래 파일을 저장하면, dira가 같은 내용을 `dira-team/protocols/`의 같은 이름
+파일에 쓰고 큐의 `.dira/protocols/`를 다시 만듭니다. 다음 디스패치부터 실립니다. 공용 문서를
+저장해도 같아서, 그 순간 `dira-team/protocols/`에 로컬 파일이 생기고 이 프로젝트에서는 로컬 쪽이
+이깁니다. 저장은 파일을 쓰기만 합니다. `dira-team/protocols/`의 변경은 직접 커밋하세요.
+
+하위 폴더 안의 파일과 `apm.yml`, `AGENTS.template.md`는 예외입니다. 이 파일들은 큐에만
+저장되므로, 오래 남길 수정이면 `dira-team/protocols/`에서 직접 고칩니다. 공용 문서를 모든
+프로젝트에서 바꾸려면 dira 저장소의 `packages/dira-protocols/`에서 고칩니다. 각 프로젝트는
+`dira-team/apm.yml`에 적힌 태그를 올려야 그 수정을 받습니다.
 
 공용에 없는 큐 전용 파일은 다시 쓸 때도 지우지 않습니다. `dira-team/apm.yml`이 없는 프로젝트는
-지금까지처럼 큐의 `protocols/`가 정본입니다.
+지금까지처럼 큐의 `protocols/`가 정본이고, 이 화면에서 저장하면 그 파일만 바뀝니다.
 
 ## `전원 프롬프트에 인라인` 배지
 
