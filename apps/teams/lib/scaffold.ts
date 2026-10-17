@@ -42,7 +42,7 @@ version: 1.0.0
 targets: [claude]
 dependencies:
   apm:
-    - ${PUBLIC_PKG_REPO}/dira-protocols#dira-protocols-v1.0.0
+    - ${PUBLIC_PKG_REPO}/dira-protocols#dira-protocols-v1.0.1
     - ${PUBLIC_PKG_REPO}/squad-default#squad-default-v1.0.0
     - ./protocols
 `;

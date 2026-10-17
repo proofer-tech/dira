@@ -187,7 +187,7 @@ def _plan(ctx):
     if os.path.isfile(os.path.join(proj, "packages", "dira-protocols", "apm.yml")):
         pub_dep = "../packages/dira-protocols"
     else:
-        pub_dep = "%s/dira-protocols#dira-protocols-v1.0.0" % PUBLIC_PKG_REPO
+        pub_dep = "%s/dira-protocols#dira-protocols-v1.0.1" % PUBLIC_PKG_REPO
     plan[os.path.join(team, "apm.yml")] = ("team", [pub_dep, "./protocols"] + sorted(set(deps)))
     return {"plan": plan, "srcs": srcs, "mat": mat, "skills": skills}
 
@@ -384,8 +384,9 @@ def _commit(ctx):
     paths = []
     for p in ("apm.yml", "apm.lock.yaml", ".apm", ".claude/skills", "dira-team", ".gitignore"):
         if os.path.exists(os.path.join(proj, p)):
-            subprocess.run(["git", "-C", proj, "add", "-A", "--", p], capture_output=True)
-            paths.append(p)
+            # 무시된 경로는 add 가 실패하고 commit pathspec 도 거부하므로 뺀다
+            if subprocess.run(["git", "-C", proj, "add", "-A", "--", p], capture_output=True).returncode == 0:
+                paths.append(p)
     if subprocess.run(["git", "-C", proj, "diff", "--cached", "--quiet", "--"] + paths).returncode == 0:
         return  # 이미 같은 트리
     r = subprocess.run(["git", "-C", proj, "commit", "-q", "-m", COMMIT_MSG, "--"] + paths, capture_output=True, text=True)

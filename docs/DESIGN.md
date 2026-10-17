@@ -9173,7 +9173,7 @@ version: 1.0.0
 targets: [claude]
 dependencies:
   apm:
-    - proofer-tech/dira/packages/dira-protocols#dira-protocols-v1.0.0
+    - proofer-tech/dira/packages/dira-protocols#dira-protocols-v1.0.1
     - ./protocols
     - ./personas/pm
     - ./personas/developer
@@ -9356,7 +9356,7 @@ P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 �
   `.dira/protocols/CORE.md`와 다음 dryrun 프롬프트에 그 줄이 있다. 같은 변경을 위해 `templates/` -
   `scaffold.ts` - 엔진 `protocols/`를 고칠 일이 없다(`git ls-files templates/protocols protocols/CORE.md`가 비어 있다).
 - [ ] 새 프로젝트를 GUI로 만들면 `dira-team/apm.yml`이 생기고 install이 끝난 뒤 첫 dryrun에 CORE와 AGENTS가 실린다.
-  이 줄은 공용 패키지 태그(`dira-protocols-v1.0.0`, `squad-default-v1.0.0` 등)가 origin에 있어야 판정할 수 있으므로
+  이 줄은 공용 패키지 태그(`dira-protocols-v1.0.1`, `squad-default-v1.0.0` 등)가 origin에 있어야 판정할 수 있으므로
   P506-12가 태그를 확인한 뒤 P506-16이 판정한다. 그 전에는 판정불가로 두고 실패로 세지 않는다(`56365eec`).
 - [ ] install이 실패하면 `apmError`가 apm 출력의 마지막 줄이 아니라 실패 원인 줄(오류 표지가 붙은 줄, 없으면
   출력 끝 세 줄)을 담는다. 태그가 origin에 없는 상태에서 `scaffold()`를 돌리면 `apmError`에 받지 못한 의존성
