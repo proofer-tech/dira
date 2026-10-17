@@ -1225,7 +1225,10 @@ from, and the project panel on the left is not there.
   left alone, because one squad should not overwrite a persona you have been editing locally. If a
   member is missing from the market as well, the import still succeeds and that name shows up
   separately under `Members missing from the market:`.
-- Import always takes the highest version. The dialog has no version picker yet.
+- When the target project has `dira-team/` and the item has more than one version, a `Version`
+  field appears. It starts on the highest version. The version you pick is copied to
+  `dira-team/market/<kind>/<owner>/<name>/`. A project without `dira-team/` has no such field, and
+  import always takes the highest version there.
 
 ### When the name is already taken
 
