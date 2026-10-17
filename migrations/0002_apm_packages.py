@@ -381,6 +381,7 @@ def _commit(ctx):
     if subprocess.run(["git", "-C", proj, "rev-parse", "--git-dir"], capture_output=True).returncode:
         ctx.log("git 저장소가 아니라 커밋하지 않는다")
         return
+    # 프로젝트의 husky/lint-staged 가 dira-team 을 서식 변환하지 못하도록 --no-verify 로 커밋한다(verify 는 커밋 전에 끝난다)
     paths = []
     for p in ("apm.yml", "apm.lock.yaml", ".apm", ".claude/skills", "dira-team", ".gitignore"):
         if os.path.exists(os.path.join(proj, p)):
@@ -390,7 +391,7 @@ def _commit(ctx):
                 paths.append(p)
     if subprocess.run(["git", "-C", proj, "diff", "--cached", "--quiet", "--"] + paths).returncode == 0:
         return  # 이미 같은 트리
-    r = subprocess.run(["git", "-C", proj, "commit", "-q", "-m", COMMIT_MSG, "--"] + paths, capture_output=True, text=True)
+    r = subprocess.run(["git", "-C", proj, "commit", "-q", "--no-verify", "-m", COMMIT_MSG, "--"] + paths, capture_output=True, text=True)
     if r.returncode:
         raise RuntimeError("커밋 실패: " + (r.stderr.strip().splitlines() or ["?"])[-1])
 

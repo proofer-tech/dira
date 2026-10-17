@@ -211,6 +211,19 @@ def test_dryrun_mismatch_fails_and_restores():
         t.done()
 
 
+def test_commit_skips_project_hooks():
+    t = Proj()
+    try:
+        hook = os.path.join(t.proj, ".git", "hooks", "pre-commit")
+        w(hook, "#!/bin/sh\necho 훅이 고침 >> \"$PWD/dira-team/apm.yml\"\ngit add -A dira-team\n")
+        os.chmod(hook, 0o755)
+        assert t.migrate("apply").returncode == 0
+        assert "훅이 고침" not in read(os.path.join(t.proj, "dira-team/apm.yml"))
+        assert "APM" in git(t.proj, "log", "-1", "--format=%s").stdout
+    finally:
+        t.done()
+
+
 def test_revert_restores_files():
     t = Proj()
     try:
