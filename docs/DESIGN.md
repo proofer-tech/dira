@@ -9296,8 +9296,10 @@ dependencies:
 **dryrun 비교 기준.** 페르소나마다 표본 티켓 한 장(`kind: work`, `persona: <이름>`, 본문 고정 `## Goal\n표본\n`)을
 임시 루트(그 프로젝트 `.dira`에서 `tickets/`만 빈 것으로 바꾼 사본)에 두고 `tick.sh dryrun`을 돌린다. 비교 대상은
 `프롬프트:` 이후 전부와 `스킬:` 줄이다. 맞추기 전에 두 가지만 지운다: (1) `===== ... (<경로>) =====` 머리 줄 괄호
-안의 경로를 `<경로>`로 (2) 변환 전에 연달아 두 번 뜬 dryrun끼리 서로 다른 줄(시각, 세션 id 등). 나머지는 바이트
-비교다.
+안의 경로를 `<경로>`로 (2) 변환 전에 연달아 두 번 뜬 dryrun끼리 서로 다른 줄(시각, 세션 id 등) (3) 변환 뒤 프로토콜
+블록 첫 줄에 붙는 materialize 표식 줄(`<!-- dira_apm materialize: ` 로 시작하는 줄, 결정 7) 하나. 나머지는 바이트
+비교다. (3)을 지우는 이유: 표식은 결정 7이 일부러 더한 줄이고 에이전트에게 큐 사본을 고치지 말라고 알리는 구실을
+하므로 프롬프트에 남긴다. 그 밖의 차이는 지우지 않는다(`56365eec`).
 
 #### 안 하는 것
 
@@ -9325,8 +9327,10 @@ dependencies:
 | P506-13 | QA - 나머지 8개 프로젝트의 (d)와 (b) 판정 | qa | P506-12 | 발행 `193eb3b8` |
 | P506-14 | 앱 - 프로토콜 화면 저장을 `dira-team/protocols/`로 쓰고 materialize(결정 7 끝 문단) | developer | - | 발행 `add70a9d` |
 | P506-15 | 앱 - 마켓 가져오기 버전 고르기(마켓 표 가져오기 줄)와 업데이트 확인 문구의 버전 뒤 공백 | developer | - | 발행 `fd0dc1e3` |
+| P506-16 | QA - 새 프로젝트 scaffold 수용조건(태그 push 뒤) | qa | P506-12 | 발행 `b10176df` |
+| P506-17 | 앱 - `runApm` 실패 문구를 원인 줄로(`apmError`) | developer | - | 발행 `2c646a39` |
 
-**열세 장이다.** P506-1과 P506-2는 서로 기다리지 않는다(`dira_apm.py`는 임시 패키지로 시험한다). P506-8은
+**열일곱 장이다.** P506-1과 P506-2는 서로 기다리지 않는다(`dira_apm.py`는 임시 패키지로 시험한다). P506-8은
 P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 다 있어 기다리지
 않는다. designer 0장 - 새로 생기는 화면 요소는 마켓 업데이트 전 diff 하나이고, 파일별 줄 단위 텍스트 목록으로 충분하다.
 
@@ -9352,6 +9356,11 @@ P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 �
   `.dira/protocols/CORE.md`와 다음 dryrun 프롬프트에 그 줄이 있다. 같은 변경을 위해 `templates/` -
   `scaffold.ts` - 엔진 `protocols/`를 고칠 일이 없다(`git ls-files templates/protocols protocols/CORE.md`가 비어 있다).
 - [ ] 새 프로젝트를 GUI로 만들면 `dira-team/apm.yml`이 생기고 install이 끝난 뒤 첫 dryrun에 CORE와 AGENTS가 실린다.
+  이 줄은 공용 패키지 태그(`dira-protocols-v1.0.0`, `squad-default-v1.0.0` 등)가 origin에 있어야 판정할 수 있으므로
+  P506-12가 태그를 확인한 뒤 P506-16이 판정한다. 그 전에는 판정불가로 두고 실패로 세지 않는다(`56365eec`).
+- [ ] install이 실패하면 `apmError`가 apm 출력의 마지막 줄이 아니라 실패 원인 줄(오류 표지가 붙은 줄, 없으면
+  출력 끝 세 줄)을 담는다. 태그가 origin에 없는 상태에서 `scaffold()`를 돌리면 `apmError`에 받지 못한 의존성
+  이름이나 ref가 보인다(P506-17).
 - [ ] `python3 test_dira_apm.py`, `cd apps/teams && pnpm test`, `pnpm exec tsc --noEmit`이 통과한다. CI가
   `apm audit --ci`를 돈다.
 
