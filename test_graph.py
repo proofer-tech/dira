@@ -161,7 +161,7 @@ try:
     runner_log = os.path.join(root, "workers", "runner.log")
     warns = []
     if os.path.exists(runner_log):
-        warns = [l for l in open(runner_log, encoding="utf-8") if "WARN" in l]
+        warns = [l for l in open(runner_log, encoding="utf-8") if "WARN" in l and "코어 프로토콜 없음" not in l]
     assert warns == [], "graph.json 없을 때 WARN이 났다: {}".format(warns)
 
     # ---- 7) 시드 매칭 - exact > prefix > substring, 무관 노드는 안 낀다, 빈 낱말은 빈 결과 ----

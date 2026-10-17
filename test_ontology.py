@@ -57,7 +57,7 @@ def write(path, body):
 
 
 def dryrun(worker, local, ontology=None):
-    env = dict(os.environ, TICKET_LOCAL=local)
+    env = dict(os.environ, TICKET_LOCAL=local, HOME=tmp)  # 엔진 사본 동기화가 진짜 ~/.config 를 두고 다른 tick 과 경합한다
     env.pop("TICKET_ONTOLOGY", None)  # 이 세션 자신의 재정의 값을 물려받지 않는다(test_graph.py와 같은 격리)
     if ontology is not None:
         env["TICKET_ONTOLOGY"] = ontology
@@ -71,7 +71,7 @@ def warns(root):
     if not os.path.exists(p):
         return []
     with open(p, encoding="utf-8") as f:
-        return [ln for ln in f if "WARN" in ln]
+        return [ln for ln in f if "WARN" in ln and "코어 프로토콜 없음" not in ln]  # P506-4: 엔진 사본이 없어 임시 큐는 코어 없이 돈다
 
 
 tmp = os.path.realpath(tempfile.mkdtemp())
@@ -82,6 +82,7 @@ try:
     local = os.path.join(tmp, "local")
     os.makedirs(local)
     ontdir = os.path.join(root, "ontology")
+    write(os.path.join(root, "protocols", "CORE.md"), "# core\n")  # P506-4: 큐 사본이 코어라 있어야 WARN 시각이 안 섞인다
     write(os.path.join(root, "personas", "dev", "PROFILE.md"), "# Dev\n데브-프로필-마커\n")
     w = mkworker(root, "w", tmp)
     mk(root, "5c112001", fm="kind: work\npersona: dev\n")

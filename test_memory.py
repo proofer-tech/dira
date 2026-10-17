@@ -56,7 +56,7 @@ def write(path, body):
 
 def dryrun(worker, local):
     r = subprocess.run([worker, "dryrun"], capture_output=True, text=True,
-                       env=dict(os.environ, TICKET_LOCAL=local), timeout=60)
+                       env=dict(os.environ, TICKET_LOCAL=local, HOME=tmp), timeout=60)  # 엔진 사본 동기화가 진짜 ~/.config 를 두고 다른 tick 과 경합한다
     assert r.returncode == 0, "dryrun rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
     return r.stdout + r.stderr
 
@@ -66,7 +66,7 @@ def warns(root):
     if not os.path.exists(p):
         return []
     with open(p, encoding="utf-8") as f:
-        return [ln for ln in f if "WARN" in ln]
+        return [ln for ln in f if "WARN" in ln and "코어 프로토콜 없음" not in ln]  # P506-4: 엔진 사본이 없어 임시 큐는 코어 없이 돈다
 
 
 tmp = os.path.realpath(tempfile.mkdtemp())
@@ -77,6 +77,7 @@ try:
     local = os.path.join(tmp, "local")
     os.makedirs(local)
     memdir = os.path.join(root, "personas", "dev", "memory")
+    write(os.path.join(root, "protocols", "CORE.md"), "# core\n")  # P506-4: 큐 사본이 코어라 있어야 WARN 시각이 안 섞인다
     write(os.path.join(root, "personas", "dev", "PROFILE.md"), "# Dev\n데브-프로필-마커\n")
     write(os.path.join(root, "personas", "dev", "skills.md"), "# 스킬\n스킬-마커\n")
     # 엔진 판정은 argv[0]의 basename만 본다. dryrun은 엔진을 실행하지 않으므로 이름만 있으면 된다.

@@ -218,7 +218,12 @@ try:
     naive_dir = os.path.join(tmp, "naive")
     os.makedirs(naive_dir)
     os.symlink(PY, os.path.join(naive_dir, "tickets.py"))
-    os.symlink(os.path.join(HERE, "protocols"), os.path.join(naive_dir, "protocols"))
+    os.symlink(os.path.join(HERE, "migrate.py"), os.path.join(naive_dir, "migrate.py"))  # 마이그레이션 게이트(P505)가 $CODE/migrate.py 를 부른다
+    prot = os.path.join(HERE, "protocols")  # P506-4 가 엔진 사본을 지웠다 - 없으면 빈 디렉터리
+    if os.path.isdir(prot):
+        os.symlink(prot, os.path.join(naive_dir, "protocols"))
+    else:
+        os.makedirs(os.path.join(naive_dir, "protocols"))
     with open(TICK, encoding="utf-8") as f:
         src = f.read()
     # `sleep 3`은 세는 것과 잡는 것 사이의 창을 넓혀 대조군을 결정적으로 만든다. 운영의 창은

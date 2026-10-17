@@ -61,7 +61,7 @@ def write(path, body):
 
 def dryrun(worker, local):
     r = subprocess.run([worker, "dryrun"], capture_output=True, text=True,
-                       env=dict(os.environ, TICKET_LOCAL=local), timeout=60)
+                       env=dict(os.environ, TICKET_LOCAL=local, HOME=tmp), timeout=60)  # 엔진 사본 동기화가 진짜 ~/.config 를 두고 다른 tick 과 경합한다
     assert r.returncode == 0, "dryrun rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
     return r.stdout + r.stderr
 
@@ -71,7 +71,7 @@ def warns(root):
     if not os.path.exists(p):
         return []
     with open(p, encoding="utf-8") as f:
-        return [ln for ln in f if "WARN" in ln]
+        return [ln for ln in f if "WARN" in ln and "코어 프로토콜 없음" not in ln]  # P506-4: 엔진 사본이 없어 임시 큐는 코어 없이 돈다
 
 
 tmp = os.path.realpath(tempfile.mkdtemp())
@@ -83,6 +83,7 @@ try:
     os.makedirs(local)
     langfile = os.path.join(local, "language.json")
     w = mkworker(root, "w", tmp)
+    write(os.path.join(root, "protocols", "CORE.md"), "# core\n")  # P506-4: 큐 사본이 코어라 있어야 WARN 시각이 안 섞인다
     mk(root, "5c112003", fm="kind: work\n")
 
     # 0) language.json 자체가 없다 -> ko로 흡수, 꼬리에 한국어 문장 두 짝. 이 출력이 기준선이다.

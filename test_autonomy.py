@@ -59,7 +59,7 @@ def dryrun(worker, local):
     r = subprocess.run([worker, "dryrun"], capture_output=True, text=True,
                        env=dict(os.environ, TICKET_LOCAL=local, HOME=os.path.dirname(local)), timeout=60)  # 실제 ~/.config/dira/bin 굽기와 다른 워커의 tmp 청소가 부딪히지 않게 HOME을 격리한다
     assert r.returncode == 0, "dryrun rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
-    return r.stdout + r.stderr
+    return r.stdout  # stderr 는 안 섞는다: 동시 tick 이 서로의 *.tmp.<pid> 를 지우는 경합 traceback 이 비결정적으로 끼기 때문이다
 
 
 tmp = os.path.realpath(tempfile.mkdtemp())
@@ -71,6 +71,7 @@ try:
     os.makedirs(local)
     autof = os.path.join(local, "autonomy.json")
     w = mkworker(root, "w", tmp)
+    write(os.path.join(root, "protocols", "CORE.md"), "# 코어\n")  # P506-4: 코어가 없으면 WARN 줄에 시각이 섞여 비결정적이다
     mk(root, "5c112003", fm="kind: work\n")
 
     # 0) autonomy.json이 없다 -> 기본값 4, `주도성 안내: 4/5`가 한 번 나온다(수용조건 1).
