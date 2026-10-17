@@ -859,6 +859,30 @@ class Tools(Base, unittest.TestCase):
         self.run_remote("sync", "--root", self.root)  # 일반 sync도 점검을 늘리지 않는다
         self.assertEqual(self.logins(), 5)
 
+    def test_failed_check_rechecks_fast_and_keeps_reason(self):
+        """needs_check는 짧은 주기로 다시 점검하고, ok는 6시간 그대로다. 실패 이유가 health.json에 남는다."""
+        p = os.path.join(self.home, ".config", "dira", "bin", "engines", "codex")
+        open(p, "w").write('#!/bin/bash\n[ "$1" = --version ] && { echo "codex 1.2.3"; exit 0; }\n'
+                           'echo "first" >&2; echo "boom sk-%s tail" >&2; exit 3\n' % ("a" * 40))
+        self.connect()
+        e = json.load(open(self.m.health_path("ws1")))["tools"]
+        self.assertEqual(e["claude"]["health"], "ok")
+        self.assertNotIn("reason", e["claude"])
+        self.assertEqual(e["codex"]["health"], "needs_check")
+        self.assertTrue(e["codex"]["reason"].startswith("exit 3: boom"), e["codex"]["reason"])
+        self.assertNotIn("a" * 32, e["codex"]["reason"])
+        self.assertLessEqual(len(e["codex"]["reason"]), 200)
+        self.assertEqual(self.m.short_reason("x" * 500), "***")
+        self.assertEqual(len(self.m.short_reason("y " * 300)), 200)
+        self.assertLessEqual(self.m.LOGIN_RECHECK_EVERY, 15 * 60)
+        self.assertEqual(self.m.LOGIN_CHECK_EVERY, 6 * 3600)
+        t = 1000.0
+        for h, age, due in (("ok", 6 * 3600 - 1, False), ("ok", 6 * 3600, True),
+                            ("needs_check", self.m.LOGIN_RECHECK_EVERY - 1, False),
+                            ("needs_check", self.m.LOGIN_RECHECK_EVERY, True)):
+            self.assertEqual(self.m.check_due({"health": h, "checked_at": t - age}, t), due, (h, age))
+        self.assertIn("--skip-git-repo-check", self.m.LOGIN_ARGS["codex"])
+
     def test_stale_check_does_not_block_heartbeat(self):
         """6시간 지난 점검이 sync의 timeout 20 안에서 하트비트를 막지 않고, 결과는 health.json에 남는다."""
         self.connect()

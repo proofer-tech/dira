@@ -1134,13 +1134,31 @@ def tool_version(name):
 
 
 # ponytail: agy-grok 최소 프롬프트 형식은 -p로 추정. 틀리면 needs_check로 떠서 드러난다
-LOGIN_ARGS = {"codex": ["exec", "ok"]}
+LOGIN_ARGS = {"codex": ["exec", "--skip-git-repo-check", "ok"]}
 LOGIN_CHECK_EVERY = 6 * 3600
+LOGIN_RECHECK_EVERY = 10 * 60  # needs_check인 도구는 일시 실패가 6시간 고정되지 않게 자주 다시 본다
+REASON_MAX = 200
 
 
-def login_ok(name):
+def check_due(entry, t):
+    return not entry or t - entry["checked_at"] >= (
+        LOGIN_CHECK_EVERY if entry.get("health") == "ok" else LOGIN_RECHECK_EVERY)
+
+
+def short_reason(text, secret=""):
+    """stderr 마지막 줄을 200자로 자른다. 토큰으로 보이는 긴 문자열은 가린다."""
+    lines = (text or "").strip().splitlines()
+    line = lines[-1].strip() if lines else ""
+    if secret:
+        line = line.replace(secret, "***")
+    return re.sub(r"[A-Za-z0-9_\-]{32,}", "***", line)[:REASON_MAX]
+
+
+def login_check(name):
+    """통과하면 None, 실패하면 이유 문자열(종료 코드 또는 시간 초과 + stderr 마지막 줄)."""
     cmd = [os.path.join(engines_dir(), name)] + LOGIN_ARGS.get(name, ["-p", "ok"])
     env = dict(os.environ)
+    secret = ""
     if name == "claude":  # 디스패치(tick.sh engine_gate_ok)와 같은 토큰으로 점검한다
         tf = os.path.join(os.environ.get("TICKET_LOCAL") or os.path.join(os.path.expanduser("~"), ".config", "dira"),
                           "oauth-token")
@@ -1149,11 +1167,29 @@ def login_ok(name):
                 env["CLAUDE_CODE_OAUTH_TOKEN"] = f.read().strip()
         except OSError:
             pass
+        secret = env.get("CLAUDE_CODE_OAUTH_TOKEN", "")
     try:
-        return subprocess.run(cmd, capture_output=True, stdin=subprocess.DEVNULL, env=env,
-                              timeout=60).returncode == 0
-    except (OSError, subprocess.SubprocessError):
-        return False
+        r = subprocess.run(cmd, capture_output=True, text=True, errors="replace",
+                           stdin=subprocess.DEVNULL, env=env, timeout=60)
+    except subprocess.TimeoutExpired:
+        return "timeout 60s"
+    except (OSError, subprocess.SubprocessError) as e:
+        return short_reason(str(e), secret) or "exec failed"
+    if r.returncode == 0:
+        return None
+    return ("exit %d: %s" % (r.returncode, short_reason(r.stderr, secret))).rstrip(": ")
+
+
+def login_ok(name):
+    return login_check(name) is None
+
+
+def login_entry(name, t):
+    why = login_check(name)
+    e = {"health": "ok" if why is None else "needs_check", "checked_at": t}
+    if why is not None:
+        e["reason"] = why
+    return e
 
 
 def health_path(ws):
@@ -1175,7 +1211,7 @@ CHECK_PENDING_MAX = 600
 
 def run_check(ws, names):
     """도구 로그인 점검을 돌려 health.json에 합친다. sync 밖의 분리된 자식에서 돈다."""
-    res = {n: {"health": "ok" if login_ok(n) else "needs_check", "checked_at": now()} for n in names}
+    res = {n: login_entry(n, now()) for n in names}
     st = read_json(health_path(ws)) or {}
     st.setdefault("tools", {}).update(res)
     st["auth_error"] = [n for n in st.get("auth_error", []) if n not in res]
@@ -1192,17 +1228,17 @@ def spawn_check(ws, names):
 
 
 def refresh_health(ws, force=False):
-    """점검 시점 - 처음(연결 때)-6시간마다-인증 오류 표식. 그 밖에는 안 돌린다.
+    """점검 시점 - 처음(연결 때)-ok는 6시간마다, needs_check는 10분마다-인증 오류 표식. 그 밖에는 안 돌린다.
     force(연결 때)만 그 자리에서 기다리고, sync에서는 분리된 자식으로 띄우고 직전 값을 돌려준다.
     점검 한 번이 수 분 걸려(실측 166초) sync의 `timeout 20` 안에 하트비트를 막았다."""
     st = read_json(health_path(ws)) or {}
     tools, errs, t = st.get("tools", {}), st.get("auth_error", []), now()
     names = tool_names()
     due = [n for n in names if force or n in errs or not tools.get(n)
-           or t - tools[n]["checked_at"] >= LOGIN_CHECK_EVERY]
+           or check_due(tools[n], t)]
     if force:
         for n in due:
-            tools[n] = {"health": "ok" if login_ok(n) else "needs_check", "checked_at": t}
+            tools[n] = login_entry(n, t)
         st = {"tools": {n: tools[n] for n in names}, "auth_error": []}
         write_json(health_path(ws), st)
         return st["tools"]
