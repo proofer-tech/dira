@@ -1497,7 +1497,7 @@ function UpdateBadge({
           <AlertDialogDescription>
             {diff && diff !== "loading"
               ? t("market.update.diffBody")
-              : `${t("market.update.confirmBodyPrefix")} v${update.latestVersion} ${t("market.update.confirmBodySuffix")}`}
+              : `${t("market.update.confirmBodyPrefix")} v${update.latestVersion}${t("market.update.confirmBodySuffix")}`}
           </AlertDialogDescription>
         </AlertDialogHeader>
         {diff === "loading" && <p className="text-xs text-muted-foreground">{t("market.update.diffLoading")}</p>}

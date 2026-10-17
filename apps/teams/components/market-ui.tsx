@@ -47,7 +47,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useLocale, useT } from "@/components/language-provider";
 
-type Project = { id: string; name: string };
+type Project = { id: string; name: string; team?: boolean };
 type Tab = MarketKind;
 
 function wr(prefix: string, mid: string, suffix: string): string {
@@ -420,6 +420,7 @@ function ItemDialog({
   const [mode, setMode] = useState<Mode>("detail");
   const [targetId, setTargetId] = useState(projects[0]?.id ?? "");
   const [asName, setAsName] = useState(item.name);
+  const [version, setVersion] = useState(item.latest);
   const [overwrite, setOverwrite] = useState(false);
   const [conflict, setConflict] = useState(false);
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -431,6 +432,9 @@ function ItemDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.kind, item.owner, item.name]);
 
+  // 버전 칸은 `dira-team/` 프로젝트이고 버전이 둘 이상일 때만 보인다(그 밖의 경로는 늘 최고 버전).
+  const showVersion = !!projects.find((p) => p.id === targetId)?.team && item.versions.length > 1;
+
   // `overwrite`를 인자로 받는다 — "덮어쓰기" 버튼이 `setOverwrite(true)` 뒤 바로 이 함수를
   // 부르면, 그 state 갱신은 다음 렌더에나 반영되어 이 클로저는 여전히 옛 `overwrite`를 본다.
   // 상태를 안 거치고 그 값을 직접 넘겨 그 타이밍 문제를 피한다.
@@ -438,7 +442,7 @@ function ItemDialog({
     start(async () => {
       setConflict(false);
       const action = item.kind === "persona" ? importPersonaAction : importSquadAction;
-      const r = await action(item.owner, item.name, targetId, asName, withOverwrite, locale);
+      const r = await action(item.owner, item.name, targetId, asName, withOverwrite, locale, showVersion ? version : undefined);
       if (!r.ok && r.conflict) {
         setConflict(true);
         return;
@@ -512,6 +516,23 @@ function ItemDialog({
                 }}
               />
             </div>
+            {showVersion && (
+              <div className="space-y-2">
+                <Label htmlFor="market-import-version">{t("market.import.versionLabel")}</Label>
+                <Select value={version} onValueChange={(v) => setVersion(v ?? item.latest)}>
+                  <SelectTrigger id="market-import-version" className="w-full font-mono">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[...item.versions].reverse().map((v) => (
+                      <SelectItem key={v.v} value={v.v} className="font-mono">
+                        v{v.v}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {conflict && (
               <Alert variant="destructive">
                 <TriangleAlert aria-hidden />

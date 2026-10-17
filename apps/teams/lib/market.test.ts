@@ -3,6 +3,7 @@ import assert from "node:assert";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { t } from "./i18n.ts";
 import { deployNoteHintKey, shouldResetDeployForm } from "./deploy-form.ts";
 
 // 진짜 마켓(~/.config/dira/market/)을 밟지 않는다. import 전에 건다(projects.test.ts 선례).
@@ -518,4 +519,30 @@ test("lineDiff — 바뀐 줄만 +/-로 나온다", () => {
     { sign: "-", text: "b" },
     { sign: "+", text: "c" },
   ]);
+});
+
+test("importToTeam - 버전을 고르면 그 버전이 복사되고 안 고르면 최고 버전이다", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-market-team-ver-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  try {
+    const { queue, team } = teamRoot();
+    await deployPersona("pofol", "pofol", "V", { profile: "# V\nold\n", skills: null }, "첫", []);
+    await deployPersona("pofol", "pofol", "V", { profile: "# V\nnew\n", skills: null }, "둘", [], "minor");
+    const copy = path.join(team, "market/persona/pofol/V");
+    const low = await importToTeam("persona", "pofol", "V", queue, "V", false, "1.0.0");
+    assert.equal(low.ok && low.version, "1.0.0");
+    assert.equal(readFileSync(path.join(copy, "PROFILE.md"), "utf8"), "# V\nold\n");
+    assert.match(readFileSync(path.join(copy, "apm.yml"), "utf8"), /^version: 1\.0\.0$/m);
+    const top = await importToTeam("persona", "pofol", "V", queue, "V", true);
+    assert.equal(top.ok && top.version, "1.1.0");
+    assert.equal(readFileSync(path.join(copy, "PROFILE.md"), "utf8"), "# V\nnew\n");
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+  }
+});
+
+test("업데이트 확인 문구는 버전 뒤에 공백이 없다", () => {
+  for (const [loc, want] of [["ko", "v1.1.0로 덮어씁니다."], ["en", "v1.1.0. This can't be undone."]] as const)
+    assert.ok(`v1.1.0${t(loc, "market.update.confirmBodySuffix")}`.startsWith(want.slice(0, want.length)));
 });

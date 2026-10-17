@@ -42,7 +42,7 @@ export type MarketCardItem = MarketItem & { profileFirstLine: string; installedI
  *  `/market` 페이지와 `MarketDialog`가 이 액션 하나를 같이 부른다 — 조립 로직 두 벌을 안 둔다. */
 export async function loadMarketPaneData(
   locale: Locale,
-): Promise<{ items: MarketCardItem[]; projects: { id: string; name: string }[] }> {
+): Promise<{ items: MarketCardItem[]; projects: { id: string; name: string; team: boolean }[] }> {
   const [items, rawProjects] = await Promise.all([listMarketItems(), readProjects(locale)]);
   // `dira-team/` 프로젝트의 가져간 기록은 레지스트리가 아니라 그 프로젝트의 apm.yml과 사본이다.
   const projects = await Promise.all(
@@ -60,7 +60,7 @@ export async function loadMarketPaneData(
       };
     }),
   );
-  return { items: rows, projects: projects.map((p) => ({ id: p.id, name: p.name })) };
+  return { items: rows, projects: projects.map((p) => ({ id: p.id, name: p.name, team: hasTeam(p.root) })) };
 }
 
 function reasonMessage(reason: ImportReason, asName: string, locale: Locale): string {
