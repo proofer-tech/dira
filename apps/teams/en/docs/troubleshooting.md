@@ -33,15 +33,16 @@ bottom.
 | Order | Key | The line after `Stalled:` | What to do |
 |---|---|---|---|
 | 1 | `migration` | `Migration not applied {id}` | `Reopen the app and it carries on applying. Without the app, run python3 migrate.py apply --root <root>` ([The screen blurs after an update](/docs/install#the-screen-blurs-after-an-update)) |
-| 2 | `auth` | `{engine} has no auth token` | `Add a token in Settings > Authentication and it starts on the next tick` ([Authentication](/docs/auth)) |
-| 3 | `cooldown` | `Account limit - clears in {n}s` | `It clears by waiting. To run now, turn on another account in Settings > Authentication` |
-| 4 | `machineCap` | `Machine-wide sessions {a}/{b} - other projects are using the slots` | `It clears when another session ends. To run now, raise Settings > Workers > Machine-wide session limit` ([How many to run at once](/docs/concurrency)) |
-| 5 | `personaCap` | `{persona} limit {a}/{b}` | `It clears when that persona's in-progress ticket ends. Change the limit on the Personas screen` |
-| 6 | `priority` | `Priority 1 ticket {hash} blocks other tickets until it ends` | `It clears when {hash} ends. If it should not block, lower that ticket's priority`. The `Open ticket` link opens that ticket |
-| 7 | `shellCap` | `{n} shells piled up, resting` | `The watchdog cleans up on the next tick. Nothing for you to do` |
-| 8 | `watchdog` | The watchdog's line as written | `The watchdog cannot fix this itself. A person fixes what the sentence above points at` |
-| 9 | `noCandidate` | `No ticket can start - waiting on deps {d}, awaiting answer {w}, polling {p}` | `Answer the awaiting tickets or wait for the dependencies to finish`. The `Show awaiting tickets` link shows only Awaiting answer tickets on the board |
-| 10 | `notWaking` | `No idle worker woke for 90 seconds` | `Check the defect marks on the Workers screen (no cron line - no exec bit)`. The `Open Workers` link opens the Workers screen ([It is on cron but never wakes](#it-is-on-cron-but-never-wakes)) |
+| 2 | `apm` | `Package install differs from the lock {detail}` | `Run python3 dira_apm.py install <project root> to reinstall as locked. If it still differs, check dira-team/apm.lock.yaml` ([Install](/docs/install#stalled-package-install-differs-from-the-lock)) |
+| 3 | `auth` | `{engine} has no auth token` | `Add a token in Settings > Authentication and it starts on the next tick` ([Authentication](/docs/auth)) |
+| 4 | `cooldown` | `Account limit - clears in {n}s` | `It clears by waiting. To run now, turn on another account in Settings > Authentication` |
+| 5 | `machineCap` | `Machine-wide sessions {a}/{b} - other projects are using the slots` | `It clears when another session ends. To run now, raise Settings > Workers > Machine-wide session limit` ([How many to run at once](/docs/concurrency)) |
+| 6 | `personaCap` | `{persona} limit {a}/{b}` | `It clears when that persona's in-progress ticket ends. Change the limit on the Personas screen` |
+| 7 | `priority` | `Priority 1 ticket {hash} blocks other tickets until it ends` | `It clears when {hash} ends. If it should not block, lower that ticket's priority`. The `Open ticket` link opens that ticket |
+| 8 | `shellCap` | `{n} shells piled up, resting` | `The watchdog cleans up on the next tick. Nothing for you to do` |
+| 9 | `watchdog` | The watchdog's line as written | `The watchdog cannot fix this itself. A person fixes what the sentence above points at` |
+| 10 | `noCandidate` | `No ticket can start - waiting on deps {d}, awaiting answer {w}, polling {p}` | `Answer the awaiting tickets or wait for the dependencies to finish`. The `Show awaiting tickets` link shows only Awaiting answer tickets on the board |
+| 11 | `notWaking` | `No idle worker woke for 90 seconds` | `Check the defect marks on the Workers screen (no cron line - no exec bit)`. The `Open Workers` link opens the Workers screen ([It is on cron but never wakes](#it-is-on-cron-but-never-wakes)) |
 | - | `unknown` | `Unknown reason - raw: {raw}` | `Paste the raw line into the home chat and ask` |
 
 For the reasons that clear by waiting (`cooldown` - `machineCap` - `personaCap` - `priority` -

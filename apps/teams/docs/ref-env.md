@@ -43,9 +43,20 @@
 | 변수 | 기본값 | 뜻 |
 |---|---|---|
 | `TICKET_LOCAL` | `~/.config/dira` | 토큰(`oauth-token`)과 워커 락(`run/`)을 두는 디렉터리. 큐 루트가 공유 드라이브에 있어도 이 경로는 이 머신에만 존재합니다 |
-| `DIRA_APM_NO_INSTALL` | (없음) | `1`이면 워커가 claim 전에 설치 상태를 확인할 때, lock과 달라도 `apm` 설치를 시도하지 않고 바로 멈춥니다. 설치 실패를 재현하는 테스트에서 씁니다 |
+| `DIRA_APM_NO_INSTALL` | (없음) | `1`이면 워커가 티켓을 가져가기 전 패키지 검사에서 어긋남을 찾아도 설치를 시도하지 않고 바로 멈춥니다. 검사 자체는 그대로 합니다. 테스트에서 네트워크 설치를 막을 때 씁니다([설치](/docs/install#멈춤-패키지-설치-상태가-lock과-다릅니다)) |
 
-dira가 까는 apm CLI는 `~/.config/dira/tools/apm/<버전>/`에 있습니다. 버전은 엔진 파일
-`apm-version`이 정하고, 사용자 PATH의 `apm`은 쓰지 않습니다([설치](/docs/install) §패키지 설치 - apm).
+### dira가 까는 도구의 자리
+
+페르소나와 프로토콜 패키지를 까는 `apm` 명령은 dira가 직접 설치하고, 사용자 PATH의 `apm`은 쓰지
+않습니다. 버전은 엔진의 `apm-version` 파일 한 줄이 정합니다(지금 `0.33.0`).
+
+| 경로 | 내용 |
+|---|---|
+| `~/.config/dira/tools/apm/<버전>/bin/apm` | dira가 부르는 `apm` 실행 파일 |
+| `~/.config/dira/tools/apm/<버전>/tools/` | `uv`로 깔았을 때 그 도구 환경(`UV_TOOL_DIR`) |
+| `~/.config/dira/tools/apm/<버전>/venv/` | `uv`가 없어 3.10 이상 `python3.x`로 깔았을 때의 가상환경 |
+
+`apm-version`이 바뀌면 새 버전 폴더가 하나 더 생기고 옛 폴더는 그대로 남습니다. 지워도 다음
+설치 때 필요한 버전만 다시 깝니다. 위치는 `TICKET_LOCAL`을 따르지 않고 늘 `~/.config/dira/tools/`입니다.
 
 다음은 [CLI](/docs/ref-cli)입니다.

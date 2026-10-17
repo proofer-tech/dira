@@ -45,5 +45,22 @@ write in the worker file.
 | Variable | Default | What it does |
 |---|---|---|
 | `TICKET_LOCAL` | `~/.config/dira` | Where the token (`oauth-token`) and the worker lock (`run/`) are kept. Even when the queue root is on a shared drive, this belongs to this machine alone |
+| `DIRA_APM_NO_INSTALL` | (none) | With `1`, when the package check before a claim finds a mismatch, the worker does not try an install and stops right away. The check itself still runs. Use it in tests to keep installs off the network ([Install](/docs/install#stalled-package-install-differs-from-the-lock)) |
+
+### Where dira installs its tools
+
+dira installs the `apm` command that installs persona and protocol packages itself, and never uses
+an `apm` on your PATH. The version is the one line in the engine's `apm-version` file (`0.33.0`
+today).
+
+| Path | What it is |
+|---|---|
+| `~/.config/dira/tools/apm/<version>/bin/apm` | The `apm` executable dira calls |
+| `~/.config/dira/tools/apm/<version>/tools/` | The tool environment when installed with `uv` (`UV_TOOL_DIR`) |
+| `~/.config/dira/tools/apm/<version>/venv/` | The virtual environment when there was no `uv` and a `python3.x` of 3.10 or later was used |
+
+When `apm-version` changes, a new version folder appears and the old one stays. You can delete it;
+the next install fetches only the version it needs. The location does not follow `TICKET_LOCAL`; it
+is always `~/.config/dira/tools/`.
 
 Next is [CLI](/docs/ref-cli).

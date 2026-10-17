@@ -65,12 +65,9 @@ claim is an atomic link, where `## 결과` (the result section) and `## 블록` 
 go. A session that breaks these sentences does not merely produce different work, it breaks the
 queue. That is why they were not put anywhere a project can reach.
 
-Each time you select one, its real path appears above. It is one of two places.
-
-- **`protocols/` in the engine repository.** The queue has no copy, so there is nothing to
-  delete.
-- **`protocols/` in this queue.** Making a new project through the app copies the core into the
-  queue. Then what sessions actually receive is the queue's copy, so the screen shows that one.
+Each time you select one, its real path appears above. What sessions actually receive is
+usually the copy in this queue's `protocols/`, so the screen shows that path. Where that copy comes
+from is in §The source of truth is a package below.
 
 Where the project document contradicts the core, the core wins. The core comes first in the
 prompt and carries that precedence in one line at its head.
@@ -78,6 +75,37 @@ prompt and carries that precedence in one line at its head.
 Of the three, only `CORE.md` is inlined into the prompt. The other two are read by the session
 itself, at the moment `CORE.md` points at them. Ticket frontmatter syntax is in
 `CORE-TICKETS.md`, and the format for leaving a retrospective is in `CORE-MEMORY.md`.
+
+## The source of truth is a package - `.dira/protocols` is generated
+
+When a project repository has `dira-team/apm.yml`, the protocols come from two places.
+
+| Where | What it holds |
+|---|---|
+| `packages/dira-protocols/` in the dira repository | Shared. `CORE.md`, `CORE-*.md` and the sibling documents every project uses. Projects pin this package by a tag |
+| `dira-team/protocols/` in the project | Local. This project's `AGENTS.md`, plus any shared document it rewrites for itself |
+
+The queue's `.dira/protocols/` is the two merged: local laid over shared, local winning on a name
+clash. dira rewrites that folder on every install (`python3 dira_apm.py install <project root>`,
+registering a project, `Copy locally`, taking a market update). So each file there starts with
+this line.
+
+```
+<!-- dira_apm materialize: 고치지 말고 dira-team/protocols 또는 packages/dira-protocols를 고친다 -->
+```
+
+(It says: do not edit this; edit `dira-team/protocols` or `packages/dira-protocols`.)
+
+**Make lasting edits in `dira-team/protocols/`.** Saving on this screen changes the file in
+`.dira/protocols/`, and the next dispatch picks it up. But the next install rewrites that file from
+the source and your edit is gone. To use a shared document differently in this project only, put a
+file by the same name in `dira-team/protocols/`, edit it there and commit. From the next install on,
+the local one wins. The shared documents themselves are edited in `packages/dira-protocols/` in the
+dira repository, and each project gets the change only after raising the tag in its
+`dira-team/apm.yml`.
+
+Rewriting never deletes queue-only files that the shared package does not have. A project without
+`dira-team/apm.yml` keeps the queue's `protocols/` as the source, as before.
 
 ## The `Inlined in every prompt` badge
 

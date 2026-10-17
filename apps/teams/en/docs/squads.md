@@ -11,8 +11,8 @@ member.
 
 ## Where it parts from a persona
 
-A squad has no profile. No skills, no memory, no color, no cap. Two files inside
-`<queue folder>/squads/<name>/` are the whole of it. `members`, which lists the members, and
+A squad has no profile. No skills, no memory, no color, no cap. Two files inside the squad
+folder are the whole of it (where that folder is: §Squad packages and their members below). `members`, which lists the members, and
 `rules`, which the leader reads when it chooses. The second one is optional.
 
 That is because a squad is not an identity. A profile is the writing that hands a session who
@@ -23,6 +23,26 @@ is two things. Who receives this ticket, and what that person looks at when divi
 meaning. The top line is this squad's leader, and a ticket that carries the squad goes to that
 one person only. The rest of the members have nothing to do with that work until the leader
 issues them a ticket.
+
+## Squad packages and their members
+
+When a project repository has `dira-team/apm.yml`, one squad is one package, by the same rules as
+personas ([Personas](/docs/personas#where-personas-live-the-dira-team-packages)).
+
+- A local squad is in `dira-team/squads/<name>/` and holds `apm.yml`, `members` and `rules` (if
+  any). Editing on screen changes these files.
+- A shared squad is the `squad-<name>` package inside `dira-team/apm_modules/`. Its source is
+  `packages/squad-<name>/` in the dira repository. On screen it is read-only; to edit it, press
+  `Copy locally`, and it becomes `dira-team/squads/<name>/`.
+- When the names match, the local one wins.
+
+**A squad package lists its member persona packages as dependencies.** The shared `squad-default`
+is the example. Its `apm.yml` has `persona-pm`, `persona-developer`, `persona-qa`, `persona-designer`
+and `persona-writer` under `dependencies.apm`, so installing the squad installs those five members
+with it. Member order and the leader are still set by the `members` file. The dependency list only
+installs the member packages and has no say in order.
+
+A project without `dira-team/apm.yml` keeps reading `<queue folder>/squads/<name>/`.
 
 ## A new project has default
 

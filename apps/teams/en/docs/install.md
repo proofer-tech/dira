@@ -35,8 +35,78 @@ keychain access. The name in the dialog shows up as a number (`2.1.222`, say) ra
 because the worker is running exactly the CLI engine you just configured. Nothing unfamiliar
 has appeared. The engine itself needs that dialog, so go ahead and allow it.
 
-`python3` and `bash` already ship with macOS. The engine uses nothing but the standard library
-of those two, so there is no package to install.
+`python3` and `bash` already ship with macOS. The engine itself uses nothing but the standard
+library of those two. The `apm` command that installs persona and protocol packages is something
+dira installs on its own when it needs it (§Installing packages on a new machine below).
+
+## Installing packages on a new machine
+
+Personas, squads and protocols live as packages under the project repository's `dira-team/`, and
+which ones at which version is pinned by `dira-team/apm.yml` and `dira-team/apm.lock.yaml`. The
+install output (`dira-team/apm_modules/`, `dira-team/.claude/`) is not committed, so after you clone
+the repository on a new machine you install once. It is one command.
+
+```bash
+cd ~/Library/Application\ Support/dira/engine     # the engine inside the app; with the repo, your clone
+python3 dira_apm.py install <project root>
+```
+
+`<project root>` is the repository folder that contains `dira-team/`, not the `.dira` folder. With
+the app you will rarely type this yourself: before claiming a ticket, a worker checks the install
+and, if it differs from the lock, installs once on its own. The command does four things.
+
+1. If there is no `apm` command yet, it installs one first. The version is the one line in the
+   engine's `apm-version` file (`0.33.0` today), and the place is `~/.config/dira/tools/apm/<version>/`.
+   With `uv` it installs through `uv`; without it, it makes a virtual environment there with a
+   `python3.x` of 3.10 or later. An `apm` you put on your own PATH is not used.
+2. It installs from the lock, at the repository root if there is an `apm.yml` there, and in
+   `dira-team/` if there is a `dira-team/apm.yml`.
+3. It checks the result (`check`).
+4. It rewrites the queue's `.dira/protocols/`
+   ([Protocols](/docs/protocols#the-source-of-truth-is-a-package-dira-protocols-is-generated)).
+
+If the last lines show no error, you are done. To only look at the current state, put `check` where
+`install` is. It installs nothing, prints one line per mismatch, and exits with rc 1 if there is any.
+
+With neither `uv` nor a `python3.x` of 3.10 or later, it stops with
+`apm 설치 실패: uv도 python3.10 이상도 없다` (apm install failed: no uv and no python3.10 or later).
+The `python3` that ships with macOS is 3.9 and does not count. Install `uv` and run it again.
+
+## `Stalled: Package install differs from the lock`
+
+Before a worker claims a ticket, it checks that the project's packages match the lock. If they do
+not, it tries one install from the lock; if they still differ, it claims no ticket in that
+project. That is when `Stalled: Package install differs from the lock` and a one-line detail attach
+after the `Next dispatch` clock in the status bar at the bottom of the screen. The project's
+`runner.log` gets this line.
+
+```text
+SKIP apm 설치 상태가 lock과 다르다 - <one-line detail>
+```
+
+It tries the install only once per lock, so this does not clear by itself.
+
+1. Run the command from §Installing packages on a new machine above, as is. That fixes most
+   cases, and the worker claims tickets again on the next tick.
+2. If the same line stays, read the lines `check` printed. Each starts with one of these four.
+   - `스킬 이름 충돌: <skill> <- <package>, <package>` (skill name clash) - two packages ship a
+     skill by the same name. Drop it from one, or rename it.
+   - `페르소나 <name>: skills.md의 <skill>가 패키지 폐포에 없다` (not in the package closure) - that
+     skill is installed by another package but not by this persona package or its dependencies. Put
+     it in the persona package's `.apm/skills/`, add the package that has it as a dependency, or
+     delete that line from `skills.md`.
+   - `apm_modules 사본이 원본과 다르다: <package>` or `원본 없음: <package>` (copy differs from the
+     source, source missing) - a local package was edited or moved and not installed again. Run the
+     command in 1 again.
+   - `dira-team: apm audit rc 1: ...` - the installed files differ from the lock. Often someone
+     changed `dira-team/apm.yml` and did not commit the lock, so check `dira-team/apm.lock.yaml`.
+     If the dependency change is intended, run `~/.config/dira/tools/apm/<version>/bin/apm install`
+     in that folder to write a new lock, and commit it.
+3. After fixing, run the command in 1 once more.
+
+To keep the worker from trying an install, as in tests, set the environment variable
+`DIRA_APM_NO_INSTALL=1` ([Worker environment variables](/docs/ref-env#machine-local-state)). How
+this ranks against other stall reasons is in the table in [Troubleshooting](/docs/troubleshooting).
 
 ## The screen blurs after an update
 
