@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert";
 import {
   copyFileSync,
+  existsSync,
   mkdtempSync,
   mkdirSync,
   readFileSync,
@@ -26,6 +27,7 @@ import {
   readTextFile,
   renameFile,
   saveFile,
+  saveProtocolFile,
   type ProtocolEntry,
 } from "./protocols.ts";
 
@@ -390,6 +392,43 @@ test("dira-team이 있는 큐 - 공용 코어와 로컬 AGENTS.md를 표식과 �
   assert.strictEqual(readFileSync(path.join(queue, "CORE.md"), "utf8"), `${MARK}\n공용 코어\n`);
   assert.strictEqual(readFileSync(path.join(queue, "AGENTS.md"), "utf8"), `${MARK}\n프로젝트 문서\n`);
   assert.strictEqual(readFileSync(path.join(queue, "qa-scratch-1.md"), "utf8"), "큐 전용\n");
+});
+
+test("저장(dira-team 있음) - dira-team/protocols에 쓰고 큐 사본을 다시 만들며, 뒤따른 materialize(install)에도 남는다", async (t) => {
+  t.after(() => void delete process.env.DIRA_ENGINE);
+  const queue = mirrorSetup("save-team", true);
+  const team = path.join(queue, "..", "..", "dira-team", "protocols", "cdp.md");
+  writeFileSync(path.join(queue, "cdp.md"), "옛\n");
+
+  await saveProtocolFile(queue, "cdp.md", "화면에서 고침\n");
+  assert.strictEqual(readFileSync(team, "utf8"), "화면에서 고침\n");
+  assert.strictEqual(readFileSync(path.join(queue, "cdp.md"), "utf8"), `${MARK}\n화면에서 고침\n`);
+
+  await mirrorCore(queue); // install이 끝에 부르는 materialize와 같다
+  assert.strictEqual(readFileSync(path.join(queue, "cdp.md"), "utf8"), `${MARK}\n화면에서 고침\n`);
+});
+
+test("저장(dira-team 없음) - 종전대로 큐 파일에만 쓴다", async (t) => {
+  t.after(() => void delete process.env.DIRA_ENGINE);
+  const queue = mirrorSetup("save-old", false);
+  writeFileSync(path.join(queue, "cdp.md"), "옛\n");
+
+  await saveProtocolFile(queue, "cdp.md", "고침\n");
+  assert.strictEqual(readFileSync(path.join(queue, "cdp.md"), "utf8"), "고침\n");
+  assert.strictEqual(existsSync(path.join(queue, "..", "..", "dira-team")), false);
+});
+
+test("저장(dira-team 있음) - 충돌 판정이 새 경로에서도 동작하고 dira-team 파일을 안 건드린다", async (t) => {
+  t.after(() => void delete process.env.DIRA_ENGINE);
+  const queue = mirrorSetup("save-conflict", true);
+  const full = path.join(queue, "cdp.md");
+  writeFileSync(full, "옛\n");
+  const read = await readTextFile(queue, "cdp.md");
+  const later = new Date(Date.now() + 60_000);
+  utimesSync(full, later, later);
+
+  await assert.rejects(() => saveProtocolFile(queue, "cdp.md", "쓰려던 것\n", read.mtimeMs), /고쳤습니다/);
+  assert.strictEqual(existsSync(path.join(queue, "..", "..", "dira-team", "protocols", "cdp.md")), false);
 });
 
 test("엔진을 못 찾으면 dira-team 큐도 손대지 않는다", async (t) => {

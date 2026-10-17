@@ -179,10 +179,20 @@ export async function readCore(
  *  프로젝트 등록 시 그 프로젝트에 돈다(기동 훅은 `instrumentation.ts`, 등록은 `addProject`).
  *  프로젝트 루트는 큐 루트(`.dira`)의 부모다. */
 export async function mirrorCore(queueProtocols: string): Promise<void> {
-  const local = path.resolve(expandHome(queueProtocols));
-  const queueRoot = path.dirname(local);
-  const project = path.dirname(queueRoot);
-  if (!(await lstat(path.join(project, "dira-team", "apm.yml")).then((st) => st.isFile(), () => false))) return;
+  const project = projectOfQueue(queueProtocols);
+  if (!(await hasTeam(project))) return;
+  await materialize(queueProtocols, project);
+}
+
+function projectOfQueue(queueProtocols: string): string {
+  return path.dirname(path.dirname(path.resolve(expandHome(queueProtocols))));
+}
+
+const hasTeam = (project: string) =>
+  lstat(path.join(project, "dira-team", "apm.yml")).then((st) => st.isFile(), () => false);
+
+async function materialize(queueProtocols: string, project: string): Promise<void> {
+  const queueRoot = path.dirname(path.resolve(expandHome(queueProtocols)));
   const repo = engineRepo();
   if ("error" in repo) return; // 엔진을 못 찾는 배치는 정상 운용이다 - 손대지 않는다
   await new Promise<void>((resolve) => {
@@ -250,6 +260,28 @@ export async function saveFile(
     throw new Error(t(locale, "protocols.lib.staleConflict"));
   }
   await writeFile(full, text, "utf8");
+}
+
+/** 프로토콜 화면의 저장(P506-14). `dira-team/apm.yml`이 있으면 최상위 파일은 `dira-team/protocols/`에도
+ *  쓰고 `materialize`로 큐 사본을 다시 만든다 - 큐 사본만 고치면 다음 `dira_apm.py install`이 덮는다.
+ *  검증(충돌·존재)은 `saveFile`이 큐 사본에서 그대로 한다. 큐 사본을 먼저 쓰므로 엔진을 못 찾아
+ *  materialize가 안 돌아도 화면 저장은 종전과 같다.
+ *  ponytail: materialize가 안 읽는 하위 디렉터리 파일과 `apm.yml`·`AGENTS.template.md`는 큐에만 쓴다. */
+export async function saveProtocolFile(
+  baseDir: string,
+  rel: string,
+  text: string,
+  expectedMtimeMs?: number,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<void> {
+  await saveFile(baseDir, rel, text, expectedMtimeMs, locale);
+  const project = projectOfQueue(baseDir);
+  const top = rel.split(path.sep).length === 1 && !rel.includes("/");
+  if (!top || ["apm.yml", "AGENTS.template.md"].includes(rel) || !(await hasTeam(project))) return;
+  const teamDir = path.join(project, "dira-team", "protocols");
+  await mkdir(teamDir, { recursive: true });
+  await writeFile(await resolveWithin(teamDir, rel), text, "utf8");
+  await materialize(baseDir, project);
 }
 
 /** 새 파일. 중간 디렉터리는 만든다(`sub/GUIDE.md`) — 기준 디렉터리 자체가 없는 큐도 있다. */

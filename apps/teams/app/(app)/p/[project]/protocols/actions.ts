@@ -8,7 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { openWithinApp, type OpenResult } from "@/lib/paths";
-import { createFile, deleteFile, renameFile, saveFile } from "@/lib/protocols";
+import { createFile, deleteFile, renameFile, saveProtocolFile } from "@/lib/protocols";
 import { getProject, resolveConfig } from "@/lib/projects";
 
 export type ProtocolResult = {
@@ -39,7 +39,7 @@ export async function saveProtocolAction(
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<ProtocolResult> {
   try {
-    await saveFile(await baseOf(projectId, locale), rel, text, expectedMtimeMs, locale);
+    await saveProtocolFile(await baseOf(projectId, locale), rel, text, expectedMtimeMs, locale);
     revalidatePath(`/p/${projectId}/protocols`);
     return { ok: true, rel };
   } catch (e) {
