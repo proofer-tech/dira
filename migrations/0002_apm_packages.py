@@ -384,8 +384,9 @@ def _commit(ctx):
     paths = []
     for p in ("apm.yml", "apm.lock.yaml", ".apm", ".claude/skills", "dira-team", ".gitignore"):
         if os.path.exists(os.path.join(proj, p)):
-            # 무시된 경로는 add 가 실패하고 commit pathspec 도 거부하므로 뺀다
-            if subprocess.run(["git", "-C", proj, "add", "-A", "--", p], capture_output=True).returncode == 0:
+            # 무시된 경로나 빈 디렉터리는 git 이 모르는 pathspec 이라 commit 이 거부하므로 뺀다
+            subprocess.run(["git", "-C", proj, "add", "-A", "--", p], capture_output=True)
+            if subprocess.run(["git", "-C", proj, "ls-files", "--error-unmatch", "--", p], capture_output=True).returncode == 0:
                 paths.append(p)
     if subprocess.run(["git", "-C", proj, "diff", "--cached", "--quiet", "--"] + paths).returncode == 0:
         return  # 이미 같은 트리
