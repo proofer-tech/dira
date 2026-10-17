@@ -9342,7 +9342,7 @@ P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 �
   `dira-team/.claude/skills/<이름>/SKILL.md`로 있다.
 - [ ] (b) 설치 뒤 `dira-team/apm_modules/` 안 파일 하나를 바꾸면 `dira_apm.py check`가 rc 1과 그 패키지 이름을
   낸다. 그 상태로 `DIRA_APM_NO_INSTALL=1`을 두면 그 프로젝트의 다음 tick은 claim하지 않고 runner.log에
-  `SKIP apm 설치 상태가 lock과 다르다`가 남으며, status bar에 `멈춤: 패키지 설치가 lock과 다릅니다`가 뜬다.
+  `SKIP apm 설치 상태가 lock과 다르다`가 남으며, status bar에 `멈춤: 패키지 설치 상태가 lock과 다릅니다 <요약>`가 뜬다.
 - [ ] (c) 마켓에서 페르소나 X 1.0.0을 가져오면 `dira-team/apm.yml`에 `./market/persona/<owner>/X` 한 줄과
   `dira-team/market/persona/<owner>/X/apm.yml`의 `version: 1.0.0`이 남고 lock이 그것을 담는다. 이어서 X 1.1.0을
   배포하면 업데이트 배지가 뜨지만 사본은 1.0.0 그대로이고, 업데이트를 누르면 diff가 먼저 보인다.
