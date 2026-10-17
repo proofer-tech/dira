@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
+  apmFailureLines,
   engineRepo,
   ensureBrowseHooks,
   ensureDenyCurrentBranch,
@@ -646,4 +647,21 @@ test("ensureGitRepo - user.name이 없는 환경에서도 첫 커밋이 생긴�
   });
   assert.deepEqual(await ensureGitRepo(dir, "main"), { status: "created" });
   assert.equal(git(dir, "log", "--format=%an").trim(), "dira");
+});
+
+test("apmFailureLines - 오류 표지 줄이 있으면 그 줄들, 없으면 출력 끝 세 줄 (P506-17)", () => {
+  const withMark = [
+    "[>] Resolving dira-protocols...",
+    "  [x] 1 package failed:",
+    "    +- dira-protocols -- Failed to download dependency proofer-tech/dira",
+    "      wrapped detail line",
+    "[x] Installation failed with 1 error(s) in 2.0s. No install transaction changes",
+    "were committed.",
+  ].join("\n");
+  const got = apmFailureLines(withMark);
+  assert.match(got, /dira-protocols -- Failed to download/);
+  assert.match(got, /Installation failed/);
+  assert.doesNotMatch(got, /wrapped detail|Resolving/);
+  assert.equal(apmFailureLines("a\nb\nc\nd\n"), "b / c / d");
+  assert.equal(apmFailureLines("only\n"), "only");
 });

@@ -49,6 +49,15 @@ dependencies:
 const DIRA_TEAM_PROTOCOLS_APM_YML = "name: project-protocols\nversion: 1.0.0\ndescription: 이 프로젝트의 AGENTS.md와 공용 문서를 바꿔 쓴 파일\n";
 const DIRA_TEAM_GITIGNORE = "apm_modules/\n.claude/\n.agents/\n";
 
+/** apm 출력에서 실패 원인 줄을 고른다(P506-17). apm 0.33은 실패를 `[x]` 표지로 쓰고, 받지 못한 패키지는
+ *  `+- <이름> -- <사유>` 줄로 나온다(마지막 줄은 늘 `changes were committed.`라 원인을 못 알린다).
+ *  표지 줄이 있으면 그 줄들(뒤에서 다섯)을, 없으면 출력 끝 세 줄을 낸다. */
+export function apmFailureLines(output: string): string {
+  const lines = output.split("\n").map((l) => l.trim()).filter(Boolean);
+  const marked = lines.filter((l) => l.startsWith("[x]") || l.startsWith("+-"));
+  return (marked.length ? marked.slice(-5) : lines.slice(-3)).join(" / ");
+}
+
 /** `dira_apm.py <명령> <프로젝트>`를 부른다. 큐 루트를 `TICKET_ROOT`로 줘서 materialize가 그 큐에 쓴다.
  *  실패하면 던진다 - 부르는 쪽이 사유를 화면에 올릴지 고른다. */
 export async function runApm(cmd: string, project: string, queueRoot: string): Promise<void> {
@@ -61,8 +70,7 @@ export async function runApm(cmd: string, project: string, queueRoot: string): P
     });
   } catch (e) {
     const x = e as { stderr?: string; stdout?: string; message?: string };
-    const out = (x.stderr?.trim() || x.stdout?.trim() || x.message || String(e)).split("\n").filter(Boolean);
-    throw new Error(out[out.length - 1] ?? "dira_apm.py 실패");
+    throw new Error(apmFailureLines(x.stderr?.trim() || x.stdout?.trim() || x.message || String(e)) || "dira_apm.py 실패");
   }
 }
 
