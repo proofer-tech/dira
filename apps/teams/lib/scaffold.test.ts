@@ -132,8 +132,8 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
 
   // (P506-4) dira-team - 공용 패키지는 git 태그 의존성이고 AGENTS.md만 로컬 패키지다
   const teamYml = await readFile(path.join(project, "dira-team/apm.yml"), "utf8");
-  assert.match(teamYml, /dira-protocols#dira-protocols-v1\.0\.0/);
-  assert.match(teamYml, /squad-default#squad-default-v1\.0\.0/);
+  assert.match(teamYml, /dira-protocols#dira-protocols-v1\.0\.1/);
+  assert.match(teamYml, /squad-default#squad-default-v1\.0\.1/);
   const localAgents = await readFile(path.join(project, "dira-team/protocols/AGENTS.md"), "utf8");
   assert.doesNotMatch(localAgents, /<프로젝트>|<통합 브랜치>/);
   assert.ok(localAgents.includes("git rebase main"));

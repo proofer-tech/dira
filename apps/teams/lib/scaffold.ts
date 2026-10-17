@@ -43,7 +43,7 @@ targets: [claude]
 dependencies:
   apm:
     - ${PUBLIC_PKG_REPO}/dira-protocols#dira-protocols-v1.0.1
-    - ${PUBLIC_PKG_REPO}/squad-default#squad-default-v1.0.0
+    - ${PUBLIC_PKG_REPO}/squad-default#squad-default-v1.0.1
     - ./protocols
 `;
 const DIRA_TEAM_PROTOCOLS_APM_YML = "name: project-protocols\nversion: 1.0.0\ndescription: 이 프로젝트의 AGENTS.md와 공용 문서를 바꿔 쓴 파일\n";
