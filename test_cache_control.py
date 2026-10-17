@@ -95,7 +95,7 @@ try:
     root = os.path.join(tmp, "dira")
     local = os.path.join(tmp, "local")
     os.makedirs(local)
-    write(os.path.join(code, "protocols", "CORE.md"), "# 코어\n코어-마커\n")
+    write(os.path.join(root, "protocols", "CORE.md"), "# 코어\n코어-마커\n")
     write(os.path.join(root, "protocols", "AGENTS.md"), "# 협업\nAGENTS-마커\n")
     write(os.path.join(root, "personas", "dev", "PROFILE.md"), "# Dev\n페르소나-마커\n")
     write(os.path.join(root, "ontology", "_ontology", "SCHEMA.md"), "# 지도\n온톨로지-마커\n")

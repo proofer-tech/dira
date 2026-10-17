@@ -142,6 +142,8 @@ def mkfile(path, body, mode=0o644):
 tmp = os.path.realpath(tempfile.mkdtemp())
 try:
     root = os.path.join(tmp, "dira")
+    __import__("os").makedirs(os.path.join(root, "protocols"), exist_ok=True)  # P506-4가 엔진 사본을 지웠다 - 큐 사본이 없으면 WARN
+    __import__("shutil").copy2(os.path.join(HERE, "packages", "dira-protocols", "CORE.md"), os.path.join(root, "protocols", "CORE.md"))
     local = os.path.join(tmp, "local")
     os.makedirs(local)
     env = dict(os.environ, TICKET_LOCAL=local, EXTRA="")

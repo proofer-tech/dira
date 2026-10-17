@@ -57,7 +57,7 @@ def write(path, body):
 
 def dryrun(worker, local):
     r = subprocess.run([worker, "dryrun"], capture_output=True, text=True,
-                       env=dict(os.environ, TICKET_LOCAL=local), timeout=60)
+                       env=dict(os.environ, TICKET_LOCAL=local, HOME=os.path.dirname(local)), timeout=60)  # 실제 ~/.config/dira/bin 굽기와 다른 워커의 tmp 청소가 부딪히지 않게 HOME을 격리한다
     assert r.returncode == 0, "dryrun rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
     return r.stdout + r.stderr
 
@@ -65,6 +65,8 @@ def dryrun(worker, local):
 tmp = os.path.realpath(tempfile.mkdtemp())
 try:
     root = os.path.join(tmp, "dira")
+    __import__("os").makedirs(os.path.join(root, "protocols"), exist_ok=True)  # P506-4가 엔진 사본을 지웠다 - 큐 사본이 없으면 WARN
+    __import__("shutil").copy2(os.path.join(HERE, "packages", "dira-protocols", "CORE.md"), os.path.join(root, "protocols", "CORE.md"))
     local = os.path.join(tmp, "local")
     os.makedirs(local)
     autof = os.path.join(local, "autonomy.json")

@@ -132,6 +132,8 @@ class Case:
         local = os.path.join(self.tmp, "local")
         os.makedirs(local)
         os.makedirs(os.path.join(root, "workers"), exist_ok=True)
+        os.makedirs(os.path.join(root, "protocols"), exist_ok=True)  # P506-4가 엔진 사본을 지웠다 - 큐 사본이 없으면 WARN
+        shutil.copy2(os.path.join(HERE, "packages", "dira-protocols", "CORE.md"), os.path.join(root, "protocols", "CORE.md"))
         w = os.path.join(root, "workers", "bg.sh")
         with open(w, "w", encoding="utf-8") as f:
             f.write(WORKER.format(tmp=self.tmp, tick=TICK, grace=grace, bgmax=bgmax, maxrun=maxrun))
