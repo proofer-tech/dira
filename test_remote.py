@@ -98,8 +98,8 @@ class Base:
         self.addCleanup(self.tmp.cleanup)
 
     def run_remote(self, *args):
-        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron, TICKET_LOCAL=os.path.join(self.home, ".config", "dira"),
-                   DIRA_MIGRATIONS_DIR=self.migdir)
+        env = dict(os.environ, HOME=self.home, DIRA_CRONTAB_FILE=self.cron, TICKET_LOCAL=getattr(self, "local", None) or os.path.join(self.home, ".config", "dira"),
+                   DIRA_MIGRATIONS_DIR=self.migdir)  # slot_env가 local을 정했으면 슬롯 락이 거기 있다
         env.pop("TICKET_ONTOLOGY", None)
 
         env.pop("TICKET_ONTOLOGY", None)  # 실제 온톨로지를 건드리지 않는다
@@ -682,7 +682,7 @@ class T(Base, unittest.TestCase):
 
     def wrun(self, w, cmd):
         # PATH에 진짜 claude가 없어야 tick이 가짜 엔진 자리를 구워 덮지 않는다
-        env = dict(os.environ, HOME=self.home, TICKET_LOCAL=self.local, DIRA_CRONTAB_FILE=self.cron,
+        env = dict(os.environ, HOME=self.home, TICKET_LOCAL=self.local, DIRA_CRONTAB_FILE=self.cron, DIRA_MIGRATIONS_DIR=self.migdir,
                    PATH=os.path.dirname(sys.executable) + ":/usr/bin:/bin:/usr/sbin:/sbin")
         r = subprocess.run([w, cmd], capture_output=True, text=True, env=env, timeout=60)
         return r.stdout + r.stderr
