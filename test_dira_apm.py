@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """dira_apm.py 시험. 임시 디렉터리의 가짜 패키지와 가짜 apm(DIRA_APM_BIN)만 쓴다."""
-import os, subprocess, sys, tempfile, unittest
+import os, shutil, subprocess, sys, tempfile, unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -40,6 +40,32 @@ class T(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def _relative_lock(self):  # 실제 lock 처럼 local_path 가 전부 site 기준 상대경로다
+        for n in ("pm", "qa"):
+            pkg(self.team / "personas" / n, "persona-" + n)
+            w(self.team / "personas" / n / "skills.md", "- `a` - x\n")
+            pkg(self.team / "apm_modules/_local" / n, "persona-" + n)
+            w(self.team / "apm_modules/_local" / n / "skills.md", "- `a` - x\n")
+        w(self.team / "apm.lock.yaml", "dependencies:\n" + "".join(
+            "- repo_url: _local/%s\n  name: persona-%s\n  source: local\n  local_path: ./personas/%s\n" % (n, n, n)
+            for n in ("pm", "qa")))
+        self.assertEqual(run("check", self.root)[0], 0)
+
+    def test_drift_relative_modified(self):  # P506-11 (b)
+        self._relative_lock()
+        with open(self.team / "apm_modules/_local/pm/skills.md", "a") as f:
+            f.write("- `b` - 추가\n")
+        rc, out, _ = run("check", self.root)
+        self.assertEqual(rc, 1)
+        self.assertIn("persona-pm", out)
+
+    def test_drift_relative_deleted(self):  # P506-11 (b)
+        self._relative_lock()
+        shutil.rmtree(self.team / "apm_modules/_local/qa")
+        rc, out, _ = run("check", self.root)
+        self.assertEqual(rc, 1)
+        self.assertIn("persona-qa", out)
 
     def test_conflict(self):  # (1)
         pkg(self.team / "apm_modules/a/one", "pkg-one", skills=["dup"])

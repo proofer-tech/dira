@@ -150,8 +150,8 @@ def lock_locals(site):
     res = []
     for c in out:
         src = c.get("anchored_local_path") or c.get("local_path")
-        if c.get("name") and src and os.path.isabs(src):
-            res.append((c["name"], Path(src)))
+        if c.get("name") and src:
+            res.append((c["name"], Path(site) / src))  # 상대경로는 site 기준(anchored_local_path가 그렇다), 절대경로는 그대로
     return res
 
 
