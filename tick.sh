@@ -228,6 +228,15 @@ refresh_fixed_engine() {
       && python3 -c 'import os,sys;os.replace(sys.argv[1],sys.argv[2])' "$ENGINES_DIR/dira_env.py.tmp.$$" "$ENGINES_DIR/dira_env.py" \
       || rm -f "$ENGINES_DIR/dira_env.py.tmp.$$"
   fi
+  # P508-1: 더 옛 코드가 고정 경로 엔진 파일을 덮어쓰지 않게 출처 시각을 대조한다. 출처 시각은 git
+  # 체크아웃이면 최신 커밋 시각, 아니면 $CODE/source-time 한 줄, 둘 다 없으면 0. 기록이 없으면 굽는다.
+  local mine rec
+  mine="$(git -C "$CODE" log -1 --format=%ct 2>/dev/null)"
+  case "$mine" in ''|*[!0-9]*) mine="$(head -n1 "$CODE/source-time" 2>/dev/null)" ;; esac
+  case "$mine" in ''|*[!0-9]*) mine=0 ;; esac
+  rec="$(head -n1 "$ENGINES_DIR/source-time" 2>/dev/null)"
+  case "$rec" in ''|*[!0-9]*) rec= ;; esac
+  if [ -z "$rec" ] || [ "$mine" -ge "$rec" ]; then
   # P476: MCP 서버와 그것이 부르는 엔진 파일도 같은 자리에 굽는다(내용이 다르면 원자 교체).
   for f in mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py; do
     [ -f "$CODE/$f" ] && ! cmp -s "$CODE/$f" "$ENGINES_DIR/$f" 2>/dev/null || continue
@@ -237,6 +246,8 @@ refresh_fixed_engine() {
   done
   # P478: 구운 remote.py가 워커 스크립트의 tick.sh 자리를 찾을 수 있게 코드 디렉터리를 적어 둔다.
   [ "$(cat "$ENGINES_DIR/code-dir" 2>/dev/null)" = "$CODE" ] || printf '%s\n' "$CODE" > "$ENGINES_DIR/code-dir" 2>/dev/null
+  [ "$rec" = "$mine" ] || printf '%s\n' "$mine" > "$ENGINES_DIR/source-time" 2>/dev/null
+  fi
   # P468-1: 라우터 본문이 다르면 원자 교체. 옛 dira-<엔진>과 부속 파일은 굽기가 끝난 뒤 지운다.
   if ! cmp -s <(printf '%s\n' "$ROUTER_BODY") "$FIXED_ENGINE" 2>/dev/null; then
     printf '%s\n' "$ROUTER_BODY" > "$FIXED_ENGINE.tmp.$$" 2>/dev/null \
