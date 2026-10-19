@@ -323,6 +323,17 @@ test("scaffold — 데스크톱 extraResources만으로 만든 가짜 엔진에�
   const dir = await tmp();
   t.after(() => rm(dir, { recursive: true, force: true }));
   for (const { from, to } of engineEntries) {
+    // `source-time`처럼 `pnpm build`가 굽는 gitignore 산출물은 체크아웃(CI)에 없다. 없는데
+    // ignore도 아니면 진짜 누락이라 cp가 그대로 던진다.
+    const src = new URL(from, desktopDir);
+    if (!existsSync(src)) {
+      try {
+        execFileSync("git", ["check-ignore", "-q", src.pathname]);
+        continue;
+      } catch {
+        /* ignore 아님 - 아래 cp가 ENOENT로 빨개진다 */
+      }
+    }
     await cp(new URL(from, desktopDir), path.join(dir, to), { recursive: true });
   }
   const fakeEngine = path.join(dir, "engine");

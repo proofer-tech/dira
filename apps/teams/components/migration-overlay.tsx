@@ -32,7 +32,11 @@ export function MigrationOverlay() {
       const body = (await r.json()) as { status: MigrationStatus | null };
       const next = body.status?.rows;
       const needs = needsOverlay(next);
-      if (was.current && !needs) setDoneAt(Date.now());
+      if (was.current && !needs) {
+        const at = Date.now();
+        setDoneAt(at);
+        setNow(at);
+      }
       was.current = needs;
       setRows(next);
     } catch {
@@ -42,6 +46,7 @@ export function MigrationOverlay() {
 
   const shown = overlayShown(rows, doneAt, now);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- poll의 setState는 fetch await 뒤라 동기 연쇄 렌더가 안 난다
     void poll();
   }, [poll]);
   useEffect(() => {
@@ -50,7 +55,6 @@ export function MigrationOverlay() {
   }, [poll, shown]);
   useEffect(() => {
     if (doneAt === null) return;
-    setNow(Date.now());
     const id = setTimeout(() => setNow(Date.now()), CLOSE_DELAY_MS + 20);
     return () => clearTimeout(id);
   }, [doneAt]);
