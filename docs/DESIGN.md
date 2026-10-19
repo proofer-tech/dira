@@ -8938,6 +8938,95 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P509. 운영 정보를 프로젝트 저장소에서 뺀다 - 페르소나, 스쿼드, 프로토콜 패키지를 `dira-team/`에서 `.dira/team/`으로 옮긴다 (요구 `8030b8a3`, 왕복 0회)
+
+사람 요구(2026-10-19): *"정의가 저기에 있으면 안됩니다. 기획이 잘못되었던것같네요. 애초에 .dira 안에 넣어줘야합니다.
+왜냐하면 운영상의 정보들은 실제 프로젝트와 별도로 취급해야하기 때문입니다. 지금 이대로면 dira-team이 커밋되게
+되거에요"*. P506 §구조 - 프로젝트 저장소가 `dira-team/`을 저장소에 두고 "커밋한다"고 정한 것을 뒤집는다.
+
+#### 실측 (2026-10-19)
+
+- 엔진 `tick.sh`(978 - 1469 - 1570 - 1709행 부근)와 `dira_apm.py`(`resolve` - `skills` - `check` - `materialize`),
+  앱 `apps/teams/lib/apm.ts` `teamOf`가 `<큐의 부모>/dira-team`을 하드코딩한다. `scaffold.ts` - `market.ts` -
+  `protocols.ts` - `home-session.ts` - 페르소나 화면 `actions.ts`도 같은 경로를 쓴다.
+- dira 저장소는 `32c1712b`(dira - APM 전환 (P506))에서 `dira-team/` 파일 292개를 커밋했고 `origin/master`에 있다.
+  다른 프로젝트의 `git ls-files dira-team` 파일 수: stocky 185, stream 239, proofer 183, hsol.info 29, pofol 286,
+  gallae 92, with-cto 78, tinyus 69, hravengers 0(디렉터리만 있다).
+- `.gitignore`는 `dira-team/apm_modules/` - `.claude/` - `.agents/`만 제외한다. `.dira`는 통째로 gitignore다.
+- `.github/workflows/ci.yml`은 `dira-team/apm.yml`이 있으면 그 안에서 `apm install`과 `apm audit --ci`를 돈다.
+
+#### 결정
+
+1. **팀 디렉터리는 큐 안 `<큐>/team/`이다.** 큐가 `<프로젝트>/.dira`이면 `<프로젝트>/.dira/team/`이다. 안의
+   배치(apm.yml, apm.lock.yaml, personas/, squads/, protocols/, skills/, market/, apm_modules/, .claude/, .agents/)는
+   P506 `dira-team/`과 같고 경로 앞부분만 바뀐다. `.dira/personas/<이름>/`(memory, limit, engine, mcp.json)는 그대로
+   둔다 - 패키지 디렉터리와 합치면 로컬 경로 의존성 설치가 memory까지 `apm_modules`로 복사한다.
+2. **아무것도 커밋하지 않는다.** 팀 디렉터리는 `.dira` gitignore 안이라 따로 제외 줄이 필요 없다. P506 결정과
+   수용조건 중 "커밋한다" - "커밋은 apply의 마지막 일"은 이 결정으로 대체된다. 다른 기계에서의 재현은 큐가 따라가는
+   곳에서 이루어진다. 마켓 사본(`team/market/`)도 큐 안이라 같은 기계 밖에서 재현해야 할 이유가 사라진다.
+3. **읽는 순서는 `<큐>/team/apm.yml` -> `<프로젝트>/dira-team/apm.yml` -> 옛 배치(rc 3)다.** 둘째 자리는 아래
+   마이그레이션이 끝나기 전 프로젝트를 위한 읽기 전용 경유지다. 쓰기(화면 저장 - 마켓 가져오기 - 로컬로 복사)는
+   `<큐>/team/`에만 하고, 그 프로젝트가 아직 `dira-team/`이면 쓰기 전에 마이그레이션 게이트가 먼저 막는다(P505).
+   엔진과 앱이 같은 판정을 쓰도록 `dira_apm.py team <프로젝트 루트>`(팀 디렉터리 절대경로 한 줄, 없으면 rc 3)를 더하고
+   tick.sh는 그것을 부른다. 앱 `teamOf`는 같은 순서를 TypeScript로 갖는다.
+4. **루트 개발 환경 `apm.yml`은 저장소에 남는다.** 모든 워커와 사람이 쓰는 스킬이고 프로젝트에 속한다. 루트
+   `check`가 자기 패키지를 셀 때 `dira-team`과 함께 `.dira`도 제외한다.
+5. **dira 저장소의 로컬 공용 의존성은 `../../packages/<패키지>`다.** 팀 디렉터리가 한 칸 깊어졌기 때문이다. 큐는
+   통합 체크아웃 `~/Projects/dira/.dira`에 실체가 있으므로 그 경로가 통합 체크아웃의 `packages/`를 가리킨다.
+6. **materialize 머리 줄은 `<!-- dira_apm materialize: 고치지 말고 .dira/team/protocols 또는 packages/dira-protocols를
+   고친다 -->`다.**
+7. **마이그레이션 항목 `migrations/0003_team_into_queue.py`(P505 형식)로 옮긴다.** `ID = "0003-team-into-queue"`,
+   `SCOPE = "project"`, `ROLLOUT = "canary"`, `REVERSIBLE = True`. 적용 순서:
+   1. `<프로젝트>/dira-team/apm.yml`이 없으면 할 일이 없다(멱등). `<큐>/team/apm.yml`이 이미 있으면 7-5로 간다.
+   2. 페르소나마다 P506 dryrun 비교 기준으로 기준 프롬프트를 떠 둔다.
+   3. `dira-team/`에서 `apm_modules/` - `.claude/` - `.agents/`를 뺀 전부를 `<큐>/team/`으로 바이트 그대로 복사하고,
+      `apm.yml` - 로컬 패키지 `apm.yml`의 `../packages/` 의존성을 `../../packages/`로 고친다(결정 5). 이어서
+      `dira_apm.py install`, `check` rc 0.
+   4. 검증: 페르소나마다 dryrun을 다시 떠서 2와 비교한다. P506 비교 기준의 두 지우기에 더해 materialize 머리 줄의
+      경로 차이(결정 6)만 지운다. 다르면 예외를 올리고 러너가 되돌린다.
+   5. `git rm -r --cached --quiet dira-team`(추적 파일이 있을 때만), `dira-team/` 디렉터리 삭제, `.gitignore`에서
+      `dira-team/apm_modules/` - `dira-team/.claude/` - `dira-team/.agents/` 세 줄 삭제. 그 프로젝트 저장소에
+      `dira-team/`과 `.gitignore`만 커밋한다(메시지 `dira - 운영 정보를 .dira로 옮긴다 (P509)`). 바뀐 것이 없으면
+      커밋하지 않는다. push는 하지 않는다(사람 몫).
+   6. `revert`는 백업한 `dira-team/`과 `.gitignore`를 되살리고 `<큐>/team/`을 지운 뒤, 5의 커밋이 HEAD 조상이면
+      되돌림 커밋을 낸다.
+   대상은 canary라 처음에는 `dira` 하나고, QA 뒤 `promote`로 나머지(hravengers 포함, 추적 파일 0이면 커밋 없음)를 연다.
+8. **이미 원격에 올라간 이력은 고쳐 쓰지 않는다.** 7-5의 삭제 커밋까지가 범위다. 지난 커밋에 남은 `dira-team/`
+   파일은 페르소나 - 프로토콜 글이고 비밀값이 아니다. 이력 재작성(force push)은 사람이 따로 정한다.
+9. **CI는 팀 디렉터리를 보지 않는다.** `ci.yml`의 `dira-team` 줄과 그 주석을 지운다. 루트 `apm install` - `apm audit
+   --ci`는 그대로다.
+10. **새 프로젝트 scaffold는 처음부터 `<큐>/team/`에 쓴다.** `0002-apm-packages`는 고치지 않는다 - 이미 적용된
+    프로젝트에서는 0003이 이어 옮기고, 아직 옛 배치인 프로젝트에서는 0002 다음 0003이 차례로 돈다.
+
+주도성 5 판단: 엔진 수정이다(`dira_apm.py` - `tick.sh` - 새 마이그레이션 항목). 사람이 이 요구에서 배치 자체를 고치라고
+했고, 상태 3종 - 파일명 - claim 락은 건드리지 않는다.
+주도성 5 판단: 자리를 `.dira/team/`으로 정했다. `.dira/personas/` - `.dira/squads/`(P506 이전 자리)로 되돌리면 패키지와
+memory가 한 디렉터리에 섞여 결정 1의 복사 문제가 생긴다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P509-1 | 엔진 - `dira_apm.py` 팀 디렉터리 판정(`team` 명령, 결정 3 - 4 - 5 - 6) + `tick.sh` 네 자리가 그것을 쓴다 + `test_dira_apm.py` - `test_core_protocol.py` | developer | - | |
+| P509-2 | 앱 - `teamOf`(결정 3)와 `scaffold.ts` - `market.ts` - `protocols.ts` - `home-session.ts` - 페르소나 화면의 쓰기를 `<큐>/team/`으로, 문구 - 테스트 | developer | - | |
+| P509-3 | 마이그레이션 `0003-team-into-queue`(결정 7) + `test_migrate_0003.py`, `ci.yml`(결정 9), dira 프로젝트에 적용 | developer | P509-1 | |
+| P509-4 | 매뉴얼 - ko-en install, personas, squads, protocols, screens, troubleshooting의 `dira-team` 자리 | writer | - | |
+| P509-5 | QA - dira 프로젝트 기준 아래 수용조건 (a) - (e) | qa | P509-2, P509-3 | |
+| P509-6 | 적용 - `migrate.py promote 0003-team-into-queue`, 나머지 9개 적용, 프로젝트별 (b) - (c) 표 보고 | developer | P509-5 | |
+| P509-7 | QA - 나머지 9개 프로젝트의 (b) - (c) | qa | P509-6 | |
+
+**일곱 장이다.** P509-1과 P509-2는 서로 기다리지 않는다(앱은 임시 큐로 시험한다). 에픽 `P509`를 연다.
+
+#### 수용조건
+
+- [ ] (a) dira 프로젝트에서 `python3 dira_apm.py team ~/Projects/dira`가 `~/Projects/dira/.dira/team` 한 줄을 내고,
+  `check`가 rc 0이다. `tick.sh dryrun`의 PROFILE - skills - 스쿼드 머리 줄 괄호가 `.dira/team/` 아래를 가리킨다.
+- [ ] (b) 마이그레이션 뒤 그 프로젝트에서 `git ls-files dira-team | wc -l`이 0이고 `test -e dira-team`이 실패하며,
+  `git status --porcelain`이 비어 있다. `git log -1 --format=%s`는 추적 파일이 있던 프로젝트에서
+  `dira - 운영 정보를 .dira로 옮긴다 (P509)`다.
+- [ ] (c) 페르소나마다 마이그레이션 전후 dryrun이 P509 비교 기준(결정 7-4)으로 같다.
+- [ ] (d) 페르소나 화면에서 PROFILE.md를 저장하면 `<큐>/team/personas/<이름>/PROFILE.md`가 바뀌고 저장소 `git status`는
+  비어 있다. 마켓에서 페르소나를 가져오면 `<큐>/team/apm.yml`에 `./market/...` 줄이 생긴다.
+- [ ] (e) GUI로 새 프로젝트를 만들면 `<큐>/team/apm.yml`이 생기고 프로젝트 저장소에 `dira-team/`이 없다.
+
 ### P508. 고정 경로 엔진 파일을 더 옛 코드가 덮어쓰지 않는다 - 굽기에 출처 시각을 대조한다 (요구 `6f1d96ad`, 왕복 0회)
 
 갈래 큐 요구 `a316d8c0`에서 넘어온 요구다. 사람이 "엔진도 개선해주세요 승인합니다"라고 승인했다(2026-10-18).
@@ -9196,6 +9285,8 @@ packages/
 태그는 `<패키지>-v<버전>`이다.
 
 #### 구조 - 프로젝트 저장소
+
+**P509가 이 배치를 대체한다(요구 `8030b8a3`).** `dira-team/`은 큐 안 `<큐>/team/`으로 옮겨 가고 커밋하지 않는다.
 
 ```
 <프로젝트>/
