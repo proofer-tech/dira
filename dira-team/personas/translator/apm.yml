@@ -1,6 +1,0 @@
-name: persona-translator
-version: 1.0.0
-description: "dira persona translator"
-dependencies:
-  apm:
-    - ../../skills/find-skills
