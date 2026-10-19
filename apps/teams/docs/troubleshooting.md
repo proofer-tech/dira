@@ -30,7 +30,7 @@
 | 순서 | 키 | `멈춤:` 뒤의 한 줄 | 할 일 |
 |---|---|---|---|
 | 1 | `migration` | `마이그레이션 미적용 {id}` | `앱을 다시 열면 이어서 적용합니다. 앱 없이 돌릴 때는 python3 migrate.py apply --root <루트>를 실행합니다` ([업데이트한 뒤 화면이 흐려졌을 때](/docs/install#업데이트한-뒤-화면이-흐려졌을-때)) |
-| 2 | `apm` | `패키지 설치 상태가 lock과 다릅니다 {detail}` | `python3 dira_apm.py install <프로젝트 루트>를 실행해 lock대로 다시 설치합니다. 그래도 다르면 dira-team/apm.lock.yaml을 확인합니다` ([설치](/docs/install#멈춤-패키지-설치-상태가-lock과-다릅니다)) |
+| 2 | `apm` | `패키지 설치 상태가 lock과 다릅니다 {detail}` | `python3 dira_apm.py install <프로젝트 루트>를 실행해 lock대로 다시 설치합니다. 그래도 다르면 .dira/team/apm.lock.yaml을 확인합니다` ([설치](/docs/install#멈춤-패키지-설치-상태가-lock과-다릅니다)) |
 | 3 | `auth` | `{engine} 인증 토큰이 없습니다` | `설정 > 인증에서 토큰을 넣으면 다음 tick에 뜹니다` ([인증](/docs/auth)) |
 | 4 | `cooldown` | `계정 한도 - {n}초 뒤 풀립니다` | `기다리면 풀립니다. 바로 돌리려면 설정 > 인증에서 다른 계정을 켭니다` |
 | 5 | `machineCap` | `머신 전체 세션 {a}/{b} - 다른 프로젝트가 자리를 쓰고 있습니다` | `다른 세션이 끝나면 풀립니다. 바로 돌리려면 설정 > 워커 > 머신 전체 세션 상한을 올립니다` ([동시에 몇 개 돌릴까](/docs/concurrency)) |

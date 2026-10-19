@@ -41,17 +41,26 @@ dira installs on its own when it needs it (§Installing packages on a new machin
 
 ## Installing packages on a new machine
 
-Personas, squads and protocols live as packages under the project repository's `dira-team/`, and
-which ones at which version is pinned by `dira-team/apm.yml` and `dira-team/apm.lock.yaml`. The
-install output (`dira-team/apm_modules/`, `dira-team/.claude/`) is not committed, so after you clone
-the repository on a new machine you install once. It is one command.
+Personas, squads and protocols live as packages under `.dira/team/` inside the queue folder, and
+which ones at which version is pinned by `.dira/team/apm.yml` and `.dira/team/apm.lock.yaml`. The
+whole of `.dira` is gitignored, so this folder is never committed to the project repository.
+Operational information is kept apart from the project's code. That also means cloning the
+repository on a new machine does not bring the team folder along.
+
+This folder used to sit in the project repository as `dira-team/`, and it was committed. For such a
+project, the `0003-team-into-queue` migration moves the old `dira-team/` to `.dira/team/` during an
+update and makes one commit that removes the committed `dira-team/` from the repository. It does not
+push; do that yourself ([The screen blurs after an update](#the-screen-blurs-after-an-update)).
+
+If you brought the queue folder over from another machine or deleted `.dira/team/apm_modules/`,
+install the packages once. It is one command.
 
 ```bash
 cd ~/Library/Application\ Support/dira/engine     # the engine inside the app; with the repo, your clone
 python3 dira_apm.py install <project root>
 ```
 
-`<project root>` is the repository folder that contains `dira-team/`, not the `.dira` folder. With
+`<project root>` is the repository folder that contains `.dira`, not the `.dira` folder itself. With
 the app you will rarely type this yourself: before claiming a ticket, a worker checks the install
 and, if it differs from the lock, installs once on its own. The command does four things.
 
@@ -60,7 +69,7 @@ and, if it differs from the lock, installs once on its own. The command does fou
    With `uv` it installs through `uv`; without it, it makes a virtual environment there with a
    `python3.x` of 3.10 or later. An `apm` you put on your own PATH is not used.
 2. It installs from the lock, at the repository root if there is an `apm.yml` there, and in
-   `dira-team/` if there is a `dira-team/apm.yml`.
+   `.dira/team/` if there is a `.dira/team/apm.yml`.
 3. It checks the result (`check`).
 4. It rewrites the queue's `.dira/protocols/`
    ([Protocols](/docs/protocols#the-source-of-truth-is-a-package-dira-protocols-is-generated)).
@@ -98,10 +107,10 @@ It tries the install only once per lock, so this does not clear by itself.
    - `apm_modules 사본이 원본과 다르다: <package>` or `원본 없음: <package>` (copy differs from the
      source, source missing) - a local package was edited or moved and not installed again. Run the
      command in 1 again.
-   - `dira-team: apm audit rc 1: ...` - the installed files differ from the lock. Often someone
-     changed `dira-team/apm.yml` and did not commit the lock, so check `dira-team/apm.lock.yaml`.
+   - `team: apm audit rc 1: ...` - the installed files differ from the lock. Often someone
+     changed `.dira/team/apm.yml` and did not write a new lock, so check `.dira/team/apm.lock.yaml`.
      If the dependency change is intended, run `~/.config/dira/tools/apm/<version>/bin/apm install`
-     in that folder to write a new lock, and commit it.
+     in that folder to write a new lock. There is nothing to commit.
 3. After fixing, run the command in 1 once more.
 
 To keep the worker from trying an install, as in tests, set the environment variable

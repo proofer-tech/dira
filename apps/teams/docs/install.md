@@ -37,24 +37,32 @@ dira를 돌리려면 CLI로 부르는 LLM 엔진이 하나 있어야 합니다. 
 
 ## 새 기계에서 패키지 설치하기
 
-페르소나, 스쿼드, 프로토콜은 프로젝트 저장소의 `dira-team/` 아래 패키지로 들어 있고, 무엇을 어떤
-버전으로 쓰는지는 `dira-team/apm.yml`과 `dira-team/apm.lock.yaml`에 고정돼 있습니다. 설치 결과물
-(`dira-team/apm_modules/`, `dira-team/.claude/`)은 커밋하지 않으니, 저장소를 새 기계에 clone하면 먼저
-한 번 깔아야 합니다. 명령은 하나입니다.
+페르소나, 스쿼드, 프로토콜은 큐 폴더 안 `.dira/team/` 아래에 패키지로 들어 있고, 무엇을 어떤
+버전으로 쓰는지는 `.dira/team/apm.yml`과 `.dira/team/apm.lock.yaml`이 고정합니다. `.dira`는 통째로
+gitignore라서 이 폴더는 프로젝트 저장소에 커밋되지 않습니다. 운영 정보는 프로젝트 코드와 따로
+다루기 때문입니다. 그래서 저장소를 새 기계에 clone해도 팀 폴더는 따라오지 않습니다.
+
+예전에는 이 폴더가 프로젝트 저장소의 `dira-team/`에 있었고 커밋 대상이었습니다. 그런 프로젝트는
+업데이트할 때 마이그레이션 `0003-team-into-queue`가 옛 `dira-team/`을 `.dira/team/`으로 옮기고,
+커밋돼 있던 `dira-team/`을 저장소에서 지우는 커밋을 한 번 냅니다. push는 하지 않으니 직접
+하세요(아래 §업데이트한 뒤 화면이 흐려졌을 때).
+
+큐 폴더를 다른 기계로 옮겨 왔거나 `.dira/team/apm_modules/`를 지웠다면 패키지를 한 번 깔아야
+합니다. 명령은 하나입니다.
 
 ```bash
 cd ~/Library/Application\ Support/dira/engine     # 앱에 들어 있는 엔진. 레포로 쓰면 그 clone 폴더
 python3 dira_apm.py install <프로젝트 루트>
 ```
 
-`<프로젝트 루트>`는 `dira-team/`이 들어 있는 저장소 폴더입니다. `.dira` 폴더가 아닙니다. 앱을 쓰면
+`<프로젝트 루트>`는 `.dira` 폴더가 들어 있는 저장소 폴더입니다. `.dira` 폴더 자체가 아닙니다. 앱을 쓰면
 이 명령을 직접 칠 일은 드뭅니다. 워커가 티켓을 가져가기 전에 설치 상태를 확인하고, lock과 다르면
 스스로 한 번 설치하기 때문입니다. 이 명령이 하는 일은 넷입니다.
 
 1. `apm` 명령이 없으면 먼저 깝니다. 버전은 엔진의 `apm-version` 파일 한 줄이 정하고(지금
    `0.33.0`), 자리는 `~/.config/dira/tools/apm/<버전>/`입니다. `uv`가 있으면 `uv`로, 없으면 3.10
    이상의 `python3.x`로 그 자리에 가상환경을 만들어 깝니다. PATH에 따로 깔아 둔 `apm`은 쓰지 않습니다.
-2. 저장소 루트에 `apm.yml`이 있으면 거기서, `dira-team/apm.yml`이 있으면 거기서 lock대로
+2. 저장소 루트에 `apm.yml`이 있으면 거기서, `.dira/team/apm.yml`이 있으면 거기서 lock대로
    설치합니다.
 3. 설치 결과를 검사합니다(`check`).
 4. 큐의 `.dira/protocols/`를 다시 씁니다([프로토콜](/docs/protocols#정본은-패키지에-있습니다-dira-protocols는-생성물)).
@@ -88,10 +96,10 @@ SKIP apm 설치 상태가 lock과 다르다 - <어긋난 내용 한 줄>
      그 스킬을 가진 패키지를 의존성으로 걸거나, `skills.md`에서 그 줄을 지웁니다.
    - `apm_modules 사본이 원본과 다르다: <패키지>` 또는 `원본 없음: <패키지>` - 로컬 패키지를 고치거나
      옮긴 뒤 다시 설치하지 않았습니다. 1의 명령을 다시 실행하면 됩니다.
-   - `dira-team: apm audit rc 1: ...` - 깔린 파일이 lock과 다릅니다. 누군가
-     `dira-team/apm.yml`만 고치고 lock을 커밋하지 않은 경우가 많으니 `dira-team/apm.lock.yaml`을
+   - `team: apm audit rc 1: ...` - 깔린 파일이 lock과 다릅니다. 누군가
+     `.dira/team/apm.yml`만 고치고 lock을 새로 만들지 않은 경우가 많으니 `.dira/team/apm.lock.yaml`을
      확인합니다. 의존성을 바꾼 것이 맞다면 그 폴더에서
-     `~/.config/dira/tools/apm/<버전>/bin/apm install`로 lock을 새로 만들고 커밋합니다.
+     `~/.config/dira/tools/apm/<버전>/bin/apm install`로 lock을 새로 만듭니다. 커밋할 것은 없습니다.
 3. 고친 뒤 1의 명령을 한 번 더 실행합니다.
 
 테스트처럼 워커가 설치를 시도하지 않게 하려면 환경변수 `DIRA_APM_NO_INSTALL=1`을 줍니다

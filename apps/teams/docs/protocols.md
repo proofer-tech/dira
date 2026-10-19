@@ -75,12 +75,12 @@
 
 ## 정본은 패키지에 있습니다 - `.dira/protocols`는 생성물
 
-프로젝트 저장소에 `dira-team/apm.yml`이 있으면 프로토콜 정본은 두 곳입니다.
+큐 폴더에 `.dira/team/apm.yml`이 있으면 프로토콜 정본은 두 곳입니다.
 
 | 자리 | 담는 것 |
 |---|---|
 | dira 저장소의 `packages/dira-protocols/` | 공용. `CORE.md`, `CORE-*.md`, 모든 프로젝트가 같이 쓰는 형제 문서. 프로젝트는 이 패키지를 태그로 고정해 받습니다 |
-| 프로젝트의 `dira-team/protocols/` | 로컬. 이 프로젝트의 `AGENTS.md`와 공용 문서를 바꿔 쓴 파일 |
+| 큐의 `.dira/team/protocols/` | 로컬. 이 프로젝트의 `AGENTS.md`와 공용 문서를 바꿔 쓴 파일 |
 
 큐의 `.dira/protocols/`는 이 둘을 합친 결과입니다. 공용 위에 로컬을 덮어 쓰고, 이름이 같으면
 로컬이 이깁니다. 패키지를 설치할 때마다(`python3 dira_apm.py install <프로젝트 루트>`, 프로젝트
@@ -88,21 +88,21 @@
 아래와 같습니다.
 
 ```
-<!-- dira_apm materialize: 고치지 말고 dira-team/protocols 또는 packages/dira-protocols를 고친다 -->
+<!-- dira_apm materialize: 고치지 말고 .dira/team/protocols 또는 packages/dira-protocols를 고친다 -->
 ```
 
-**이 화면에서 저장한 내용은 다음 설치 뒤에도 남습니다.** `dira-team/apm.yml`이 있는 프로젝트에서
-`protocols/` 바로 아래 파일을 저장하면, dira가 같은 내용을 `dira-team/protocols/`의 같은 이름
+**이 화면에서 저장한 내용은 다음 설치 뒤에도 남습니다.** `.dira/team/apm.yml`이 있는 프로젝트에서
+`protocols/` 바로 아래 파일을 저장하면, dira가 같은 내용을 `.dira/team/protocols/`의 같은 이름
 파일에 쓰고 큐의 `.dira/protocols/`를 다시 만듭니다. 다음 디스패치부터 실립니다. 공용 문서를
-저장해도 같아서, 그 순간 `dira-team/protocols/`에 로컬 파일이 생기고 이 프로젝트에서는 로컬 쪽이
-이깁니다. 저장은 파일을 쓰기만 합니다. `dira-team/protocols/`의 변경은 직접 커밋하세요.
+저장해도 같아서, 그 순간 `.dira/team/protocols/`에 로컬 파일이 생기고 이 프로젝트에서는 로컬 쪽이
+이깁니다. `.dira/team/`은 큐 안이라 저장해도 프로젝트 저장소에는 커밋할 것이 생기지 않습니다.
 
 하위 폴더 안의 파일과 `apm.yml`, `AGENTS.template.md`는 예외입니다. 이 파일들은 큐에만
-저장되므로, 오래 남길 수정이면 `dira-team/protocols/`에서 직접 고칩니다. 공용 문서를 모든
+저장되므로, 오래 남길 수정이면 `.dira/team/protocols/`에서 직접 고칩니다. 공용 문서를 모든
 프로젝트에서 바꾸려면 dira 저장소의 `packages/dira-protocols/`에서 고칩니다. 각 프로젝트는
-`dira-team/apm.yml`에 적힌 태그를 올려야 그 수정을 받습니다.
+`.dira/team/apm.yml`에 적힌 태그를 올려야 그 수정을 받습니다.
 
-공용에 없는 큐 전용 파일은 다시 쓸 때도 지우지 않습니다. `dira-team/apm.yml`이 없는 프로젝트는
+공용에 없는 큐 전용 파일은 다시 쓸 때도 지우지 않습니다. `.dira/team/apm.yml`이 없는 프로젝트는
 지금까지처럼 큐의 `protocols/`가 정본이고, 이 화면에서 저장하면 그 파일만 바뀝니다.
 
 ## `전원 프롬프트에 인라인` 배지

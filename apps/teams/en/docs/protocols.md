@@ -78,12 +78,12 @@ itself, at the moment `CORE.md` points at them. Ticket frontmatter syntax is in
 
 ## The source of truth is a package - `.dira/protocols` is generated
 
-When a project repository has `dira-team/apm.yml`, the protocols come from two places.
+When the queue folder has `.dira/team/apm.yml`, the protocols come from two places.
 
 | Where | What it holds |
 |---|---|
 | `packages/dira-protocols/` in the dira repository | Shared. `CORE.md`, `CORE-*.md` and the sibling documents every project uses. Projects pin this package by a tag |
-| `dira-team/protocols/` in the project | Local. This project's `AGENTS.md`, plus any shared document it rewrites for itself |
+| `.dira/team/protocols/` in the queue | Local. This project's `AGENTS.md`, plus any shared document it rewrites for itself |
 
 The queue's `.dira/protocols/` is the two merged: local laid over shared, local winning on a name
 clash. dira rewrites that folder on every install (`python3 dira_apm.py install <project root>`,
@@ -91,25 +91,25 @@ registering a project, `Copy locally`, taking a market update). So each file the
 this line.
 
 ```
-<!-- dira_apm materialize: 고치지 말고 dira-team/protocols 또는 packages/dira-protocols를 고친다 -->
+<!-- dira_apm materialize: 고치지 말고 .dira/team/protocols 또는 packages/dira-protocols를 고친다 -->
 ```
 
-(It says: do not edit this; edit `dira-team/protocols` or `packages/dira-protocols`.)
+(It says: do not edit this; edit `.dira/team/protocols` or `packages/dira-protocols`.)
 
-**What you save on this screen survives the next install.** In a project with `dira-team/apm.yml`,
+**What you save on this screen survives the next install.** In a project with `.dira/team/apm.yml`,
 saving a file directly under `protocols/` makes dira write the same content to the file of the same
-name in `dira-team/protocols/` and then rebuild the queue's `.dira/protocols/`. The next dispatch
+name in `.dira/team/protocols/` and then rebuild the queue's `.dira/protocols/`. The next dispatch
 picks it up. Saving a shared document works the same way: a local file appears in
-`dira-team/protocols/` at that moment, and the local one wins in this project. Saving only writes
-files. Commit the change in `dira-team/protocols/` yourself.
+`.dira/team/protocols/` at that moment, and the local one wins in this project. `.dira/team/` is inside
+the queue, so saving leaves nothing to commit in the project repository.
 
 Files inside subfolders, `apm.yml` and `AGENTS.template.md` are the exception. They are saved to the
-queue only, so make lasting edits to them in `dira-team/protocols/` directly. To change a shared
+queue only, so make lasting edits to them in `.dira/team/protocols/` directly. To change a shared
 document for every project, edit it in `packages/dira-protocols/` in the dira repository. Each
-project gets the change only after raising the tag in its `dira-team/apm.yml`.
+project gets the change only after raising the tag in its `.dira/team/apm.yml`.
 
 Rewriting never deletes queue-only files that the shared package does not have. A project without
-`dira-team/apm.yml` keeps the queue's `protocols/` as the source, as before, and saving on this
+`.dira/team/apm.yml` keeps the queue's `protocols/` as the source, as before, and saving on this
 screen changes only that file.
 
 ## The `Inlined in every prompt` badge

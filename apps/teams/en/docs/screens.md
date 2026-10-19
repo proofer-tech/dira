@@ -1167,7 +1167,7 @@ carry.
 - Versions are semver (three parts, like `1.2.0`). Under `Bump`, pick `patch (fix)`,
   `minor (addition)` or `major (breaking)`; `patch` is the default. The first deploy is `1.0.0`
   whatever you pick. Deploy the same bytes twice and you get two versions. Old versions are never
-  deleted. When the origin is a `dira-team/` project, its local package is copied as is and the
+  deleted. When the origin project has `.dira/team/`, its local package is copied as is and the
   `version` in `apm.yml` is set to the new value.
 - Tags are what narrow the list later on the market screen. You can leave them blank.
 
@@ -1225,9 +1225,9 @@ from, and the project panel on the left is not there.
   left alone, because one squad should not overwrite a persona you have been editing locally. If a
   member is missing from the market as well, the import still succeeds and that name shows up
   separately under `Members missing from the market:`.
-- When the target project has `dira-team/` and the item has more than one version, a `Version`
+- When the target project has `.dira/team/` and the item has more than one version, a `Version`
   field appears. It starts on the highest version. The version you pick is copied to
-  `dira-team/market/<kind>/<owner>/<name>/`. A project without `dira-team/` has no such field, and
+  `.dira/team/market/<kind>/<owner>/<name>/`. A project without `.dira/team/` has no such field, and
   import always takes the highest version there.
 
 ### When the name is already taken
@@ -1241,27 +1241,27 @@ ways forward. Nothing is overwritten quietly.
 - `Different name` sends you back to the `Name` box with the text selected. Change it, press
   `Import` again, and it lands under the new name with the old one untouched.
 
-### When the receiving project uses `dira-team/` - a pinned copy
+### When the receiving project has `.dira/team/` - a pinned copy
 
-When the receiving project's repository has `dira-team/apm.yml`, what you import stays inside that
-project as a copy. Pressing `Import` does this.
+When the receiving project's queue has `.dira/team/apm.yml`, what you import stays inside that
+queue as a copy. Pressing `Import` does this.
 
-1. It copies that version's folder to `dira-team/market/<kind>/<owner>/<name>/`. The `version` in the
+1. It copies that version's folder to `.dira/team/market/<kind>/<owner>/<name>/`. The `version` in the
    copy's `apm.yml` is the version you took.
-2. It adds one line, `./market/<kind>/<owner>/<name>`, to the dependencies in `dira-team/apm.yml`.
-3. It installs the packages and records the result in `dira-team/apm.lock.yaml`.
+2. It adds one line, `./market/<kind>/<owner>/<name>`, to the dependencies in `.dira/team/apm.yml`.
+3. It installs the packages and records the result in `.dira/team/apm.lock.yaml`.
 
-Commit the copy and those two files, and another machine gets the same content from one
-`python3 dira_apm.py install <project root>` ([Install](/docs/install#installing-packages-on-a-new-machine)).
-The market store is a folder on this Mac that other machines cannot see, which is why the copy lives
-in the repository. **The copy is pinned.** A newer version from the origin leaves it as is; only the
+The copy and those two files are inside the queue, so they are not committed to the project
+repository. Even if the market's versions change later, `python3 dira_apm.py install <project root>`
+reinstalls the same content from this copy
+([Install](/docs/install#installing-packages-on-a-new-machine)). **The copy is pinned.** A newer version from the origin leaves it as is; only the
 badge appears.
 
 Items owned by `dira` are the shared packages in the dira repository's `packages/`. For those no
 copy is made; it adds a single git dependency line of the form
 `proofer-tech/dira/packages/<package>#<package>-v<version>`.
 
-A project without `dira-team/apm.yml` still gets the files written straight into the queue's
+A project without `.dira/team/apm.yml` still gets the files written straight into the queue's
 persona folder, as before.
 
 ### What the origin sees
@@ -1282,7 +1282,7 @@ next to the persona's name in the head of the right pane. It shows only while th
 copy's `apm.yml` is below the highest version in the market. Squads carry the same badge.
 
 **See what changes before you take it.** Press the badge and `Fetch the latest version?` opens. In a
-`dira-team/` project, `Reading what changes…` shows briefly, then
+project with `.dira/team/`, `Reading what changes…` shows briefly, then
 `Files that change when you take it · v1.0.0 → v1.1.0` appears below. Each file is listed with
 `Added`, `Removed` or `Changed`, and under it the changing lines show as `+` (green) and `-` (red).
 If the contents match, it says `File contents match your copy. Only the version label changes.`
@@ -1292,7 +1292,7 @@ do not want it, press `Cancel`; the copy and the lock stay as they were. Edits y
 show up in the diff as `-` lines, so move anything worth keeping before you take the update. Memory
 is untouched here as well.
 
-In a project without `dira-team/apm.yml` there is no diff. The dialog says the current
+In a project without `.dira/team/apm.yml` there is no diff. The dialog says the current
 `PROFILE.md` and `skills.md` will be overwritten and that this can't be undone, and the button is
 `Fetch update`. Pressing it overwrites them right away.
 

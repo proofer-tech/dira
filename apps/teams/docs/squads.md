@@ -23,14 +23,14 @@
 
 ## 스쿼드 패키지와 멤버
 
-프로젝트 저장소에 `dira-team/apm.yml`이 있으면 스쿼드 하나는 패키지 하나입니다. 페르소나와 같은
-규칙입니다([페르소나](/docs/personas#페르소나가-있는-곳-dira-team-패키지)).
+큐 폴더에 `.dira/team/apm.yml`이 있으면 스쿼드 하나는 패키지 하나입니다. 페르소나와 같은
+규칙입니다([페르소나](/docs/personas#페르소나가-있는-곳-큐-안의-team-패키지)).
 
-- 로컬 스쿼드는 `dira-team/squads/<이름>/`에 있고 `apm.yml`, `members`, `rules`(있으면)를 담습니다.
+- 로컬 스쿼드는 `.dira/team/squads/<이름>/`에 있고 `apm.yml`, `members`, `rules`(있으면)를 담습니다.
   화면에서 고치면 이 파일이 바뀝니다.
-- 공용 스쿼드는 `dira-team/apm_modules/` 안의 `squad-<이름>` 패키지입니다. 정본은 dira 저장소의
+- 공용 스쿼드는 `.dira/team/apm_modules/` 안의 `squad-<이름>` 패키지입니다. 정본은 dira 저장소의
   `packages/squad-<이름>/`입니다. 화면에서는 읽기만 되고, 고치려면 `로컬로 복사`를 누릅니다. 결과는
-  `dira-team/squads/<이름>/`이 됩니다.
+  `.dira/team/squads/<이름>/`이 됩니다.
 - 이름이 같으면 로컬이 이깁니다.
 
 **스쿼드 패키지는 멤버 페르소나 패키지를 의존성으로 겁니다.** 공용 `squad-default`의 `apm.yml`이
@@ -39,7 +39,7 @@
 리더는 여전히 `members` 파일이 정합니다. 의존성 목록은 멤버 패키지를 깔기만 하고 순서에는 관여하지
 않습니다.
 
-`dira-team/apm.yml`이 없는 프로젝트는 지금까지처럼 `<큐 폴더>/squads/<이름>/`을 읽습니다.
+`.dira/team/apm.yml`이 없는 프로젝트는 지금까지처럼 `<큐 폴더>/squads/<이름>/`을 읽습니다.
 
 ## 새 프로젝트에는 default가 있습니다
 

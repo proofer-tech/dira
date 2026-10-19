@@ -586,20 +586,21 @@ Making a profile with the same name also brings the row back. The name no longer
 profile, so it shows as an ordinary row whether hidden or not. The `.hidden` line still sits in
 the trash then too; press `Show again` to clear it.
 
-## Where personas live - the `dira-team/` packages
+## Where personas live - the `team/` packages in the queue
 
-When a project repository has `dira-team/apm.yml`, one persona is one package. A package is a
+When the queue folder has `.dira/team/apm.yml`, one persona is one package. A package is a
 folder in APM (`apm-cli`) format, and dira reads the `PROFILE.md` and `skills.md` inside it straight
-into the prompt. Which personas you use is set by the dependency list in `dira-team/apm.yml` and
-by `apm.lock.yaml` beside it. Commit those two files and another machine installs the same content
-([Install](/docs/install#installing-packages-on-a-new-machine)).
+into the prompt. Which personas you use is set by the dependency list in `.dira/team/apm.yml` and
+by `apm.lock.yaml` beside it. `.dira/team/` is inside the queue, so it is not committed to the
+project repository, and saving a persona on screen leaves the repository's `git status` unchanged.
+How it moves over from the old place is in [Install](/docs/install#installing-packages-on-a-new-machine).
 
 There are two kinds of persona package.
 
 | Kind | Where | Editing on screen |
 |---|---|---|
-| Local | `dira-team/personas/<name>/` (`apm.yml`, `PROFILE.md`, `skills.md`) | Yes. Saving changes this file |
-| Shared | Inside `dira-team/apm_modules/`. The source is `packages/persona-<name>/` in the dira repository, pinned by a tag | No |
+| Local | `.dira/team/personas/<name>/` (`apm.yml`, `PROFILE.md`, `skills.md`) | Yes. Saving changes this file |
+| Shared | Inside `.dira/team/apm_modules/`. The source is `packages/persona-<name>/` in the dira repository, pinned by a tag | No |
 
 When both exist under the same name, the local one wins. A new project's default personas arrive
 as shared packages.
@@ -608,8 +609,8 @@ as shared packages.
 `This is a shared package. Copy it locally to edit`, with `Save` disabled. Press `Copy locally`
 next to it and the app does three things.
 
-1. It copies the package to `dira-team/personas/<name>/`.
-2. It changes the dependency line in `dira-team/apm.yml` to `./personas/<name>`.
+1. It copies the package to `.dira/team/personas/<name>/`.
+2. It changes the dependency line in `.dira/team/apm.yml` to `./personas/<name>`.
 3. It installs the packages again.
 
 When that finishes the screen reloads and the notice is gone. From then on the persona is this
@@ -622,14 +623,14 @@ not travel through the market either.
 
 **The skills themselves come from packages too.** A name in `skills.md` attaches to the session
 only if it is in that persona package's `.apm/skills/<name>/` or in a package it depends on. The
-install puts them in `dira-team/.claude/skills/`, and this project no longer reads
+install puts them in `.dira/team/.claude/skills/`, and this project no longer reads
 `~/.claude/skills`. A name that no package provides stays in the prompt as text, as before. A name
 that some other package installs but this persona package and its dependencies do not is reported,
 one line each, by `python3 dira_apm.py check <project root>`. If two packages ship a skill with the
 same name, the later install silently overwrites the earlier one, so `check` fails on that case and
 names both packages.
 
-A project without `dira-team/apm.yml` keeps reading the queue's `personas/<name>/`. How an update
+A project without `.dira/team/apm.yml` keeps reading the queue's `personas/<name>/`. How an update
 moves a project to the new layout is in [Install](/docs/install#the-screen-blurs-after-an-update).
 
 ## How the prompt is assembled - where the profile rides

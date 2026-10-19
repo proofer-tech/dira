@@ -26,14 +26,14 @@ issues them a ticket.
 
 ## Squad packages and their members
 
-When a project repository has `dira-team/apm.yml`, one squad is one package, by the same rules as
-personas ([Personas](/docs/personas#where-personas-live-the-dira-team-packages)).
+When the queue folder has `.dira/team/apm.yml`, one squad is one package, by the same rules as
+personas ([Personas](/docs/personas#where-personas-live-the-team-packages-in-the-queue)).
 
-- A local squad is in `dira-team/squads/<name>/` and holds `apm.yml`, `members` and `rules` (if
+- A local squad is in `.dira/team/squads/<name>/` and holds `apm.yml`, `members` and `rules` (if
   any). Editing on screen changes these files.
-- A shared squad is the `squad-<name>` package inside `dira-team/apm_modules/`. Its source is
+- A shared squad is the `squad-<name>` package inside `.dira/team/apm_modules/`. Its source is
   `packages/squad-<name>/` in the dira repository. On screen it is read-only; to edit it, press
-  `Copy locally`, and it becomes `dira-team/squads/<name>/`.
+  `Copy locally`, and it becomes `.dira/team/squads/<name>/`.
 - When the names match, the local one wins.
 
 **A squad package lists its member persona packages as dependencies.** The shared `squad-default`
@@ -42,7 +42,7 @@ and `persona-writer` under `dependencies.apm`, so installing the squad installs 
 with it. Member order and the leader are still set by the `members` file. The dependency list only
 installs the member packages and has no say in order.
 
-A project without `dira-team/apm.yml` keeps reading `<queue folder>/squads/<name>/`.
+A project without `.dira/team/apm.yml` keeps reading `<queue folder>/squads/<name>/`.
 
 ## A new project has default
 
