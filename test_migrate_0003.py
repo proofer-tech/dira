@@ -36,6 +36,7 @@ class Proj:
         w(T + "/personas/dev/apm.yml", "name: persona-dev\nversion: 1.0.0\n")
         w(T + "/personas/dev/PROFILE.md", "# dev\n개발자 프로필\n")
         w(T + "/personas/dev/skills.md", "- `x` - 스킬\n")
+        w(T + "/protocols/회고-예산.md", "한글 이름 파일\n")
         w(T + "/protocols/apm.yml", "name: project-protocols\nversion: 1.0.0\n")
         w(T + "/protocols/AGENTS.md", "# 협업 프로토콜\n프로젝트 고유\n")
         w(self.root + "/personas/dev/memory/note.md", "메모\n")
@@ -73,7 +74,7 @@ def test_apply_idempotent_revert():
     t = Proj()
     try:
         before = {p: read(os.path.join(t.proj, "dira-team", p)) for p in ("apm.yml", "personas/dev/PROFILE.md", "protocols/AGENTS.md")}
-        assert len(git(t.proj, "ls-files", "dira-team").stdout.split()) == 7
+        assert len(git(t.proj, "ls-files", "dira-team").stdout.split()) == 8
         r = t.migrate("apply")
         assert r.returncode == 0, r.stdout + r.stderr
         applied = json.load(open(t.root + "/migrations/applied.json"))
@@ -101,7 +102,7 @@ def test_apply_idempotent_revert():
         assert "dira-team/apm_modules/" in read(t.proj + "/.gitignore")
         s2 = t.subjects()
         assert "revert" in s2[0] and len(s2) == 4, s2
-        assert len(git(t.proj, "ls-files", "dira-team").stdout.split()) == 7, git(t.proj, "ls-files", "dira-team").stdout
+        assert len(git(t.proj, "ls-files", "dira-team").stdout.split()) == 8, git(t.proj, "ls-files", "dira-team").stdout
         # 다시 적용(revert 가 지운 기록 뒤): 같은 결과
         assert t.migrate("apply").returncode == 0
         assert git(t.proj, "ls-files", "dira-team").stdout == "" and os.path.isfile(team + "/apm.yml")

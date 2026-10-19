@@ -113,6 +113,11 @@ def _git(proj, *a):
     return subprocess.run(["git", "-C", proj, *a], capture_output=True, text=True)
 
 
+def _staged(proj):
+    out = _git(proj, "diff", "--cached", "--name-only", "-z", "--", "dira-team", ".gitignore").stdout
+    return [n for n in out.split("\0") if n]  # -z: 한글 이름을 git 이 따옴표로 감싸지 않게
+
+
 def verify(ctx):
     if not _todo(ctx):
         return
@@ -150,12 +155,12 @@ def _leave_repo(ctx):
     if not git:
         return
     _git(proj, "add", "-A", "--", ".gitignore")
-    names = _git(proj, "diff", "--cached", "--name-only", "--", "dira-team", ".gitignore").stdout.split("\n")
-    names = [n for n in names if n]
+    names = _staged(proj)
     if not names:
         return  # 추적 파일도 .gitignore 변화도 없다
     r = _git(proj, "commit", "-q", "--no-verify", "-m", COMMIT_MSG, "--", *names)
     if r.returncode:
+        _git(proj, "reset", "-q", "HEAD", "--", "dira-team", ".gitignore")  # 러너가 되살리는 파일과 색인을 맞춘다
         raise RuntimeError("커밋 실패: " + (r.stderr.strip().splitlines() or ["?"])[-1])
 
 
@@ -170,6 +175,6 @@ def revert(ctx):
         return
     paths = [p for p in ("dira-team", ".gitignore") if os.path.exists(os.path.join(proj, p))]
     _git(proj, "add", "-A", "--", *paths)
-    names = [n for n in _git(proj, "diff", "--cached", "--name-only", "--", "dira-team", ".gitignore").stdout.split("\n") if n]
+    names = _staged(proj)
     if names:
         _git(proj, "commit", "-q", "--no-verify", "-m", REVERT_MSG, "--", *names)
