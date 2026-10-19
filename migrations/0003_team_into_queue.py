@@ -145,15 +145,21 @@ def _leave_repo(ctx):
         r = _git(proj, "rm", "-r", "--cached", "--quiet", "--", "dira-team")
         if r.returncode:
             raise RuntimeError("git rm 실패: " + r.stderr.strip())
-    shutil.rmtree(old, ignore_errors=True)
     gi = os.path.join(proj, ".gitignore")
     if os.path.isfile(gi):
         cur = open(gi, encoding="utf-8").read()
         keep = [l for l in cur.splitlines(True) if l.strip() not in IGNORE_LINES]
         if len(keep) != len(cur.splitlines(True)):
             open(gi, "w", encoding="utf-8").write("".join(keep))
-    if not git:
-        return
+    for p in _files(old):  # 추적 파일만 먼저 지운다(경로 지정 커밋이 작업 트리를 다시 읽는다). 백업이 있어 러너가 되살린다
+        os.remove(p)
+    if git:
+        _commit(ctx)
+    shutil.rmtree(old, ignore_errors=True)  # 설치본(apm_modules 등)은 커밋이 끝난 뒤에 지운다. 실패하면 남아 있어야 한다
+
+
+def _commit(ctx):
+    proj = ctx.project_dir
     _git(proj, "add", "-A", "--", ".gitignore")
     names = _staged(proj)
     if not names:
