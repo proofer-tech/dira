@@ -121,6 +121,23 @@ class T(unittest.TestCase):
         self.assertEqual((out / "qa-scratch-1.md").read_text(), "큐 전용")
         self.assertFalse((out / "apm.yml").exists())
 
+    def test_team_dir(self):  # P509 결정 3
+        q = self.root / ".dira/team"
+        self.assertEqual(run("team", self.root), (0, str(self.team), ""))  # dira-team 만
+        w(q / "apm.yml", "name: team\nversion: 1.0.0\n")
+        self.assertEqual(run("team", self.root), (0, str(q), ""))  # 둘 다면 .dira/team 이 이긴다
+        shutil.rmtree(self.team)
+        self.assertEqual(run("team", self.root), (0, str(q), ""))  # .dira/team 만
+        shutil.rmtree(q)
+        self.assertEqual(run("team", self.root)[0], 3)  # 둘 다 없다
+
+    def test_root_check_skips_queue_team(self):  # P509 결정 4
+        shutil.rmtree(self.team)
+        w(self.root / "apm.yml", "name: root\nversion: 1.0.0\n")
+        pkg(self.root / ".dira/team", "team", skills=("dup",))
+        pkg(self.root / "tool", "tool", skills=("dup",))
+        self.assertEqual(run("check", self.root)[0], 0)  # .dira/team 의 dup 이 루트 패키지로 세어지면 충돌이다
+
     def test_skills(self):  # (5)
         pd = self.team / "personas/dev"
         pkg(pd, "persona-dev")

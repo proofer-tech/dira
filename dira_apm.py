@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""dira 패키지(APM) 보조: ensure-cli | install | check | resolve | materialize | skills. 표준 라이브러리만."""
+"""dira 패키지(APM) 보조: ensure-cli | install | check | resolve | materialize | skills | team. 표준 라이브러리만."""
 import hashlib, os, re, shutil, subprocess, sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-MARK = "<!-- dira_apm materialize: 고치지 말고 dira-team/protocols 또는 packages/dira-protocols를 고친다 -->"
+MARK = "<!-- dira_apm materialize: 고치지 말고 .dira/team/protocols 또는 packages/dira-protocols를 고친다 -->"
 SKILL_LINE = re.compile(r"^\s*-\s*`([^`]+)`")
 
 
@@ -122,12 +122,21 @@ def closure(d, site, seen=None):
     return seen
 
 
+def team_dir(root):
+    """P509 결정 3: <루트>/.dira/team -> <루트>/dira-team(마이그레이션 전 읽기 경유지) -> None."""
+    for t in (root / ".dira/team", root / "dira-team"):
+        if (t / "apm.yml").exists():
+            return t
+    return None
+
+
 def sites(root):
     r = []
     if (root / "apm.yml").exists():
         r.append(root)
-    if (root / "dira-team/apm.yml").exists():
-        r.append(root / "dira-team")
+    t = team_dir(root)
+    if t:
+        r.append(t)
     return r
 
 
@@ -178,8 +187,8 @@ def check(root):
         bad.extend(drift(site))
         owners = {}
         locs = [d for d in packages(site) if "apm_modules" not in d.parts]
-        if site == root:  # 루트는 dira-team을 자기 패키지로 세지 않는다
-            locs = [d for d in locs if "dira-team" not in d.relative_to(site).parts]
+        if site == root:  # 루트는 팀 디렉터리(dira-team, .dira)를 자기 패키지로 세지 않는다
+            locs = [d for d in locs if not {"dira-team", ".dira"} & set(d.relative_to(site).parts)]
         for d in locs:
             for s in skills_of(d):
                 owners.setdefault(s, set()).add(read_yml(d / "apm.yml")["name"])
@@ -190,7 +199,7 @@ def check(root):
         for s, o in sorted(owners.items()):
             if len(o) > 1:
                 bad.append("스킬 이름 충돌: %s <- %s" % (s, ", ".join(sorted(o))))
-        if site.name == "dira-team":
+        if site != root:
             for pd in sorted((site / "personas").glob("*/")) if (site / "personas").is_dir() else []:
                 if not (pd / "apm.yml").exists():
                     continue
@@ -207,9 +216,9 @@ def check(root):
 
 
 def resolve(root, kind, name=None):
-    team = root / "dira-team"
-    if not (team / "apm.yml").exists():
-        return 3, "옛 배치: dira-team/apm.yml 없음"
+    team = team_dir(root)
+    if not team:
+        return 3, "옛 배치: .dira/team/apm.yml - dira-team/apm.yml 없음"
     if kind == "protocols":
         local, pname = team / "protocols", "dira-protocols"
     elif name:
@@ -227,7 +236,9 @@ def resolve(root, kind, name=None):
 
 
 def materialize(root):
-    team = root / "dira-team"
+    team = team_dir(root)
+    if not team:
+        return 3
     out = Path(os.environ.get("TICKET_ROOT") or root / ".dira") / "protocols"
     out.mkdir(parents=True, exist_ok=True)
     srcs = []
@@ -254,7 +265,7 @@ def skills(root, persona):
         print(p, file=sys.stderr)
         return rc
     for s in skill_names(Path(p) / "skills.md"):
-        d = root / "dira-team/.claude/skills" / s
+        d = team_dir(root) / ".claude/skills" / s
         if (d / "SKILL.md").exists():
             print(d)
     return 0
@@ -272,15 +283,17 @@ def install(root, frozen):
     if rc:
         return rc
     rc = check(root)
-    if (root / "dira-team/apm.yml").exists():
+    if team_dir(root):
         materialize(root)
     return rc
 
 
 def listing(root, kind):
-    """<이름>\t<디렉터리> 줄들. 로컬(dira-team/<kind>s/*)이 같은 이름의 설치본을 가린다."""
-    team = root / "dira-team"
+    """<이름>\t<디렉터리> 줄들. 로컬(<팀>/<kind>s/*)이 같은 이름의 설치본을 가린다."""
+    team = team_dir(root)
     rows = {}
+    if not team:
+        return 3
     base = team / (kind + "s")
     for d in sorted(base.iterdir()) if base.is_dir() else []:
         if d.is_dir():
@@ -353,6 +366,11 @@ def main(a):
         return gate(root)
     if cmd == "check":
         return check(root)
+    if cmd == "team":
+        t = team_dir(root)
+        if t:
+            print(t)
+        return 0 if t else 3
     if cmd == "materialize":
         return materialize(root)
     if cmd == "resolve":

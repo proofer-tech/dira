@@ -979,7 +979,8 @@ fi
 # 옛 배치(dira-team/apm.yml 없음)는 gate가 아무것도 안 하고 0이다. 다르면 한 번 설치를 시도하고(gate
 # 안), 그래도 다르면 이번 tick은 아무것도 안 잡는다. DIRA_APM_NO_INSTALL=1이면 설치 시도를 건너뛴다.
 APMROOT="$(dirname "$TICKET_ROOT")"
-if [ "$CMD" = "tick" ] && [ -f "$APMROOT/dira-team/apm.yml" -o -f "$APMROOT/apm.yml" ]; then
+APMTEAM=$(python3 "$CODE/dira_apm.py" team "$APMROOT" 2>/dev/null)
+if [ "$CMD" = "tick" ] && [ -n "$APMTEAM" -o -f "$APMROOT/apm.yml" ]; then
   if ! APMMSG=$(python3 "$CODE/dira_apm.py" gate "$APMROOT" 2>/dev/null); then
     log "SKIP apm 설치 상태가 lock과 다르다 - ${APMMSG:-check 실패}"
     exit 0
@@ -1466,7 +1467,8 @@ fi
 APMROOT="$(dirname "$TICKET_ROOT")"
 PDIR="${TICKET_PERSONAS:-$TICKET_ROOT/personas}/$TPERSONA"
 APMPERSONAS=""; APMPLIST=""
-if [ -f "$APMROOT/dira-team/apm.yml" ]; then
+APMTEAM=$(python3 "$CODE/dira_apm.py" team "$APMROOT" 2>/dev/null)
+if [ -n "$APMTEAM" ]; then
   APMPLIST=$(python3 "$CODE/dira_apm.py" list "$APMROOT" persona 2>/dev/null)
   APMPERSONAS="$APMPLIST"
   if [ -n "$TPERSONA" ]; then
@@ -1567,7 +1569,7 @@ SQUADBLOCK=""
 RULESBLOCK=""
 # P506: dira-team/apm.yml이 있으면 스쿼드 후보는 로컬 dira-team/squads/*와 설치된 squad-*(`list`)이고,
 # 멤버 역할 한 줄은 `list persona`의 디렉터리 PROFILE.md에서 읽는다. 없으면 종전 $TICKET_ROOT/squads다.
-if [ -f "$APMROOT/dira-team/apm.yml" ]; then
+if [ -n "$APMTEAM" ]; then
   SQDIRS=$(python3 "$CODE/dira_apm.py" list "$APMROOT" squad 2>/dev/null | awk -F'\t' '{print $1 "|" $2}')
 else
   SQDIRS=$(find "$TICKET_ROOT/squads" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort | while IFS= read -r _d; do printf '%s|%s\n' "$(basename "$_d")" "$_d"; done)
@@ -1706,7 +1708,7 @@ fi
 CORE="$TICKET_ROOT/protocols/CORE.md"
 # 엔진 사본(<엔진>/protocols/CORE.md)은 P506-4가 지웠다 - 큐 사본(materialize 결과)이 없으면
 # 공용 패키지(resolve protocols)에서 읽는다. dira-team/apm.yml이 없으면(rc 3) 빈 값이라 WARN으로 간다.
-if [ ! -r "$CORE" ] && [ -f "$APMROOT/dira-team/apm.yml" ]; then
+if [ ! -r "$CORE" ] && [ -n "$APMTEAM" ]; then
   _pp=$(python3 "$CODE/dira_apm.py" resolve "$APMROOT" protocols 2>/dev/null) && [ -r "$_pp/CORE.md" ] && CORE="$_pp/CORE.md"
 fi
 if [ -r "$CORE" ]; then
