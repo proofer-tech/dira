@@ -519,6 +519,8 @@ def cmd_revert(args):
         return 1
     last = os.path.join(bdir, runs[-1])
     restore(last, os.path.dirname(tgt["root"]) if tgt["root"] else LOCAL)
+    if hasattr(item, "revert"):  # 파일 복원만으로 모자란 항목(git 커밋 - 큐 안 디렉터리)의 뒷정리
+        item.revert(Ctx(tgt["root"], None if tgt["root"] is None else tgt["id"]))
     recs = read_json(applied_path(tgt["root"]), {})
     recs.pop(args.id, None)
     write_json(applied_path(tgt["root"]), recs)

@@ -20,11 +20,9 @@ jobs:
       - uses: actions/checkout@v7
 
       # apm 개발 환경 — 버전은 `apm-version` 파일 하나가 정한다(dira_apm.py ensure-cli가 읽는다).
-      # 루트와, 있으면 dira-team/ 각각 audit --ci. 이 레포에는 dira-team/이 아직 없다.
       - run: echo "$(dirname "$(python3 dira_apm.py ensure-cli)")" >> "$GITHUB_PATH"
       - run: apm install
       - run: apm audit --ci
-      - run: test ! -f dira-team/apm.yml || (cd dira-team && apm install && apm audit --ci)
 
       # 엔진 — 의존성 0. ubuntu-latest의 python3를 그대로 쓴다.
       - run: python3 test_generic.py
