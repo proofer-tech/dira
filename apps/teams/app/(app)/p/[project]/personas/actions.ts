@@ -82,7 +82,7 @@ async function squadsDirFor(projectId: string): Promise<string> {
   return squadsDir(project);
 }
 
-/** 쓰기 위치. `dira-team/`의 공용(`apm_modules`) 패키지면 거절한다(P506-5) - 서버가 막는다. */
+/** 쓰기 위치. `<큐>/team/`의 공용(`apm_modules`) 패키지면 거절한다(P506-5) - 서버가 막는다. */
 async function writableHome(projectId: string, kind: ApmKind, name: string): Promise<Home> {
   const project = await getProject(projectId);
   if (!project) throw new Error(wrap(t("ko", "persona.error.unknownProjectPrefix"), projectId, ""));
@@ -92,7 +92,7 @@ async function writableHome(projectId: string, kind: ApmKind, name: string): Pro
   return home;
 }
 
-/** `로컬로 복사` - 공용 패키지를 `dira-team/<kind>s/<이름>/`로 옮기고 apm.yml 의존성을 로컬 경로로 바꾼 뒤 install. */
+/** `로컬로 복사` - 공용 패키지를 `team/<kind>s/<이름>/`로 옮기고 apm.yml 의존성을 로컬 경로로 바꾼 뒤 install. */
 export async function copySharedToLocalAction(
   projectId: string,
   kind: ApmKind,

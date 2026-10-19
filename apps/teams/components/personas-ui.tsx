@@ -179,7 +179,7 @@ export type PersonaRow = {
   /** 마켓 배포 이력·가져간 기록·갱신 배지(§원본에서 보는 기록, 티켓 `1c06035e`) —
    *  `marketRecord`(`lib/market.ts`)가 이 렌더에서 이미 뽑아 둔 것. */
   market: MarketRecord;
-  /** `dira-team/apm_modules` 안 공용 패키지다(P506-5) - 저장을 막고 `로컬로 복사`를 보인다 */
+  /** `team/apm_modules` 안 공용 패키지다(P506-5) - 저장을 막고 `로컬로 복사`를 보인다 */
   shared: boolean;
 };
 
@@ -1474,7 +1474,7 @@ function UpdateBadge({
           setResult(null);
           setDiff(undefined);
         } else {
-          // `dira-team/` 프로젝트면 받기 전에 파일별 diff를 먼저 보인다. 아니면 null이라 옛 확인 문구다.
+          // `<큐>/team/` 프로젝트면 받기 전에 파일별 diff를 먼저 보인다. 아니면 null이라 옛 확인 문구다.
           setDiff("loading");
           void previewMarketUpdateAction(kind, update.owner, update.name, projectId).then(setDiff, () => setDiff(null));
         }

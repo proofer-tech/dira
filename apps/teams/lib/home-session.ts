@@ -971,7 +971,7 @@ export async function personaBlock(
 ): Promise<string> {
   const memBase = path.join(personasDir, name); // memory/는 항상 지금 자리다(패키지 밖 로컬 상태)
   // P506-4 - PROFILE.md - skills.md는 `dira_apm.py resolve persona`가 준 디렉터리에서 읽는다.
-  // rc 3(`dira-team/apm.yml` 없음)이든 그 밖의 실패든 지금 경로로 간다.
+  // rc 3(`team/apm.yml` 없음)이든 그 밖의 실패든 지금 경로로 간다.
   const dir = (projectDir && (await resolvePersonaDir(projectDir, name))) || memBase;
   const read = (...p: string[]) => readFile(path.join(dir, ...p), "utf8").catch(() => null);
 

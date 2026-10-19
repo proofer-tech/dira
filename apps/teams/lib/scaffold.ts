@@ -32,12 +32,12 @@ const execFileP = promisify(execFile);
 export { engineRepo };
 
 /** `templates/` 아래 경로가 곧 `.dira/` 아래 경로다(1:1). §0-3 스캐폴딩 집합 중 복사본들.
- *  프로토콜 - 페르소나 - 스쿼드는 P506-4가 APM 패키지(`dira-team/`)로 옮겼다. */
+ *  프로토콜 - 페르소나 - 스쿼드는 P506-4가 APM 패키지(`<큐>/team/`)로 옮겼다. */
 const TEMPLATE_FILES = ["watchdog_gates.py", "watchdog_alert.py"];
 
 /** 공용 패키지는 GitHub 태그로 고정한다(P506 결정 2 - 태그는 `<패키지>-v<버전>`). */
 const PUBLIC_PKG_REPO = "proofer-tech/dira/packages";
-const DIRA_TEAM_APM_YML = `name: dira-team
+const DIRA_TEAM_APM_YML = `name: project-team
 version: 1.0.0
 targets: [claude]
 dependencies:
@@ -289,17 +289,17 @@ export async function scaffold(
     await put(rel, fillPlaceholders(text, { project, branch: opts.branch, specDoc: opts.specDoc }));
   }
 
-  // P506-4 - 프로토콜은 파일 복사 대신 `dira-team/` 패키지 선언이다. 공용 문서는 install이 받아
+  // P506-4 - 프로토콜은 파일 복사 대신 `<큐>/team/` 패키지 선언이다. 공용 문서는 install이 받아
   // materialize가 `.dira/protocols/`에 쓰고, AGENTS.md만 이 프로젝트의 로컬 패키지로 둔다.
   const putTeam = async (rel: string, text: string) => {
-    const file = path.join(project, "dira-team", rel);
+    const file = path.join(root, "team", rel);
     await mkdir(path.dirname(file), { recursive: true });
     try {
       await writeFile(file, text, { flag: "wx" });
-      written.push(path.join("dira-team", rel));
+      written.push(path.join(".dira", "team", rel));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-      skipped.push(path.join("dira-team", rel));
+      skipped.push(path.join(".dira", "team", rel));
     }
   };
   const agentsTemplate = await readFile(path.join(repo.path, "packages/dira-protocols/AGENTS.template.md"), "utf8");

@@ -46,7 +46,7 @@ const PROTOCOL_NAMES = [
   ),
   "AGENTS.md",
 ].map((n) => `.dira/protocols/${n}`);
-const TEAM_FILES = ["dira-team/apm.yml", "dira-team/protocols/AGENTS.md", "dira-team/protocols/apm.yml", "dira-team/.gitignore"];
+const TEAM_FILES = [".dira/team/apm.yml", ".dira/team/protocols/AGENTS.md", ".dira/team/protocols/apm.yml", ".dira/team/.gitignore"];
 
 /** §0-3 스캐폴딩 집합. **이 목록이 계약이다** — 여기 없는 파일을 쓰면 실패한다. */
 const SET = [
@@ -130,11 +130,11 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
     execFileSync("python3", ["-c", "import ast,sys;ast.parse(open(sys.argv[1]).read())", path.join(project, ".dira", name)]);
   }
 
-  // (P506-4) dira-team - 공용 패키지는 git 태그 의존성이고 AGENTS.md만 로컬 패키지다
-  const teamYml = await readFile(path.join(project, "dira-team/apm.yml"), "utf8");
+  // (P506-4) .dira/team - 공용 패키지는 git 태그 의존성이고 AGENTS.md만 로컬 패키지다
+  const teamYml = await readFile(path.join(project, ".dira/team/apm.yml"), "utf8");
   assert.match(teamYml, /dira-protocols#dira-protocols-v1\.0\.1/);
   assert.match(teamYml, /squad-default#squad-default-v1\.0\.1/);
-  const localAgents = await readFile(path.join(project, "dira-team/protocols/AGENTS.md"), "utf8");
+  const localAgents = await readFile(path.join(project, ".dira/team/protocols/AGENTS.md"), "utf8");
   assert.doesNotMatch(localAgents, /<프로젝트>|<통합 브랜치>/);
   assert.ok(localAgents.includes("git rebase main"));
   // install 뒤 큐 CORE.md는 공용 CORE.md와 표식 줄 빼고 같다
@@ -228,8 +228,8 @@ test("scaffold — §0-3 집합 그대로, 두 번째는 전부 skipped", async 
   assert.deepEqual(second.written, []);
   assert.equal(await readFile(agents, "utf8"), before);
   assert.equal(await readFile(path.join(project, ".gitignore"), "utf8"), ".dira\n");
-  // (D2) 소급 0 — 재실행해도 dira-team/apm.yml 내용이 안 갈린다
-  assert.equal(await readFile(path.join(project, "dira-team/apm.yml"), "utf8"), teamYml);
+  // (D2) 소급 0 — 재실행해도 team/apm.yml 내용이 안 갈린다
+  assert.equal(await readFile(path.join(project, ".dira/team/apm.yml"), "utf8"), teamYml);
 });
 
 /** P438-1 — `ensureBrowseHooks` 단독 호출. 스캐폴딩을 거치지 않은 기존 큐(§0-3 이전에 만든

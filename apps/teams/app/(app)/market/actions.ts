@@ -44,7 +44,7 @@ export async function loadMarketPaneData(
   locale: Locale,
 ): Promise<{ items: MarketCardItem[]; projects: { id: string; name: string; team: boolean }[] }> {
   const [items, rawProjects] = await Promise.all([listMarketItems(), readProjects(locale)]);
-  // `dira-team/` 프로젝트의 가져간 기록은 레지스트리가 아니라 그 프로젝트의 apm.yml과 사본이다.
+  // `<큐>/team/` 프로젝트의 가져간 기록은 레지스트리가 아니라 그 프로젝트의 apm.yml과 사본이다.
   const projects = await Promise.all(
     rawProjects.map(async (p) => (hasTeam(p.root) ? { ...p, market: await teamImports(p.root) } : p)),
   );
@@ -69,7 +69,7 @@ function reasonMessage(reason: ImportReason, asName: string, locale: Locale): st
   return t(locale, "market.import.notFound");
 }
 
-/** `dira-team/` 프로젝트의 가져오기 한 벌: 사본 + apm.yml 한 줄 + install. 레지스트리 `market`은 쓰지 않는다. */
+/** `<큐>/team/` 프로젝트의 가져오기 한 벌: 사본 + apm.yml 한 줄 + install. 레지스트리 `market`은 쓰지 않는다. */
 async function importTeam(
   kind: MarketKind,
   owner: string,
@@ -95,7 +95,7 @@ async function importTeam(
 }
 
 /** 페르소나 가져오기. `asName`이 비면 원본 이름을 그대로 쓴다(화면의 기본값과 같은 규칙).
- *  `version`을 안 주면 저장소의 최고 버전이다(`dira-team/` 프로젝트만 고를 수 있다). */
+ *  `version`을 안 주면 저장소의 최고 버전이다(`<큐>/team/` 프로젝트만 고를 수 있다). */
 export async function importPersonaAction(
   owner: string,
   name: string,
@@ -162,7 +162,7 @@ export async function importSquadAction(
   }
 }
 
-/** 업데이트 전 diff. `dira-team/` 프로젝트에서만 의미가 있고(사본이 있어야 견줄 수 있다) 아니면 빈 목록이다. */
+/** 업데이트 전 diff. `<큐>/team/` 프로젝트에서만 의미가 있고(사본이 있어야 견줄 수 있다) 아니면 빈 목록이다. */
 export async function previewMarketUpdateAction(
   kind: MarketKind,
   owner: string,

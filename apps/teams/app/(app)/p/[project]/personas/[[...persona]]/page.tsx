@@ -112,9 +112,9 @@ export default async function Personas({
     listSquads(squadsDir(project)),
     listTrashAll(config.personas, squadsDir(project)),
   ]);
-  // 새 체계(`dira-team/`)면 PROFILE - skills - members - rules 는 `resolve` 위치에서 읽는다(P506-5).
+  // 새 체계(`<큐>/team/`)면 PROFILE - skills - members - rules 는 `resolve` 위치에서 읽는다(P506-5).
   const { personas, homes } = await overlayPersonas(project.root, config.personas, personaList, tickets);
-  // `dira-team/`이면 받아 둔 것의 출처는 레지스트리가 아니라 사본과 apm.yml이다(레지스트리 `market`은 안 쓴다).
+  // `<큐>/team/`이면 받아 둔 것의 출처는 레지스트리가 아니라 사본과 apm.yml이다(레지스트리 `market`은 안 쓴다).
   const imports = hasTeam(project.root) ? await teamImports(project.root) : project.market;
   const squadList = await overlaySquads(project.root, squadsDir(project), squadListOld);
   const squads = await Promise.all(

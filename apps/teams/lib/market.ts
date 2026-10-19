@@ -12,7 +12,7 @@
 import { appendFile, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { NAME_RE, PROJECT_ID_RE, localDir, resolveWithin } from "./paths.ts";
-import { setDependency, teamOf } from "./apm.ts";
+import { setDependency, teamOf, writableTeamOf } from "./apm.ts";
 import { personaNames, squadNames, type MarketInstallEntry } from "./projects.ts";
 export { matchesMarketSearch } from "./market-search.ts";
 
@@ -546,9 +546,9 @@ export function projectsThatImported(
     .map((p) => p.name);
 }
 
-// ── 가져오기 - dira-team 프로젝트 (DESIGN.md P506 "마켓 - 현행 -> APM") ─────────────
+// ── 가져오기 - team 프로젝트 (DESIGN.md P506 "마켓 - 현행 -> APM") ─────────────
 
-/** 옛 규칙의 `dira-team/`이 없는 프로젝트는 위 `importPersona` - `importSquad`와 레지스트리 `market`을 그대로 쓴다.
+/** 옛 규칙의 `team/`이 없는 프로젝트는 위 `importPersona` - `importSquad`와 레지스트리 `market`을 그대로 쓴다.
  *  있는 프로젝트는 사본 + apm.yml 한 줄이고 lock은 호출자가 `installTeam`으로 쓴다. 레지스트리는 안 쓴다. */
 const GIT_DEP = (kind: MarketKind, name: string, v: string) =>
   `proofer-tech/dira/packages/${kind}-${name}#${kind}-${name}-v${v}`;
@@ -588,7 +588,7 @@ export type TeamImportResult =
   | { ok: true; version: string; coImported: string[]; missingInMarket: string[] }
   | { ok: false; reason: ImportReason };
 
-/** `dira-team/` 프로젝트로 가져온다. `overwrite`가 없으면 사본이 이미 있을 때 `conflict`다.
+/** `team/` 프로젝트로 가져온다. `overwrite`가 없으면 사본이 이미 있을 때 `conflict`다.
  *  owner `dira`는 사본 없이 `packages/`의 git 의존성 한 줄이다(받는 이름은 원래 이름이어야 한다).
  *  스쿼드는 대상에 없는 멤버 페르소나를 같은 소유자의 마켓에서 같이 가져온다. `apm install`은 부르지 않는다. */
 export async function importToTeam(
@@ -604,7 +604,7 @@ export async function importToTeam(
   if (!NAME_RE.test(asName)) return { ok: false, reason: "invalidName" };
   const src = await sourceDir(kind, owner, name, version);
   if (!src) return { ok: false, reason: "notFound" };
-  const team = teamOf(queueRoot);
+  const team = writableTeamOf(queueRoot);
   const yml = path.join(team, "apm.yml");
   const out = { coImported: [] as string[], missingInMarket: [] as string[] };
   if (owner === "dira") {
@@ -626,7 +626,7 @@ export async function importToTeam(
   return { ok: true, version: src.version, ...out };
 }
 
-/** `dira-team/`에 받아 둔 항목 - 이름 -> `{owner, name, v}`. 사본의 `apm.yml` `version`과 `owner`가 `dira`인 git 의존성의 태그가 `v`다. */
+/** `<큐>/team/`에 받아 둔 항목 - 이름 -> `{owner, name, v}`. 사본의 `apm.yml` `version`과 `owner`가 `dira`인 git 의존성의 태그가 `v`다. */
 export async function teamImports(queueRoot: string): Promise<{ personas: Record<string, MarketInstallEntry>; squads: Record<string, MarketInstallEntry> }> {
   const team = teamOf(queueRoot);
   const out = { personas: {} as Record<string, MarketInstallEntry>, squads: {} as Record<string, MarketInstallEntry> };

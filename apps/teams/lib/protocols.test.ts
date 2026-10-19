@@ -346,7 +346,7 @@ test("최상위 CORE*.md는 listTree에 안 뜬다 — 저장·삭제·이름변
 
 // ── 미러링 (P506-4 - dira_apm.py materialize) ───────────────────────────────
 
-const MARK = "<!-- dira_apm materialize: 고치지 말고 dira-team/protocols 또는 packages/dira-protocols를 고친다 -->";
+const MARK = "<!-- dira_apm materialize: 고치지 말고 .dira/team/protocols 또는 packages/dira-protocols를 고친다 -->";
 
 /** 진짜 dira_apm.py를 얹은 가짜 엔진 + 프로젝트. `team`이면 dira-team을 만든다. */
 function mirrorSetup(name: string, team: boolean) {
@@ -361,7 +361,7 @@ function mirrorSetup(name: string, team: boolean) {
   const queue = path.join(project, ".dira", "protocols");
   mkdirSync(queue, { recursive: true });
   if (team) {
-    const t = path.join(project, "dira-team");
+    const t = path.join(project, ".dira", "team");
     mkdirSync(path.join(t, "protocols"), { recursive: true });
     mkdirSync(path.join(t, "apm_modules", "o", "dira-protocols"), { recursive: true });
     writeFileSync(path.join(t, "apm.yml"), "name: t\nversion: 1.0.0\n");
@@ -397,7 +397,7 @@ test("dira-team이 있는 큐 - 공용 코어와 로컬 AGENTS.md를 표식과 �
 test("저장(dira-team 있음) - dira-team/protocols에 쓰고 큐 사본을 다시 만들며, 뒤따른 materialize(install)에도 남는다", async (t) => {
   t.after(() => void delete process.env.DIRA_ENGINE);
   const queue = mirrorSetup("save-team", true);
-  const team = path.join(queue, "..", "..", "dira-team", "protocols", "cdp.md");
+  const team = path.join(queue, "..", "team", "protocols", "cdp.md");
   writeFileSync(path.join(queue, "cdp.md"), "옛\n");
 
   await saveProtocolFile(queue, "cdp.md", "화면에서 고침\n");
@@ -415,7 +415,7 @@ test("저장(dira-team 없음) - 종전대로 큐 파일에만 쓴다", async (t
 
   await saveProtocolFile(queue, "cdp.md", "고침\n");
   assert.strictEqual(readFileSync(path.join(queue, "cdp.md"), "utf8"), "고침\n");
-  assert.strictEqual(existsSync(path.join(queue, "..", "..", "dira-team")), false);
+  assert.strictEqual(existsSync(path.join(queue, "..", "team")), false);
 });
 
 test("저장(dira-team 있음) - 충돌 판정이 새 경로에서도 동작하고 dira-team 파일을 안 건드린다", async (t) => {
@@ -428,7 +428,7 @@ test("저장(dira-team 있음) - 충돌 판정이 새 경로에서도 동작하�
   utimesSync(full, later, later);
 
   await assert.rejects(() => saveProtocolFile(queue, "cdp.md", "쓰려던 것\n", read.mtimeMs), /고쳤습니다/);
-  assert.strictEqual(existsSync(path.join(queue, "..", "..", "dira-team", "protocols", "cdp.md")), false);
+  assert.strictEqual(existsSync(path.join(queue, "..", "team", "protocols", "cdp.md")), false);
 });
 
 test("엔진을 못 찾으면 dira-team 큐도 손대지 않는다", async (t) => {

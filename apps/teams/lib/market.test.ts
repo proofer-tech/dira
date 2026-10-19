@@ -442,13 +442,13 @@ test("projectsThatImported — owner·name이 맞는 레지스트리 칸이 있�
   assert.deepEqual(projectsThatImported("persona", "dira", "reviewer", projects), []);
 });
 
-// ── dira-team 프로젝트 가져오기 (P506-7) ─────────────────────────────────────────
+// ── team 프로젝트 가져오기 (P506-7) ─────────────────────────────────────────
 
 const APM_YML = "name: team\nversion: 1.0.0\ndependencies:\n  apm:\n    - ./existing\n";
 
 function teamRoot(): { queue: string; team: string } {
   const repo = mkdtempSync(path.join(tmpdir(), "fst-market-team-"));
-  const team = path.join(repo, "dira-team");
+  const team = path.join(repo, ".dira", "team");
   mkdirSync(team, { recursive: true });
   writeFileSync(path.join(team, "apm.yml"), APM_YML, "utf8");
   return { queue: path.join(repo, ".dira"), team };

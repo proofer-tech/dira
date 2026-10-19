@@ -1,6 +1,6 @@
 /** 페르소나 - 스쿼드 화면의 읽기 쓰기 위치 (DESIGN.md P506 "엔진 - 주입 경로" 마지막 항목).
  *
- *  `dira-team/apm.yml`이 있는 프로젝트에서는 PROFILE.md - skills.md - members - rules 가
+ *  `<큐>/team/apm.yml`(없으면 `dira-team/apm.yml`)이 있는 프로젝트에서는 PROFILE.md - skills.md - members - rules 가
  *  `dira_apm.py resolve`가 준 디렉터리에 있다. 판정은 엔진 것을 그대로 부르고 TS에 복제하지 않는다.
  *  없으면(rc 3 포함) 지금 위치(`.dira/personas`, `.dira/squads`)를 그대로 쓴다. */
 import { execFile } from "node:child_process";
@@ -20,7 +20,22 @@ export type Home = { base: string; name: string; shared: boolean };
 
 /** 프로젝트 저장소 루트 = 큐(`.dira`)의 부모. */
 export const repoOf = (queueRoot: string) => path.dirname(queueRoot);
-export const teamOf = (queueRoot: string) => path.join(repoOf(queueRoot), "dira-team");
+/** 쓰기 자리. 팀 디렉터리는 큐 안 `<큐>/team`이다(P509 결정 1). */
+export const queueTeamOf = (queueRoot: string) => path.join(queueRoot, "team");
+/** 읽는 순서: `<큐>/team` -> `<큐의 부모>/dira-team`(마이그레이션 전 읽기 전용 경유지, P509 결정 3).
+ *  어느 쪽에도 apm.yml이 없으면 쓰기 자리를 낸다. */
+export const teamOf = (queueRoot: string) => {
+  const own = queueTeamOf(queueRoot);
+  if (existsSync(path.join(own, "apm.yml"))) return own;
+  const legacy = path.join(repoOf(queueRoot), "dira-team");
+  return existsSync(path.join(legacy, "apm.yml")) ? legacy : own;
+};
+/** 쓰기는 `<큐>/team`에만 한다. 아직 옛 `dira-team`이면 마이그레이션 0003이 먼저다. */
+export const writableTeamOf = (queueRoot: string) => {
+  const team = teamOf(queueRoot);
+  if (team !== queueTeamOf(queueRoot)) throw new Error("팀 디렉터리가 아직 옛 위치입니다. 마이그레이션 0003-team-into-queue를 먼저 적용합니다");
+  return team;
+};
 
 export const hasTeam = (queueRoot: string) => existsSync(path.join(teamOf(queueRoot), "apm.yml"));
 
@@ -81,14 +96,14 @@ export async function packageNames(queueRoot: string, kind: ApmKind): Promise<st
   return [...out].sort();
 }
 
-/** 공용 패키지를 `dira-team/<kind>s/<이름>/`로 옮기고 `dira-team/apm.yml` 의존성을 `./<kind>s/<이름>`으로
+/** 공용 패키지를 `<큐>/team/<kind>s/<이름>/`로 옮기고 `team/apm.yml` 의존성을 `./<kind>s/<이름>`으로
  *  바꾼 뒤 install 한다. 이미 로컬이 있으면 거절한다(덮지 않는다). */
 export async function copyToLocal(queueRoot: string, kind: ApmKind, name: string): Promise<void> {
   const py = enginePy();
   if (!py) throw new Error("dira_apm.py 없음");
+  const team = writableTeamOf(queueRoot);
   const home = await resolveHome(queueRoot, kind, name, "");
   if (!home.shared) throw new Error("공용 패키지가 아닙니다: " + name);
-  const team = teamOf(queueRoot);
   const dest = path.join(team, `${kind}s`, name);
   if (existsSync(dest)) throw new Error("이미 로컬 패키지가 있습니다: " + name);
   const src = path.join(home.base, home.name);
@@ -98,7 +113,7 @@ export async function copyToLocal(queueRoot: string, kind: ApmKind, name: string
   await installTeam(queueRoot);
 }
 
-/** `dira-team/apm.yml`의 `dependencies.apm` 목록에 한 줄을 건다. `replaces`가 참인 줄이 있으면 그 줄을
+/** `team/apm.yml`의 `dependencies.apm` 목록에 한 줄을 건다. `replaces`가 참인 줄이 있으면 그 줄을
  *  바꾸고, 같은 줄이 이미 있으면 그대로 두고, 아니면 목록 끝에 붙인다. */
 export async function setDependency(
   ymlPath: string,
@@ -115,7 +130,7 @@ export async function setDependency(
   if (hit >= 0) next[hit] = `${dep.exec(next[hit])![1]}${line}`;
   else {
     const i = next.findIndex((l) => /^\s+apm:\s*$/.test(l));
-    if (i < 0) throw new Error("dira-team/apm.yml에 dependencies.apm 목록이 없습니다");
+    if (i < 0) throw new Error("team/apm.yml에 dependencies.apm 목록이 없습니다");
     let j = i + 1;
     while (j < next.length && /^\s+-\s/.test(next[j])) j++;
     next.splice(j, 0, `    - ${line}`);

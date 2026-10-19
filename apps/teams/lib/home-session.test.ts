@@ -564,9 +564,9 @@ test("personaBlock — dira-team이 있으면 resolve 디렉터리에서, 없으
   assert.ok(old.includes("옛 자리 프로필"));
 
   // 있는 경우 - 로컬 페르소나 패키지가 이긴다. memory는 여전히 .dira/personas 아래다
-  const pkg = path.join(realpathSync(project), "dira-team", "personas", "pm");
+  const pkg = path.join(realpathSync(project), ".dira", "team", "personas", "pm");
   mkdirSync(pkg, { recursive: true });
-  writeFileSync(path.join(project, "dira-team", "apm.yml"), "name: t\nversion: 1.0.0\n");
+  writeFileSync(path.join(project, ".dira", "team", "apm.yml"), "name: t\nversion: 1.0.0\n");
   writeFileSync(path.join(pkg, "apm.yml"), "name: persona-pm\nversion: 1.0.0\n");
   writeFileSync(path.join(pkg, "PROFILE.md"), "패키지 프로필\n");
   writeFileSync(path.join(pkg, "skills.md"), "- `x` - 스킬\n");

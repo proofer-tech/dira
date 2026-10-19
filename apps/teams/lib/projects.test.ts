@@ -413,7 +413,7 @@ test("addProject — dira-team이 있는 큐는 등록 시 materialize로 공용
   process.env.DIRA_ENGINE = engine;
 
   const root = newQueue({ "w1.sh": "" });
-  const team = path.join(path.dirname(root), "dira-team");
+  const team = path.join(root, "team");
   const pkg = path.join(team, "apm_modules", "o", "dira-protocols");
   mkdirSync(pkg, { recursive: true });
   writeFileSync(path.join(team, "apm.yml"), "name: t\nversion: 1.0.0\n");

@@ -15,6 +15,7 @@ import { byteLength } from "./budgets.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
 import { expandHome, resolveWithin } from "./paths.ts";
 import { engineRepo } from "./scaffold.ts";
+import { queueTeamOf, teamOf } from "./apm.ts";
 
 export type ProtocolEntry = {
   /** 기준 디렉터리 기준 상대경로. URL(`?file=`)에 실리는 값이자 모든 액션의 입력이다 */
@@ -173,14 +174,14 @@ export async function readCore(
   return { files, vendored };
 }
 
-/** 큐 `protocols/`를 설치 결과로 다시 쓴다(P506-4). 프로젝트에 `dira-team/apm.yml`이 **있으면**
- *  `dira_apm.py materialize`를 부른다 - 공용 `dira-protocols` 위에 로컬 `dira-team/protocols`를 덮는다.
+/** 큐 `protocols/`를 설치 결과로 다시 쓴다(P506-4). 큐에 `team/apm.yml`이 **있으면**
+ *  `dira_apm.py materialize`를 부른다 - 공용 `dira-protocols` 위에 로컬 `team/protocols`를 덮는다.
  *  **없으면 아무것도 안 쓴다**(옛 배치 큐는 손대지 않는다). 서버 기동 시 전 등록 프로젝트에,
  *  프로젝트 등록 시 그 프로젝트에 돈다(기동 훅은 `instrumentation.ts`, 등록은 `addProject`).
  *  프로젝트 루트는 큐 루트(`.dira`)의 부모다. */
 export async function mirrorCore(queueProtocols: string): Promise<void> {
   const project = projectOfQueue(queueProtocols);
-  if (!(await hasTeam(project))) return;
+  if (!(await hasTeam(queueOf(queueProtocols)))) return;
   await materialize(queueProtocols, project);
 }
 
@@ -188,8 +189,9 @@ function projectOfQueue(queueProtocols: string): string {
   return path.dirname(path.dirname(path.resolve(expandHome(queueProtocols))));
 }
 
-const hasTeam = (project: string) =>
-  lstat(path.join(project, "dira-team", "apm.yml")).then((st) => st.isFile(), () => false);
+const queueOf = (queueProtocols: string) => path.dirname(path.resolve(expandHome(queueProtocols)));
+const hasTeam = (queueRoot: string) =>
+  lstat(path.join(teamOf(queueRoot), "apm.yml")).then((st) => st.isFile(), () => false);
 
 async function materialize(queueProtocols: string, project: string): Promise<void> {
   const queueRoot = path.dirname(path.resolve(expandHome(queueProtocols)));
@@ -262,7 +264,7 @@ export async function saveFile(
   await writeFile(full, text, "utf8");
 }
 
-/** 프로토콜 화면의 저장(P506-14). `dira-team/apm.yml`이 있으면 최상위 파일은 `dira-team/protocols/`에도
+/** 프로토콜 화면의 저장(P506-14). `team/apm.yml`이 있으면 최상위 파일은 `team/protocols/`에도
  *  쓰고 `materialize`로 큐 사본을 다시 만든다 - 큐 사본만 고치면 다음 `dira_apm.py install`이 덮는다.
  *  검증(충돌·존재)은 `saveFile`이 큐 사본에서 그대로 한다. 큐 사본을 먼저 쓰므로 엔진을 못 찾아
  *  materialize가 안 돌아도 화면 저장은 종전과 같다.
@@ -277,8 +279,10 @@ export async function saveProtocolFile(
   await saveFile(baseDir, rel, text, expectedMtimeMs, locale);
   const project = projectOfQueue(baseDir);
   const top = rel.split(path.sep).length === 1 && !rel.includes("/");
-  if (!top || ["apm.yml", "AGENTS.template.md"].includes(rel) || !(await hasTeam(project))) return;
-  const teamDir = path.join(project, "dira-team", "protocols");
+  const queueRoot = queueOf(baseDir);
+  // 쓰기는 `<큐>/team`에만 한다. 아직 옛 `dira-team`이면 마이그레이션 0003이 먼저다(P509 결정 3).
+  if (!top || ["apm.yml", "AGENTS.template.md"].includes(rel) || teamOf(queueRoot) !== queueTeamOf(queueRoot) || !(await hasTeam(queueRoot))) return;
+  const teamDir = path.join(queueTeamOf(queueRoot), "protocols");
   await mkdir(teamDir, { recursive: true });
   await writeFile(await resolveWithin(teamDir, rel), text, "utf8");
   await materialize(baseDir, project);

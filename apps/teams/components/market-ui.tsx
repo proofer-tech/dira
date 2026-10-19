@@ -432,7 +432,7 @@ function ItemDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.kind, item.owner, item.name]);
 
-  // 버전 칸은 `dira-team/` 프로젝트이고 버전이 둘 이상일 때만 보인다(그 밖의 경로는 늘 최고 버전).
+  // 버전 칸은 `<큐>/team/` 프로젝트이고 버전이 둘 이상일 때만 보인다(그 밖의 경로는 늘 최고 버전).
   const showVersion = !!projects.find((p) => p.id === targetId)?.team && item.versions.length > 1;
 
   // `overwrite`를 인자로 받는다 — "덮어쓰기" 버튼이 `setOverwrite(true)` 뒤 바로 이 함수를
