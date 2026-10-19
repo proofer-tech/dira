@@ -41,9 +41,9 @@ process.env.DIRA_APM_BIN = FAKE_APM;
 
 /** install(materialize) 뒤 `.dira/protocols/`에 놓이는 이름 - 공용 패키지 파일 + 로컬 AGENTS.md. */
 const PROTOCOL_NAMES = [
-  ...readdirSync(path.resolve(process.cwd(), "..", "..", "packages", "dira-protocols")).filter(
-    (n) => n !== "apm.yml" && n !== "AGENTS.template.md",
-  ),
+  ...readdirSync(path.resolve(process.cwd(), "..", "..", "packages", "dira-protocols"), { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name !== "apm.yml" && e.name !== "AGENTS.template.md")
+    .map((e) => e.name),
   "AGENTS.md",
 ].map((n) => `.dira/protocols/${n}`);
 const TEAM_FILES = [".dira/team/apm.yml", ".dira/team/protocols/AGENTS.md", ".dira/team/protocols/apm.yml", ".dira/team/.gitignore"];
