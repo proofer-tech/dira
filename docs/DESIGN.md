@@ -9005,13 +9005,13 @@ memory가 한 디렉터리에 섞여 결정 1의 복사 문제가 생긴다.
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P509-1 | 엔진 - `dira_apm.py` 팀 디렉터리 판정(`team` 명령, 결정 3 - 4 - 5 - 6) + `tick.sh` 네 자리가 그것을 쓴다 + `test_dira_apm.py` - `test_core_protocol.py` | developer | - | |
-| P509-2 | 앱 - `teamOf`(결정 3)와 `scaffold.ts` - `market.ts` - `protocols.ts` - `home-session.ts` - 페르소나 화면의 쓰기를 `<큐>/team/`으로, 문구 - 테스트 | developer | - | |
-| P509-3 | 마이그레이션 `0003-team-into-queue`(결정 7) + `test_migrate_0003.py`, `ci.yml`(결정 9), dira 프로젝트에 적용 | developer | P509-1 | |
-| P509-4 | 매뉴얼 - ko-en install, personas, squads, protocols, screens, troubleshooting의 `dira-team` 자리 | writer | - | |
-| P509-5 | QA - dira 프로젝트 기준 아래 수용조건 (a) - (e) | qa | P509-2, P509-3 | |
-| P509-6 | 적용 - `migrate.py promote 0003-team-into-queue`, 나머지 9개 적용, 프로젝트별 (b) - (c) 표 보고 | developer | P509-5 | |
-| P509-7 | QA - 나머지 9개 프로젝트의 (b) - (c) | qa | P509-6 | |
+| P509-1 | 엔진 - `dira_apm.py` 팀 디렉터리 판정(`team` 명령, 결정 3 - 4 - 5 - 6) + `tick.sh` 네 자리가 그것을 쓴다 + `test_dira_apm.py` - `test_core_protocol.py` | developer | - | 발행 `6f22c989` |
+| P509-2 | 앱 - `teamOf`(결정 3)와 `scaffold.ts` - `market.ts` - `protocols.ts` - `home-session.ts` - 페르소나 화면의 쓰기를 `<큐>/team/`으로, 문구 - 테스트 | developer | - | 발행 `33087e5d` |
+| P509-3 | 마이그레이션 `0003-team-into-queue`(결정 7) + `test_migrate_0003.py`, `ci.yml`(결정 9), dira 프로젝트에 적용 | developer | P509-1 | 발행 `0b218cba` |
+| P509-4 | 매뉴얼 - ko-en install, personas, squads, protocols, screens, troubleshooting의 `dira-team` 자리 | writer | - | 발행 `59d580ed` |
+| P509-5 | QA - dira 프로젝트 기준 아래 수용조건 (a) - (e) | qa | P509-2, P509-3 | 발행 `6f69147b` |
+| P509-6 | 적용 - `migrate.py promote 0003-team-into-queue`, 나머지 9개 적용, 프로젝트별 (b) - (c) 표 보고 | developer | P509-5 | 발행 `1832c1e8` |
+| P509-7 | QA - 나머지 9개 프로젝트의 (b) - (c) | qa | P509-6 | 발행 `be02440d` |
 
 **일곱 장이다.** P509-1과 P509-2는 서로 기다리지 않는다(앱은 임시 큐로 시험한다). 에픽 `P509`를 연다.
 
