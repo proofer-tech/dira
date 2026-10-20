@@ -857,7 +857,7 @@ const ISO = "\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:Z|[+-]\\d{2}:?\\d{2})";
 // 시각 짝 — `(<시작> -> <끝>)`(정본), `(<시작>) -> <끝>`(끝이 괄호 밖), `(<시작>)`(시작만).
 // 항목 전체를 이어붙인 문자열 안에서 찾는다(§2-11① 판정 1-2) — 줄 끝이 아니어도 된다,
 // 뒤에 남는 꼬리말은 이 매치가 안 먹는다(판정 3).
-const PLAN_TIME_PAIR = new RegExp(`\\s*\\((${ISO})(?:\\s*->\\s*(${ISO}))?\\)(?:\\s*->\\s*(${ISO}))?`, "g");
+const PLAN_TIME_PAIR = new RegExp(`\\s*\\((?:(${ISO})(?:\\s*->\\s*(${ISO})?)?|\\s*->)\\s*\\)(?:\\s*->\\s*(${ISO}))?`, "g");
 
 /** 티켓 본문의 `## 진행 계획` 절 → 계획 목록(§2-11①). 체크박스 줄이 아닌 줄은 건너뛴다 —
  *  형식이 어긋난 줄에 상태를 지어내지 않는다.
@@ -893,7 +893,7 @@ export function planOf(body: string): PlanItem[] {
     let m: RegExpExecArray | null;
     while ((m = PLAN_TIME_PAIR.exec(joined))) last = m;
     if (last) {
-      start = last[1];
+      start = last[1] ?? null;
       end = last[2] ?? last[3] ?? null;
       rest = (joined.slice(0, last.index) + joined.slice(last.index + last[0].length)).trim();
     }

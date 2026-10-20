@@ -1507,6 +1507,14 @@ test("planOf — 끝 시각 없는 완료: 상자가 켜지면 시작만 있어�
   ]);
 });
 
+test("planOf — 빈 시각 자리 ( -> )와 (시작 -> )는 문장에서 걷힌다(P511 결정 4)", () => {
+  const body = "## 진행 계획\n- [x] a ( -> )\n- [ ] b (2026-10-20T22:00:00+09:00 -> )";
+  assert.deepStrictEqual(planOf(body), [
+    { text: "a", state: "done", start: null, end: null },
+    { text: "b", state: "doing", start: "2026-10-20T22:00:00+09:00", end: null },
+  ]);
+});
+
 test("planOf — 시작 없는 완료: 괄호가 아예 없어도 상자가 켜지면 완료다(§2-11①)", () => {
   const body = "## 진행 계획\n\n- [x] 시각 없이 바로 완료\n";
   assert.deepStrictEqual(planOf(body), [
