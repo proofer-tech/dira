@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { useT } from "@/components/language-provider";
 import { useTrackedRouter } from "@/lib/route-pending";
-import { initialLayout, layoutGraph, stepLayout, type GraphNode, type OntologyGraph, type Point } from "@/lib/ontology-graph";
+import { ALPHA_STOP, DRAG_ALPHA, initialLayout, layoutGraph, nextAlpha, stepLayout, type GraphNode, type OntologyGraph, type Point } from "@/lib/ontology-graph";
 
 const PALETTE = ["blue", "orange", "teal", "pink", "yellow", "violet", "green", "sky"];
 const MIN_K = 0.25;
@@ -133,7 +133,7 @@ export function OntologyMap({ graph, projectId, sidebarOff }: { graph: OntologyG
   }, [visEdges]);
 
   // 배치 - 화면 밖에서 수렴시킨 뒤 정지 상태로 처음 그린다(모션 예외를 안 연다, §80 (11)).
-  const sim = useRef({ pos: [] as Point[], pairs: [] as [number, number][], pinned: new Set<number>(), settle: 0, raf: 0, dragging: false });
+  const sim = useRef({ pos: [] as Point[], pairs: [] as [number, number][], pinned: new Set<number>(), vel: [] as Point[], alpha: 0, raf: 0, dragging: false });
   const [pos, setPos] = useState<Point[] | null>(null);
   const ready = pos !== null;
   const [, setTick] = useState(0);
@@ -144,6 +144,7 @@ export function OntologyMap({ graph, projectId, sidebarOff }: { graph: OntologyG
       // 같은 배열을 시뮬레이션이 제자리에서 고친다 - tick이 다시 그리게 한다.
       const laid = nodes.length ? layoutGraph(nodes.length, pairs, { seed: 1 }) : initialLayout(0);
       sim.current.pos = laid;
+      sim.current.vel = laid.map(() => ({ x: 0, y: 0 }));
       setPos(laid);
     }, 0);
     return () => clearTimeout(id);
@@ -154,13 +155,14 @@ export function OntologyMap({ graph, projectId, sidebarOff }: { graph: OntologyG
     const s = sim.current;
     if (s.raf || reduced()) return;
     const frame = () => {
-      if (!s.dragging && s.settle <= 0) {
+      // alpha는 식기만 한다 - 끌기 중에는 낮은 목표값을 향하고, 놓으면 0을 향한다(다시 높이지 않는다).
+      s.alpha = nextAlpha(s.alpha, s.dragging ? DRAG_ALPHA : 0);
+      if (!s.dragging && s.alpha < ALPHA_STOP) {
         s.raf = 0;
         s.pinned.clear();
         return;
       }
-      stepLayout(s.pos, s.pairs, s.dragging ? 0.3 : Math.max(0.02, (s.settle / 90) * 0.3), s.pinned);
-      if (!s.dragging) s.settle--;
+      stepLayout(s.pos, s.pairs, s.alpha, s.pinned, s.vel);
       setTick((x) => x + 1);
       s.raf = requestAnimationFrame(frame);
     };
@@ -298,7 +300,6 @@ export function OntologyMap({ graph, projectId, sidebarOff }: { graph: OntologyG
       if (!d.moved) goTo(nodes[d.id]);
       else {
         s.dragging = false;
-        s.settle = 90;
         if (reduced()) s.pinned.clear();
         else startLoop();
       }

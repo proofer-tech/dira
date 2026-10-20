@@ -230,9 +230,19 @@ export function initialLayout(n: number, seed = 1): Point[] {
   });
 }
 
-/** 힘 한 걸음: 반발(전 쌍) + 간선 스프링 + 중심 당김. `alpha`는 식는 정도(1 -> 0)이고 `pinned`
- *  노드는 안 움직인다(끌기). ponytail: 반발이 O(n^2)다 - 300 노드는 실측 통과, 수천이면 격자 근사. */
-export function stepLayout(pos: Point[], edges: [number, number][], alpha: number, pinned?: Set<number>): void {
+/** 끌기 중 alpha 목표값, alpha가 목표로 다가가는 비율, 이 아래로 식으면 멈춘다(d3-force 모양). */
+export const DRAG_ALPHA = 0.1;
+export const ALPHA_RATE = 0.03;
+export const ALPHA_STOP = 0.004;
+const DAMPING = 0.4;
+const GAIN = 0.15; // 힘 -> 속도 배율. 반발 기울기가 커도 걸음이 발산하지 않게 한다.
+
+export const nextAlpha = (alpha: number, target: number) => alpha + (target - alpha) * ALPHA_RATE;
+
+/** 힘 한 걸음: 반발(전 쌍) + 간선 스프링 + 중심 당김을 속도에 더하고 감쇠한 뒤 좌표에 더한다.
+ *  `alpha`는 힘의 세기(1 -> 0)이고 `pinned` 노드는 안 움직이며 속도 0이다(끌기). `vel`은 노드별 속도로
+ *  호출 사이에 이어진다. ponytail: 반발이 O(n^2)다 - 300 노드는 실측 통과, 수천이면 격자 근사. */
+export function stepLayout(pos: Point[], edges: [number, number][], alpha: number, pinned: Set<number> | undefined, vel: Point[]): void {
   const n = pos.length;
   const K = 60; // 이상 간선 길이
   const CUTOFF2 = (5 * K) * (5 * K);
@@ -266,15 +276,25 @@ export function stepLayout(pos: Point[], edges: [number, number][], alpha: numbe
     dx[b] += ex * f;
     dy[b] += ey * f;
   }
-  const maxMove = 30 * alpha + 0.5;
+  const MAX_STEP = 30; // 폭주 방지용 큰 상한 - 진동을 누르는 것은 감쇠다
   for (let i = 0; i < n; i++) {
-    if (pinned?.has(i)) continue;
+    if (pinned?.has(i)) {
+      vel[i].x = vel[i].y = 0;
+      continue;
+    }
     dx[i] -= pos[i].x * 0.15; // 중심 당김
     dy[i] -= pos[i].y * 0.15;
-    const len = Math.sqrt(dx[i] * dx[i] + dy[i] * dy[i]) || 1;
-    const m = Math.min(len, maxMove) / len;
-    pos[i].x += dx[i] * m;
-    pos[i].y += dy[i] * m;
+    let vx = (vel[i].x + dx[i] * GAIN * alpha) * (1 - DAMPING);
+    let vy = (vel[i].y + dy[i] * GAIN * alpha) * (1 - DAMPING);
+    const len = Math.sqrt(vx * vx + vy * vy);
+    if (len > MAX_STEP) {
+      vx *= MAX_STEP / len;
+      vy *= MAX_STEP / len;
+    }
+    vel[i].x = vx;
+    vel[i].y = vy;
+    pos[i].x += vx;
+    pos[i].y += vy;
   }
 }
 
@@ -286,6 +306,7 @@ export function layoutGraph(
 ): Point[] {
   const iterations = opts.iterations ?? 300;
   const pos = initialLayout(n, opts.seed ?? 1);
-  for (let it = 0; it < iterations; it++) stepLayout(pos, edges, 1 - it / iterations);
+  const vel = pos.map(() => ({ x: 0, y: 0 }));
+  for (let it = 0; it < iterations; it++) stepLayout(pos, edges, 1 - it / iterations, undefined, vel);
   return pos;
 }

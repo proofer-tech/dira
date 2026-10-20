@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { buildOntologyGraph, layoutGraph } from "./ontology-graph.ts";
+import { buildOntologyGraph, layoutGraph, stepLayout, nextAlpha, DRAG_ALPHA } from "./ontology-graph.ts";
 
 const SCHEMA = `## 객체 타입
 
@@ -108,4 +108,59 @@ test("300 노드 - 1000 간선 배치가 3초 안에 끝난다", () => {
   console.log(`layout 300x1000: ${ms.toFixed(0)}ms cpu`);
   assert.ok(ms < 3000);
   assert.ok(pos.every((p) => Number.isFinite(p.x)));
+});
+
+// 지식 지도 끌기 - 화면(ontology-map.tsx)과 같은 인자: 끌기 중 alpha는 DRAG_ALPHA를 향해 오르고, 놓으면 0을 향해 식는다.
+test("끌기 중 지도가 떨리지 않고 놓은 뒤 3초 안에 멈춘다", () => {
+  const edges: [number, number][] = [];
+  let s = 1;
+  while (edges.length < 1000) {
+    s = (s * 1103515245 + 12345) % 2147483648;
+    const a = s % 300;
+    s = (s * 1103515245 + 12345) % 2147483648;
+    const b = s % 300;
+    if (a !== b) edges.push([a, b]);
+  }
+  const pos = layoutGraph(300, edges);
+  const vel = pos.map(() => ({ x: 0, y: 0 }));
+  // 노드 0에서 간선 두 단계 안
+  const near = new Set([0]);
+  for (let k = 0; k < 2; k++) for (const [a, b] of edges) {
+    if (near.has(a)) near.add(b);
+    if (near.has(b)) near.add(a);
+  }
+  const pinned = new Set([0]);
+  pos[0] = { x: pos[0].x + 50, y: pos[0].y };
+  let alpha = 0;
+  let prev = pos.map((p) => ({ ...p }));
+  const prevMove = pos.map(() => ({ x: 0, y: 0 }));
+  let moved = 0, reversed = 0, farMax = 0;
+  for (let step = 0; step < 60; step++) {
+    alpha = nextAlpha(alpha, DRAG_ALPHA);
+    stepLayout(pos, edges, alpha, pinned, vel);
+    for (let i = 1; i < 300; i++) {
+      const mx = pos[i].x - prev[i].x, my = pos[i].y - prev[i].y;
+      const len = Math.hypot(mx, my);
+      if (!near.has(i)) farMax = Math.max(farMax, len);
+      if (step > 0 && len > 0.5) {
+        moved++;
+        if (mx * prevMove[i].x + my * prevMove[i].y < 0) reversed++;
+      }
+      prevMove[i] = { x: mx, y: my };
+    }
+    prev = pos.map((p) => ({ ...p }));
+  }
+  console.log(`drag: moved>0.5=${moved} reversed=${reversed} farMax=${farMax.toFixed(2)}`);
+  assert.ok(reversed <= moved * 0.05, `방향 반전 ${reversed}/${moved}`);
+  assert.ok(farMax <= 1, `먼 노드 최대 이동 ${farMax}`);
+  pinned.clear();
+  let last = Infinity;
+  for (let step = 0; step < 180; step++) {
+    alpha = nextAlpha(alpha, 0);
+    const before = pos.map((p) => ({ ...p }));
+    stepLayout(pos, edges, alpha, pinned, vel);
+    last = Math.max(...pos.map((p, i) => Math.hypot(p.x - before[i].x, p.y - before[i].y)));
+  }
+  console.log(`release: 180걸음째 최대 이동 ${last.toFixed(4)}px`);
+  assert.ok(last < 0.1);
 });
