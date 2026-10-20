@@ -91,11 +91,19 @@ project's git working tree` beside it. The ontology row on the workers screen on
 the worker file says. The one place that decides is this field in `Settings`.
 
 The folder you point at connects even if it is not in dira format. The check looks at two places
-only - `_ontology/SCHEMA.md` and `objects/`. With neither there, `Not dira format` comes up under
-the title on the ontology screen. The form that brings the folder over is `Folder to import` in
-`Settings` ([Pulling in a folder from outside](#pulling-in-a-folder-from-outside)). You do not get
-hundreds of lines of violations. The folder is not broken. It just has not been moved yet. Point at
-a folder that is altogether empty and the screen gives you the survey below.
+only - `_ontology/SCHEMA.md` and `objects/`. With neither there and something in the folder, `Not
+dira format` comes up under the title on the ontology screen. You do not get hundreds of lines of
+violations. The folder is not broken; it needs a migration. A folder of plain notes on a shared
+drive is the usual case.
+
+Press `Start migration` inside that card. One ticket appears in the queue and the screen moves to
+its detail. It is the same ticket described under Already running a project - migration below.
+The worker does not move, edit or delete your notes. They stay where they are, and the worker
+adds the dira layers, such as `_ontology/` and `objects/`, next to them. Cards cite the original
+notes at their current paths, so anyone else reading that folder keeps the same paths. When it
+is done, the card goes away.
+
+Point at a folder that is altogether empty and the screen gives you the survey below instead.
 
 ### Directories open one at a time
 
@@ -368,6 +376,10 @@ values table in that panel is `Ontology migration`. The gear on that row in the 
 you straight to the same place (see [Screens](/docs/screens), under the settings dialog). The
 description sits right there: `Sets one up if there's none, and re-applies the latest conventions
 if there is. Safe to run again.`
+
+If the ontology screen is showing the `Not dira format` card, its `Start migration` is the same
+button. Both places point at the same ticket, one per project. While that ticket is open, both show
+the same waiting link in place of the button.
 
 Running it again is normal use. Cards you edited by hand are not overwritten. What already
 matches the conventions is not touched. Old records are not thrown out. Only what counts as fact
