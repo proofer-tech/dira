@@ -2057,7 +2057,7 @@ export const ko: Record<string, string> = {
   "ontology.object.cites": "인용한 속성 값",
   "ontology.object.noValue": "(값 없음)",
   "ontology.notDira.body":
-    "_ontology/SCHEMA.md도 objects/도 없습니다 — 아직 이 폴더를 dira 형식으로 옮기지 않은 것뿐입니다. 설정의 가져올 폴더로 옮겨오세요.",
+    "_ontology/SCHEMA.md도 objects/도 없습니다 — 이 폴더의 노트는 마이그레이션이 필요합니다. 노트를 제자리에 둔 채 dira 형식 층을 더합니다.",
   // 티켓 cd662a73이 만들고 c5d51522가 온톨로지 화면으로 옮긴 폼 — 화면에서 TICKET_ONTOLOGY를
   // 편집한다(§결정 1 (b)). 거절 사유 둘은 여기서 prefix로 쓰고 값이 뒤에 붙는다
   // (`projectActions.unknownProjectPrefix`와 같은 관용구) — 셋째 거절(워크트리 안)은 위
@@ -4702,7 +4702,7 @@ export const en: Record<string, string> = {
   "ontology.object.cites": "Cited property values",
   "ontology.object.noValue": "(no value)",
   "ontology.notDira.body":
-    "No _ontology/SCHEMA.md or objects/ here — this folder just hasn't been moved into dira format yet. Use the folder-to-import field in Settings to bring it in.",
+    "No _ontology/SCHEMA.md or objects/ here — this folder needs a migration. Your notes stay where they are and a dira-format layer is added on top.",
 
   // 보드 화면(§0-16 §발행 §묶음 표 행 3) — `ko`는 `f3a8794e`, 이 영어가 `6d818d48`다. 이 앱에서
   // 사람이 제일 오래 보는 화면이라 낱말은 셸(`90be3eeb`)에서 그대로 내려받았고, 새 낱말만 위

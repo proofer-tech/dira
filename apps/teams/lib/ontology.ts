@@ -26,6 +26,11 @@ export function isDiraFormat(tree: { rel: string; isDir: boolean }[]): boolean {
   return hasSchema || hasObjects;
 }
 
+/** P510 - `dira 형식이 아닙니다` 카드가 서는 조건: 비어 있지 않고 형식이 아니다. 빈 폴더는 설문이다. */
+export function needsMigration(tree: { rel: string; isDir: boolean }[]): boolean {
+  return tree.length > 0 && !isDiraFormat(tree);
+}
+
 /** 첫 번째 `---` 블록의 평평한 `키: 값` 하나. 따옴표는 벗긴다. */
 export function fmScalar(text: string, key: string): string | undefined {
   const lines = text.split("\n");

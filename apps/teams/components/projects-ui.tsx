@@ -684,6 +684,29 @@ export function OntologyMigration({
   ticket: { stem: string; hash: string; status: string } | null;
 }) {
   const t = useT();
+  return (
+    <div className="space-y-2 border-t pt-4">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-medium">{t("project.ontologyMigration.title")}</h3>
+          <p className="text-xs text-muted-foreground">{t("project.ontologyMigration.description")}</p>
+        </div>
+        <OntologyMigrationStart projectId={projectId} ticket={ticket} />
+      </div>
+    </div>
+  );
+}
+
+/** 버튼 - 대기 링크 - 실패 카드 한 벌. 설정 다이얼로그와 온톨로지 화면의 `dira 형식이 아닙니다`
+ *  카드(P510)가 같은 것을 쓴다 — 액션과 마커가 같아 어느 자리에서 눌러도 티켓은 한 장이다. */
+export function OntologyMigrationStart({
+  projectId,
+  ticket,
+}: {
+  projectId: string;
+  ticket: { stem: string; hash: string; status: string } | null;
+}) {
+  const t = useT();
   const router = useTrackedRouter();
   const [pending, setPending] = useState(false);
   const { error, fixing, run } = useSelfHealRetry();
@@ -701,31 +724,23 @@ export function OntologyMigration({
   };
 
   return (
-    <div className="space-y-2 border-t pt-4">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-medium">{t("project.ontologyMigration.title")}</h3>
-          <p className="text-xs text-muted-foreground">{t("project.ontologyMigration.description")}</p>
-        </div>
-        {ticket ? (
-          <p className="text-xs text-muted-foreground">
-            <Link
-              href={`/p/${projectId}/tickets/${encodeURIComponent(ticket.stem)}`}
-              className="rounded-sm underline hover:text-foreground"
-            >
-              {t("project.ontologyMigration.linkPrefix")} <span className="font-mono">{ticket.hash}</span>{" "}
-              {ticket.status}
-            </Link>
-          </p>
-        ) : (
-          <Button variant="outline" size="sm" disabled={pending} onClick={start}>
-            {pending ? t("project.ontologyMigration.startPending") : t("project.ontologyMigration.start")}
-          </Button>
-        )}
-      </div>
-
-      {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
-          `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
+    <div className="space-y-2">
+      {ticket ? (
+        <p className="text-xs text-muted-foreground">
+          <Link
+            href={`/p/${projectId}/tickets/${encodeURIComponent(ticket.stem)}`}
+            className="rounded-sm underline hover:text-foreground"
+          >
+            {t("project.ontologyMigration.linkPrefix")} <span className="font-mono">{ticket.hash}</span>{" "}
+            {ticket.status}
+          </Link>
+        </p>
+      ) : (
+        <Button variant="outline" size="sm" disabled={pending} onClick={start}>
+          {pending ? t("project.ontologyMigration.startPending") : t("project.ontologyMigration.start")}
+        </Button>
+      )}
+      {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8). */}
       {error && (
         <SelfHealAlert
           title={t("project.ontologyMigration.failedTitle")}

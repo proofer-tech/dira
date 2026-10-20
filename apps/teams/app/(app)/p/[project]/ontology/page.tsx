@@ -33,10 +33,11 @@ import { statusLabel } from "@/components/status-badge";
 import { t, type Locale } from "@/lib/i18n";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
-import { fmScalar, isDiraFormat, nodeViewLink, parseCitations, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
+import { fmScalar, isDiraFormat, needsMigration, nodeViewLink, parseCitations, parseTypeProperties, type OntologyMetrics } from "@/lib/ontology";
 import { loadMetrics, loadOntologyGraph } from "@/lib/ontology-load";
+import { OntologyMigrationStart } from "@/components/projects-ui";
 import { OntologyMap } from "@/components/ontology-map";
-import { ONTOLOGY_FIX_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
+import { ONTOLOGY_FIX_MARKER, ONTOLOGY_MIGRATION_MARKER, listTickets, openFixTicket, statusOf, type Ticket } from "@/lib/queue";
 import {
   listTree,
   nestTree,
@@ -146,6 +147,7 @@ export default async function Ontology({
   // 비용을 안 낸다. 판정(openFixTicket)은 `문제해결` 액션과 같은 함수다 — 갈리면 화면이
   // 거짓말을 한다(§P230 — §비주얼 §56 ⑤가 import에 같은 판정을 요구한다).
   let fixTicket: Ticket | null = null;
+  let migrationTicket: Ticket | null = null;
   // 프론트매터 행 편집기의 후보 원천 여섯(DESIGN.md §프론트매터 행 편집기 결정 8, 티켓
   // `7e02b1ac`) — 새 캐시 파일이나 색인 없이 이 화면·큐가 이미 읽는 값만 묶는다.
   let candidates: FrontmatterCandidates | null = null;
@@ -154,6 +156,7 @@ export default async function Ontology({
     if (metrics && metrics.schemaViolations.length > 0) {
       fixTicket = openFixTicket(tickets, ONTOLOGY_FIX_MARKER);
     }
+    if (needsMigration(tree)) migrationTicket = openFixTicket(tickets, ONTOLOGY_MIGRATION_MARKER);
     if (tree.length > 0) {
       const basename = (rel: string) => rel.split("/").at(-1) ?? rel;
       const typeFileEntries = tree.filter(
@@ -236,11 +239,27 @@ export default async function Ontology({
         <OntologyViolationsAlert metrics={metrics} projectId={id} fixTicket={fixTicket} locale={locale} />
       )}
 
-      {tree.length > 0 && !diraFormat && (
+      {needsMigration(tree) && (
         <Alert>
           <TriangleAlert aria-hidden className="text-status-stale" />
           <AlertTitle>{t(locale, "ontology.notDira.title")}</AlertTitle>
-          <AlertDescription>{t(locale, "ontology.notDira.body")}</AlertDescription>
+          <AlertDescription>
+            <p>{t(locale, "ontology.notDira.body")}</p>
+            <div className="mt-2">
+              <OntologyMigrationStart
+                projectId={id}
+                ticket={
+                  migrationTicket
+                    ? {
+                        stem: migrationTicket.stem,
+                        hash: migrationTicket.hash,
+                        status: statusLabel(statusOf(migrationTicket), locale),
+                      }
+                    : null
+                }
+              />
+            </div>
+          </AlertDescription>
         </Alert>
       )}
 

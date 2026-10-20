@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { computeOntologyMetrics,
-  nodeViewLink, isDiraFormat, parseCitations, fmScalar, parseTypeProperties } from "./ontology.ts";
+  nodeViewLink, isDiraFormat, needsMigration, parseCitations, fmScalar, parseTypeProperties } from "./ontology.ts";
 import { listTree } from "./protocols.ts";
 import { loadMetrics } from "./ontology-load.ts";
 
@@ -513,6 +513,12 @@ test("isDiraFormat — objects/만 있어도 뜬다(빈 디렉터리도 포함)"
     ]),
     true,
   );
+});
+
+test("needsMigration — a.md만 있으면 카드, 빈 폴더는 설문, SCHEMA.md가 있으면 카드 없음", () => {
+  assert.equal(needsMigration([{ rel: "a.md", isDir: false }]), true);
+  assert.equal(needsMigration([]), false);
+  assert.equal(needsMigration([{ rel: "_ontology/SCHEMA.md", isDir: false }]), false);
 });
 
 test("isDiraFormat — 둘 다 있으면 뜬다", () => {
