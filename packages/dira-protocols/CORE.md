@@ -9,13 +9,13 @@ asking, blocking, approval, forbidden commands. Worker dir:
 
 1. Read `.dira/tickets/<hash>.wip.md`. `## Goal` + `## Done when` are the
    contract.
-2. Before anything else, append `## 진행 계획`: handoff-size steps, one
-   checkbox per line - `- [ ] step (<start> -> <end>)`, ISO 8601+offset like
-   `assigned_at`, stamped on start and check, read live, never pre-filled.
-   Full rules: `protocols/계획-규약.md`. **Push, retrospective, `## 결과`,
-   `.done` rename aren't plan items.**
-3. Do the work. Nothing outside `## Done when`. Flip each box `- [ ]` -> `- [x]`
-   the moment it is true - not batched at the end.
+2. Before anything else, append `## 진행 계획`: handoff-size steps, a
+   checkbox per line: `- [ ] step` only; on start add ` (<start>)`, on check
+   `)` -> ` -> <end>)`. ISO 8601+offset like `assigned_at`, from `date`, never
+   pre-filled, no empty `( -> )`. `protocols/계획-규약.md`. **Push, retro,
+   `## 결과`, `.done` rename aren't plan items.**
+3. Do the work. Nothing outside `## Done when`. Flip one box `- [ ]` -> `- [x]`
+   per edit, when true - never batched.
 4. Append `## 결과` - what changed, how verified (one-line summary, not full
    output), pushed commit hashes.
 5. Confirm push succeeded **and every `## Done when` box is `- [x]`** - one left
