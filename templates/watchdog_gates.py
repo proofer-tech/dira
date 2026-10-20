@@ -30,20 +30,24 @@ def _real_pgrep_count(path):
 
 
 def _real_crontab_lines():
+    # 읽지 못하면 None - 빈 목록(진짜 0줄)과 구별한다. G6은 None이면 그 칸을 건너뛴다.
     try:
         out = subprocess.run(["crontab", "-l"], capture_output=True, text=True)
     except OSError:
-        return []
+        return None
     if out.returncode != 0:
-        return []
+        # "no crontab for <user>"는 진짜 0줄이다. 그 밖의 실패는 측정 실패다.
+        return [] if "no crontab" in (out.stderr or "").lower() else None
     return out.stdout.splitlines()
 
 
 def _real_git_version():
     try:
         out = subprocess.run(["git", "--version"], capture_output=True, text=True)
-    except OSError:
+    except FileNotFoundError:
         return (127, "git: 실행 파일을 못 찾는다")
+    except OSError:
+        return None  # fork 실패(EAGAIN 등) - 측정 실패라 G7은 이번 tick에 건너뛴다
     return (out.returncode, (out.stdout or "") + (out.stderr or ""))
 
 
@@ -189,9 +193,10 @@ def diagnose(root, local=None, now=None, pgrep_count=_real_pgrep_count,
         lines.append(f"G5 자력 워커 {name} 셸이 {n}벌(상한 {threshold})")
 
     # --- G6: 살아 있는 워커가 있는데 크론 줄이 0개다 ---
-    if worker_paths:
+    cron = crontab_lines() if worker_paths else None
+    if worker_paths and cron is not None:
         found = False
-        for cl in crontab_lines():
+        for cl in cron:
             cl = cl.strip()
             if cl.startswith("#"):
                 continue
@@ -210,7 +215,8 @@ def diagnose(root, local=None, now=None, pgrep_count=_real_pgrep_count,
                 f"G6 사람 살아 있는 워커 {len(worker_paths)}개의 크론 줄이 0개다")
 
     # --- G7: git 자체가 죽어 있다 ---
-    code, out = git_version()
+    gv = git_version()
+    code, out = gv if gv is not None else (0, "")
     if code != 0:
         first_line = out.splitlines()[0] if out else "(출력 없음)"
         lines.append(f"G7 사람 git --version이 죽는다: {first_line}")
