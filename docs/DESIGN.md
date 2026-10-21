@@ -9059,12 +9059,25 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
    §보내지 않는 것을 고쳐 오류 제보가 무엇을 보내는지(위 표), 경로가 `~`로 바뀐 채 들어간다는 것, 끄는 법이 통계와
    같다는 것을 적는다. `privacy.md`에는 수집 항목 - 위탁처(Vercel) - 보존 기간(90일)을 더한다.
 
+7. **90일 파기는 Vercel Cron이 매일 한다**(피드백 `7beeabb4`). `apps/teams/vercel.json`에 `crons` 한 줄로 하루 한 번
+   `GET /api/error-report/purge`를 부른다. 이 라우트는 `Authorization: Bearer <CRON_SECRET>`이 맞을 때만 돌고(틀리거나
+   `CRON_SECRET`이 없으면 `401`), `error-reports/` 아래 날짜 폴더 중 UTC 오늘로부터 90일보다 오래된 것을 통째로 지운 뒤
+   지운 건수를 JSON으로 돌려준다. `proxy.ts`는 랜딩-only에서 이 경로도 통과시킨다. `CRON_SECRET`은 사람이 Vercel
+   환경변수에 넣는다.
+8. **`install_id`로 지워 달라는 요청(방침 7항)은 사람이 스크립트 하나로 처리한다.** `apps/teams/scripts/error-report-delete.mjs
+   <install_id>`가 `BLOB_READ_WRITE_TOKEN`(`vercel env pull`로 받는다)으로 `error-reports/` 전체를 훑어 파일 이름이
+   `<install_id>-`로 시작하는 것을 모두 지우고 지운 경로를 출력한다. `--dry-run`이면 지우지 않고 목록만 낸다. 런타임 로그
+   폴백(결정 5)으로 남은 것은 Vercel 로그 보존 기간에 맡긴다.
+
+주도성 5 판단: 방침 문구를 바꾸지 않고 파기 장치를 만든다. 방침은 이미 시행됐고, 장치는 라우트 하나와 스크립트 하나라
+2027-01-19 전에 충분히 들어간다.
+
 주도성 5 판단: 사람이 "raw 로그까지"라고 해서 스택과 로그 원문을 보내되, 홈 경로만 `~`로 바꾼다. 사용자 이름이 경로마다
 박히는 것을 막는 최소한의 가공이고 디버깅 정보는 줄지 않는다.
 주도성 5 판단: 저장소는 Vercel Blob(`@vercel/blob`, `apps/teams` 의존성 1개 추가)로 정한다. 이미 `@vercel/analytics`를
 쓰는 Vercel 프로젝트라 계정이 따로 필요 없다. Blob 스토어를 프로젝트에 연결하는 일(대시보드에서 한 번)은 사람이 하고,
 그 전까지는 결정 5의 런타임 로그로 떨어진다.
-주도성 5 판단: 보존 기간 90일은 요구에 없어 정했다. 오래된 파일 정리는 이번 범위가 아니다.
+주도성 5 판단: 보존 기간 90일은 요구에 없어 정했다. 정리 장치는 결정 7 - 8로 뒤에 더했다.
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
@@ -9073,8 +9086,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 | P513-3 | 데스크톱 - `apps/desktop/main.ts`의 `child_exit` - `renderer_gone` - `ready_timeout` 제보(결정 1 - 3 - 4) | developer | P513-2 | 발행 `78713d28` |
 | P513-4 | 매뉴얼 `analytics.md` ko - en + `privacy.md`(결정 6) | writer | - | 발행 `b06d561f` |
 | P513-5 | QA - 실제 앱에서 오류를 일으켜 제보가 닿는지, 끄면 안 닿는지 | qa | P513-1, P513-2, P513-3 | 발행 `a5009c9b` |
+| P513-6 | 서버 - `app/api/error-report/purge/route.ts` + `vercel.json` 크론 + `proxy.ts` 통과 + `scripts/error-report-delete.mjs`(결정 7 - 8) | developer | P513-1 | 발행 `3e400794` |
 
-**다섯 장이다.** P513-3은 P513-2의 조립 함수(`~` 치환 - 지문 묶기)를 그대로 쓰므로 그것 없이 시작하면 같은 코드를 두 번
+**여섯 장이다.** P513-6은 P513-1이 넣는 `@vercel/blob`과 `proxy.ts` 통과 목록을 그대로 쓴다. P513-3은 P513-2의 조립 함수(`~` 치환 - 지문 묶기)를 그대로 쓰므로 그것 없이 시작하면 같은 코드를 두 번
 쓴다. designer 0장 - 화면이 바뀌지 않는다.
 
 #### 수용조건
@@ -9083,6 +9097,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] `BLOB_READ_WRITE_TOKEN`이 있으면 `error-reports/<날짜>/` 아래에 받은 본문과 같은 JSON 파일이 생기고, 없으면 런타임 로그에 그 본문이 찍힌다(`route.test.ts`가 둘 다 잰다).
 - [ ] `lib/error-report.test.ts`: 홈 경로가 들어간 `stack` - `raw`가 `~`로 바뀌어 나간다. 같은 지문 3회는 1건만 나가고, 서로 다른 지문 25건은 20건만 나간다. `raw`가 64 KB를 넘으면 앞이 잘린다.
 - [ ] 자격값이 없거나 `enabled: false`이면 `fetch`가 한 번도 불리지 않는다(테스트).
+- [ ] `purge/route.test.ts`: `CRON_SECRET`이 틀리면 `401`이고, 91일 전 날짜 폴더의 파일은 지워지고 89일 전 폴더의 파일은 남는다. `error-report-delete.mjs --dry-run <id>`는 그 `install_id` 파일만 나열하고 아무것도 지우지 않는다.
 - [ ] 서버 라우트에서 던진 예외, 렌더러의 `throw`, error boundary에 걸린 오류가 각각 `source` - `kind`가 맞는 본문 하나로 나간다(테스트).
 - [ ] 데스크톱에서 자식 서버를 `kill -9`하면 `source: main`, `kind: child_exit`, `raw`에 자식 `stderr`가 든 본문이 나간다(테스트 또는 QA 실측).
 - [ ] 매뉴얼 `analytics.md` ko - en에 "에러와 크래시도 보내지 않습니다"가 없고, 오류 제보 표와 끄는 법이 있다. `privacy.md`에 오류 제보 항목 - Vercel - 90일이 있다.
