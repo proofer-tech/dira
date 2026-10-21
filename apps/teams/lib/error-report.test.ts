@@ -45,7 +45,7 @@ test("같은 지문 3회는 1건, 다른 지문 25건은 20건", () => {
 
 // ── 전송: fetch 모킹 ────────────────────────────────────────────────────────
 const realFetch = globalThis.fetch;
-let calls: { url: string; body: any }[] = [];
+let calls: { url: string; body: Record<string, unknown> }[] = [];
 let dir = "";
 const env = ["TICKET_LOCAL", "GA_MEASUREMENT_ID", "GA_API_SECRET", "DIRA_ERROR_REPORT_URL"] as const;
 const saved: Record<string, string | undefined> = {};
@@ -74,7 +74,10 @@ beforeEach(() => {
 });
 const teardown = () => {
   globalThis.fetch = realFetch;
-  for (const k of env) saved[k] === undefined ? delete process.env[k] : (process.env[k] = saved[k]);
+  for (const k of env) {
+    if (saved[k] === undefined) delete process.env[k];
+    else process.env[k] = saved[k];
+  }
   if (dir) rmSync(dir, { recursive: true, force: true });
 };
 
