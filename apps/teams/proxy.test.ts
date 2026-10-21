@@ -74,7 +74,8 @@ test("랜딩-only - /api/error-report 하나만 통과하고 나머지 /api/**�
   process.env.DIRA_LANDING_ONLY = "1";
   try {
     assert.ok(isPassthrough(proxy(req("/api/error-report", { method: "POST" }))));
-    assert.strictEqual(proxy(req("/api/error-report/purge")).status, 404);
+    assert.ok(isPassthrough(proxy(req("/api/error-report/purge"))));
+    assert.strictEqual(proxy(req("/api/error-report/purge/x")).status, 404);
     assert.strictEqual(proxy(req("/api/error-reports")).status, 404);
     assert.strictEqual(proxy(req("/api/awaiting")).status, 404);
   } finally {

@@ -83,3 +83,13 @@ export function resetReportForTest(): void {
 export function pushTailForTest(line: string): void {
   tail.push(line);
 }
+
+function errParts(e: unknown): { message: string; stack: string } {
+  return e instanceof Error ? { message: e.message, stack: e.stack ?? "" } : { message: String(e), stack: "" };
+}
+
+export function installProcessHandlers(): void {
+  process.on("uncaughtException", (e) => void reportError({ source: "server", kind: "uncaught", ...errParts(e) }));
+  process.on("unhandledRejection", (e) =>
+    void reportError({ source: "server", kind: "unhandled_rejection", ...errParts(e) }));
+}

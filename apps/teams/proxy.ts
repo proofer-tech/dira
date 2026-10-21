@@ -22,7 +22,8 @@ export function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   // 오류 제보 수신(§P513 결정 2)은 랜딩-only에서도 열린 유일한 `/api/**`다. fs를 읽지 않는 라우트다.
-  if (pathname === "/api/error-report") return NextResponse.next();
+  // 90일 파기 크론(§P513 결정 7)의 purge도 열린다 - 라우트가 CRON_SECRET으로 스스로 막는다.
+  if (pathname === "/api/error-report" || pathname === "/api/error-report/purge") return NextResponse.next();
   if (
     pathname === "/p" ||
     pathname.startsWith("/p/") ||
