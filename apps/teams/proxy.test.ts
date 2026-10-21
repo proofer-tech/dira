@@ -69,3 +69,15 @@ test("랜딩-only — 홈 GET(액션 아님)은 그대로 통과", () => {
     delete process.env.DIRA_LANDING_ONLY;
   }
 });
+
+test("랜딩-only - /api/error-report 하나만 통과하고 나머지 /api/**는 404다", () => {
+  process.env.DIRA_LANDING_ONLY = "1";
+  try {
+    assert.ok(isPassthrough(proxy(req("/api/error-report", { method: "POST" }))));
+    assert.strictEqual(proxy(req("/api/error-report/purge")).status, 404);
+    assert.strictEqual(proxy(req("/api/error-reports")).status, 404);
+    assert.strictEqual(proxy(req("/api/awaiting")).status, 404);
+  } finally {
+    delete process.env.DIRA_LANDING_ONLY;
+  }
+});
