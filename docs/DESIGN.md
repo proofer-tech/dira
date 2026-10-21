@@ -9067,11 +9067,11 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P513-1 | 서버 - `app/api/error-report/route.ts` + `proxy.ts` 통과 + Blob 쓰기 + 런타임 로그 폴백(결정 2 - 3 - 5) | developer | - | 발행 |
-| P513-2 | 앱 - `lib/error-report.ts`(본문 조립 - `~` 치환 - 지문 묶기 - 상한) + 서버 - 렌더러 수집(결정 1 - 3 - 4) | developer | - | 발행 |
-| P513-3 | 데스크톱 - `apps/desktop/main.ts`의 `child_exit` - `renderer_gone` - `ready_timeout` 제보(결정 1 - 3 - 4) | developer | P513-2 | 발행 |
-| P513-4 | 매뉴얼 `analytics.md` ko - en + `privacy.md`(결정 6) | writer | - | 발행 |
-| P513-5 | QA - 실제 앱에서 오류를 일으켜 제보가 닿는지, 끄면 안 닿는지 | qa | P513-1, P513-2, P513-3 | 발행 |
+| P513-1 | 서버 - `app/api/error-report/route.ts` + `proxy.ts` 통과 + Blob 쓰기 + 런타임 로그 폴백(결정 2 - 3 - 5) | developer | - | 발행 `8d5def3c` |
+| P513-2 | 앱 - `lib/error-report.ts`(본문 조립 - `~` 치환 - 지문 묶기 - 상한) + 서버 - 렌더러 수집(결정 1 - 3 - 4) | developer | - | 발행 `144db6e2` |
+| P513-3 | 데스크톱 - `apps/desktop/main.ts`의 `child_exit` - `renderer_gone` - `ready_timeout` 제보(결정 1 - 3 - 4) | developer | P513-2 | 발행 `78713d28` |
+| P513-4 | 매뉴얼 `analytics.md` ko - en + `privacy.md`(결정 6) | writer | - | 발행 `b06d561f` |
+| P513-5 | QA - 실제 앱에서 오류를 일으켜 제보가 닿는지, 끄면 안 닿는지 | qa | P513-1, P513-2, P513-3 | 발행 `a5009c9b` |
 
 **다섯 장이다.** P513-3은 P513-2의 조립 함수(`~` 치환 - 지문 묶기)를 그대로 쓰므로 그것 없이 시작하면 같은 코드를 두 번
 쓴다. designer 0장 - 화면이 바뀌지 않는다.
