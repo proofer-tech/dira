@@ -8938,6 +8938,56 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P515. 오류 제보를 보낸 설치와 GA4에 찍힌 설치를 같은 `install_id`로 맞춰 본다 (요구 `2ec9044a`, 왕복 0회)
+
+사람 요구(2026-10-21): *"error report 보낸사람이랑 analytics 찍힌 사람을 매칭해볼 수 있으면 좋겠어요. 리포트 보낼때도
+식별키를 함께 보내야겠죠?"*
+
+#### 실측 (2026-10-21)
+
+- 식별키는 이미 함께 나간다. P513 결정 3대로 오류 제보 본문에 `install_id` - `session_id`가 들어가고, 앱 서버
+  (`lib/error-report-send.ts`)는 GA4와 같은 `sessionIdentity()` 값을, 데스크톱 메인(`apps/desktop/error-report.ts`)은
+  같은 `analytics.json`의 `install_id`를 읽는다. 제보 파일 이름도 `<install_id>-`로 시작한다.
+- 막힌 곳은 GA4 쪽이다. `lib/analytics.ts`는 `install_id`를 Measurement Protocol의 `client_id`로만 보낸다. GA4 보고서와
+  탐색 화면에는 `client_id`를 고르는 측정기준이 없어서, 제보 파일의 `install_id`를 들고 가도 GA4에서 그 설치를 찾을 수
+  없다. `session_id`도 세션을 묶는 데만 쓰이고 측정기준으로 보이지 않는다.
+- `install_id`는 `randomUUID()`라 36자다. GA4 사용자 속성 값의 길이 상한(36자)에 딱 맞는다.
+
+#### 결정
+
+1. **GA4로 나가는 모든 이벤트에 사용자 속성 `install_id`를 싣는다.** `lib/analytics.ts`의 `post()`가 본문에
+   `user_properties: { install_id: { value: <client_id와 같은 값> } }`을 더한다. 새 값이 아니라 이미 `client_id`로 나가는
+   값을 한 칸 더 싣는 것이고, 전송 조건(`configured && enabled`)과 이벤트 목록은 그대로다.
+2. **GA4 관리 화면에 사용자 범위 맞춤 측정기준 `install_id`를 사람이 한 번 등록한다.** 이름 `install_id`, 범위 사용자,
+   사용자 속성 `install_id`. 등록하기 전에 쌓인 값은 보고서에 소급되지 않으므로 결정 1의 릴리스와 같은 날 등록한다.
+3. **맞춰 보는 절차는 두 방향이다.** 제보 -> GA4: 제보 JSON의 `install_id`를 GA4 탐색(자유 형식)의 측정기준
+   `install_id` 필터에 넣고 `at` 근처의 이벤트를 본다. GA4 -> 제보: 탐색에서 고른 설치의 `install_id`로
+   `node apps/teams/scripts/error-report-delete.mjs --dry-run <install_id>`를 돌리면 그 설치의 제보 파일 경로가 나온다
+   (P513 결정 8의 스크립트, 지우지 않는다).
+4. **매뉴얼과 방침에는 같은 값이 사용자 속성으로도 간다는 것만 더한다.** 새 수집 항목이 아니므로 표의 행은 늘리지 않고,
+   `install_id` 설명에 "GA4 사용자 속성 `install_id`로도 보냅니다"를 붙인다(ko - en).
+
+주도성 5 판단: GA4 `user_id` 대신 사용자 속성으로 정했다. `user_id`는 로그인 계정용 필드라 보고 ID 체계를 바꾸지만,
+사용자 속성은 기존 집계를 건드리지 않고 측정기준 하나만 늘린다.
+주도성 5 판단: 오류를 GA4 이벤트로도 보내는 방법은 택하지 않았다. 매칭에는 식별자 하나면 충분하고, 오류 내용을 GA4에
+보내지 않는다는 방침 약속을 지킨다.
+주도성 5 판단: 맞춰 보는 전용 스크립트를 따로 만들지 않고 P513-6의 `--dry-run`을 그대로 쓴다. 출력이 같다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P515-1 | 앱 - `lib/analytics.ts` `post()`에 `user_properties.install_id`(결정 1) + 테스트 | developer | - | 발행 `cb2b4966` |
+| P515-2 | 매뉴얼 `analytics.md` ko - en + `privacy.md` ko - en의 `install_id` 설명(결정 4) | writer | - | 발행 `fb834e77` |
+
+**두 장이다.** 결정 2(GA4 관리 화면 등록)는 사람이 한다. QA 티켓은 내지 않는다 - 결정 1은 테스트가 본문을 재고,
+GA4 화면 확인은 결정 2를 마친 사람이 결정 3의 절차로 한 번 해 본다. designer 0장.
+
+#### 수용조건
+
+- [ ] `lib/analytics.test.ts`: 통계가 켜져 있을 때 GA4로 나가는 본문의 `user_properties.install_id.value`가 `client_id`와 같고, 꺼져 있으면 `fetch`가 불리지 않는다.
+- [ ] `grep -n 'user_properties' apps/teams/lib/analytics.ts`가 한 줄 이상 나온다.
+- [ ] `apps/teams/docs/analytics.md` - `apps/teams/en/docs/analytics.md` - `apps/teams/privacy.md` - `apps/teams/en/privacy.md` 각각에서 `install_id` 설명에 GA4 사용자 속성이 언급된다(`grep -n '사용자 속성\|user property'`).
+- [ ] 사람: GA4 맞춤 측정기준 `install_id` 등록 뒤 탐색에서 자기 `analytics.json`의 `install_id`로 필터하면 자기 이벤트가 보이고, 같은 값으로 `--dry-run`을 돌리면 자기 제보 파일이 나온다.
+
 ### P514. 부하가 높아도 tick이 겹쳐 쌓이지 않고, reap이 `ps` 시간 초과로 멈추지 않는다 - 엔진 수정 (요구 `2d764d4a`, 왕복 0회)
 
 사람 요구(2026-10-21, tinyus 홈 대화에서 옮김): *"tick 겹쳐쌓이지 않게 엔진수정"*. 수정 방식은 정하지 않았다.
