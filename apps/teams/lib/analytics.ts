@@ -160,6 +160,8 @@ async function post(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       client_id: clientId,
+      // §P515 결정 1: GA4 탐색에서 오류 제보의 install_id로 이 설치를 찾는 측정기준이 된다.
+      user_properties: { install_id: { value: clientId } },
       events: [{ name, params: { ...params, session_id: sessionId, engagement_time_msec: ENGAGEMENT_MS } }],
     }),
     signal: AbortSignal.timeout(5_000),

@@ -16,7 +16,7 @@ const FILE = path.join(LOCAL, "analytics.json");
 
 // ── fetch 스텁 — 실제로 GA에 보내지 않는다 ──────────────────────────────────
 
-type Call = { url: string; body: { client_id: string; events: { name: string; params: Record<string, unknown> }[] } };
+type Call = { url: string; body: { client_id: string; user_properties: { install_id: { value: string } }; events: { name: string; params: Record<string, unknown> }[] } };
 let calls: Call[] = [];
 const realFetch = globalThis.fetch;
 globalThis.fetch = (async (url: string, init: { body: string }) => {
@@ -133,6 +133,16 @@ test("client_id는 파일의 install_id고 session_id는 파일에 안 쓴다", 
   resetSessionForTest();
   await track("feedback_submit", {});
   assert.strictEqual(calls[0].body.client_id, saved.install_id);
+});
+
+test("user_properties.install_id.value가 client_id와 같고, 꺼져 있으면 fetch가 0회다", async () => {
+  reset();
+  await track("feedback_submit", {});
+  assert.ok(calls.length > 0);
+  for (const c of calls) assert.strictEqual(c.body.user_properties.install_id.value, c.body.client_id);
+  reset({ enabled: false });
+  await track("feedback_submit", {});
+  assert.strictEqual(calls.length, 0);
 });
 
 // ── ③ 익명 규칙 — 이 기능의 유일한 유출 표면 ────────────────────────────────
