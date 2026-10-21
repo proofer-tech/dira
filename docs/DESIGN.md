@@ -8938,6 +8938,75 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P514. 부하가 높아도 tick이 겹쳐 쌓이지 않고, reap이 `ps` 시간 초과로 멈추지 않는다 - 엔진 수정 (요구 `2d764d4a`, 왕복 0회)
+
+사람 요구(2026-10-21, tinyus 홈 대화에서 옮김): *"tick 겹쳐쌓이지 않게 엔진수정"*. 수정 방식은 정하지 않았다.
+
+#### 실측 (2026-10-21)
+
+- tinyus 진행중 6건 가운데 5건은 pid가 죽었는데 `.wip`로 남았다. `reap()`이 부르는 `live_session_ids()`가 `ps -eo
+  command`를 `timeout=10`으로 돌리는데, 실측 15.9초가 걸려 `None`이 나왔고 `SKIP ps 조회 실패 - 회수 판단 보류`만
+  남았다. 이 줄은 tinyus에 1,554번, proofer에 29,496번, dira에 20,057번 쌓였다.
+- 같은 시각 load average는 79 ~ 96(17:37에 재부팅 7분 뒤 236)이었고, `/usr/sbin/cron` 64개, dira `watchdog.sh
+  tick` 52개, dira `reaper.sh` 28개, gallae `w1.sh` 22개, tinyus `w3.sh` 19개가 떠 있었다.
+- **겹치는 자리는 `tick.sh`의 워커 락 앞이다.** 워커 락(`$LOCAL/run/<워커>-<h>.lock`)은 `reap` - 로그 보존 - agy 수거
+  - `poll_step` 다음에 잡힌다. reap을 워커 락 앞에 둔 것은 의도다(바쁜 워커의 tick도 큐 전체를 수거해야 한다). 그래서
+  워커가 세션을 물고 있어도 30초마다 새 tick이 `ps`를 부르고, `ps`가 느려지면 앞 tick이 끝나기 전에 다음 tick이 뜬다.
+  tick이 쌓일수록 `ps`가 더 느려져 스스로 악화된다.
+- 큐 훅 `tick-lock.sh`(P442-1)가 같은 겹침을 막지만 엔진이 아니다. dira - pofol - proofer - stocky - stream 다섯
+  큐에만 있고 tinyus - gallae - with-cto에는 없다. 워커 `.sh` 안에서 `watchdog.sh tick` 다음에 놓여 감시자 셸은
+  막지 못한다. `reaper.sh`가 부르는 `w1.sh reap`은 인자가 있어 막는 대상이 아니다.
+- cron의 진입점은 `dispatch.py run --reason cron`이다. 이 손은 워커 락이 있으면 띄우지 않지만, 락이 잡히기 전 단계에
+  있는 tick은 못 본다.
+
+#### 결정
+
+1. **tick 진입 잠금을 엔진에 둔다.** 인자 없는 `tick`은 `tick.sh`의 첫 단계(reap보다 앞)에서 워커별 진입 잠금
+   `$LOCAL/run/<워커>-<h>.entry`를 `mkdir`로 잡는다. 산 pid가 쥐고 있으면 로그 없이 `exit 0`이다. 잠금은 워커 락을
+   잡는 순간이나 tick이 끝나는 순간에 풀린다 - 세션 동안 쥐지 않으므로 바쁜 워커의 다음 tick도 reap까지는 돈다.
+   pid가 죽었으면 걷고 한 번 다시 잡는다. `tick <해시>` - `reap` - `list` - `unassign` - `poll` - `preempt` -
+   `dryrun`은 막지 않는다(`tick-lock.sh`와 같은 판정).
+2. **`dispatch.py run --reason cron`도 진입 잠금을 본다.** 산 pid가 쥔 진입 잠금이 있는 워커는 idle이 아니다.
+   그래서 워커 `.sh`의 큐 훅(`watchdog.sh tick` - `shell-cap.sh` 등)까지 새로 뜨지 않는다.
+3. **reap은 큐 루트마다 한 벌만 돈다.** `tickets.py reap`이 `$LOCAL/run/reap-<루트 해시>.lock`을 `mkdir`로 잡고,
+   산 pid가 쥐고 있으면 `SKIP 다른 reap이 도는 중` 한 줄로 끝난다. 워커 여럿과 `reaper.sh`가 같은 루트를 동시에
+   훑지 않는다.
+4. **`ps`가 시간을 넘기면 pid로 판정한다.** `live_session_ids()`가 `None`이면 지금처럼 전부 보류하지 않고, 각
+   `.wip`의 fm `pid:`를 `os.kill(pid, 0)`으로 본다. pid가 죽었으면 회수하고, 살았거나 `pid:`가 없으면 보류한다.
+   pid 재사용은 "살았다"로만 틀리므로 잘못 회수하는 쪽으로는 틀리지 않는다. `ps` 시간 제한 10초는 그대로 둔다.
+5. **큐 훅 `tick-lock.sh`는 이번에 걷지 않는다.** 엔진 잠금과 겹쳐도 해가 없고, 설치본 엔진이 새 릴리스로 바뀌기
+   전까지 다섯 큐를 지킨다.
+6. **새 의존성 0.** `flock`(macOS 기본 없음)을 쓰지 않고 `mkdir` 원자성과 `kill -0`만 쓴다.
+
+주도성 5 판단: 엔진 수정은 사람 승인이 원칙이지만, 사람이 이 요구로 엔진 수정을 직접 지시했으므로 그것을 승인으로
+보고 티켓을 발행한다. 방식은 PM이 정했다 - 진입 잠금(겹침 차단)과 pid 판정(회수 재개)을 함께 고른다. 둘 중 하나만
+고치면 다른 쪽이 남아 같은 증상이 되풀이된다.
+
+설치본 엔진(`~/Library/Application Support/dira/engine/`)에는 다음 앱 릴리스부터 들어간다. 릴리스는 이 에픽 밖이다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P514-1 | 엔진 `tickets.py` - reap 루트 잠금(결정 3)과 `ps` 시간 초과 때 pid 판정(결정 4), 테스트 | developer | - | 발행 |
+| P514-2 | 엔진 `tick.sh` - `dispatch.py` - tick 진입 잠금(결정 1 - 2), 테스트 | developer | - | 발행 |
+| P514-3 | QA - 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P514-1, P514-2 | 발행 |
+
+**세 장이다.** designer 0장, writer 0장 - 화면과 매뉴얼이 바뀌지 않는다. 에픽을 안 연다(후속 묶음은 `req:`로 충분하다).
+
+#### 수용조건
+
+- [ ] `PATH` 앞에 15초 자는 가짜 `ps`를 두고 `tickets.py reap`을 돌리면, fm `pid:`가 죽은 `.wip`은 백로그로 돌아가고
+      (`attempts` 1 증가) 자기 pid를 적은 `.wip`은 그대로 남는다. 출력에 `SKIP ps 조회 실패 - 회수 판단 보류`가 없다.
+- [ ] 같은 루트에 `tickets.py reap` 둘을 동시에 띄우면 하나는 `SKIP 다른 reap이 도는 중`을 내고 1초 안에 끝난다.
+      죽은 pid가 남긴 reap 잠금은 다음 reap이 걷고 잡는다.
+- [ ] 워커 진입 잠금을 산 pid로 쥐어 두고 그 워커 `.sh`를 인자 없이 실행하면 1초 안에 `exit 0`으로 끝나고,
+      `runner.log`에 새 줄이 생기지 않는다. 같은 상태에서 `<워커>.sh reap`과 `<워커>.sh list`는 그대로 돈다.
+- [ ] 인자 없는 tick이 끝나거나 워커 락을 잡은 뒤에는 진입 잠금 디렉터리가 없다. 죽은 pid가 남긴 진입 잠금은 다음
+      tick이 걷고 잡는다.
+- [ ] 진입 잠금을 산 pid로 쥐어 두고 `dispatch.py run <루트> --reason cron --worker <워커>.sh --dryrun`을 돌리면 그
+      워커를 띄우지 않는다고 판정한다.
+- [ ] reap 단계를 10초 걸리게 만든 상태에서 같은 워커의 인자 없는 tick을 1초 안에 10개 띄우면, reap 단계에 들어간
+      tick은 하나다(`runner.log`의 reap 결과 줄이 한 벌).
+- [ ] 엔진 테스트 전량(`python3 -m pytest test_*.py`)이 통과하고, `git diff --stat`에 `apps/teams/`가 없다.
 ### P513. 사용 통계가 켜져 있으면 앱 오류를 스택 트레이스와 원본 로그째 dira 서버(Vercel)로 자동 제보한다 (요구 `c82e5159`, 왕복 0회)
 
 사람 요구(2026-10-21): *"사용통계 켜놓으면 dira 에 오류났을때 자동으로 우리 서버로 제보되도록(vercel 띄워놓은 곳)해주세요.
