@@ -10,6 +10,7 @@ import { UpdateToast } from "@/components/update-toast";
 import { MigrationOverlay } from "@/components/migration-overlay";
 import { RoutePending } from "@/components/route-pending";
 import { ScreenView } from "@/components/project-switcher";
+import { ErrorReporter } from "@/components/error-reporter";
 import { readKeymap, readLanguage } from "@/lib/projects";
 import { t } from "@/lib/i18n";
 import "../globals.css";
@@ -61,6 +62,7 @@ export default async function RootLayout({
         {/* 툴팁은 잘린 경로 전문·배지 설명에 쓴다. shadcn tooltip이 Provider를 요구한다 */}
         {/* `screen_view`를 보내는 유일한 자리(§0-11). 화면 8종이 전부 이 아래고 그리는 것이 없다 */}
         <ScreenView />
+        <ErrorReporter />
         <TooltipProvider>
           <LanguageProvider locale={locale}>
             {/* §0-12 의견 폼. 여는 신호(`dira:feedback`)는 데스크톱 셸의 `Help` 메뉴에서 오고

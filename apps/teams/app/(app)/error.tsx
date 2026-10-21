@@ -10,6 +10,7 @@ import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useT } from "@/components/language-provider";
+import { reportRenderer } from "@/components/error-reporter";
 
 export default function Error({
   error,
@@ -21,6 +22,7 @@ export default function Error({
   const t = useT();
   useEffect(() => {
     console.error(error);
+    reportRenderer("boundary", error);
   }, [error]);
 
   return (

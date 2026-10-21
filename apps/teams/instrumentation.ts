@@ -10,6 +10,11 @@ import { isLandingOnly } from "./lib/flags.ts";
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return; // fs 없음 — node 런타임에서만 돈다
   const { registerShutdownHandlers } = await import("./lib/pty.ts");
+  const { tapProcessOutput, reportError } = await import("./lib/error-report-send.ts");
+  tapProcessOutput();
+  process.on("uncaughtException", (e) => void reportError({ source: "server", kind: "uncaught", ...errParts(e) }));
+  process.on("unhandledRejection", (e) =>
+    void reportError({ source: "server", kind: "unhandled_rejection", ...errParts(e) }));
   registerShutdownHandlers(); // §11-1 §개정 — SIGTERM·SIGINT·정상 exit에서 열린 pty를 전부 죽인다
   if (isLandingOnly()) return; // 공개 배포는 등록된 프로젝트가 없다 — 레지스트리 읽기 0회
   // P505: 미적용 마이그레이션이 있으면 러너를 분리 프로세스로 띄운다(기다리지 않는다 - 차단은 게이트, 화면은 오버레이).
@@ -26,4 +31,19 @@ export async function register() {
   // P489-2: 옛 crontab 워커 줄을 dispatch.py 형식으로 한 번 바꾼다. 실패하면 옛 줄이 그대로 돈다.
   const { migrateCron } = await import("./lib/workers.ts");
   await migrateCron(projects.map((p) => p.root)).catch(() => {});
+}
+
+function errParts(e: unknown): { message: string; stack: string } {
+  return e instanceof Error ? { message: e.message, stack: e.stack ?? "" } : { message: String(e), stack: "" };
+}
+
+/** 라우트 - 서버 액션 - 렌더 중 난 요청 오류(Next 훅). `route`는 패턴만 보낸다(실제 URL 아님). */
+export async function onRequestError(
+  err: unknown,
+  _request: unknown,
+  context: { routePath?: string },
+) {
+  if (process.env.NEXT_RUNTIME === "edge") return;
+  const { reportError } = await import("./lib/error-report-send.ts");
+  await reportError({ source: "server", kind: "request_error", route: context.routePath, ...errParts(err) });
 }

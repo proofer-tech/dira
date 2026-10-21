@@ -6,6 +6,7 @@
  *  §비주얼 §6 에러 3요소를 지킨다. */
 import { useEffect } from "react";
 import { useT } from "@/components/language-provider";
+import { reportRenderer } from "@/components/error-reporter";
 
 export default function GlobalError({
   error,
@@ -19,6 +20,7 @@ export default function GlobalError({
   const t = useT();
   useEffect(() => {
     console.error(error);
+    reportRenderer("boundary", error);
   }, [error]);
 
   return (

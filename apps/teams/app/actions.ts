@@ -135,6 +135,7 @@ import {
   type SelfishSettingsInput,
 } from "@/lib/selfish-server";
 import { liveSessionCount, readSessionLimit, writeSessionLimit } from "@/lib/session-cap";
+import { reportRendererError } from "@/lib/error-report-send";
 import {
   buildWorkersPanel,
   type SessionCapProjectRow,
@@ -1143,4 +1144,9 @@ export async function previewSelfishAction() {
 }
 export async function saveSelfishSettingsAction(input: SelfishSettingsInput) {
   return saveSelfishSettings(input);
+}
+
+/** 렌더러 오류를 서버가 대신 보낸다(DESIGN.md §P513 결정 1 - 3). 모양 검사는 `reportRendererError`가 한다. */
+export async function reportRendererErrorAction(input: Parameters<typeof reportRendererError>[0]): Promise<void> {
+  await reportRendererError(input);
 }
