@@ -53,7 +53,10 @@ def entry_busy(workers_dir, name):
     h = hashlib.sha1(os.path.join(workers_dir, name).encode()).hexdigest()[:8]
     try:
         with open(os.path.join(local_dir(), "run", "%s-%s.entry" % (name, h), "pid")) as f:
-            os.kill(int(f.read().strip()), 0)
+            pid = int(f.read().strip())
+        if pid <= 0:  # kill(0)/kill(-1)은 항상 성공한다
+            return False
+        os.kill(pid, 0)
         return True
     except PermissionError:
         return True

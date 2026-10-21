@@ -74,6 +74,28 @@ def main():
         f.write("999999")
     rc, j = dispatch(d, root, local)
     assert rc == 0 and j["go"], (rc, j, os.listdir(os.path.join(local, "run")))
+    # 4b. 깨진 pid 값(-1 0 abc 빈 문자열)은 죽은 것이다: dispatch는 idle로 보고 tick은 잠금을 걷고 reap에 든다
+    for bad in ("-1", "0", "abc", ""):
+        with open(os.path.join(entry, "pid"), "w") as f:
+            f.write(bad)
+        rc, j = dispatch(d, root, local)
+        assert rc == 0 and j["go"], (bad, rc, j)
+        p = subprocess.Popen(["bash", w], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(80):
+            if os.path.exists(os.path.join(d, "reap-count")):
+                break
+            time.sleep(0.1)
+        assert os.path.exists(os.path.join(d, "reap-count")), bad
+        os.remove(os.path.join(d, "reap-count"))
+        p.kill()
+        p.wait()
+        shutil.rmtree(entry, ignore_errors=True)
+        os.makedirs(entry)
+    time.sleep(0.5)  # 죽인 tick의 스텁이 남기는 기록까지 기다린 뒤 비운다
+    if os.path.exists(os.path.join(d, "reap-count")):
+        os.remove(os.path.join(d, "reap-count"))
+    with open(os.path.join(entry, "pid"), "w") as f:
+        f.write("999999")
     ps = [subprocess.Popen(["bash", w], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) for _ in range(10)]
     rc_file = os.path.join(d, "reap-count")
     for _ in range(80):  # 부하가 큰 머신에서는 reap에 닿기까지 오래 걸린다

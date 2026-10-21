@@ -54,7 +54,9 @@ if [ "$#" -eq 0 ]; then
     'import hashlib,sys;print(hashlib.sha1(sys.argv[1].encode()).hexdigest()[:8])' "$WORKERS/$TICKET_NAME").entry"
   if ! mkdir "$ENTRYLOCK" 2>/dev/null; then
     _EP=""; read -r _EP < "$ENTRYLOCK/pid" 2>/dev/null
-    if [ -n "$_EP" ] && kill -0 "$_EP" 2>/dev/null; then
+    # 양의 정수만 pid다: kill -0 -1 / kill -0 0은 항상 성공해서 깨진 파일이 잠금을 영원히 쥔다
+    case "$_EP" in ''|*[!0-9]*) _EP="" ;; esac
+    if [ -n "$_EP" ] && [ "$_EP" -gt 0 ] && kill -0 "$_EP" 2>/dev/null; then
       ENTRYLOCK=""; exit 0
     fi
     rm -rf "$ENTRYLOCK"

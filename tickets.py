@@ -1474,7 +1474,7 @@ def reap(troot, local=None):
                 holder = open(os.path.join(lock, "pid")).read().strip()
             except OSError:
                 holder = ""
-            if holder.isdigit() and _kill0(holder):
+            if holder.isdigit() and int(holder) > 0 and _kill0(holder):
                 return ["SKIP 다른 reap이 도는 중"]
             # ponytail: 죽은 잠금 걷기는 rename 경합 없이 rmtree. 두 벌이 동시에 걷으면 둘 다 도는 드문 틈
             shutil.rmtree(lock, ignore_errors=True)
