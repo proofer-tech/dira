@@ -25,7 +25,7 @@ anonymously.
 
 | Item | What it is | Where it lives |
 |---|---|---|
-| Install identifier (`install_id`) | A random UUID naming this one install on this Mac. Sent as the GA4 `client_id` | `~/.config/dira/analytics.json` |
+| Install identifier (`install_id`) | A random UUID naming this one install on this Mac. Sent as the GA4 `client_id`, and the same value also goes as the GA4 user property `install_id` | `~/.config/dira/analytics.json` |
 | Session identifier (`session_id`) | One stretch of using the app after you open it. Sent as the GA4 `session_id` | The server process's memory (nothing is written to a file) |
 
 Neither value is tied to a name, an email address, or an account. The events that ride on
@@ -169,6 +169,6 @@ Beyond these three, the Company gives personal information to no third party.
 ## 10. Effective date
 
 This policy takes effect on 2026-10-21. This revision adds error reports from the app
-(`dira teams`). Changed are the error report items in section 2, the scope note in section 3,
+(`dira teams`). Changed are the install identifier entry and the error report items in section 2, the scope note in section 3,
 the 90-day retention in section 5, Vercel's processing work in section 6, and turning off and
 deleting in section 7. The version before it took effect on 2026-08-04.

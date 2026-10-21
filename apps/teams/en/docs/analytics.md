@@ -53,7 +53,7 @@ One report is a single JSON object of at most 256 KB. These keys are all it hold
 | Key | Value |
 |---|---|
 | `v` | Format version. `1` for now |
-| `install_id`, `session_id` | The same install and session identifiers sent to GA |
+| `install_id`, `session_id` | The same install and session identifiers sent to GA, so a report and that install's usage analytics share the same value |
 | `app_version`, `shell` | The same values `app_open` carries |
 | `source` | Where the error happened. `server`\|`renderer`\|`main` |
 | `kind` | What kind of error. `uncaught`\|`unhandled_rejection`\|`request_error`\|`boundary`\|`child_exit`\|`renderer_gone`\|`ready_timeout` |
@@ -98,10 +98,10 @@ same moment. There is no separate switch for error reports alone.
 ## Deleting it
 
 There is one analytics file, `~/.config/dira/analytics.json`. It holds two values and no more:
-`install_id` (the anonymous install identifier sent to GA4) and `enabled` (written as `false`
-only when you have turned it off). Delete the file and the next run issues a new `install_id`,
-counted as a new install with no line back to the earlier analytics. One line in a terminal does
-it.
+`install_id` (the anonymous install identifier, sent to GA4 as the `client_id` and as the
+user property `install_id`) and `enabled` (written as `false` only when you have turned it
+off). Delete the file and the next run issues a new `install_id`, counted as a new install with
+no line back to the earlier analytics. One line in a terminal does it.
 
 ```bash
 rm ~/.config/dira/analytics.json

@@ -51,7 +51,7 @@ IP를 유추할 값.
 | 키 | 값 |
 |---|---|
 | `v` | 형식 버전. 지금은 `1` |
-| `install_id`, `session_id` | GA로 보내는 것과 같은 설치 식별자와 세션 식별자 |
+| `install_id`, `session_id` | GA로 보내는 것과 같은 설치 식별자와 세션 식별자. 그래서 제보 한 건과 그 설치의 사용 통계가 같은 값으로 이어집니다 |
 | `app_version`, `shell` | `app_open`에 실리는 것과 같은 값 |
 | `source` | 오류가 난 곳. `server`\|`renderer`\|`main` |
 | `kind` | 오류 종류. `uncaught`\|`unhandled_rejection`\|`request_error`\|`boundary`\|`child_exit`\|`renderer_gone`\|`ready_timeout` |
@@ -93,10 +93,11 @@ CI가 넣고, 레포에는 커밋되지 않습니다. **값이 없으면 코드�
 
 ## 지우는 법
 
-통계 파일은 `~/.config/dira/analytics.json` 하나입니다. 여기 든 값은 `install_id`(GA4에 보내는
-익명 설치 식별자)와 `enabled`(껐을 때만 `false`로 적힙니다) 둘뿐입니다. 파일을 지우면 다음
-실행에서 새 `install_id`가 발급되고, 이전 통계와 이어지지 않는 새 설치로 집계됩니다. 아래 한
-줄을 터미널에 입력하시면 됩니다.
+통계 파일은 `~/.config/dira/analytics.json` 하나입니다. 여기 든 값은 둘뿐입니다. 하나는
+`install_id`(GA4에 `client_id`와 사용자 속성 `install_id`로 보내는 익명 설치 식별자)이고,
+다른 하나는 `enabled`(껐을 때만 `false`로 적힙니다)입니다. 파일을 지우면 다음 실행에서 새
+`install_id`가 발급되고, 이전 통계와 이어지지 않는 새 설치로 집계됩니다. 아래 한 줄을 터미널에
+입력하시면 됩니다.
 
 ```bash
 rm ~/.config/dira/analytics.json
