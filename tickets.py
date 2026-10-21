@@ -37,6 +37,7 @@ import json
 import uuid
 import errno
 import hashlib
+import shutil
 import subprocess
 import unicodedata
 from datetime import datetime, timezone, timedelta
@@ -1445,7 +1446,64 @@ def _worker_lock_live(troot, local, owner):
     return pid.isdigit() and bool(pid_alive(pid))
 
 
+def _kill0(pid):
+    """os.kill(pid, 0)으로 본 생존. 권한 없음은 산 것이다(재사용은 살았다 쪽으로만 틀린다)."""
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except (PermissionError, OverflowError, ValueError):
+        return True
+    return True
+
+
 def reap(troot, local=None):
+    """루트마다 한 벌만 돈다(P514 결정 3): `$LOCAL/run/reap-<루트 해시>.lock`을 mkdir로 잡는다."""
+    if local is None:
+        local = os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
+    run = os.path.join(local, "run")
+    os.makedirs(run, exist_ok=True)
+    lock = os.path.join(run, "reap-{}.lock".format(
+        hashlib.sha1(os.path.realpath(troot).encode()).hexdigest()[:8]))
+    for _ in range(2):
+        try:
+            os.mkdir(lock)
+            break
+        except FileExistsError:
+            try:
+                holder = open(os.path.join(lock, "pid")).read().strip()
+            except OSError:
+                holder = ""
+            if holder.isdigit() and _kill0(holder):
+                return ["SKIP 다른 reap이 도는 중"]
+            # ponytail: 죽은 잠금 걷기는 rename 경합 없이 rmtree. 두 벌이 동시에 걷으면 둘 다 도는 드문 틈
+            shutil.rmtree(lock, ignore_errors=True)
+    else:
+        return ["SKIP 다른 reap이 도는 중"]
+    try:
+        with open(os.path.join(lock, "pid"), "w") as f:
+            f.write(str(os.getpid()))
+        return _reap(troot, local)
+    finally:
+        shutil.rmtree(lock, ignore_errors=True)
+
+
+def _reap_grace_over(troot, local, fm, now):
+    """회수 유예(REAP_GRACE_SEC, 사후처리 창)가 끝났으면 True."""
+    at = (fm.get("assigned_at") or "").strip()
+    try:
+        elapsed = (now - datetime.fromisoformat(at)).total_seconds()
+        if elapsed < REAP_GRACE_SEC:
+            return False
+        if elapsed < REAP_GRACE_SEC + REAP_POST_GRACE_SEC and \
+                _worker_lock_live(troot, local, fm.get("owner")):
+            return False                 # 부모가 사후처리 중 - 상한 안에서 양보(P360-2)
+    except ValueError:
+        pass                             # assigned_at이 깨졌으면 유예 없이 회수 대상
+    return True
+
+
+def _reap(troot, local):
     """세션이 죽었는데 진행중으로 남은 티켓을 백로그로 되돌린다.
 
     죽는 방식 두 가지를 다 덮는다: (a) 프로세스가 0으로 끝났지만 세션이 사람에게 질문만 하고
@@ -1456,10 +1514,6 @@ def reap(troot, local=None):
     사후처리 창을 잴 때만 쓴다. 생략하면 `tick.sh`와 같은 기본값으로 떨어진다.
     """
     live = live_session_ids()
-    if live is None:
-        return ["SKIP ps 조회 실패 - 회수 판단 보류"]
-    if local is None:
-        local = os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
     now = datetime.now(timezone.utc)
     msgs = []
     for p in in_progress(troot):
@@ -1470,6 +1524,15 @@ def reap(troot, local=None):
         if end < 0:
             continue
         sid = (fm.get("session_id") or "").strip().strip("\"'")
+        if live is None:
+            # ps 시간 초과(P514 결정 4): fm pid를 kill -0으로 본다. 죽었으면 회수, 살았거나 pid 없으면 보류
+            pid = (fm.get("pid") or "").strip().strip("\"'")
+            if not pid.isdigit() or _kill0(pid):
+                continue
+            if not _reap_grace_over(troot, local, fm, now):
+                continue
+            msgs.append(reclaim(p, fm, "pid {} 사망(ps 조회 실패)".format(pid)))
+            continue
         if not sid:
             msgs.extend(reap_manual(p, fm, now))   # 손 클레임 -> pid + 트랜스크립트로 판정
             continue
@@ -1480,18 +1543,7 @@ def reap(troot, local=None):
             continue
         if sid in live:
             continue                     # 살아있는 디스패처 세션
-        at = (fm.get("assigned_at") or "").strip()
-        skip = False
-        try:
-            elapsed = (now - datetime.fromisoformat(at)).total_seconds()
-            if elapsed < REAP_GRACE_SEC:
-                skip = True
-            elif elapsed < REAP_GRACE_SEC + REAP_POST_GRACE_SEC and \
-                    _worker_lock_live(troot, local, fm.get("owner")):
-                skip = True             # 부모가 사후처리 중 - 상한 안에서 양보(P360-2)
-        except ValueError:
-            pass                         # assigned_at이 깨졌으면 유예 없이 회수 대상
-        if skip:
+        if not _reap_grace_over(troot, local, fm, now):
             continue
         msgs.append(reclaim(p, fm, "세션 {} 사망".format(sid[:8])))
     return msgs
