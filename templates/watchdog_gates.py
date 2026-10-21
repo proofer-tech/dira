@@ -304,8 +304,23 @@ def _real_restore(recv, paths):
     subprocess.run(["git", "-C", recv, "restore", "--staged", "--worktree", "--", *paths])
 
 
+def _parse_etime(raw):
+    # ps -o etime= 형식 "[[dd-]hh:]mm:ss"를 초로 바꾼다. macOS BSD ps는 etimes(GNU procps
+    # 전용)를 모르고 etime만 안다 - 이 파서가 그 차이를 메운다.
+    s = raw.strip()
+    days = 0
+    if "-" in s:
+        d, s = s.split("-", 1)
+        days = int(d)
+    parts = [int(p) for p in s.split(":")]
+    while len(parts) < 3:
+        parts.insert(0, 0)
+    hh, mm, ss = parts[-3], parts[-2], parts[-1]
+    return days * 86400 + hh * 3600 + mm * 60 + ss
+
+
 def _real_pids_by_age(path):
-    # (pid, etimes초) 목록, 오래된 것(etimes 큰 것)부터. pgrep 패턴은 shell-cap.sh와 같은
+    # (pid, 경과초) 목록, 오래된 것(경과초 큰 것)부터. pgrep 패턴은 shell-cap.sh와 같은
     # 수법(첫 글자 대괄호) - 동시에 도는 다른 pgrep의 인자열을 자기 자신으로 무는 사고를 막는다.
     pattern = f"[{path[0]}]{path[1:]}" if path else path
     try:
@@ -316,7 +331,7 @@ def _real_pids_by_age(path):
     if not pids:
         return []
     try:
-        ps_out = subprocess.run(["ps", "-o", "pid=,etimes=", "-p", ",".join(pids)],
+        ps_out = subprocess.run(["ps", "-o", "pid=,etime=", "-p", ",".join(pids)],
                                  capture_output=True, text=True)
     except OSError:
         return []
@@ -325,12 +340,78 @@ def _real_pids_by_age(path):
         parts = l.split()
         if len(parts) != 2:
             continue
+        pid_s, etime_s = parts
         try:
-            result.append((int(parts[0]), int(parts[1])))
+            result.append((int(pid_s), _parse_etime(etime_s)))
         except ValueError:
             continue
     result.sort(key=lambda kv: -kv[1])
     return result
+
+
+def _real_ps_tree():
+    # pid -> ppid 전체 표. G5가 세션을 쥔 셸(열린 .wip fm pid:의 조상)을 kill 대상에서
+    # 빼는 데 한 번만 부른다 - 워커마다 다시 부르지 않는다.
+    try:
+        out = subprocess.run(["ps", "-Ao", "pid=,ppid="], capture_output=True, text=True)
+    except OSError:
+        return None
+    if out.returncode != 0:
+        return None
+    tree = {}
+    for l in out.stdout.splitlines():
+        parts = l.split()
+        if len(parts) != 2:
+            continue
+        try:
+            tree[int(parts[0])] = int(parts[1])
+        except ValueError:
+            continue
+    return tree
+
+
+def _wip_session_pids(tickets_dir):
+    # 열린 .wip 티켓 fm의 pid: 값들. 세션을 쥔 셸을 찾는 시작점이다.
+    pids = []
+    if not os.path.isdir(tickets_dir):
+        return pids
+    wip_suffix = os.environ.get("TICKET_INPROGRESS") or ".wip"
+    for name in sorted(os.listdir(tickets_dir)):
+        if not name.endswith(wip_suffix + ".md"):
+            continue
+        try:
+            with open(os.path.join(tickets_dir, name), encoding="utf-8", errors="replace") as f:
+                in_fm = False
+                for i, line in enumerate(f):
+                    line = line.rstrip("\n")
+                    if i == 0:
+                        if line.strip() != "---":
+                            break
+                        in_fm = True
+                        continue
+                    if in_fm and line.strip() == "---":
+                        break
+                    if in_fm and line.startswith("pid:"):
+                        try:
+                            pids.append(int(line.split(":", 1)[1].strip()))
+                        except ValueError:
+                            pass
+        except OSError:
+            continue
+    return pids
+
+
+def _ancestor_pids(tree, start_pids):
+    # start_pids 각각의 ppid 체인을 루트까지 걷는다 - 순환이 생겨도 seen으로 끊는다.
+    ancestors = set()
+    for pid in start_pids:
+        seen = set()
+        cur = tree.get(pid)
+        while cur is not None and cur not in seen and cur != 0:
+            ancestors.add(cur)
+            seen.add(cur)
+            cur = tree.get(cur)
+    return ancestors
 
 
 def _real_kill(pid):
@@ -347,7 +428,7 @@ def _real_token_rotate(root):
 def recover(root, local=None, now=None, lines=None,
             classify=_real_classify, restore=_real_restore,
             pids_by_age=_real_pids_by_age, kill=_real_kill,
-            token_rotate=_real_token_rotate):
+            token_rotate=_real_token_rotate, ps_tree=_real_ps_tree):
     """G1-G3-G5만 고치고 결과를 `<코드> <조치|건너뜀> <한 줄>`로 낸다. G6은 안 읽는다
     (개정 `3ed7b692`) - crontab을 읽지도 쓰지도 않는다."""
     now = now if now is not None else time.time()
@@ -399,31 +480,40 @@ def recover(root, local=None, now=None, lines=None,
             out.append("G3 처방 token-rotate.sh exhausted")
             _write_marker(root, "G3", now, signature)
 
-    # --- G5: 워커별로 임계를 넘는 만큼만 오래된 것부터 kill ---
+    # --- G5: 워커별로 임계를 넘는 만큼만, 세션을 쥔 조상 셸은 빼고 오래된 것부터 kill ---
     if "G5" in codes and os.path.isdir(workers_dir):
-        threshold = 25
-        try:
-            with open(os.path.join(local, "shell-limit"), encoding="utf-8") as f:
-                threshold = int(f.readline().strip())
-        except (OSError, ValueError):
+        tree = ps_tree()
+        if tree is None:
+            out.append("G5 건너뜀 ps 조회 실패")
+        else:
+            tickets_dir = os.path.join(root, "tickets")
+            protected = _ancestor_pids(tree, _wip_session_pids(tickets_dir))
             threshold = 25
-        for name in sorted(os.listdir(workers_dir)):
-            if not name.endswith(".sh"):
-                continue
-            wp = os.path.join(workers_dir, name)
-            pids = pids_by_age(wp)
-            excess = len(pids) - threshold
-            if excess <= 0:
-                continue
-            targets = pids[:excess]
-            signature = f"G5:{name}:" + ",".join(str(p) for p, _ in targets)
-            if _already_treated(root, "G5", signature):
-                out.append(f"G5 건너뜀 {name} 이미 처방했다")
-                continue
-            for pid, _ in targets:
-                kill(pid)
-            out.append(f"G5 처방 {name} {len(targets)}벌 kill(상한 {threshold})")
-            _write_marker(root, "G5", now, signature)
+            try:
+                with open(os.path.join(local, "shell-limit"), encoding="utf-8") as f:
+                    threshold = int(f.readline().strip())
+            except (OSError, ValueError):
+                threshold = 25
+            for name in sorted(os.listdir(workers_dir)):
+                if not name.endswith(".sh"):
+                    continue
+                wp = os.path.join(workers_dir, name)
+                pids = pids_by_age(wp)
+                excess = len(pids) - threshold
+                if excess <= 0:
+                    continue
+                candidates = [(p, a) for p, a in pids if p not in protected]
+                targets = candidates[:excess]
+                if not targets:
+                    continue
+                signature = f"G5:{name}:" + ",".join(str(p) for p, _ in targets)
+                if _already_treated(root, "G5", signature):
+                    out.append(f"G5 건너뜀 {name} 이미 처방했다")
+                    continue
+                for pid, _ in targets:
+                    kill(pid)
+                out.append(f"G5 처방 {name} {len(targets)}벌 kill(상한 {threshold})")
+                _write_marker(root, "G5", now, signature)
 
     return out
 
@@ -431,7 +521,8 @@ def recover(root, local=None, now=None, lines=None,
 def tick(root, local=None, now=None, pgrep_count=_real_pgrep_count,
          crontab_lines=_real_crontab_lines, git_version=_real_git_version,
          classify=_real_classify, restore=_real_restore, pids_by_age=_real_pids_by_age,
-         kill=_real_kill, token_rotate=_real_token_rotate, notify_fn=None):
+         kill=_real_kill, token_rotate=_real_token_rotate, ps_tree=_real_ps_tree,
+         notify_fn=None):
     """diagnose -> recover -> alert를 이 프로세스 안에서 순서대로 돈다(§디스패치 감시자
     §개정, P429-1). diagnose가 낸 lines를 파일이나 파이프로 다시 안 읽고 그대로 recover와
     alert에 넘긴다. 락은 이 함수가 안 쥔다 - 루트당 한 번만 부르는 것은 watchdog.sh tick의
@@ -446,7 +537,7 @@ def tick(root, local=None, now=None, pgrep_count=_real_pgrep_count,
                       crontab_lines=crontab_lines, git_version=git_version)
     recover_out = recover(root, local=local, now=now, lines=lines, classify=classify,
                           restore=restore, pids_by_age=pids_by_age, kill=kill,
-                          token_rotate=token_rotate)
+                          token_rotate=token_rotate, ps_tree=ps_tree)
     just_treated = {l.split(" ", 2)[0] for l in recover_out
                     if l.split(" ", 2)[1:2] == ["처방"]}
     alert_kwargs = {} if notify_fn is None else {"notify_fn": notify_fn}
