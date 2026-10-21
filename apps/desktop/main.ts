@@ -23,10 +23,11 @@ import { createEnvStore } from "./env-store.ts";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { badgeText, nextCount, type DockCounts } from "./dock-badge.ts";
 import { classifyLink } from "./link.ts";
 import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
+import { createMainReporter } from "./error-report.ts";
 import { describeReadyTimeout, readyTimeoutHint, type ReadyTimeoutState } from "./ready-timeout.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
 import { mcpCronEdit } from "./mcp-install.ts";
@@ -207,17 +208,44 @@ function extractEngine(): string | null {
  *  로그로도 안 남긴다: 없는 것이 정상인 값에 매번 에러 줄이 뜨면 진짜 에러가 묻힌다.
  *  **짝일 때만 넘긴다** — 한쪽만 있으면 서버는 어차피 안 보낸다(둘 다 있어야가 그쪽 계약이다).
  *  ponytail: 키 둘짜리 JSON 하나. `.env` 파서도 번들 치환 스텝도 들이지 않는다. */
-function gaCredentials(): Record<string, string> {
+function gaCredentials(log = true): Record<string, string> {
   try {
     const o: unknown = JSON.parse(readFileSync(fileURLToPath(new URL("ga.json", import.meta.url)), "utf8"));
     const { GA_MEASUREMENT_ID: id, GA_API_SECRET: secret } = (o ?? {}) as Record<string, unknown>;
     if (typeof id !== "string" || typeof secret !== "string" || !id || !secret) return {};
-    console.log(`[dira] GA 자격값을 실었습니다 — ${id}`); // 시크릿은 안 찍는다
+    if (log) console.log(`[dira] GA 자격값을 실었습니다 — ${id}`); // 시크릿은 안 찍는다
     return { GA_MEASUREMENT_ID: id, GA_API_SECRET: secret };
   } catch {
     return {};
   }
 }
+
+/** P513-3 — 오류 제보. 본문 조립은 `apps/teams/lib/error-report.ts`를 쓴다. 패키징된 `.app`에서는
+ *  `build.extraResources`가 `Resources/lib/error-report.ts`로 옮긴다. 켜는 조건은 통계와 같다(자격값 짝 +
+ *  `analytics.json`의 `enabled`가 `false`가 아님). 사건 자리에서 await하지 않는다(`void`). */
+const reportMain = (() => {
+  let reporter: ReturnType<typeof createMainReporter> | null = null;
+  const sessionId = String(Date.now());
+  return async (i: Parameters<ReturnType<typeof createMainReporter>>[0]) => {
+    try {
+      reporter ??= createMainReporter({
+        lib: await import(
+          app.isPackaged
+            ? pathToFileURL(join(process.resourcesPath, "lib", "error-report.ts")).href
+            : new URL("../teams/lib/error-report.ts", import.meta.url).href
+        ),
+        home: homedir(),
+        analyticsFile: join(homedir(), ".config", "dira", "analytics.json"),
+        configured: () => Object.keys(gaCredentials(false)).length > 0,
+        appVersion: app.getVersion(),
+        sessionId,
+        url: process.env.DIRA_ERROR_REPORT_URL || "https://dira.vercel.app/api/error-report", // ponytail: lib/error-report-send.ts의 DEFAULT_URL과 같은 값
+      });
+      await reporter(i);
+    } catch {}
+  };
+})();
+const childRaw = () => `${stderr}\n${stdoutTail}`;
 
 function startServer(port: number): ChildProcess {
   stdoutTail = ""; // 새 자식이다 — 지난 자식의 꼬리를 물려주지 않는다
@@ -253,6 +281,7 @@ function startServer(port: number): ChildProcess {
     killedIntentionally = null;
     if (external) {
       console.log(`[dira] 자식 서버가 밖에서 죽었습니다 (code ${code ?? signal ?? "?"}) — 되살리기 대상입니다`);
+      void reportMain({ kind: "child_exit", message: `자식 서버가 밖에서 죽었습니다 (code ${code ?? signal ?? "?"})`, raw: childRaw() });
       killServer();
       reviveIfVisible("자식 서버가 밖에서 죽었습니다");
     }
@@ -272,7 +301,9 @@ async function waitForReady(origin: string, proc: ChildProcess): Promise<ReadyTi
   while (Date.now() < deadline) {
     if (proc.exitCode !== null || proc.signalCode !== null) {
       const state: ReadyTimeoutState = { kind: "exited", code: proc.exitCode, signal: proc.signalCode };
-      return { reason: describeReadyTimeout(READY_TIMEOUT_MS / 1000, origin, state), hint: readyTimeoutHint(state) };
+      const r = { reason: describeReadyTimeout(READY_TIMEOUT_MS / 1000, origin, state), hint: readyTimeoutHint(state) };
+      void reportMain({ kind: "ready_timeout", message: r.reason, raw: childRaw() });
+      return r;
     }
     try {
       await fetch(`${origin}/`, { signal: AbortSignal.timeout(2_000) });
@@ -282,7 +313,9 @@ async function waitForReady(origin: string, proc: ChildProcess): Promise<ReadyTi
     }
   }
   const state: ReadyTimeoutState = { kind: "hung", pid: proc.pid, stdoutTail };
-  return { reason: describeReadyTimeout(READY_TIMEOUT_MS / 1000, origin, state), hint: readyTimeoutHint(state) };
+  const r = { reason: describeReadyTimeout(READY_TIMEOUT_MS / 1000, origin, state), hint: readyTimeoutHint(state) };
+  void reportMain({ kind: "ready_timeout", message: r.reason, raw: childRaw() });
+  return r;
 }
 
 function killServer() {
@@ -335,6 +368,7 @@ function openWindow(origin: string): BrowserWindow {
   // 이 플래그로 든다 — 다음 `showWindow()`가 되살리기로 갈지 이것으로 가른다.
   win.webContents.on("render-process-gone", (_e, details) => {
     contentDead = true;
+    void reportMain({ kind: "renderer_gone", message: `렌더러가 죽었습니다 (${details.reason}, exitCode ${details.exitCode})`, raw: childRaw() });
     console.log(`[dira] 렌더러가 죽었습니다 (${details.reason}) — 되살리기 대상입니다`);
     reviveIfVisible("렌더러가 죽었습니다");
   });

@@ -49,6 +49,10 @@
         "to": "server/node_modules"
       },
       {
+        "from": "../teams/lib/error-report.ts",
+        "to": "lib/error-report.ts"
+      },
+      {
         "from": "mcp-keepalive.sh",
         "to": "mcp-keepalive.sh"
       },
