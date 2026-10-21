@@ -43,6 +43,27 @@ mkdir -p "$LOGDIR" "$LOCAL/run" "$TICKET_ROOT/tickets" "$TICKET_ROOT/polls"
 log() { printf '%s [%s] %s\n' "$(date '+%F %T')" "${TICKET_NAME:-?}" "$*" >> "$RUNLOG"; }
 
 TICKET_NAME="${TICKET_NAME:-$(basename "$0" .sh)}"
+# --- P514 tick 진입 잠금: 인자 없는 tick은 워커당 reap 앞에 한 벌만 든다 ---
+# 워커 락은 reap - poll 다음에 잡혀서, 워커가 세션을 물고 있어도 30초마다 새 tick이 그 단계를 돈다.
+# 부하가 높으면 앞 tick이 끝나기 전에 다음 tick이 떠서 쌓인다. 산 pid가 쥐고 있으면 로그 없이 나간다.
+# 서두의 느린 초기화보다 앞에 둔다(1초 안에 끝나야 한다). 워커 락을 잡는 순간 풀고(세션 동안 안 쥔다), 그 전에 어떻게 끝나든 EXIT trap이 푼다.
+# `tick <해시>` - reap - list - unassign - poll - preempt - dryrun은 막지 않는다(tick-lock.sh와 같은 판정).
+ENTRYLOCK=""
+if [ "$#" -eq 0 ]; then
+  ENTRYLOCK="$LOCAL/run/$TICKET_NAME-$(python3 -c \
+    'import hashlib,sys;print(hashlib.sha1(sys.argv[1].encode()).hexdigest()[:8])' "$WORKERS/$TICKET_NAME").entry"
+  if ! mkdir "$ENTRYLOCK" 2>/dev/null; then
+    _EP=""; read -r _EP < "$ENTRYLOCK/pid" 2>/dev/null
+    if [ -n "$_EP" ] && kill -0 "$_EP" 2>/dev/null; then
+      ENTRYLOCK=""; exit 0
+    fi
+    rm -rf "$ENTRYLOCK"
+    mkdir "$ENTRYLOCK" 2>/dev/null || { ENTRYLOCK=""; exit 0; }
+  fi
+  printf %s "$$" > "$ENTRYLOCK/pid"
+  trap '[ -n "$ENTRYLOCK" ] && rm -rf "$ENTRYLOCK"' EXIT
+fi
+
 # 기본 작업 디렉터리 = 루트의 부모(<프로젝트>/.dira/workers/w1.sh -> <프로젝트>)
 TICKET_CWD="${TICKET_CWD:-$(dirname "$TICKET_ROOT")}"
 # P499-1: `remote H`는 `tick H`와 같은 길이다. 원격 슬롯(TICKET_NAME=remote<n>)은 기준 워커의 워크트리를
@@ -934,6 +955,7 @@ if [ "$CMD" = "tick" ]; then
     mkdir "$LOCK" 2>/dev/null || exit 0
   fi
   printf %s "$$" > "$LOCK/pid"
+  [ -n "$ENTRYLOCK" ] && { rm -rf "$ENTRYLOCK"; ENTRYLOCK=""; }
   # 빈 값이면 rm -f ""가 되고 아무 일도 안 한다 -- 어떻게 죽든 FIFO가 남지 않게 여기 한 번만 건다.
   trap 'rm -rf "$LOCK" "$SLOCK" "$PLUGDIR"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}" "${INBOX:+$INBOX.human}"' EXIT
 fi

@@ -48,6 +48,19 @@ def lock_path(workers_dir, name):
     return os.path.join(local_dir(), "run", "%s-%s.lock" % (name, h))
 
 
+def entry_busy(workers_dir, name):
+    """P514: 산 pid가 쥔 tick 진입 잠금이 있으면 True."""
+    h = hashlib.sha1(os.path.join(workers_dir, name).encode()).hexdigest()[:8]
+    try:
+        with open(os.path.join(local_dir(), "run", "%s-%s.entry" % (name, h), "pid")) as f:
+            os.kill(int(f.read().strip()), 0)
+        return True
+    except PermissionError:
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def idle_workers(root, only):
     wdir = os.path.join(os.path.abspath(root), "workers")
     cron = crontab_text()
@@ -63,6 +76,8 @@ def idle_workers(root, only):
         if full not in cron:
             continue
         if os.path.exists(lock_path(wdir, name)):
+            continue
+        if entry_busy(wdir, name):
             continue
         out.append(name)
     return out
