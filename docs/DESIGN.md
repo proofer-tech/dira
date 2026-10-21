@@ -8938,6 +8938,86 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P513. 사용 통계가 켜져 있으면 앱 오류를 스택 트레이스와 원본 로그째 dira 서버(Vercel)로 자동 제보한다 (요구 `c82e5159`, 왕복 0회)
+
+사람 요구(2026-10-21): *"사용통계 켜놓으면 dira 에 오류났을때 자동으로 우리 서버로 제보되도록(vercel 띄워놓은 곳)해주세요.
+오류로그 스택트레이스 포함해서 raw 로그까지."*
+
+#### 실측 (2026-10-21)
+
+- 사용 통계는 GA4 Measurement Protocol 하나다(`apps/teams/lib/analytics.ts`). 전송 조건은 `GA_MEASUREMENT_ID` -
+  `GA_API_SECRET` 두 자격값이 있고(릴리스 빌드만) `~/.config/dira/analytics.json`의 `enabled`가 `false`가 아닌 것이다.
+- 매뉴얼 `analytics.md`는 지금 "에러와 크래시도 보내지 않습니다", "파일 경로 ... 보내지 않습니다"라고 약속한다. 이 요구는
+  그 약속을 바꾼다.
+- Vercel 배포(프로젝트 `dira`, `DIRA_LANDING_ONLY=1`)에는 받는 자리가 없다. `proxy.ts`가 랜딩-only에서 `/api/**`를 전부
+  404로 끊는다. 저장소(Blob - KV - DB)도 연결돼 있지 않다.
+- 앱의 오류가 생기는 자리는 셋이다. (1) 로컬 Next 서버(라우트 - 서버 액션 - `instrumentation.ts`), (2) 렌더러(브라우저
+  쪽 예외 - `app/global-error.tsx` - `(app)/error.tsx` 같은 error boundary), (3) Electron 메인(`apps/desktop/main.ts` -
+  자식 서버가 밖에서 죽음 - 렌더러 죽음 - 준비 타임아웃). (3)은 이미 `stderr` 전체와 `stdoutTail`을 들고 있다.
+
+#### 결정
+
+1. **켜는 조건은 사용 통계와 같다.** `readAnalytics()`가 `configured && enabled`일 때만 보낸다. 별도 토글은 두지 않는다.
+   통계를 끄면 오류 제보도 같이 꺼지고, 자격값이 없는 개발 빌드는 아무것도 안 보낸다.
+2. **받는 자리는 `POST https://<Vercel 프로덕션 도메인>/api/error-report` 하나다.** `proxy.ts`는 랜딩-only에서도 이 경로
+   하나만 통과시킨다(나머지 `/api/**`는 그대로 404). 엔드포인트 URL은 앱 코드 상수 하나이고, 환경변수
+   `DIRA_ERROR_REPORT_URL`이 있으면 그 값으로 바꾼다(테스트 - 스테이징용).
+3. **본문은 JSON 한 벌, 256 KB 상한이다.**
+
+   | 키 | 값 |
+   |---|---|
+   | `v` | `1` |
+   | `install_id` - `session_id` | GA와 같은 값(`sessionIdentity()`) |
+   | `app_version` - `shell` | GA `app_open`과 같은 값 |
+   | `source` | `server` \| `renderer` \| `main` |
+   | `kind` | `uncaught` \| `unhandled_rejection` \| `request_error` \| `boundary` \| `child_exit` \| `renderer_gone` \| `ready_timeout` |
+   | `message` | 오류 메시지 원문 |
+   | `stack` | 스택 트레이스 원문 |
+   | `raw` | 원본 로그 꼬리 - 서버는 같은 프로세스 stderr - stdout 최근 200줄, 메인은 자식 서버 `stderr` 전체와 `stdoutTail`, 렌더러는 콘솔 오류 최근 50건. 64 KB를 넘으면 앞을 자른다 |
+   | `route` | 있으면 라우트 패턴(`/p/[project]/tickets/[hash]`)만. 실제 URL은 안 보낸다 |
+   | `at` | ISO 8601 시각 |
+
+   가공은 하나만 한다 - 모든 문자열에서 홈 디렉터리 절대 경로를 `~`로 바꾼다. 그 밖에는 원문 그대로다.
+4. **쏟아지지 않게 앱 쪽에서 묶는다.** 같은 지문(`source` + `kind` + `message` + `stack` 첫 프레임)은 10분에 한 번만
+   보내고, 설치 하나가 한 시간에 보내는 건수는 20건이 상한이다. 전송 실패는 조용히 버리고 재시도하지 않는다. 제보
+   코드 안에서 난 예외는 다시 제보하지 않는다(재귀 금지).
+5. **서버는 받아서 Vercel Blob에 한 건 한 파일로 쓴다.** 경로는 `error-reports/<YYYY-MM-DD>/<install_id>-<at>-<난수>.json`,
+   접근은 private다. `BLOB_READ_WRITE_TOKEN`이 없으면 본문을 `console.error`로 찍어 Vercel 런타임 로그에 남기고
+   `202`를 돌려준다. 검증은 모양만 본다 - JSON 아님 - 256 KB 초과 - 필수 키(`v` `install_id` `source` `kind` `message`)
+   누락은 `400`, 그 외 `202`다. 인증은 두지 않는다(공개 엔드포인트, 상한과 모양 검사로만 막는다).
+6. **매뉴얼과 개인정보처리방침을 같이 고친다.** `analytics.md`(ko - en)의 "에러와 크래시도 보내지 않습니다" 문장과
+   §보내지 않는 것을 고쳐 오류 제보가 무엇을 보내는지(위 표), 경로가 `~`로 바뀐 채 들어간다는 것, 끄는 법이 통계와
+   같다는 것을 적는다. `privacy.md`에는 수집 항목 - 위탁처(Vercel) - 보존 기간(90일)을 더한다.
+
+주도성 5 판단: 사람이 "raw 로그까지"라고 해서 스택과 로그 원문을 보내되, 홈 경로만 `~`로 바꾼다. 사용자 이름이 경로마다
+박히는 것을 막는 최소한의 가공이고 디버깅 정보는 줄지 않는다.
+주도성 5 판단: 저장소는 Vercel Blob(`@vercel/blob`, `apps/teams` 의존성 1개 추가)로 정한다. 이미 `@vercel/analytics`를
+쓰는 Vercel 프로젝트라 계정이 따로 필요 없다. Blob 스토어를 프로젝트에 연결하는 일(대시보드에서 한 번)은 사람이 하고,
+그 전까지는 결정 5의 런타임 로그로 떨어진다.
+주도성 5 판단: 보존 기간 90일은 요구에 없어 정했다. 오래된 파일 정리는 이번 범위가 아니다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P513-1 | 서버 - `app/api/error-report/route.ts` + `proxy.ts` 통과 + Blob 쓰기 + 런타임 로그 폴백(결정 2 - 3 - 5) | developer | - | 발행 |
+| P513-2 | 앱 - `lib/error-report.ts`(본문 조립 - `~` 치환 - 지문 묶기 - 상한) + 서버 - 렌더러 수집(결정 1 - 3 - 4) | developer | - | 발행 |
+| P513-3 | 데스크톱 - `apps/desktop/main.ts`의 `child_exit` - `renderer_gone` - `ready_timeout` 제보(결정 1 - 3 - 4) | developer | P513-2 | 발행 |
+| P513-4 | 매뉴얼 `analytics.md` ko - en + `privacy.md`(결정 6) | writer | - | 발행 |
+| P513-5 | QA - 실제 앱에서 오류를 일으켜 제보가 닿는지, 끄면 안 닿는지 | qa | P513-1, P513-2, P513-3 | 발행 |
+
+**다섯 장이다.** P513-3은 P513-2의 조립 함수(`~` 치환 - 지문 묶기)를 그대로 쓰므로 그것 없이 시작하면 같은 코드를 두 번
+쓴다. designer 0장 - 화면이 바뀌지 않는다.
+
+#### 수용조건
+
+- [ ] 랜딩-only 서버에 `curl -X POST <도메인>/api/error-report -H 'content-type: application/json' -d '<필수 키 다 있는 JSON>'`이 `202`, 필수 키 하나를 뺀 JSON이 `400`, 256 KB를 넘는 본문이 `400`이다. `/api/` 아래 다른 경로는 그대로 `404`다.
+- [ ] `BLOB_READ_WRITE_TOKEN`이 있으면 `error-reports/<날짜>/` 아래에 받은 본문과 같은 JSON 파일이 생기고, 없으면 런타임 로그에 그 본문이 찍힌다(`route.test.ts`가 둘 다 잰다).
+- [ ] `lib/error-report.test.ts`: 홈 경로가 들어간 `stack` - `raw`가 `~`로 바뀌어 나간다. 같은 지문 3회는 1건만 나가고, 서로 다른 지문 25건은 20건만 나간다. `raw`가 64 KB를 넘으면 앞이 잘린다.
+- [ ] 자격값이 없거나 `enabled: false`이면 `fetch`가 한 번도 불리지 않는다(테스트).
+- [ ] 서버 라우트에서 던진 예외, 렌더러의 `throw`, error boundary에 걸린 오류가 각각 `source` - `kind`가 맞는 본문 하나로 나간다(테스트).
+- [ ] 데스크톱에서 자식 서버를 `kill -9`하면 `source: main`, `kind: child_exit`, `raw`에 자식 `stderr`가 든 본문이 나간다(테스트 또는 QA 실측).
+- [ ] 매뉴얼 `analytics.md` ko - en에 "에러와 크래시도 보내지 않습니다"가 없고, 오류 제보 표와 끄는 법이 있다. `privacy.md`에 오류 제보 항목 - Vercel - 90일이 있다.
+- [ ] QA: 릴리스 자격값을 넣은 앱에서 오류를 일으키면 Vercel 쪽(Blob 또는 런타임 로그)에 그 건이 보이고, 설정에서 통계를 끈 뒤 같은 오류는 안 보인다.
+
 ### P512. 노드뷰에서 노드를 끌어도 지도 전체가 떨리지 않는다 - 속도와 감쇠가 있는 배치로 바꾼다 (요구 `2cd3355d`, 왕복 0회)
 
 사람 요구(2026-10-20): *"노드뷰 노드를 이동시켰을때 재정렬되면서 전체적으로 경련합니다. 옵시디언처럼 부드러운 경험을
