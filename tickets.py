@@ -39,6 +39,7 @@ import errno
 import hashlib
 import shutil
 import subprocess
+import time
 import unicodedata
 from datetime import datetime, timezone, timedelta
 
@@ -1474,6 +1475,11 @@ def reap(troot, local=None):
                 holder = open(os.path.join(lock, "pid")).read().strip()
             except OSError:
                 holder = ""
+                try:  # mkdir과 pid 쓰기 사이의 빈 잠금은 잡은 직후일 수 있다 - 5초 안이면 산 것으로 본다
+                    if time.time() - os.stat(lock).st_mtime < 5:
+                        return ["SKIP 다른 reap이 도는 중"]
+                except OSError:
+                    pass
             if holder.isdigit() and int(holder) > 0 and _kill0(holder):
                 return ["SKIP 다른 reap이 도는 중"]
             # ponytail: 죽은 잠금 걷기는 rename 경합 없이 rmtree. 두 벌이 동시에 걷으면 둘 다 도는 드문 틈

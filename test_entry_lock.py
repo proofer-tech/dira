@@ -96,6 +96,39 @@ def main():
         os.remove(os.path.join(d, "reap-count"))
     with open(os.path.join(entry, "pid"), "w") as f:
         f.write("999999")
+    # 4c. pid 없는 빈 잠금: 방금 만들었으면 산 것(조용히 exit 0, reap 없음, stderr 없음), 오래됐으면 걷는다
+    shutil.rmtree(entry, ignore_errors=True)
+    os.makedirs(entry)
+    r = subprocess.run(["bash", w], env=env, capture_output=True, text=True, timeout=20)
+    assert r.returncode == 0 and r.stderr == "" and not os.path.exists(os.path.join(d, "reap-count")), r
+    assert os.path.isdir(entry)
+    old = time.time() - 60
+    os.utime(entry, (old, old))
+    rc, j = dispatch(d, root, local)
+    p = subprocess.Popen(["bash", w], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(80):
+        if os.path.exists(os.path.join(d, "reap-count")):
+            break
+        time.sleep(0.1)
+    assert os.path.exists(os.path.join(d, "reap-count"))
+    p.kill()
+    p.wait()
+    shutil.rmtree(entry, ignore_errors=True)
+    os.makedirs(entry)
+    time.sleep(0.5)
+    if os.path.exists(os.path.join(d, "reap-count")):
+        os.remove(os.path.join(d, "reap-count"))
+    with open(os.path.join(entry, "pid"), "w") as f:
+        f.write("999999")
+    # 4d. reap 루트 잠금: 방금 만든 빈 디렉터리면 SKIP
+    sys.path.insert(0, HERE)
+    import tickets as T
+    ld = os.path.join(d, "reaplocal")
+    lock = os.path.join(ld, "run", "reap-%s.lock" % hashlib.sha1(os.path.realpath(root).encode()).hexdigest()[:8])
+    os.makedirs(lock)
+    assert T.reap(root, ld) == ["SKIP 다른 reap이 도는 중"]
+    os.utime(lock, (old, old))
+    assert T.reap(root, ld) != ["SKIP 다른 reap이 도는 중"]
     ps = [subprocess.Popen(["bash", w], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) for _ in range(10)]
     rc_file = os.path.join(d, "reap-count")
     for _ in range(80):  # 부하가 큰 머신에서는 reap에 닿기까지 오래 걸린다
