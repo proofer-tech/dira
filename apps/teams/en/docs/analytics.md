@@ -1,7 +1,8 @@
 # Usage analytics, and how to turn them off
 
-The app (`dira teams`) sends usage analytics to GA4. The engine (`tick.sh`, `tickets.py`) sends
-nothing at all. Everything in this chapter is about the app side.
+The app (`dira teams`) sends usage analytics to GA4, and when something goes wrong in the app it
+reports the error to the dira server. One switch turns both on and off together. The engine
+(`tick.sh`, `tickets.py`) sends nothing at all. Everything in this chapter is about the app side.
 
 ## What gets sent - eight events
 
@@ -20,7 +21,8 @@ Eight names, and that is all of them. An event in the code that is not in this t
 
 The values are counts, booleans and enums decided in advance, and nothing else. Facts the engine
 makes, like a `.done` transition or a dispatch, are not events. Only screen actions are counted.
-Errors and crashes are not sent either.
+Errors are not counted as events in this table. They go out as a separate request, described
+under Error reports below.
 
 ## What does not get sent
 
@@ -36,12 +38,51 @@ in advance (`ticket`, and so on). The free text you write in the feedback form d
 either. That goes to a GitHub issue and nowhere else, and what is left in GA is the fact that you
 sent it (`feedback_submit`).
 
+This list is a promise about the events that go to GA. Error reports carry the raw logs as they
+are, so the promise does not cover them. What can end up in them is set out right below.
+
+## Error reports
+
+While usage analytics is on, an error in the app is sent to the dira server (the same Vercel
+project as the website), stack trace and raw logs included. We need to see errors to fix them,
+and that is why this exists. Errors are caught in three places: the app server running on your
+Mac, the screen (the renderer), and the desktop app itself.
+
+One report is a single JSON object of at most 256 KB. These keys are all it holds.
+
+| Key | Value |
+|---|---|
+| `v` | Format version. `1` for now |
+| `install_id`, `session_id` | The same install and session identifiers sent to GA |
+| `app_version`, `shell` | The same values `app_open` carries |
+| `source` | Where the error happened. `server`\|`renderer`\|`main` |
+| `kind` | What kind of error. `uncaught`\|`unhandled_rejection`\|`request_error`\|`boundary`\|`child_exit`\|`renderer_gone`\|`ready_timeout` |
+| `message` | The error message, verbatim |
+| `stack` | The stack trace, verbatim |
+| `raw` | The raw log leading up to the error. For the app server, the last 200 lines of stderr and stdout. For the desktop app, everything the app server wrote to stderr plus the tail of its stdout. For the screen, the last 50 console errors. Past 64 KB the front is cut off |
+| `route` | The route pattern of the screen where it happened (`/p/[project]/tickets/[hash]`). The actual URL is not sent |
+| `at` | When it happened (ISO 8601) |
+
+Only one thing is changed before sending. In every string, the absolute path of your home
+directory becomes `~`, so `/Users/<your name>/Projects/app/.dira` goes out as
+`~/Projects/app/.dira`. Everything else is left as it was. That means the stack and the raw log
+can contain file paths under your home, project names, ticket hashes, and whatever lines were in
+the log when the error hit. If you would rather not send that, turn usage analytics off.
+
+The app batches reports so a repeating error does not flood the server. The same error goes out
+at most once every 10 minutes, and one install sends at most 20 reports an hour. A report that
+fails to send is dropped, not retried.
+
+The server stores each report it receives privately on Vercel, one file per report, and keeps it
+for 90 days.
+
 ## What has to be true to send - two credentials
 
 Nothing goes out without `GA_MEASUREMENT_ID` and `GA_API_SECRET`. CI puts those two into release
 builds only, and they are not committed to the repository. **With no values, the code sends
 nothing.** A development server started with `pnpm dev` and an `.app` you built by hand are both
-in that state. That is why sessions running during development do not pollute the analytics.
+in that state. That is why sessions running during development do not pollute the analytics. Error reports
+follow the same rule, so an error in a development build goes nowhere.
 
 `Usage stats` in the `Settings` dialog shows you whether those values are there, too. On a build
 without the credentials you get the one line `Not sending` and the reason, and no button to turn
@@ -51,7 +92,8 @@ anything off. There is nothing to turn off.
 
 Open `Settings` with the gear at the top right and pick `Usage stats` in the left-hand tree (see
 [The screens](/docs/screens)). It is on by default, and one button turns it off. From that
-moment no event goes out, and the line above changes to `Not sending`.
+moment no event goes out, and the line above changes to `Not sending`. Error reports stop at the
+same moment. There is no separate switch for error reports alone.
 
 ## Deleting it
 
@@ -64,6 +106,9 @@ it.
 ```bash
 rm ~/.config/dira/analytics.json
 ```
+
+Deleting the file does not delete error reports already sent. Those stay on the server until the
+90-day retention period runs out.
 
 What is sent and why, how long it is kept, and who processes it are in the [privacy
 policy](/privacy).

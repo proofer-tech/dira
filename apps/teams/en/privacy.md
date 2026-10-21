@@ -12,6 +12,9 @@ The Company looks at whether anyone actually opens the app (`dira teams`) and wh
 partway through onboarding. It counts how many installs are running and a handful of screen
 actions. Not even the Company knows who is using it.
 
+When that same app runs into an error, the Company receives the error to find the cause and fix
+it.
+
 The website carries one support chat widget. Questions that arrive through it get an answer,
 and when the same person asks again, the earlier conversation is there to read.
 
@@ -26,7 +29,7 @@ anonymously.
 | Session identifier (`session_id`) | One stretch of using the app after you open it. Sent as the GA4 `session_id` | The server process's memory (nothing is written to a file) |
 
 Neither value is tied to a name, an email address, or an account. The events that ride on
-these identifiers are the eight below and nothing else.
+these identifiers to GA4 are the eight below and nothing else.
 
 | Event | When | Parameters |
 |---|---|---|
@@ -41,6 +44,23 @@ these identifiers are the eight below and nothing else.
 
 The values are counts, booleans, and enums fixed in advance. There is no free text anywhere
 among them.
+
+While usage analytics is on, the app sends one error report to the Company's server (Vercel)
+each time an error happens. Turning analytics off stops error reports as well.
+
+| Item | What it is |
+|---|---|
+| Identifiers and app details | The install and session identifiers above, the app version (`app_version`), and how the app runs (`shell`) |
+| Error classification | Where the error happened (`source`), what kind it was (`kind`), the screen's route pattern (`route`, shaped like `/p/[project]/tickets/[hash]` rather than the actual URL), and when (`at`) |
+| Error content | The error message (`message`) and stack trace (`stack`), verbatim |
+| Raw log | The log the app left just before the error (`raw`): the last 200 lines of the app server's stderr and stdout, the app server log held by the desktop app, or the last 50 console errors on the screen, whichever matches where the error happened. Up to 64 KB |
+
+Before sending, the absolute path of the home directory is replaced with `~` in every string, so
+that the Mac user name built into those paths is left out. Everything else is sent as it was, so
+the stack and the raw log can contain file paths under the home directory, project names, ticket
+hashes, and whatever lines were in the log when the error hit. No key in a report holds an IP
+address, but the Vercel server receiving the request can see the connecting IP address, as with
+any web request.
 
 The website this page belongs to, `dira.proofer.tech`, collects visit totals through Vercel
 Analytics without cookies. Those totals are page views counted by path, and they do not
@@ -67,7 +87,8 @@ This is not a promise in prose but the means of carrying it out. The
 that defines the events and their parameters closes the table, so a name or a parameter that
 is not in the table fails to compile. The code has no way to slip a new value out.
 
-Everything up to here is about the events the app sends. The website's support widget leaves
+Everything up to here is about the events the app sends. Error reports carry raw logs as they
+are, so this list does not apply to them. What can be in them is in section 2. The website's support widget leaves
 the visitor's browser directly without passing through the app, so it stays outside this
 table. What rides on the widget is in section 2.
 
@@ -93,16 +114,20 @@ How long GA4 keeps something depends on what it is (checked in the GA4 console o
 | Event data - the eight events and their parameters | 2 months |
 | User data - data tied to the install identifier | 14 months |
 
+The Company stores error reports privately on Vercel, keeps each for 90 days from the day it
+arrives, and then destroys it.
+
 The file left behind locally, `~/.config/dira/analytics.json`, is on your own Mac and not on
 the Company's side. Delete the file and it is gone that moment; the next run issues a new
-install identifier.
+install identifier. Error reports already sent are not removed by deleting the file; they stay
+until their 90 days are up and are then destroyed.
 
 ## 6. Processors and transfers abroad
 
 | Processor | Work | Country |
 |---|---|---|
 | Google LLC | Collecting and analyzing GA4 events | United States |
-| Vercel Inc. | Website hosting and visit totals | United States |
+| Vercel Inc. | Website hosting and visit totals; receiving and storing error reports | United States |
 | Channel Corporation | Answering questions through the support widget | - |
 
 Channel Corporation is a Korean company, and the cloud Channel Talk runs on is the AWS Seoul
@@ -116,9 +141,12 @@ Beyond these three, the Company gives personal information to no third party.
 ## 7. Your rights
 
 - **Turning it off** - the gear at the top right of the app › `Settings` dialog, third
-  section. It starts on, and one button turns it off. From that moment nothing goes out.
+  section. It starts on, and one button turns it off. From that moment nothing goes out, error reports
+  included.
 - **Deleting** - delete `~/.config/dira/analytics.json` and the install identifier goes with
-  it. You are counted again as a new install, unconnected to the earlier statistics.
+  it. You are counted again as a new install, unconnected to the earlier statistics. To have
+  error reports already sent removed before their retention period ends, send the `install_id`
+  from that file to the address below before you delete it.
 - **Asking** - info@proofer.tech
 
 ## 8. Privacy officer
@@ -140,6 +168,7 @@ Beyond these three, the Company gives personal information to no third party.
 
 ## 10. Effective date
 
-This policy takes effect on 2026-08-04. This revision covers one axis, the support widget
-attached to the website. What the app (`dira teams`) sends and does not send has not changed
-by a line from the version before it, effective 2026-08-02.
+This policy takes effect on 2026-10-21. This revision adds error reports from the app
+(`dira teams`). Changed are the error report items in section 2, the scope note in section 3,
+the 90-day retention in section 5, Vercel's processing work in section 6, and turning off and
+deleting in section 7. The version before it took effect on 2026-08-04.
