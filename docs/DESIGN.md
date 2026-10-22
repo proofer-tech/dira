@@ -8938,6 +8938,74 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P516. MCP로 답변 대기 티켓을 찾고 답을 단다 - 화면의 답변 쓰기와 같은 파일을 만든다 (요구 `8d956335`, 왕복 0회)
+
+사람 요구(2026-10-22): dira MCP에는 답변 대기(`## 질문 n`) 티켓에 답을 다는 도구가 없어서, 다른 에이전트(Claude
+Cowork 등)에게 대신 답하라고 맡기면 그 에이전트가 브라우저로 화면을 열어 `답변 쓰기`를 눌러야 한다. 선택지 고르기와
+직접 쓰기를 둘 다 MCP 도구로 하고 싶다. 또 `queue_list` 결과로는 어느 티켓이 답변 대기인지 보이지 않으니, 등록된
+프로젝트 전체의 답변 대기 티켓과 그 질문을 한 번에 보는 도구가 필요하다. 계기는 타이니어스 프로젝트에 답변 대기
+5건이 쌓였을 때다.
+
+#### 실측 (2026-10-22)
+
+- 화면의 답변 쓰기는 `apps/teams/app/(app)/p/[project]/tickets/[hash]/actions.ts` `answerRequirement`다. 판정은
+  `lib/queue.ts` `isAwaiting` - 열림(접미사 없음) + fm `awaiting:`이 비어 있지 않음 + 그 stem이 미충족 dep이다.
+  만드는 파일은 `tickets/<awaiting>.done.md` 하나고 fm은 `ticket` `title`(답변 + 구분 기호 + `<R> #<n>`, 글자는 그 파일 그대로) `kind: answer`,
+  본문은 `## 답변 <n>` 다음에 답이다. `<n>`은 `deps` 중 `kind: answer`로 풀리는 수 + 1이다. 만든 뒤
+  `kickIdleWorker`(= `dispatch.py run --reason direct`)를 부른다.
+- 선택지 답의 형식은 `lib/urls.ts` `composeAnswer`다 - 문항마다 한 줄, `1.(a)(a-1)`처럼 번호 뒤에 고른 글자를
+  정렬해 붙이고 덧붙임은 한 칸 뒤에 둔다. 고른 것도 덧붙임도 없는 문항은 줄이 없다.
+- `mcp_tools.py`에는 `projects`(`gui-projects.json`의 `id` `name` `root`)와 `queue_list`(`<w>.sh list`)가 있고, 둘 다
+  `awaiting` 여부를 싣지 않는다. 엔진(`tickets.py`)에 새 서브커맨드가 생기지 않으므로 `COVERS` 표는 안 바뀐다.
+
+#### 결정
+
+1. **새 도구 `awaiting_list {root?}`.** `root`가 있으면 그 큐만, 없으면 `projects`가 읽는 `gui-projects.json`의
+   프로젝트 전부를 훑는다. 판정은 화면의 `isAwaiting`과 같다(열림 + `awaiting` + 그 stem이 미충족 dep). 항목 하나는
+   `{project, root, hash, title, persona, awaiting, round, question, items}`이고, `question`은 마지막 `## 질문 n` 절
+   전문, `round`는 그 `n`, `items`는 그 절에서 읽은 문항 목록 `[{number, title, options: [{letter, label}]}]`이다.
+   문항과 선택지는 `protocols/질문-형식.md` 형식만 읽는다(`### 1.` `### 1-1.` + 목록 마커 `(a)` `(a-1)`). 형식이
+   틀린 절은 `items`가 빈 배열이고 `question` 전문은 그대로 싣는다. 루트를 못 읽는 프로젝트는 건너뛰고
+   `skipped: [{project, why}]`에 적는다. 정렬은 프로젝트 순서 다음 티켓 파일 mtime 오래된 순이다.
+2. **새 도구 `ticket_answer {root?, hash, picks?, text?}`.** `picks`는 `[{number, letters, note?}]`이고 `text`는
+   직접 쓴 답이다. 둘 중 하나는 있어야 한다. 본문은 `composeAnswer`와 같은 규칙으로 `picks`를 조립한 줄들 다음에
+   빈 줄 하나와 `text`를 붙인다(한쪽만 있으면 그쪽만). 조립 결과가 비면 도구 오류다.
+3. **검사는 화면과 같은 순서로 하고, 하나라도 걸리면 아무 파일도 안 만든다.** (1) `hash`가 정확히 한 파일이고 결정
+   1의 판정이 참 (2) `awaiting` 값이 8자 소문자 16진 (3) 그 stem이 큐 어디에도 없음(`tickets.py` `find_any`)
+   (4) `picks`의 `number`가 마지막 질문 절의 문항이고 `letters`가 그 문항의 선택지이며, `a-1` 같은 하위 글자는
+   부모 글자도 같이 골랐을 때만 받는다. 오류 문구는 어느 검사에 걸렸는지 적는다.
+4. **만드는 파일은 화면과 한 글자도 다르지 않다.** `tickets/<awaiting>.done.md`를 `O_EXCL`로 만들고 fm과
+   `## 답변 <n>` 머리는 위 실측 그대로 한국어로 고정한다. `<R>` 파일은 건드리지 않는다(`awaiting`도 안 지운다).
+   만든 뒤 `dispatch_run(root, "direct", hash=<R>)`을 부르고 그 JSON을 응답의 `dispatch` 키로 싣는다. 디스패치가
+   실패해도 답 파일 생성은 성공이다(`ticket_create`와 같다). 응답은 `{path, round, body, dispatch}`다.
+5. **`queue_list`는 그대로 둔다.** `<w>.sh list`의 출력 형식은 엔진 계약이라 바꾸지 않고, 답변 대기 조회는
+   결정 1의 도구 하나가 맡는다.
+6. **질문 절 파서는 `mcp_tools.py` 안에 둔다.** 엔진 다른 파일은 안 고친다. `lib/queue.ts`의 `optionsOf`와 같은
+   형식을 읽는지는 테스트가 같은 질문 절 하나를 양쪽 예문으로 써서 맞춘다.
+
+주도성 5 판단: 엔진 파일(`mcp_tools.py`) 수정이지만 사람 승인을 기다리지 않는다. 새 서브커맨드도 큐 상태 규칙
+변경도 없고, 화면이 이미 하는 쓰기를 같은 형식으로 한 자리 더 여는 것이다.
+주도성 5 판단: 답변 대기 표시를 `queue_list`에 덧붙이지 않고 새 도구로 뺐다. `<w>.sh list` 출력은 셸 스크립트와
+화면이 읽는 계약이라 바꾸면 범위가 엔진 전체로 번진다.
+주도성 5 판단: 선택지를 고르는 인자를 화면 조립 문자열(`1.(a)`)이 아니라 `picks` 구조로 받는다. 호출하는 에이전트가
+형식을 틀릴 자리를 없애고, 없는 번호와 글자를 검사 (4)로 걸러 낸다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P516-1 | 엔진 - `mcp_tools.py` `awaiting_list` `ticket_answer`(결정 1-4, 6) + `test_mcp_server.py` 테스트 | developer | - | 발행 예정 |
+| P516-2 | 매뉴얼 - `apps/teams/docs/mcp.md` ko - en 도구 표에 두 도구, 다른 에이전트에게 답변을 맡기는 절차 한 절 | writer | - | 발행 예정 |
+
+**두 장이다.** 매뉴얼은 위 결정에 도구 이름과 인자가 다 있어 기다리지 않는다. QA 티켓은 내지 않는다 - 수용조건이
+전부 임시 큐 테스트와 grep으로 판정된다. designer 0장, 화면 변경 없음.
+
+#### 수용조건
+
+- [ ] `python3 test_mcp_server.py`가 통과하고, 그 안에 다음 경우가 각각 있다: 답변 대기 티켓 하나가 `awaiting_list`에 `round` - `question` - `items`(문항 번호와 선택지 글자)째 나온다, `.wip`이거나 `awaiting` stem이 이미 있는 티켓은 안 나온다, `root` 없이 부르면 `TICKET_LOCAL`의 `gui-projects.json` 두 프로젝트를 다 훑는다.
+- [ ] 같은 테스트에서 `ticket_answer`에 `picks: [{number: "1.", letters: ["a"]}]`과 `text`를 주면 `tickets/<awaiting>.done.md`가 생기고, 그 파일이 fm `kind: answer` - 화면 `answerRequirement`가 쓰는 것과 같은 글자의 `title`(`<R> #1`로 끝남), 본문 `## 답변 1` 다음 `1.(a)` 줄과 `text`를 담으며, 직후 `tickets.py list`에서 `<R>`이 미충족 dep 없이 열린 티켓으로 나온다.
+- [ ] 같은 테스트에서 없는 문항 번호, 없는 선택지 글자, 부모 없는 하위 글자, 빈 답, 이미 답이 있는 티켓 각각이 도구 오류로 끝나고 `tickets/`에 새 파일이 없다.
+- [ ] `python3 test_mcp_parity.py`가 통과한다(`COVERS` 무변경).
+- [ ] `grep -n 'awaiting_list\|ticket_answer' apps/teams/docs/mcp.md apps/teams/en/docs/mcp.md`가 두 파일 모두에서 두 이름을 찾는다.
+
 ### P515. 오류 제보를 보낸 설치와 GA4에 찍힌 설치를 같은 `install_id`로 맞춰 본다 (요구 `2ec9044a`, 왕복 0회)
 
 사람 요구(2026-10-21): *"error report 보낸사람이랑 analytics 찍힌 사람을 매칭해볼 수 있으면 좋겠어요. 리포트 보낼때도
