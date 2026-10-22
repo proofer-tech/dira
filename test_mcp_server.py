@@ -120,6 +120,67 @@ res, err = call("ticket_create", hash="f3f3f3f3", fm={**mk, "kind": "request"}, 
 assert not err and "dispatch" in res and res["dispatch"]["reason"] == "request", res
 assert call("dispatch_now", worker="../x")[1], "worker 이름 검증"
 
+# 4c. 답변 대기 (P516): 같은 질문 절 하나로 awaiting_list와 ticket_answer를 돈다
+Q = ("## 질문 1\n\n### 1. 무엇부터\n\n- (a) 엔진만\n- (a-1) 한 벌\n- (b) 화면까지\n\n"
+     "### 1-1. 고정인가\n\n- (a) 고정\n- (b) 프로젝트마다\n")
+call("ticket_create", hash="a0a0a0a0", fm={"title": "물음", "kind": "request", "persona": "pm",
+                                         "awaiting": "b1b1b1b1", "deps": "[b1b1b1b1]"}, body="## Goal\nx\n\n" + Q)
+call("ticket_create", hash="a0a0a0a1", fm={"title": "답 있음", "kind": "request", "awaiting": "abcd1234",
+                                         "deps": "[abcd1234]"}, body=Q)  # abcd1234.done이 이미 있다
+call("ticket_create", hash="a0a0a0a3", fm={"title": "이름 충돌", "kind": "request", "awaiting": "d1d1d1d1",
+                                         "deps": "[d1d1d1d1]"}, body=Q)  # d1d1d1d1이 열려 있어 stem이 이미 있다
+call("ticket_create", hash="a0a0a0a2", fm={"title": "진행", "kind": "request", "awaiting": "b2b2b2b2",
+                                         "deps": "[b2b2b2b2]"}, body=Q)
+call("engine_exec", program="tickets.py", args=["handclaim", os.path.join(root, "tickets", "a0a0a0a2.md")])
+res, err = call("awaiting_list")  # root 없이: gui-projects.json 두 프로젝트
+root2 = os.path.join(tmp, "p2", ".dira")
+os.makedirs(os.path.join(root2, "tickets"))
+json.dump({"projects": [{"id": "p1", "name": "one", "root": root}, {"id": "p2", "name": "two", "root": root2},
+                        {"id": "px", "name": "x", "root": os.path.join(tmp, "nope")}]},
+          open(os.path.join(tmp, "local", "gui-projects.json"), "w"))
+open(os.path.join(root2, "tickets", "c0c0c0c0.md"), "w").write(
+    "---\nticket: c0c0c0c0\ntitle: 둘째\nawaiting: c9c9c9c9\ndeps: [c9c9c9c9]\n---\n\n## 질문 2\n\n자유\n")
+res, err = call("awaiting_list", root=None)
+assert not err, res
+got = {r["hash"]: r for r in res["awaiting"]}
+assert set(got) == {"a0a0a0a0", "a0a0a0a3", "c0c0c0c0"}, got.keys()  # .wip와 답이 달린 티켓은 없다
+assert [s["project"] for s in res["skipped"]] == ["px"], res
+a0 = got["a0a0a0a0"]
+assert a0["round"] == 1 and a0["awaiting"] == "b1b1b1b1" and a0["question"].startswith("## 질문 1"), a0
+assert a0["items"] == [
+    {"number": "1.", "title": "무엇부터", "options": [{"letter": "a", "label": "엔진만"},
+                                                      {"letter": "a-1", "label": "한 벌"},
+                                                      {"letter": "b", "label": "화면까지"}]},
+    {"number": "1-1.", "title": "고정인가", "options": [{"letter": "a", "label": "고정"},
+                                                        {"letter": "b", "label": "프로젝트마다"}]}], a0["items"]
+assert got["c0c0c0c0"]["round"] == 2 and got["c0c0c0c0"]["items"] == [], got["c0c0c0c0"]
+assert {r["hash"] for r in call("awaiting_list", root=root2)[0]["awaiting"]} == {"c0c0c0c0"}
+
+before = sorted(os.listdir(os.path.join(root, "tickets")))
+bad = [dict(picks=[{"number": "9.", "letters": ["a"]}]),
+       dict(picks=[{"number": "1.", "letters": ["z"]}]),
+       dict(picks=[{"number": "1.", "letters": ["a-1"]}]),  # 부모 없는 하위 글자
+       dict(picks=[{"number": "1.", "letters": []}], text="  "),  # 빈 답
+       dict(text="x", hash="a0a0a0a1"),  # 이미 답이 있다
+       dict(text="x", hash="a0a0a0a3"),  # stem 파일이 열려 있다
+       dict(text="x", hash="a0a0a0a2")]  # .wip
+for kw in bad:
+    kw.setdefault("hash", "a0a0a0a0")
+    res, err = call("ticket_answer", **kw)
+    assert err and "path" not in res, (kw, res)
+assert sorted(os.listdir(os.path.join(root, "tickets"))) == before, "오류인데 파일이 생겼다"
+res, err = call("ticket_answer", hash="a0a0a0a0", picks=[{"number": "1.", "letters": ["a-1", "a"], "note": "메모"}],
+                text="덧붙임")
+assert not err and res["round"] == 1 and "dispatch" in res, res
+ans = open(os.path.join(root, "tickets", "b1b1b1b1.done.md"), encoding="utf-8").read()
+assert ans == ("---\nticket: b1b1b1b1\ntitle: 답변 \u2014 a0a0a0a0 #1\nkind: answer\n---\n\n## 답변 1\n\n"
+               "1.(a)(a-1) 메모\n\n덧붙임\n"), ans
+assert call("ticket_answer", hash="a0a0a0a0", text="again")[1], "이미 답한 티켓"
+lst = subprocess.run([sys.executable, os.path.join(HERE, "tickets.py"), "list", root], capture_output=True,
+                     text=True, env=dict(env, TICKET_ROOT=root)).stdout
+line = next(x for x in lst.splitlines() if "a0a0a0a0" in x)
+assert "deps 대기" not in line, line
+
 # 5. HTTP
 srv = subprocess.Popen([sys.executable, SERVER, "--http", "127.0.0.1:0"], stdout=subprocess.PIPE, text=True,
                        env=env)

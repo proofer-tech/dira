@@ -284,6 +284,179 @@ def t_projects(a):
         return {"projects": []}
 
 
+# ---------------------------------------------------------------- 답변 대기 (P516)
+
+HASH8_RE = re.compile(r"[0-9a-f]{8}\Z")
+Q_HEADING_RE = re.compile(r"^###\s+(\d+(?:-\d+)*)\.(?:\s|$)")
+Q_OPTION_RE = re.compile(r"^\s*(?:[-*]|\d+\.)\s+\**\(([a-z](?:-\d+)*)\)")
+
+
+def _tickets():
+    import tickets  # 엔진 판정(read_fm, deps_unmet, find_any)을 그대로 쓴다. 의미를 복제하지 않는다
+    return tickets
+
+
+def _unq(v):
+    return (v or "").strip().strip("\"'")
+
+
+def question_sections(body):
+    """lib/queue.ts questionsOf와 같다: `## 질문` 절들의 (제목, 본문)."""
+    out, cur = [], None
+    for line in body.split("\n"):
+        if re.match(r"^#{1,2}\s", line):
+            if cur:
+                out.append((cur[0], "\n".join(cur[1]).strip()))
+            cur = None
+            if re.match(r"^##\s*질문", line):
+                cur = (re.sub(r"^#+\s*", "", line).strip(), [])
+            continue
+        if cur:
+            cur[1].append(line)
+    if cur:
+        out.append((cur[0], "\n".join(cur[1]).strip()))
+    return out
+
+
+def question_items(text):
+    """lib/queue.ts optionsOf와 같다. 하위 문항은 평평하게 펴서 [{number, title, options}]로 낸다."""
+    items, path, cur, opt_depth = [], [], None, 0
+    for line in text.split("\n"):
+        h = Q_HEADING_RE.match(line)
+        if h:
+            depth = h.group(1).count("-") + 1
+            if depth > 1 and len(path) < depth - 1:
+                cur = None  # 부모 문항이 없는 하위 문항은 버린다
+                continue
+            cur = {"number": h.group(1) + ".", "title": re.sub(r"^###\s+\d+(?:-\d+)*\.\s*", "", line).strip(),
+                   "options": []}
+            items.append(cur)
+            del path[depth - 1:]
+            path.append(cur)
+            opt_depth = 0
+            continue
+        m = Q_OPTION_RE.match(line)
+        if not m or cur is None:
+            continue
+        depth = m.group(1).count("-") + 1
+        if depth > 1 and opt_depth < depth - 1:
+            continue  # 부모 선택지가 없는 하위 선택지는 버린다
+        cur["options"].append({"letter": m.group(1), "label": line[m.end():].replace("**", "").strip()})
+        opt_depth = depth
+    return items
+
+
+def awaiting_rows(root):
+    T = _tickets()
+    rows = []
+    for p in T.tickets_in(os.path.join(root)):
+        if not T.is_open_name(os.path.basename(p)):
+            continue
+        try:
+            fm, lines, end = T.read_fm(p)
+        except (OSError, UnicodeDecodeError):
+            continue
+        a = _unq(fm.get("awaiting"))
+        if end < 0 or not a:
+            continue
+        if nfc(a) not in [nfc(d) for d in T.deps_unmet(root, T.deps_of(lines, end))]:
+            continue
+        rows.append((os.path.getmtime(p), p, fm, lines, end, a))
+    rows.sort(key=lambda r: (r[0], r[1]))
+    return rows
+
+
+def t_awaiting_list(a):
+    if a.get("root"):
+        targets = [{"id": "", "name": "", "root": a["root"]}]
+    else:
+        targets = t_projects({})["projects"]
+    T, out, skipped = _tickets(), [], []
+    for pr in targets:
+        label = pr.get("id") or pr.get("name") or pr.get("root")
+        try:
+            root = get_root({"root": pr.get("root")})
+            for _, p, fm, lines, end, aw in awaiting_rows(root):
+                secs = question_sections("\n".join(lines[end + 1:]))
+                head, text = secs[-1] if secs else ("", "")
+                m = re.search(r"질문\s*(\d+)", head)
+                out.append({"project": label, "root": root, "hash": T.ticket_hash(p, fm), "title": _unq(fm.get("title")),
+                            "persona": T.persona_of(fm), "awaiting": aw, "round": int(m.group(1)) if m else 0,
+                            "question": ("## " + head + "\n\n" + text).strip() if head else "",
+                            "items": question_items(text)})
+        except (ToolError, OSError) as e:
+            skipped.append({"project": label, "why": str(e)})
+    return {"awaiting": out, "skipped": skipped}
+
+
+def compose_answer(picks):
+    """lib/urls.ts composeAnswer와 같다."""
+    out = []
+    for p in picks:
+        marks = "".join("(%s)" % l for l in sorted(p["letters"]))
+        note = p["note"].strip()
+        if marks or note:
+            out.append(p["number"] + marks + (" " + note if note else ""))
+    return "\n".join(out)
+
+
+def t_ticket_answer(a):
+    root = get_root(a)
+    T = _tickets()
+    h = a.get("hash")
+    sfx, path = exactly_one(root, h)
+    row = next((r for r in awaiting_rows(root) if r[1] == path), None) if sfx == "" else None
+    if not row:
+        raise ToolError("답변 대기 티켓이 아닙니다(열림 + awaiting + 미충족 dep): %s" % h)
+    _, _, fm, lines, end, stem = row
+    if not HASH8_RE.match(stem):
+        raise ToolError("awaiting 값이 8자 소문자 16진이 아닙니다: %r" % stem)
+    if T.find_any(root, stem):
+        raise ToolError("%s 파일이 이미 큐에 있습니다(이미 답했거나 이름 충돌)" % stem)
+    secs = question_sections("\n".join(lines[end + 1:]))
+    items = {i["number"]: {o["letter"] for o in i["options"]} for i in question_items(secs[-1][1])} if secs else {}
+    picks = a.get("picks") or []
+    if not isinstance(picks, list):
+        raise ToolError("picks는 배열이어야 합니다")
+    norm = []
+    for p in picks:
+        if not isinstance(p, dict) or not isinstance(p.get("letters") or [], list):
+            raise ToolError("picks 항목이 올바르지 않습니다: %r" % (p,))
+        num, letters = str(p.get("number")), [str(l) for l in p.get("letters") or []]
+        if num not in items:
+            raise ToolError("마지막 질문 절에 없는 문항 번호입니다: " + num)
+        for l in letters:
+            if l not in items[num]:
+                raise ToolError("문항 %s에 없는 선택지 글자입니다: %s" % (num, l))
+            if "-" in l and l.rsplit("-", 1)[0] not in letters:
+                raise ToolError("하위 선택지 %s는 부모 글자도 같이 골라야 합니다" % l)
+        norm.append({"number": num, "letters": letters, "note": str(p.get("note") or "")})
+    text = str(a.get("text") or "").replace("\r\n", "\n").strip()
+    answer = "\n\n".join(x for x in (compose_answer(norm), text) if x)
+    if not answer:
+        raise ToolError("답이 비어 있습니다(picks나 text가 필요)")
+    n = 1
+    for d in T.deps_of(lines, end):
+        dp = T.find_any(root, d)
+        if dp and _unq(T.read_fm(dp)[0].get("kind")) == "answer":
+            n += 1
+    r_stem = T.ticket_hash(path, fm)
+    dst = os.path.join(root, "tickets", stem + DONE + ".md")
+    body = "\n".join(["---", "ticket: " + stem, "title: 답변 \u2014 %s #%d" % (r_stem, n), "kind: answer", "---", "",
+                      "## 답변 %d" % n, "", answer, ""])
+    try:
+        fd = os.open(dst, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o644)
+    except FileExistsError:
+        raise ToolError("답변 파일이 이미 있습니다: " + os.path.basename(dst))
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(body)
+    try:  # 즉시 디스패치는 최적화다. 실패해도 답 파일 생성은 성공이다
+        d = dispatch_run(root, "direct", hash=r_stem)
+    except ToolError as e:
+        d = {"go": False, "worker": None, "hash": r_stem, "reason": "direct", "why": str(e)}
+    return {"path": dst, "round": n, "body": body, "dispatch": d}
+
+
 # ---------------------------------------------------------------- 온톨로지 읽기 (P496)
 
 def ontology_tool(op):
@@ -364,6 +537,12 @@ W = {"worker": {"type": "string", "description": "workers/<이름>.sh 의 이름
 
 TOOLS = {
     "projects": ("GUI에 등록된 프로젝트와 큐 루트 목록", {"type": "object", "properties": {}}, t_projects),
+    "awaiting_list": ("답변 대기 티켓(열림 + awaiting + 미충족 dep)과 마지막 질문 절-문항-선택지. "
+                      "root가 없으면 GUI 등록 프로젝트 전체", _s("", {}), t_awaiting_list),
+    "ticket_answer": ("답변 대기 티켓에 답을 단다(화면 답변 쓰기와 같은 파일). picks=[{number, letters, note?}], "
+                      "text=직접 쓴 답. 만든 뒤 그 티켓을 디스패치한다",
+                      _s("", {**H, "picks": {"type": "array", "items": {"type": "object"}}, "text": STR},
+                         ["hash"]), t_ticket_answer),
     "queue_list": ("열린 티켓 목록(<w>.sh list)", _s("", W), t_queue_list),
     "dispatch": ("워커를 1회 돌린다(<w>.sh)", _s("", W, ["worker"]), lambda a: worker_cmd(a)),
     "dispatch_now": ("지금 워커를 띄운다(dispatch.py run --reason direct). 해시가 있으면 그 티켓을 지목. "
