@@ -8992,8 +8992,8 @@ Cowork 등)에게 대신 답하라고 맡기면 그 에이전트가 브라우저
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P516-1 | 엔진 - `mcp_tools.py` `awaiting_list` `ticket_answer`(결정 1-4, 6) + `test_mcp_server.py` 테스트 | developer | - | 발행 예정 |
-| P516-2 | 매뉴얼 - `apps/teams/docs/mcp.md` ko - en 도구 표에 두 도구, 다른 에이전트에게 답변을 맡기는 절차 한 절 | writer | - | 발행 예정 |
+| P516-1 | 엔진 - `mcp_tools.py` `awaiting_list` `ticket_answer`(결정 1-4, 6) + `test_mcp_server.py` 테스트 | developer | - | 발행 `cafa6d55` |
+| P516-2 | 매뉴얼 - `apps/teams/docs/mcp.md` ko - en 도구 표에 두 도구, 다른 에이전트에게 답변을 맡기는 절차 한 절 | writer | - | 발행 `57774f15` |
 
 **두 장이다.** 매뉴얼은 위 결정에 도구 이름과 인자가 다 있어 기다리지 않는다. QA 티켓은 내지 않는다 - 수용조건이
 전부 임시 큐 테스트와 grep으로 판정된다. designer 0장, 화면 변경 없음.
