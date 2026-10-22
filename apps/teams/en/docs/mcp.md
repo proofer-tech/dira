@@ -29,6 +29,8 @@ Common operations are named tools.
 | `ticket_append` | Looks up the hash's current filename again and appends a section. Fails on zero or two-plus files |
 | `ticket_done` | Renames `.wip` to `.done`. No other rename |
 | `interject` | Sends one interjection line to a running session, by the same path as the screen's interject |
+| `awaiting_list` | Collects tickets awaiting an answer, with their questions. Without `root` it scans every registered project. See [Handing answers to another agent](#handing-answers-to-another-agent) |
+| `ticket_answer` | Answers a ticket that is awaiting an answer. Creates the same file as the screen's `Write an answer` form |
 | `graph_query` | Asks the ontology (`graph.py query`) |
 | `ontology_objects` `ontology_object` `ontology_search` | Read ontology objects as a list, one at a time, or by search. See [Reading the ontology](#reading-the-ontology) |
 | `ontology_versions` `ontology_version` `ontology_schema` | Read an object's past versions and the ontology schema. See [Reading the ontology](#reading-the-ontology) |
@@ -75,11 +77,67 @@ as structure. When you need one object's properties or body, call `ontology_obje
 Remote job sessions do not get this MCP server automatically. For a session there to use these
 tools, the persona's `mcp.json` must include the `dira mcp` server.
 
+### Handing answers to another agent
+
+A ticket whose session left a `## 질문 n` section and stopped is locked as
+[awaiting an answer](/docs/states#three-markings-that-are-not-lanes). You don't have to answer it on
+the screen. Hand it to another agent that has dira MCP connected (Claude Cowork, for example), and
+that agent handles it with two tools, without opening a browser. If `awaiting_list` and
+`ticket_answer` are missing from the tool list, update the app.
+
+You can hand it over like this.
+
+> Using dira MCP, collect the tickets awaiting an answer across the registered projects, and answer
+> each question by picking options or writing the answer yourself. If you can't decide on a
+> question, don't answer it; ask me.
+
+The agent calls `awaiting_list` first. With `root` it looks at that queue only; without it, every
+registered project. The tickets it returns are the same ones that carry the `Awaiting answer` badge on
+the screen. They come in project order, and within a project the ticket that has waited longest comes
+first. A project whose queue root can't be read is skipped and listed in `skipped` with the project
+and the reason. Each item carries these values.
+
+| Key | Meaning |
+|---|---|
+| `project` `root` | Project name and queue root |
+| `hash` `title` `persona` | Ticket hash, title, and assigned persona |
+| `awaiting` | The hash that becomes the answer file's name |
+| `round` `question` | The `n` of the last `## 질문 n` section, and that section in full |
+| `items` | The questions read from that section, `[{number, title, options: [{letter, label}]}]` |
+
+`items` only reads a section whose questions start with `### 1.` or `### 1-1.` and whose options
+start with `(a)` or `(a-1)`. For a section in any other shape, `items` comes back as an empty array;
+the agent then reads the full `question` and writes the answer itself.
+
+The answer goes to `ticket_answer` along with `hash`. There are two arguments for the answer,
+`picks` and `text`, and at least one is required. Given both, the lines built from `picks` come
+first, then one blank line, then `text`.
+
+- `picks` is the chosen options, shaped `[{number, letters, note}]`. `number` is the question number
+  (the `number` in `items`), `letters` is an array of the chosen letters, and `note` is anything to
+  add to that question. `note` is optional. `picks` turns into the same line the screen builds when
+  you pick options. For example, `{"number": "1", "letters": ["a", "a-1"]}` becomes the single line
+  `1.(a)(a-1)`.
+- `text` is an answer written out. Use it when no option fits or `items` is empty.
+
+`ticket_answer` checks in the same order as the screen, and if any check fails it creates no file.
+The ticket must be awaiting an answer right now, and the same answer must not exist yet. The numbers
+and letters in `picks` must actually appear in the last question section, and a sub-letter such as
+`a-1` is accepted only when its parent letter `a` is picked too. The error message says which check
+failed.
+
+Once the checks pass, it creates `tickets/<awaiting>.done.md`, identical down to the character to the
+file the screen's `Write an answer` form creates. The moment that file exists the lock is released and the
+ticket goes back on the queue for a worker to pick up. The tool then wakes a worker once. The
+response is `{path, round, body, dispatch}`, with that result in `dispatch`. If waking the worker
+fails, the answer file still stays, and the next worker run picks the ticket up.
+
 ### Choosing the queue
 
 Every tool takes the queue root (`<project>/.dira`) as `root`. Without it the tool uses the
 `TICKET_ROOT` environment variable, and without that it fails with `root가 필요합니다` (root is
-required). If you don't know the root, call `projects` first. If you only work one project, set
+required). `awaiting_list` is the one exception: without `root` it scans every registered project.
+If you don't know the root, call `projects` first. If you only work one project, set
 `TICKET_ROOT` in the client's config.
 
 ### What MCP will not do
