@@ -23,6 +23,7 @@ import {
   Clock,
   Lock,
   MessageSquareReply,
+  OctagonAlert,
   Play,
   Plug,
   Power,
@@ -43,6 +44,8 @@ export type Status =
   | "blocked"
   // `blocked`의 하위 종류 — 상태 5개를 늘리는 게 아니라 표시가 갈리는 것이다(queue.ts isAwaiting)
   | "awaiting"
+  // `awaiting`의 하위 종류 — 오토파일럿이 못 풀어 막힌 답변 대기(§P517 결정 6, `isAutopilotFailed`)
+  | "autopilotFailed"
   | "assigned"
   | "wip"
   | "done"
@@ -92,6 +95,14 @@ const STATUS: Record<Status, Spec> = {
     variant: "outline",
     tint: BLOCKED,
     hintKey: "status.hint.awaiting",
+  },
+  // 오토파일럿이 사람 없이는 못 푸는 자리다 — `awaiting`(정상 신호)과 달리 고장이라 destructive다.
+  autopilotFailed: {
+    labelKey: "status.label.autopilotFailed",
+    icon: OctagonAlert,
+    variant: "outline",
+    tint: "text-destructive bg-destructive/10 border-destructive/30",
+    hintKey: "status.hint.autopilotFailed",
   },
   // 정상 흐름에 없는 상태다(엔진은 claim → assign 순서라 "열린 파일 + session_id"를 만들지 않는다).
   // 그래서 정상 단계용 색을 주지 않는다 — stale과 같은 "고장, 사람이 봐야 함"이다(§2 이상 상태).

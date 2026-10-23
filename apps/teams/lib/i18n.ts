@@ -537,6 +537,7 @@ export const ko: Record<string, string> = {
   "status.label.open": "대기",
   "status.label.blocked": "deps 대기",
   "status.label.awaiting": "답변 대기",
+  "status.label.autopilotFailed": "오토파일럿 실패",
   "status.label.assigned": "할당됨",
   "status.label.wip": "진행중",
   "status.label.done": "완료",
@@ -961,6 +962,9 @@ export const ko: Record<string, string> = {
   // 접두가 아니라 자기 파일 접두를 든다(`ontology.unit.count`·`boardPage.unit.count`와 같은 값,
   // `board.`는 FILLED라 새 키를 못 넣는다).
   "epicSidebar.unit.count": "건",
+  "ticketDetail.autopilotFailedAlert":
+    "오토파일럿이 답 없이 진행할 방법을 찾지 못했습니다. 아래 질문에 답하면 다시 자율 진행합니다.",
+  "status.hint.autopilotFailed": "오토파일럿이 답 없이 진행할 방법을 찾지 못했다 - 질문에 답을 쓰면 다시 자율 진행한다",
   "status.hint.awaiting": "PM이 되물었다 — 요구사항 상세에서 답을 쓰면 다시 큐에 뜬다. 자동 만료는 없다",
   "status.hint.assigned": "session_id가 적힌 열린 티켓 — 큐에서 영구 제외된다. 할당 해제로 되돌린다",
   "status.hint.pollingOverdue": "폴링 상한을 지났다 — 다음 tick에 답변 대기로 잠긴다",
@@ -3486,6 +3490,7 @@ export const en: Record<string, string> = {
   "status.label.open": "Open",
   "status.label.blocked": "Blocked",
   "status.label.awaiting": "Awaiting answer",
+  "status.label.autopilotFailed": "Autopilot failed",
   "status.label.assigned": "Assigned",
   "status.label.wip": "In progress",
   "status.label.done": "Done",
@@ -3597,6 +3602,10 @@ export const en: Record<string, string> = {
   // (`persona.delete.refsWarnSuffix`가 선 그 벌).
   "epicSidebar.unit.count": " tickets",
   // 배지의 `title`이라 마침표로 안 닫는다(`ko`도 같다).
+  "status.hint.autopilotFailed":
+    "Autopilot could not find a way to proceed without an answer - write one and it resumes on its own",
+  "ticketDetail.autopilotFailedAlert":
+    "Autopilot could not find a way to proceed without an answer. Answer the question below and it resumes on its own.",
   "status.hint.awaiting":
     "The PM asked something back — write an answer on the request page and it returns to the queue. It never expires on its own",
   "status.hint.assigned":

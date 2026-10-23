@@ -30,6 +30,7 @@ import {
   fixesOf,
   importFolderOf,
   inDefaultList,
+  isAutopilotFailed,
   isAwaiting,
   isDispatchable,
   isPolling,
@@ -1201,6 +1202,19 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
     "r0000005.md",
     fm({ ticket: "r0000005", title: "결정 1로 정리됨", kind: "request", awaiting: "e5555555" }),
   );
+  // 오토파일럿 실패 표식(§P517 결정 6) — 같은 답 a1111111을 기다리고 `autopilot_failed`가 있다
+  await write(
+    r,
+    "r0000006.md",
+    fm({
+      ticket: "r0000006",
+      title: "오토파일럿 실패",
+      kind: "request",
+      deps: "[a1111111]",
+      awaiting: "a1111111",
+      autopilot_failed: "2026-10-23T16:00:00+09:00",
+    }),
+  );
   // `.wip` — 답변칸이 없어야 한다(제약 5). `awaiting`이 걸려 있어도 마찬가지다
   await write(
     r,
@@ -1229,6 +1243,9 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   const before = await listTickets(r, DEFAULT);
   const at = (h: string) => before.find((t) => t.hash === h)!;
   assert.strictEqual(isAwaiting(at("r0000001")), true);
+  // 표식 없는 답변 대기는 빨갛지 않고, 표식 있는 것만 빨갛다
+  assert.strictEqual(isAutopilotFailed(at("r0000001")), false);
+  assert.strictEqual(isAutopilotFailed(at("r0000006")), true);
   assert.strictEqual(awaitingOf(at("r0000001")), "a1111111");
   assert.strictEqual(awaitingUnlocked(at("r0000001"), before, DEFAULT), false);
   // 잠금 없음: 대상(b2222222)이 큐에 실재하니 경고는 뜨고 답변칸은 안 뜬다(엔진이 이미
@@ -1283,6 +1300,9 @@ test("답변 대기 판정 + 답변 파일 생성으로 재큐 (엔진과 대조
   // `awaiting`은 지우지 않았는데 판정이 저절로 꺼진다(이력이 남는다 — 결정 5)
   assert.strictEqual(awaitingOf(req), "a1111111");
   assert.strictEqual(isAwaiting(req), false);
+  // 답 파일이 생기면 표식이 남아 있어도 빨간 표시가 꺼진다
+  assert.strictEqual(after.find((t) => t.hash === "r0000006")!.fm.autopilot_failed !== "", true);
+  assert.strictEqual(isAutopilotFailed(after.find((t) => t.hash === "r0000006")!), false);
   assert.strictEqual(awaitingUnlocked(req, after, DEFAULT), false);
   assert.deepStrictEqual(req.unmet, []);
   assert.strictEqual(statusOf(req), "open");

@@ -553,6 +553,12 @@ export function isAwaiting(t: Ticket): boolean {
   return t.state === "open" && !!a && t.unmet.some((d) => nfc(d) === a);
 }
 
+/** 오토파일럿이 답 없이 진행할 방법을 못 찾아 만든 답변 대기(DESIGN.md §P517 결정 6) —
+ *  `isAwaiting`이면서 엔진이 `ask_human`에서 적은 fm `autopilot_failed`가 비어 있지 않을 때다.
+ *  표식은 이력이라 지워지지 않지만, 답 파일이 생기면 `isAwaiting`이 꺼져 이 판정도 저절로 꺼진다. */
+export const isAutopilotFailed = (t: Ticket): boolean =>
+  isAwaiting(t) && unquote(t.fm.autopilot_failed ?? "") !== "";
+
 /** 표시만 있고 잠금이 없는 상태 — PM이 `awaiting`만 쓰고 `deps`에 안 걸었다.
  *  판정을 `unmet`이 아니라 `deps`로 하는 이유: 답이 달린 뒤엔 `awaiting`이 unmet에서 빠지는데
  *  그때도 경고를 띄우면 "답변 전에 디스패치된다"가 거짓말이 된다(정상적으로 답을 받은 티켓이다).

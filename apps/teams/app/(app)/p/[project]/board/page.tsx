@@ -27,6 +27,7 @@
  *  실측이다(3회 중 2회 실패. 되는 회차는 첫 로드가 느려 fallback이 실제로 떴던 회차다).
  *  스켈레톤은 첫 로드 한 번의 편의고 큐를 안 따라가는 보드는 이 제품이 아니다. 첫 도착은
  *  fs 한 번 읽기라 짧다(실측 +0.03~0.39s) — 상세 화면(§2)이 스켈레톤 없이 도는 것과 같은 이유다. */
+import { cn } from "@/lib/utils";
 import { stat } from "node:fs/promises";
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
@@ -86,6 +87,7 @@ import {
   epicOf,
   filterTickets,
   inDefaultList,
+  isAutopilotFailed,
   isAwaiting,
   isPolling,
   lastQuestionOptions,
@@ -717,7 +719,7 @@ export default async function Board({
       // 고스트)가 그대로 남는다(§비주얼 §52 ⑤ (4)). `cursor-grab`은 안 붙인다 — 카드 전체가
       // 링크라 커서가 이미 그 사실을 알려 준다(같은 절).
       draggable={t.state === "open" || (t.state === "wip" && !laneMode)}
-      className="card-tint relative gap-2 px-4"
+      className={cn("card-tint relative gap-2 px-4", isAutopilotFailed(t) && "border-destructive")}
     >
       {/* 칸반 카드는 레인이 상태를 말하므로 배지를 달지 않는다 — 예외가
           `답변 대기`다. 자기 레인 없이 `대기`에 앉고, 답변 stem은 큐에
@@ -741,7 +743,11 @@ export default async function Board({
           </Link>
         </span>
         {isAwaiting(t) ? (
-          <StatusBadge status="awaiting" days={daysSince(t.mtime)} locale={locale} />
+          <StatusBadge
+            status={isAutopilotFailed(t) ? "autopilotFailed" : "awaiting"}
+            days={daysSince(t.mtime)}
+            locale={locale}
+          />
         ) : isPolling(t) ? (
           <PollingBadge ticket={t} now={now} locale={locale} />
         ) : (
@@ -1294,7 +1300,11 @@ export default async function Board({
                           <TableRow key={t.path} className="relative h-9 focus-within:bg-muted/50">
                             <TableCell className="px-3 py-0">
                               {isAwaiting(t) ? (
-                                <StatusBadge status="awaiting" days={daysSince(t.mtime)} locale={locale} />
+                                <StatusBadge
+                                  status={isAutopilotFailed(t) ? "autopilotFailed" : "awaiting"}
+                                  days={daysSince(t.mtime)}
+                                  locale={locale}
+                                />
                               ) : backoffByHash.has(t.hash) ? (
                                 <RetryingBadge mark={backoffByHash.get(t.hash)!} now={now} locale={locale} />
                               ) : (

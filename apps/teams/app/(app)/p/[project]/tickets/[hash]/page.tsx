@@ -7,7 +7,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
-import { Lock, TriangleAlert } from "lucide-react";
+import { Lock, OctagonAlert, TriangleAlert } from "lucide-react";
 import { boardRevision } from "@/lib/board-revision";
 import { AttachmentPreview } from "@/components/attachment-preview";
 import { TicketBrowserSection } from "@/components/browser-panel";
@@ -50,6 +50,7 @@ import {
   defaultAnswerOf,
   depBadges,
   derivedFrom,
+  isAutopilotFailed,
   isAwaiting,
   isPolling,
   isTicketEngineKey,
@@ -320,6 +321,12 @@ export default async function TicketDetail({
             조각을 그린다(§비주얼 §23 ⑤). 스레드·답변 대기·계획만 있는 경우(극단 A — 세션이
             붙은 적 없는 요구사항 · 회수된 열림 티켓)도 여기로 온다: 상자는 `max-h`가 되고
             **스트림이 없다는 말을 하지 않는다**(§29 ④ — `대기` 배지가 이미 알려 준다). */}
+        {isAutopilotFailed(ticket) && (
+          <Alert variant="destructive">
+            <OctagonAlert aria-hidden />
+            <AlertDescription>{t(locale, "ticketDetail.autopilotFailedAlert")}</AlertDescription>
+          </Alert>
+        )}
         {transcript || engineCan("stream", engine) === false || thread.length > 0 || awaiting || plans.length > 0 ? (
           <SessionStream
             project={id}
@@ -465,7 +472,11 @@ export default async function TicketDetail({
           {/* 보드와 **같은 말**을 쓴다 — 같은 티켓이 한쪽에서 `deps 대기`, 다른 쪽에서
               `답변 대기`로 보이면 배지가 상태 표현의 유일한 출처인 의미가 없다(§1 보드) */}
           {isAwaiting(ticket) ? (
-            <StatusBadge status="awaiting" days={daysSince(ticket.mtime)} locale={locale} />
+            <StatusBadge
+              status={isAutopilotFailed(ticket) ? "autopilotFailed" : "awaiting"}
+              days={daysSince(ticket.mtime)}
+              locale={locale}
+            />
           ) : backoff ? (
             <StatusBadge
               status="retrying"
