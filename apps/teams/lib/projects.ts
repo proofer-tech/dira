@@ -200,12 +200,16 @@ export type Autonomy = { level: AutonomyLevel; autopilot: boolean };
 
 async function readAutonomyFile(): Promise<{ level: AutonomyLevel; flag: boolean }> {
   try {
-    const o: unknown = JSON.parse(await readFile(autonomyPath(), "utf8"));
+    const raw = await readFile(autonomyPath(), "utf8");
+    const o: unknown = JSON.parse(raw);
+    // JSON.parse는 5.0을 5로 읽지만 파이썬은 float로 읽어 흡수한다. 원문 토큰에 소수점-지수가 있으면 정수가 아니다.
+    // ponytail: 정규식으로 첫 "level" 토큰만 본다. 중첩 키가 앞서는 모양은 엔진 파일에 없다.
+    const floaty = /"level"\s*:\s*-?\d+(?:\.|[eE])/.test(raw);
     const rec = o && typeof o === "object" && !Array.isArray(o) ? (o as { level?: unknown; autopilot?: unknown }) : {};
     const level = rec.level;
     return {
       level:
-        typeof level === "number" && Number.isInteger(level) && level >= 1 && level <= 5
+        typeof level === "number" && !floaty && Number.isInteger(level) && level >= 1 && level <= 5
           ? (level as AutonomyLevel)
           : DEFAULT_AUTONOMY,
       flag: rec.autopilot === true,

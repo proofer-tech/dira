@@ -969,6 +969,9 @@ test("주도성 — 흡수 다섯 경우 전부 4, set 뒤에는 그 값을 읽�
       writeFileSync(autonomyPath(), JSON.stringify({ level: 5, autopilot: bad }));
       assert.equal((await readAutonomy()).autopilot, false);
     }
+    // 엔진은 5.0을 정수가 아니라 보고 4로 흡수한다(TC 9646f6a8 5번)
+    writeFileSync(autonomyPath(), '{"level":5.0,"autopilot":true}');
+    assert.deepEqual(await readAutonomy(), { level: 4, autopilot: false });
   } finally {
     rmSync(autonomyPath(), { force: true });
   }
