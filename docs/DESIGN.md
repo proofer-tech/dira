@@ -8938,6 +8938,49 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P518. MCP로 올린 요구가 즉시 배정된다 - 고정 경로에 `dispatch.py`도 굽는다 (요구 `95bbba8e`, 왕복 0회)
+
+사람 요구(2026-10-23): 외부 에이전트에게 dira로 요구를 올려 달라고 하자 "이 맥에 `~/.config/dira/bin/engines/dispatch.py`가
+없어서 자동 배정이 실패했습니다. 엔진을 복구해주세요"라는 답이 돌아왔다. 이 답이 맞는지 묻는다.
+
+#### 실측 (2026-10-23)
+
+- MCP 서버는 고정 경로 `~/.config/dira/bin/engines/`에서 돈다. `mcp_tools.py` `dispatch_run`은 `ENGINE_DIR`(그 파일이 놓인
+  디렉터리)의 `dispatch.py`를 실행한다.
+- `tick.sh` `refresh_fixed_engine`의 굽기 목록은 `mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py
+  ontology_read.py`이고 `dispatch.py`가 없다. `test_source_time.py` `FILES`도 같은 일곱 개다. 그래서 고정 경로에
+  `dispatch.py`가 없고, MCP로 올린 요구는 티켓은 생기지만 즉시 배정이 매번 실패한다. 다음 cron 틱이 집어 가므로
+  손실은 즉시 배정 하나다.
+- `dispatch.py`는 표준 라이브러리와 같은 디렉터리의 `tickets.py`만 쓴다. 같은 부재를 efc374ba가 화면 kick
+  (`apps/teams/lib/kick.ts`)에서 먼저 만났고 그때는 kick.ts 폴백으로 닫았다.
+- "엔진을 복구해주세요"는 dira 문구가 아니다. 외부 에이전트가 `dispatch.py 실패(rc=..): ...` 오류를 보고 덧붙인
+  말이다. 오류 문구에 "티켓은 만들어졌고 다음 틱에 배정된다"는 사실이 없어서 그렇게 읽혔다.
+
+#### 결정
+
+1. **굽기 목록에 `dispatch.py`를 더한다.** `tick.sh` 목록과 `test_source_time.py` `FILES`를 같이 고친다.
+2. **배정 실패가 사람의 할 일처럼 읽히지 않게 한다.** `ticket_create`류 도구가 `dispatch_run` 실패를 응답
+   `dispatch.why`에 실을 때, 티켓은 만들어졌고 cron 다음 틱에 배정되므로 사람이 할 일은 없다는 문장을 앞에 붙인다.
+   `dispatch_now`처럼 티켓을 만들지 않는 도구는 문구를 안 바꾼다.
+
+주도성 5 판단: 엔진 파일(`tick.sh` `mcp_tools.py`) 수정이지만 사람 승인을 기다리지 않는다. 굽는 파일 하나를 더하고
+오류 문구를 고치는 것이라 큐 상태 규칙이 바뀌지 않는다.
+주도성 5 판단: 이 머신에는 통합 체크아웃의 `dispatch.py`를 고정 경로에 손으로 복사해 두었다(2026-10-23). 설치본
+릴리스 전까지 MCP 즉시 배정을 살리기 위해서다. 다음 틱 굽기는 목록에 있는 파일만 덮으므로 이 사본을 지우지 않는다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P518-1 | 엔진 - `tick.sh` 굽기 목록 + `test_source_time.py` `FILES`에 `dispatch.py`(결정 1), `mcp_tools.py` 배정 실패 문구(결정 2) + 테스트 | developer | - | 발행 `HASH1` |
+
+**한 장이다.** 매뉴얼에는 굽기 목록이 없어 writer 0장, 화면 변경 없음, QA는 수용조건이 테스트와 grep으로 판정된다.
+
+#### 수용조건
+
+- [ ] `python3 test_source_time.py`가 통과하고, 임시 `ENGINES_DIR`로 굽기를 돌린 뒤 그 안에 `dispatch.py`가 있다.
+- [ ] `grep -n 'for f in mcp_server.py.*dispatch.py' tick.sh`가 한 줄을 찾는다.
+- [ ] `python3 test_mcp_server.py`가 통과하고, 그 안에 `ENGINE_DIR`에 `dispatch.py`가 없을 때 요구 생성 도구가 티켓 파일을 만들고 응답 `dispatch.why`에 "다음 틱" 문장이 들어가는 경우가 있다.
+- [ ] `python3 test_mcp_parity.py`가 통과한다.
+
 ### P517. 오토파일럿 - 주도성 5 아래의 토글을 켜면 세션이 답변 대기를 만들지 않고, 물리적으로 막힌 답변 대기는 실패 색으로 뜬다 (요구 `2853e0b1`, 왕복 0회)
 
 사람 요구(2026-10-23): *"주도성 5 아래에 위험하지만 정말 자율주행으로 진행하는 '오토파일럿 모드'를 토글할 수
