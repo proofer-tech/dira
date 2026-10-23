@@ -935,6 +935,12 @@ field. It takes you there without walking the tree.
 - **Usage stats** — covered in
   [Usage analytics, and how to turn them off](/docs/analytics).
 - **Language** — picks the screen's wording between Korean and English.
+- **Autonomy** — the line right under `Language`. It picks, from 1 to 5, how often worker sessions
+  ask a person back. Indented right under the 5 line is the `Autopilot` switch, with one red line of
+  warning beneath it: sessions push on without asking, and only tell you through a red awaiting
+  answer when they get stuck. The switch only responds when 5 is picked, and it saves the moment you
+  flip it. Typing `autopilot` in the search field brings you here too. What a session stops asking
+  once it is on is in [Submitting a request](/docs/requirements), under Autopilot.
 - **Webhook** — when a ticket newly starts waiting on an answer, it sends just that fact outside as
   one line. Covered in [Sending Awaiting answer somewhere else](/docs/webhook).
 - **Workers** — the bottom line of the tree. At the top is `Machine-wide session limit`, which sets

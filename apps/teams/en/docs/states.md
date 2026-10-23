@@ -41,7 +41,7 @@ line. One after the original, then two, adding up one at a time. At the fourth, 
 claims the ticket puts it straight back down and locks it as awaiting an answer. The point is to
 get a ticket that has been passed on and on with nobody finishing it in front of a person at
 least once. Write an answer and the lock comes off, and the same ticket does not hit this ceiling
-again.
+again. With autopilot on in settings, there is no ceiling.
 
 The badge shows in the status column of the board table and next to the title on the ticket
 detail. The status filter does not have this split. Pick `Done` and both come out.
@@ -75,6 +75,30 @@ born, the lock comes off and the badge goes back to `Open`.
 
 The days elapsed ride along on the badge to make neglect visible. Nothing expires and nothing
 cancels on its own. An old `Awaiting answer` is a sign of a stall. That call is a person's.
+
+**`Autopilot failed` — a red badge.** This is a kind of `Awaiting answer`. It carries an octagon
+warning icon instead of the speech bubble, and the badge and the board card's border turn red. With
+[Autopilot](/docs/requirements#autopilot) on in settings, sessions are not supposed to ask at all.
+This badge means one asked anyway, because it found no way to go on without an answer. A ticket the
+engine locked at the automatic-reclaim ceiling while autopilot was on wears it too.
+
+An ordinary `Awaiting answer` is a session asking something its level told it to ask. This badge is
+the promise not to ask being broken. So the first line of the question lists the ways the session
+already tried. Read that list first, then answer with a route that is not on it, or with a value the
+session cannot have, like a password or a verification code. Suggest something already on the list
+and the ticket comes back to the same spot.
+
+The answer form is the same as for an ordinary `Awaiting answer`. The only addition is one red
+warning line at the head of the answer field on the ticket detail. It says autopilot found no way
+forward without an answer, and that answering the question below lets it carry on by itself. Write
+the answer and the lock comes off,
+the badge goes back to `Open`, and the red goes with it. In the board's status filter, picking
+`Awaiting answer` catches these tickets too.
+
+The red is decided when the ticket gets locked. Turn autopilot off later and a ticket that is
+already red stays red until it is answered. The other way round, an `Awaiting answer` caused by a
+person force-stopping a session shows in the ordinary color even with autopilot on. Stopping it
+was a person's call, not autopilot failing.
 
 **`Polling` — a badge and the time left (`Polling · 3h left`).** This ticket is waiting on a
 condition outside the queue. Waiting for a build to end, for another team to fill a value in.

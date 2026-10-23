@@ -96,6 +96,34 @@ Until an answer is there, no worker touches that request. It is locked so that s
 burn asking the same question over and over. So `Awaiting answer` is not a fault. It is a step
 that was in the design from the start, and it stands there waiting for you.
 
+## Autopilot
+
+How much a session asks you is set by `Autonomy` in the settings dialog, a level from 1 to 5
+([The screens](/docs/screens), under the settings dialog). Even at 5 a session still
+stops and asks when it needs something only a person has: a password, a login, a payment method,
+a two-factor code. Autopilot takes that last exception away too.
+
+Pick 5 and the `Autopilot` switch right under it can be turned on. At 4 or below the switch shows
+off and does not respond. Flipping it saves at once, and takes effect from the next dispatch.
+
+With it on, sessions never create an `Awaiting answer`. They write no question and no `## 블록`.
+Even when a login looks necessary they keep going: credentials already on this computer, another
+account or tool, a workaround, a smaller scope. They make up the ways to succeed and try them one
+by one.
+
+**This mode is risky. Sessions push on without asking you.** On top of what level 5 already
+allows (force pushes, engine edits), a session may narrow or change scope you would have wanted to
+decide, and still close the ticket as done. The handoff ceiling no longer applies either, so work
+that never finishes can keep spawning handoff tickets. While it is on, read the decision lines at
+the end of `## 결과` more often than usual.
+
+Only when there is truly no way left to try does a session ask. That `Awaiting answer` shows on the
+board as a red `Autopilot failed` badge. How it differs from an ordinary one, and how to answer it,
+is in [The states a ticket passes through](/docs/states), in the `Autopilot failed` paragraph.
+
+Lower the level to 4 or below and autopilot stops having any effect, even if the switch was left
+on. Raise it back to 5 and the switch comes back the way you left it.
+
 ## Your part in this
 
 You put in a request, pm splits it, and workers take the split tickets one at a time. Where one
