@@ -133,7 +133,8 @@ def t_ticket_create(a):
         try:  # 즉시 디스패치는 최적화다(P489 결정 3). 실패해도 티켓 생성은 성공이다
             res["dispatch"] = dispatch_run(root, "request", hash=h)
         except ToolError as e:
-            res["dispatch"] = {"go": False, "worker": None, "hash": h, "reason": "request", "why": str(e)}
+            res["dispatch"] = {"go": False, "worker": None, "hash": h, "reason": "request",
+                               "why": "티켓은 만들어졌고 cron 다음 틱에 배정됩니다. 사람이 할 일은 없습니다. " + str(e)}
     return res
 
 

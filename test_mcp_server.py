@@ -119,6 +119,17 @@ assert not err and "dispatch" not in res, res
 res, err = call("ticket_create", hash="f3f3f3f3", fm={**mk, "kind": "request"}, body="## Goal\nx")
 assert not err and "dispatch" in res and res["dispatch"]["reason"] == "request", res
 assert call("dispatch_now", worker="../x")[1], "worker 이름 검증"
+# dispatch.py 없는 ENGINE_DIR(고정 경로 상황): 티켓은 생기고 why에 다음 틱 문장이 붙는다
+import shutil
+eng = os.path.join(tmp, "eng")
+os.makedirs(eng)
+for f in "mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py".split():
+    shutil.copy(os.path.join(HERE, f), eng)
+SERVER_SAVED, SERVER = SERVER, os.path.join(eng, "mcp_server.py")
+res, err = call("ticket_create", hash="a4a4a4a4", fm={**mk, "kind": "request"}, body="## Goal\nx")
+SERVER = SERVER_SAVED
+assert not err and os.path.exists(os.path.join(root, "tickets", "a4a4a4a4.md")), (res, err)
+assert res["dispatch"]["go"] is False and "다음 틱" in res["dispatch"]["why"], res
 
 # 4c. 답변 대기 (P516): 같은 질문 절 하나로 awaiting_list와 ticket_answer를 돈다
 Q = ("## 질문 1\n\n### 1. 무엇부터\n\n- (a) 엔진만\n- (a-1) 한 벌\n- (b) 화면까지\n\n"

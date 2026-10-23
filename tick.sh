@@ -265,7 +265,7 @@ refresh_fixed_engine() {
   case "$rec" in ''|*[!0-9]*) rec= ;; esac
   if [ -z "$rec" ] || [ "$mine" -ge "$rec" ]; then
   # P476: MCP 서버와 그것이 부르는 엔진 파일도 같은 자리에 굽는다(내용이 다르면 원자 교체).
-  for f in mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py; do
+  for f in mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py dispatch.py; do
     [ -f "$CODE/$f" ] && ! cmp -s "$CODE/$f" "$ENGINES_DIR/$f" 2>/dev/null || continue
     cp "$CODE/$f" "$ENGINES_DIR/$f.tmp.$$" 2>/dev/null \
       && python3 -c 'import os,sys;os.replace(sys.argv[1],sys.argv[2])' "$ENGINES_DIR/$f.tmp.$$" "$ENGINES_DIR/$f" \
