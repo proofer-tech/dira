@@ -8970,7 +8970,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P518-1 | 엔진 - `tick.sh` 굽기 목록 + `test_source_time.py` `FILES`에 `dispatch.py`(결정 1), `mcp_tools.py` 배정 실패 문구(결정 2) + 테스트 | developer | - | 발행 `HASH1` |
+| P518-1 | 엔진 - `tick.sh` 굽기 목록 + `test_source_time.py` `FILES`에 `dispatch.py`(결정 1), `mcp_tools.py` 배정 실패 문구(결정 2) + 테스트 | developer | - | 발행 `af5a4cca` |
 
 **한 장이다.** 매뉴얼에는 굽기 목록이 없어 writer 0장, 화면 변경 없음, QA는 수용조건이 테스트와 grep으로 판정된다.
 
