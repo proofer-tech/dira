@@ -9011,11 +9011,11 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P517-1 | 엔진 - `autopilot` 판정(결정 1), `tick.sh` 안내 갈래(결정 2), `ask_human` 표식(결정 3), 이어받기 상한 생략(결정 4), `test_autonomy.py` | developer | - | 발행 |
-| P517-2 | GUI - `readAutonomy`/`setAutopilot` - 설정 토글(결정 7) - `home-session.ts` 안내(결정 2) | developer | - | 발행 |
-| P517-3 | GUI - `isAutopilotFailed` - 배지 - 보드 카드 - 상세 답변칸 경고(결정 6) | developer | - | 발행 |
-| P517-4 | 매뉴얼 - `apps/teams/docs/requirements.md` - `screens.md` - `states.md`의 주도성 설명에 오토파일럿 토글과 빨간 답변 대기, ko - en | writer | - | 발행 |
-| P517-5 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P517-1, P517-2, P517-3 | 발행 |
+| P517-1 | 엔진 - `autopilot` 판정(결정 1), `tick.sh` 안내 갈래(결정 2), `ask_human` 표식(결정 3), 이어받기 상한 생략(결정 4), `test_autonomy.py` | developer | - | 발행 `f1051b0e` |
+| P517-2 | GUI - `readAutonomy`/`setAutopilot` - 설정 토글(결정 7) - `home-session.ts` 안내(결정 2) | developer | - | 발행 `854c5879` |
+| P517-3 | GUI - `isAutopilotFailed` - 배지 - 보드 카드 - 상세 답변칸 경고(결정 6) | developer | - | 발행 `7a97a72b` |
+| P517-4 | 매뉴얼 - `apps/teams/docs/requirements.md` - `screens.md` - `states.md`의 주도성 설명에 오토파일럿 토글과 빨간 답변 대기, ko - en | writer | - | 발행 `eec34318` |
+| P517-5 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P517-1, P517-2, P517-3 | 발행 `be8601c8` |
 
 **다섯 장이다.** 1 - 2 - 3은 서로 다른 파일이고 계약(키 이름과 문장)이 이 절에 다 있어 기다리지 않는다. 결정 2의
 문장은 1과 2가 같은 글자로 옮긴다. 매뉴얼도 이 절만 보고 쓴다.
