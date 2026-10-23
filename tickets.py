@@ -451,6 +451,8 @@ def _check_handoff_cap(dst):
     원자적 link 자체는 손대지 않는다. `awaiting`이 이미 걸려 있으면 건드리지 않는다
     (결정 6 (4) - 없으면 사람이 답한 뒤 재claim 때 또 걸려 영구 루프가 된다).
     """
+    if autopilot_on():                       # §P517 결정 4 - 사슬 끝은 세션의 Done when 판정이 정한다
+        return
     fm, lines, end = read_fm(dst)
     if end < 0:
         return
@@ -1083,6 +1085,9 @@ def ask_human(path, h, attempts, why, blocked=False, killed=False, handoff=False
     # attempts를 "0" 문자열로 쓴다(0은 falsy라 set_fm_keys가 빈 값으로 적는다) --
     # 답을 받아 다시 디스패치된 뒤엔 자동 회수 2회를 처음부터 다시 쓴다
     upd = {"awaiting": a}
+    # §P517 결정 3 - 오토파일럿이 유효하면 표식을 단다. killed는 사람의 판단이라 뺀다. 이미 있으면 덮지 않는다.
+    if not killed and autopilot_on() and not (fm.get("autopilot_failed") or "").strip():
+        upd["autopilot_failed"] = datetime.now().astimezone().isoformat(timespec="seconds")
     # 강제 중단은 아직 `.wip`이고 pid가 살아 있는 티켓에 건다. 여기서 REAP_CLEAR를 비우면
     # 죽이기 전에 `pid:`가 사라지고, kill이 실패하면 pid도 session_id도 없는 `.wip`이 남아
     # reap_manual이 두 번 다시 안 본다. 할당 필드는 종전대로 부모 tick.sh가 clear로 지운다.
@@ -1141,6 +1146,17 @@ def autonomy_level(local=None):
     except Exception:
         pass
     return 4
+
+
+def autopilot_on(local=None):
+    """§P517 결정 1 - 유효 = `level == 5`(정수) + `autopilot`이 JSON true. tick.sh 판정과 같다."""
+    local = local or os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
+    try:
+        with open(os.path.join(local, "autonomy.json"), encoding="utf-8") as f:
+            o = json.load(f)
+        return isinstance(o, dict) and autonomy_level(local) == 5 and o.get("autopilot") is True
+    except Exception:
+        return False
 
 
 # §폴링 상한 결정 2 - 4와 5는 사람에게 안 묻고 조건과 무관하게 디스패치 후보로 돌린다. 다음

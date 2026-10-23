@@ -132,6 +132,60 @@ try:
     again = dryrun(w, local)
     assert again == got3, "같은 level=3인데 블록이 매번 달라졌다(상수여야 한다)"
 
+    # 6) 오토파일럿(P517-1): 유효 = level 5 + JSON true. 나머지 셋은 줄 0회, 지금 안내 그대로.
+    for body, on in (({"level": 5, "autopilot": True}, True), ({"level": 4, "autopilot": True}, False),
+                     ({"level": 5, "autopilot": "true"}, False), ({"level": 5}, False)):
+        write(autof, json.dumps(body))
+        got = dryrun(w, local)
+        assert got.count("주도성 안내: 5/5 (오토파일럿).") == (1 if on else 0), "오토파일럿 줄 횟수가 다르다 {}".format(body)
+        assert ("오토파일럿이 켜져 있습니다. 답변 대기를 만들지 않습니다" in got) == on, body
+        if not on:
+            write(autof, json.dumps({"level": body["level"]}))
+            assert got == dryrun(w, local), "꺼진 판정인데 안내가 달라졌다 {}".format(body)
+    write(langfile, json.dumps({"locale": "en"}))
+    write(autof, json.dumps({"level": 5, "autopilot": True}))
+    assert dryrun(w, local).count("Autonomy note: 5/5 (autopilot).") == 1, "영어 오토파일럿 안내 없음"
+    os.remove(langfile)
+
+    # 7) ask_human 표식과 8) 이어받기 상한 생략
+    import sys
+    sys.path.insert(0, HERE)
+    import tickets as T
+    os.environ["TICKET_LOCAL"] = local
+
+    def mkq(h, fm):
+        d = os.path.join(tmp, "q", "tickets")
+        os.makedirs(d, exist_ok=True)
+        q = os.path.join(d, h + ".md")
+        write(q, "---\nticket: {}\nkind: work\n{}---\n\n## Goal\nx\n".format(h, fm))
+        return q
+
+    def mark(q):
+        return (T.read_fm(q)[0].get("autopilot_failed") or "").strip()
+
+    write(autof, json.dumps({"level": 5, "autopilot": True}))
+    q = mkq("aaaa0001", "")
+    T.ask_human(q, "aaaa0001", 0, "x", blocked=True)
+    assert mark(q), "오토파일럿인데 autopilot_failed가 없다"
+    q = mkq("aaaa0002", "")
+    T.ask_human(q, "aaaa0002", 0, "x", killed=True)
+    assert not mark(q), "killed인데 표식이 생겼다"
+    write(autof, json.dumps({"level": 5}))
+    q = mkq("aaaa0003", "")
+    T.ask_human(q, "aaaa0003", 0, "x", blocked=True)
+    assert not mark(q), "꺼져 있는데 표식이 생겼다"
+
+    q = mkq("aaaa0004", "handoffs: 4\n")
+    try:
+        T.claim(q)
+        assert False, "꺼져 있으면 handoffs 4는 잠겨야 한다"
+    except SystemExit:
+        pass
+    write(autof, json.dumps({"level": 5, "autopilot": True}))
+    q = mkq("aaaa0005", "handoffs: 4\n")
+    T.claim(q)
+    assert os.path.exists(os.path.join(tmp, "q", "tickets", "aaaa0005" + T.IN_PROGRESS + ".md")), "오토파일럿인데 .wip이 안 됐다"
+
     print("PASS 기본값4 · level 1-5 개별 · 0/문자열/배열/깨진JSON 4종 4로 흡수 · "
           "en에서는 영어 안내만 · 언어 안내 뒤 꼬리 · persona 무관 · 블록 상수")
 finally:

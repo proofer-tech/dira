@@ -1412,16 +1412,45 @@ protocol as a line starting with \`주도성 5 판단:\`, gathered into one fenc
 with info string \`autonomy\` at the end of the reply or \`## 결과\`."
   ;;
 esac
+# 오토파일럿(§P517 결정 1-2): level 5이고 autopilot이 JSON true(정확히 불리언)일 때만 유효하다.
+# tickets.py autopilot_on과 같은 판정이다. 유효하면 머리말과 5 문장이 갈린다.
+AUTOPILOT=$(python3 -c 'import json, sys
+try:
+    o = json.load(open(sys.argv[1], encoding="utf-8"))
+    print(1 if isinstance(o, dict) and o.get("level") == 5 and type(o.get("level")) is int and o.get("autopilot") is True else 0)
+except Exception:
+    print(0)' "$LOCAL/autonomy.json" 2>/dev/null)
+HEAD_KO="$LEVEL/5."
+HEAD_EN="$LEVEL/5."
+if [ "$AUTOPILOT" = 1 ] && [ "$LEVEL" = 5 ]; then
+  HEAD_KO="5/5 (오토파일럿)."
+  HEAD_EN="5/5 (autopilot)."
+  ROW_KO="오토파일럿이 켜져 있습니다. 답변 대기를 만들지 않습니다 -- \`## 질문 n\`도 \`awaiting:\`도 \`## 블록\`도 쓰지
+않습니다. 사람만 가진 것(비밀번호·로그인·결제 수단·2단계 인증 코드)이 필요해 보여도 이미 이 머신에 있는
+자격 증명, 다른 계정·도구·경로, 우회 구현, 범위 조정까지 성공할 방법을 스스로 고안해 하나씩 시도하세요.
+시도할 방법이 물리적으로 하나도 남지 않았을 때만 옛 통로(\`kind: request\`는 \`## 질문 n\` + \`awaiting:\`, 그
+밖은 \`## 블록\`)를 쓰고, 같은 편집에서 fm에 \`autopilot_failed: <ISO 8601 시각>\`을 더하고 그 절 첫 줄에
+시도한 방법을 나열하세요. 그 밖은 주도성 5와 같습니다 -- 규약을 넘은 판단은 각 줄을 \`주도성 5 판단:\`으로
+시작해 정보 문자열 \`autonomy\`인 펜스 한 벌에 모으세요."
+  ROW_EN="Autopilot is on. Do not create a waiting-for-answer ticket -- write no \`## 질문 n\`, no \`awaiting:\`,
+and no \`## 블록\`. Even when something only the human holds (password, login, payment method, 2FA code)
+seems necessary, devise and try ways to succeed one by one: credentials already on this machine, other
+accounts, tools, or paths, workaround implementations, scope adjustment. Only when no method physically
+remains, use the old channel (\`## 질문 n\` + \`awaiting:\` for \`kind: request\`, otherwise \`## 블록\`), add
+\`autopilot_failed: <ISO 8601 time>\` to the fm in the same edit, and list the methods tried on the first
+line of that section. Otherwise the same as level 5 -- record any judgment that crosses protocol as a
+line starting with \`주도성 5 판단:\`, gathered into one fence with info string \`autonomy\`."
+fi
 case "$LOCALE" in
 en)
   PROMPT="$PROMPT
 
-Autonomy note: $LEVEL/5. $ROW_EN"
+Autonomy note: $HEAD_EN $ROW_EN"
   ;;
 *)
   PROMPT="$PROMPT
 
-주도성 안내: $LEVEL/5. $ROW_KO"
+주도성 안내: $HEAD_KO $ROW_KO"
   ;;
 esac
 
