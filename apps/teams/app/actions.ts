@@ -78,6 +78,8 @@ import {
   setLanguage,
   readAutonomy,
   setAutonomy,
+  setAutopilot,
+  type Autonomy,
   type AutonomyLevel,
   readMultiplay,
   setMultiplayEnabled,
@@ -784,14 +786,20 @@ export async function setLanguageAction(locale: Locale): Promise<void> {
 
 /** 설정 트리 `언어` 바로 아래 노드 `주도성` (DESIGN.md §주도성 결정 4) — 다이얼로그가 열릴 때
  *  한 줄이 읽는다(`AnalyticsSection`과 같은 이유). 값은 `autonomy.json`에 머신 스코프로 쓴다. */
-export async function readAutonomyAction(): Promise<AutonomyLevel> {
+export async function readAutonomyAction(): Promise<Autonomy> {
   return readAutonomy();
 }
 
 /** 라디오 다섯 중 하나. 이미 도는 세션은 안 바뀌고 다음 디스패치부터 먹는다 — 그 사실은
  *  파일 쓰기가 아니라 화면 문구(`settings.autonomy.savedHint`)가 알린다. */
-export async function setAutonomyAction(level: AutonomyLevel): Promise<AutonomyLevel> {
+export async function setAutonomyAction(level: AutonomyLevel): Promise<Autonomy> {
   await setAutonomy(level);
+  return readAutonomy();
+}
+
+/** 5 아래 `오토파일럿` 스위치 (§P517 결정 7). `level`은 그대로 두고 `autopilot`만 쓴다. */
+export async function setAutopilotAction(on: boolean): Promise<Autonomy> {
+  await setAutopilot(on);
   return readAutonomy();
 }
 

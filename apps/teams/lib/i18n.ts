@@ -199,6 +199,8 @@ export const ko: Record<string, string> = {
   "settings.autonomy.level4": "막힘과 엔진 수정 승인만 되묻는다",
   "settings.autonomy.level5": "되묻지 않고 스스로 정한다",
   "settings.autonomy.default": "기본",
+  "settings.autonomy.autopilot": "오토파일럿",
+  "settings.autonomy.autopilotWarn": "위험: 세션이 묻지 않고 어떻게든 진행합니다. 막히면 빨간 답변 대기로만 알립니다.",
   "settings.autonomy.delayHint": "되묻기 한 번이 약 40분 걸립니다.",
   "settings.autonomy.savedHint": "지금 도는 세션은 그대로이고, 다음 디스패치부터 적용됩니다.",
 
@@ -3183,6 +3185,8 @@ export const en: Record<string, string> = {
   "settings.autonomy.level4": "Asks back only on blocks and engine-change approval",
   "settings.autonomy.level5": "Never asks back — decides everything itself",
   "settings.autonomy.default": "Default",
+  "settings.autonomy.autopilot": "Autopilot",
+  "settings.autonomy.autopilotWarn": "Danger: sessions push ahead without asking. If truly blocked, they only tell you through a red answer-wait.",
   "settings.autonomy.delayHint": "One round of asking back takes about 40 minutes.",
   "settings.autonomy.savedHint": "Sessions already running are unaffected — this takes effect from the next dispatch.",
 

@@ -194,24 +194,50 @@ export function autonomyPath(): string {
   return path.join(path.dirname(registryPath()), "autonomy.json");
 }
 
-/** 던지지 않는다. 흡수하는 다섯 경우는 파일 없음 - 깨진 JSON - 객체 아님 - 정수 아님 - 1~5
- *  범위 밖이다. */
-export async function readAutonomy(): Promise<AutonomyLevel> {
+/** `autopilot`은 **유효 판정**이다 — `level == 5`이고 파일 값이 JSON `true`일 때만 `true`
+ *  (§P517 결정 1, 엔진 `tick.sh` - `tickets.py`와 같은 흡수 판정). */
+export type Autonomy = { level: AutonomyLevel; autopilot: boolean };
+
+async function readAutonomyFile(): Promise<{ level: AutonomyLevel; flag: boolean }> {
   try {
     const o: unknown = JSON.parse(await readFile(autonomyPath(), "utf8"));
-    const level = o && typeof o === "object" && !Array.isArray(o) ? (o as { level?: unknown }).level : undefined;
-    return typeof level === "number" && Number.isInteger(level) && level >= 1 && level <= 5
-      ? (level as AutonomyLevel)
-      : DEFAULT_AUTONOMY;
+    const rec = o && typeof o === "object" && !Array.isArray(o) ? (o as { level?: unknown; autopilot?: unknown }) : {};
+    const level = rec.level;
+    return {
+      level:
+        typeof level === "number" && Number.isInteger(level) && level >= 1 && level <= 5
+          ? (level as AutonomyLevel)
+          : DEFAULT_AUTONOMY,
+      flag: rec.autopilot === true,
+    };
   } catch {
-    return DEFAULT_AUTONOMY;
+    return { level: DEFAULT_AUTONOMY, flag: false };
   }
 }
 
-export async function setAutonomy(level: AutonomyLevel): Promise<void> {
+/** 던지지 않는다. 흡수하는 다섯 경우는 파일 없음 - 깨진 JSON - 객체 아님 - 정수 아님 - 1~5
+ *  범위 밖이다. */
+export async function readAutonomy(): Promise<Autonomy> {
+  const { level, flag } = await readAutonomyFile();
+  return { level, autopilot: level === 5 && flag };
+}
+
+// 키 하나만 바꾸고 다른 키는 보존한다(파일 값이므로 유효 판정이 아니라 원 플래그를 쓴다).
+async function writeAutonomyFile(level: AutonomyLevel, flag: boolean): Promise<void> {
   const p = autonomyPath();
   await mkdir(path.dirname(p), { recursive: true });
-  await writeFile(p, JSON.stringify({ level }, null, 2) + "\n", "utf8");
+  const body = flag ? { level, autopilot: true } : { level };
+  await writeFile(p, JSON.stringify(body, null, 2) + "\n", "utf8");
+}
+
+export async function setAutonomy(level: AutonomyLevel): Promise<void> {
+  await writeAutonomyFile(level, (await readAutonomyFile()).flag);
+}
+
+/** `level`을 보존한 채 `autopilot`만 쓴다. 5가 아니면 켜지 않는다(UI도 비활성이다). */
+export async function setAutopilot(on: boolean): Promise<void> {
+  const { level } = await readAutonomyFile();
+  await writeAutonomyFile(level, on && level === 5);
 }
 
 // ── 멀티플레잉 스위치 파일 (DESIGN.md §0-18 §스위치) ────────────────────────

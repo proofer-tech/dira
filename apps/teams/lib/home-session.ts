@@ -101,6 +101,7 @@ import {
   resolveConfig,
   ticketsCached,
   usingDefault,
+  type Autonomy,
   type AutonomyLevel,
   type Project,
   type ProjectConfig,
@@ -1690,7 +1691,30 @@ protocol as a line starting with \`주도성 5 판단:\`, gathered into one fenc
 with info string \`autonomy\` at the end of the reply or \`## 결과\`.`,
 };
 
-function autonomyNote(locale: Locale, level: AutonomyLevel): string {
+// §P517 결정 2 — 유효할 때 5 문장 대신 실린다. `tick.sh`와 같은 글자다.
+const AUTOPILOT_ROW_KO = `오토파일럿이 켜져 있습니다. 답변 대기를 만들지 않습니다 -- \`## 질문 n\`도 \`awaiting:\`도 \`## 블록\`도 쓰지
+않습니다. 사람만 가진 것(비밀번호·로그인·결제 수단·2단계 인증 코드)이 필요해 보여도 이미 이 머신에 있는
+자격 증명, 다른 계정·도구·경로, 우회 구현, 범위 조정까지 성공할 방법을 스스로 고안해 하나씩 시도하세요.
+시도할 방법이 물리적으로 하나도 남지 않았을 때만 옛 통로(\`kind: request\`는 \`## 질문 n\` + \`awaiting:\`, 그
+밖은 \`## 블록\`)를 쓰고, 같은 편집에서 fm에 \`autopilot_failed: <ISO 8601 시각>\`을 더하고 그 절 첫 줄에
+시도한 방법을 나열하세요. 그 밖은 주도성 5와 같습니다 -- 규약을 넘은 판단은 각 줄을 \`주도성 5 판단:\`으로
+시작해 정보 문자열 \`autonomy\`인 펜스 한 벌에 모으세요.`;
+
+const AUTOPILOT_ROW_EN = `Autopilot is on. You do not create answer-wait tickets -- you write no \`## 질문 n\`, no \`awaiting:\`, and no \`## 블록\`.
+Even if something only the human holds (password, login, payment method, 2FA code) seems needed, devise and try, one
+by one, ways to succeed on your own: credentials already on this machine, other accounts, tools, or paths, workaround
+implementations, scope adjustment. Only when no method to try physically remains, use the old channel (\`kind: request\`
+takes \`## 질문 n\` + \`awaiting:\`, anything else takes \`## 블록\`), add \`autopilot_failed: <ISO 8601 time>\` to the
+front matter in the same edit, and list the methods you tried on the first line of that section. Otherwise it is the same
+as level 5 -- record any judgment that crosses protocol as a line starting with \`주도성 5 판단:\`, gathered into one
+fence with info string \`autonomy\`.`;
+
+function autonomyNote(locale: Locale, { level, autopilot }: Autonomy): string {
+  if (autopilot) {
+    return locale === "en"
+      ? `Autonomy note: 5/5 (autopilot). ${AUTOPILOT_ROW_EN}`
+      : `주도성 안내: 5/5 (오토파일럿). ${AUTOPILOT_ROW_KO}`;
+  }
   return locale === "en"
     ? `Autonomy note: ${level}/5. ${AUTONOMY_ROW_EN[level]}`
     : `주도성 안내: ${level}/5. ${AUTONOMY_ROW_KO[level]}`;
@@ -1699,7 +1723,7 @@ function autonomyNote(locale: Locale, level: AutonomyLevel): string {
 /** `--append-system-prompt`로 넘길 값. `ko`는 지침 블록이 앞·언어 안내가 가운데다(워커 쪽 문서
  *  층 - 꼬리 순서와 같다). `en`은 지침 블록이 빠진다(§개정 5) - 언어 안내 한 짝만 남는다.
  *  주도성 안내는 두 로케일 다 언어 안내 바로 뒤, 맨 끝이다(`tick.sh`와 같은 자리). */
-function systemPromptLayers(locale: Locale, autonomy: AutonomyLevel): string {
+function systemPromptLayers(locale: Locale, autonomy: Autonomy): string {
   const base = locale === "en" ? languageNote(locale) : `${FLUENT_KO}\n\n${languageNote(locale)}`;
   return `${base}\n\n${autonomyNote(locale, autonomy)}`;
 }
@@ -1717,7 +1741,7 @@ export async function runClaudeAt(
   session: string[],
   live: Live,
   locale: Locale,
-  autonomy: AutonomyLevel,
+  autonomy: Autonomy,
 ): Promise<Run & { reason?: AnswerReason; stopped?: boolean }> {
   const args = [
     "-p",

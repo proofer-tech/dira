@@ -64,6 +64,7 @@ import {
   setActiveEngineProfileAction,
   setAnalyticsAction,
   setAutonomyAction,
+  setAutopilotAction,
   setBindingAction,
   setEngineProfileEnabledAction,
   setEngineProfileLabelAction,
@@ -97,7 +98,7 @@ import { OntologyImport, OntologyLocationEditor } from "@/components/ontology-ui
 import { ConfigTable, OntologyMetricsField, OntologyMigration } from "@/components/projects-ui";
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
-import type { AutonomyLevel } from "@/lib/projects";
+import type { Autonomy, AutonomyLevel } from "@/lib/projects";
 import { VercelEnvLine } from "@/components/vercel-env-line";
 import { codeAfterList, rowMarkKey, type EnvErrorCode, type EnvItem, type VercelMeta, type VercelOnlyItem } from "@/lib/project-env";
 import { saveFailure } from "@/lib/selfish-mode";
@@ -179,7 +180,7 @@ export function openWorkerSettingsNode() {
 /** §0-15 §검색 레지스트리 한 줄 — `{트리 경로, 항목 이름, 이동 대상}`. `crumbs`가 빈 문자열이면
  *  결과 줄은 `name` 하나만 그린다(트리 노드 이름 자신 — §45 ⑤ 예시의 `키설정`). `anchor`는
  *  `data-setting="<anchor>"`를 짚는 문자열 하나다(§45 ⑥ §자리). */
-type SearchEntry = { node: SettingsNode; crumbs: string; name: string; anchor: string };
+type SearchEntry = { node: SettingsNode; crumbs: string; name: string; anchor: string; alias?: string };
 
 /** 머신당 하나뿐인 Claude 장기 토큰의 자리와 저장 시각. 프로젝트마다 있지 않다(§0-4). */
 export type AuthView = {
@@ -530,16 +531,22 @@ function LanguageSection({ className }: { className?: string }) {
  *  `router.refresh()`는 안 부른다, 이 값을 읽는 화면이 이 패널 자신뿐이라서다(언어와 다른 점). */
 function AutonomySection({ className }: { className?: string }) {
   const t = useT();
-  const [level, setLevel] = useState<AutonomyLevel | null>(null);
+  const [state, setState] = useState<Autonomy | null>(null);
   const [pending, start] = useTransition();
+  const level = state?.level ?? null;
 
   useEffect(() => {
-    void readAutonomyAction().then(setLevel);
+    void readAutonomyAction().then(setState);
   }, []);
 
   const choose = (next: AutonomyLevel) => {
     if (next === level) return;
-    start(async () => setLevel(await setAutonomyAction(next)));
+    start(async () => setState(await setAutonomyAction(next)));
+  };
+
+  const toggleAutopilot = () => {
+    if (!state) return;
+    start(async () => setState(await setAutopilotAction(!state.autopilot)));
   };
 
   const rows: { value: AutonomyLevel; label: string }[] = [
@@ -586,6 +593,32 @@ function AutonomySection({ className }: { className?: string }) {
                 )}
               </div>
             ))}
+          </div>
+
+          {/* §P517 결정 7 — 5 아래 스위치. `components/ui`에 Switch가 없어 role="switch" 버튼이다. */}
+          <div data-setting="autonomy.autopilot" className="ml-9 space-y-1">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={state?.autopilot ?? false}
+                disabled={pending || level !== 5}
+                onClick={toggleAutopilot}
+                className={cn(
+                  "relative h-5 w-9 shrink-0 rounded-full border transition-colors disabled:opacity-50",
+                  state?.autopilot ? "bg-destructive border-destructive" : "bg-muted",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-0.5 left-0.5 size-3.5 rounded-full bg-background transition-transform",
+                    state?.autopilot && "translate-x-4",
+                  )}
+                />
+              </button>
+              <span className="text-sm">{t("settings.autonomy.autopilot")}</span>
+            </div>
+            <p className="text-xs text-destructive">{t("settings.autonomy.autopilotWarn")}</p>
           </div>
 
           {/* 1·2에서만 뜬다(결정 4, 수용조건 9) — 되묻기가 큐를 늦춘다는 사실 한 줄 */}
@@ -2328,6 +2361,14 @@ export function SettingsDialog({
     // §주도성 §설정 노드 검색 — 노드 자신 하나면 충분하다(수용조건 10). 라디오 다섯 줄은
     // 이름이 아니라 문장이라 검색 색인에 안 싣는다(다른 노드의 상태 줄과 같은 판단).
     { node: "autonomy", crumbs: "", name: autonomyLabel, anchor: "autonomy" },
+    // §P517 결정 7 — `오토파일럿` - `autopilot`을 쳐도 주도성 노드가 나온다(이름은 로케일 사전).
+    {
+      node: "autonomy",
+      crumbs: autonomyLabel,
+      name: t("settings.autonomy.autopilot"),
+      anchor: "autonomy.autopilot",
+      alias: "오토파일럿 autopilot", // 어느 언어에서든 둘 다 잡힌다
+    },
     // §0-10 §화면 · §비주얼 §45 ⑪ 검색 — 노드 이름 하나 + 항목 둘(§검색 층 규칙 그대로).
     // 지금 상태 한 줄은 값이라 안 싣는다(정적 인덱스에 실을 이름이 없다).
     { node: "webhook", crumbs: "", name: webhookCrumb, anchor: "webhook" },
@@ -2741,7 +2782,7 @@ export function SettingsDialog({
                 {searchIndex.map((entry) => (
                   <CommandItem
                     key={entry.anchor}
-                    value={[entry.crumbs, entry.name].filter(Boolean).join(" ")}
+                    value={[entry.crumbs, entry.name, entry.alias].filter(Boolean).join(" ")}
                     onSelect={() => selectSearchResult(entry)}
                   >
                     <span className="truncate">

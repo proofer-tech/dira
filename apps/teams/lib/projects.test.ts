@@ -42,6 +42,7 @@ const {
   saveSquadRules,
   savePersona,
   setAutonomy,
+  setAutopilot,
   setMarketInstall,
   setMultiplayEnabled,
   setMultitoken,
@@ -929,30 +930,45 @@ test("다중계정 허용 — 세 상태(파일 없음=플래그 / 1 / 0), 판�
 test("주도성 — 흡수 다섯 경우 전부 4, set 뒤에는 그 값을 읽는다 (DESIGN.md §주도성 결정 1)", async () => {
   try {
     rmSync(autonomyPath(), { force: true });
-    assert.equal(await readAutonomy(), 4); // 파일 없음
+    assert.equal((await readAutonomy()).level, 4); // 파일 없음
 
     await setAutonomy(3);
     assert.equal(JSON.parse(readFileSync(autonomyPath(), "utf8")).level, 3);
-    assert.equal(await readAutonomy(), 3);
+    assert.equal((await readAutonomy()).level, 3);
 
     await setAutonomy(1);
-    assert.equal(await readAutonomy(), 1);
+    assert.equal((await readAutonomy()).level, 1);
     await setAutonomy(5);
-    assert.equal(await readAutonomy(), 5);
+    assert.equal((await readAutonomy()).level, 5);
 
     writeFileSync(autonomyPath(), "{ 깨진"); // 깨진 JSON
-    assert.equal(await readAutonomy(), 4);
+    assert.equal((await readAutonomy()).level, 4);
 
     writeFileSync(autonomyPath(), "[]"); // 객체가 아니다
-    assert.equal(await readAutonomy(), 4);
+    assert.equal((await readAutonomy()).level, 4);
 
     writeFileSync(autonomyPath(), JSON.stringify({ level: "3" })); // 정수가 아니다
-    assert.equal(await readAutonomy(), 4);
+    assert.equal((await readAutonomy()).level, 4);
 
     writeFileSync(autonomyPath(), JSON.stringify({ level: 0 })); // 1~5 범위 밖
-    assert.equal(await readAutonomy(), 4);
+    assert.equal((await readAutonomy()).level, 4);
     writeFileSync(autonomyPath(), JSON.stringify({ level: 6 }));
-    assert.equal(await readAutonomy(), 4);
+    assert.equal((await readAutonomy()).level, 4);
+
+    // §P517 결정 1·7 — 오토파일럿은 level 5 + JSON true일 때만 유효, 쓰기는 level을 보존한다
+    await setAutonomy(5);
+    await setAutopilot(true);
+    assert.deepEqual(JSON.parse(readFileSync(autonomyPath(), "utf8")), { level: 5, autopilot: true });
+    assert.deepEqual(await readAutonomy(), { level: 5, autopilot: true });
+    await setAutonomy(4); // 키는 남고 효력은 없다
+    assert.equal(JSON.parse(readFileSync(autonomyPath(), "utf8")).level, 4);
+    assert.deepEqual(await readAutonomy(), { level: 4, autopilot: false });
+    await setAutopilot(true); // 5가 아니면 안 켠다
+    assert.equal(JSON.parse(readFileSync(autonomyPath(), "utf8")).autopilot, undefined);
+    for (const bad of ["true", 1, null]) {
+      writeFileSync(autonomyPath(), JSON.stringify({ level: 5, autopilot: bad }));
+      assert.equal((await readAutonomy()).autopilot, false);
+    }
   } finally {
     rmSync(autonomyPath(), { force: true });
   }

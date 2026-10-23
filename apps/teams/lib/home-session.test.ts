@@ -55,7 +55,7 @@ type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
 const { TAB_LIMIT } = await import("./tabs.ts");
 const { tailEvents } = await import("./transcript.ts");
 type StreamEvent = Awaited<ReturnType<typeof tailEvents>>["events"][number];
-const { registryPath, resolveConfig, addProject, setLanguage, setAutonomy } = await import("./projects.ts");
+const { registryPath, resolveConfig, addProject, setLanguage, setAutonomy, autonomyPath } = await import("./projects.ts");
 const { listTickets } = await import("./queue.ts");
 const { listWorkers, lockPath } = await import("./workers.ts");
 const { engineRepo } = await import("./scaffold.ts");
@@ -1249,6 +1249,21 @@ echo '{"type":"result","is_error":false,"result":"답"}'
     const argvLevel1 = readFileSync(logLevel1, "utf8");
     assert.ok(argvLevel1.includes("주도성 안내: 1/5. 사람에게 묻는 것: `## Done when`"));
     assert.ok(!argvLevel1.includes("주도성 안내: 4/5"));
+
+    // ②-2 §P517 오토파일럿 — 유효(5 + true)면 `5/5 (오토파일럿)` 줄 1회, 4 + true면 0회
+    await setAutonomy(5);
+    writeFileSync(autonomyPath(), JSON.stringify({ level: 5, autopilot: true }));
+    process.env.AUTO_LOG = logLevel1;
+    writeFileSync(logLevel1, "");
+    assert.strictEqual((await ask(project, "오토 질문")).ok, true);
+    const argvAuto = readFileSync(logLevel1, "utf8");
+    assert.strictEqual(argvAuto.split("5/5 (오토파일럿)").length - 1, 1);
+    assert.ok(!argvAuto.includes("주도성 안내: 5/5. 묻지 않습니다"));
+    writeFileSync(autonomyPath(), JSON.stringify({ level: 4, autopilot: true }));
+    writeFileSync(logLevel1, "");
+    assert.strictEqual((await ask(project, "오토 아님")).ok, true);
+    assert.strictEqual(readFileSync(logLevel1, "utf8").split("5/5 (오토파일럿)").length - 1, 0);
+    await setAutonomy(1);
 
     // ③ en 로케일에서는 영어 문구를 따른다
     await setLanguage("en");
