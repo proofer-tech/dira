@@ -2093,7 +2093,7 @@ $ cd <루트>/.dira/tickets && python3 /tmp/measure_opts.py     # 스크립트�
 5. 같은 화면에서 `티켓 Goal` - `티켓 블록` - `죽은 세션 마지막 기록` 셋이 **접혀** 있다. 처음
    보이는 질문 글이 정형문 한 줄 + 선택지 4줄이고, 펼치면 1번에서 잰 글이 그대로 나온다.
 6. PM이 손으로 쓴 질문 절(`default_answer` 없음)은 종전 그대로 - 미리 체크된 칸이 0개다.
-7. `cd apps/teams && pnpm test` 통과 - `python3 -m pytest test_ask_context.py` 통과.
+7. `cd apps/teams && pnpm test` 통과 - `python3 test_ask_context.py` 통과.
 
 #### 버린 대안
 
@@ -2186,7 +2186,7 @@ claim - 평면 큐에 손이 안 가고 **새 fm 키 0**) - 기존 `test_*.py` �
 # ⑤ 블록에 그 형식이 없으면 종전 그대로다 - `### 1. 이 티켓을 어떻게 할까요` + `default_answer: 1.(a)`
 # ⑥ ③의 티켓을 화면에서 열면 카드가 두 장이고 위 카드의 선택지가 세션이 적은 것이다.
 #    인용 3종은 그대로 접혀 있다. `apps/teams/**`의 diff가 0줄이다
-# ⑦ python3 -m pytest test_ask_context.py && python3 -m pytest      # 전부 통과
+# ⑦ python3 test_ask_context.py && (for t in test_*.py; do python3 "$t" || exit 1; done)  # rc=0
 # ⑧ grep -c '한 문장 요약' .dira/protocols/질문-형식.md              # 1 이상
 ```
 
@@ -2538,7 +2538,7 @@ rename하고, 마지막 절이 `## 블록`이면 종전대로 답변 요청으�
    있고 `killed`에는 `default_answer` 키가 없다.
 6. 무종료 마감 갈래에서 문항 뒤에 `미체크 <m>개 / 전체 <n>개` 한 줄이 뜨고, 미체크가 0인
    티켓에서는 `상자는 다 찼고 rename만 안 됐습니다`로 갈린다.
-7. `python3 -m pytest test_ask_context.py` 통과 - `git diff --stat`에 `apps/teams/`가 **없다**.
+7. `python3 test_ask_context.py` 통과 - `git diff --stat`에 `apps/teams/`가 **없다**.
 
 #### 버린 대안
 
@@ -2593,7 +2593,7 @@ stream 큐의 `8fc51df3`이 계기다. 세션(w3, sid `983e1deb`)은 구현하�
 3. 회수 실패 - 블록 - 강제 중단 갈래의 질문 절에 `### 세션 마지막 기록`이 있고
    `### 죽은 세션 마지막 기록`은 없다. `handoff` 갈래에는 둘 다 없다.
 4. `grep -n '죽은 세션 마지막 기록' tickets.py`가 0줄이다.
-5. `python3 -m pytest test_ask_context.py test_handoff_cap.py` 통과 - `git diff --stat`에
+5. `python3 test_ask_context.py && python3 test_handoff_cap.py` 통과 - `git diff --stat`에
    `apps/teams/`가 없다.
 
 #### 버린 대안
@@ -9124,7 +9124,7 @@ GA4 화면 확인은 결정 2를 마친 사람이 결정 3의 절차로 한 번 
       워커를 띄우지 않는다고 판정한다.
 - [ ] reap 단계를 10초 걸리게 만든 상태에서 같은 워커의 인자 없는 tick을 1초 안에 10개 띄우면, reap 단계에 들어간
       tick은 하나다(`runner.log`의 reap 결과 줄이 한 벌).
-- [ ] 엔진 테스트 전량(`python3 -m pytest test_*.py`)이 통과하고, `git diff --stat`에 `apps/teams/`가 없다.
+- [ ] 엔진 테스트 전량(`(for t in test_*.py; do python3 "$t" || exit 1; done)`)이 rc=0으로 끝나고, `git diff --stat`에 `apps/teams/`가 없다.
 
 ### P513. 사용 통계가 켜져 있으면 앱 오류를 스택 트레이스와 원본 로그째 dira 서버(Vercel)로 자동 제보한다 (요구 `c82e5159`, 왕복 0회)
 
