@@ -39,12 +39,13 @@ export const writableTeamOf = (queueRoot: string) => {
 
 export const hasTeam = (queueRoot: string) => existsSync(path.join(teamOf(queueRoot), "apm.yml"));
 
-function enginePy(): string | null {
+export function engineFile(name: string): string | null {
   const raw = process.env.DIRA_ENGINE?.trim();
   const repo = raw && path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(process.cwd(), "..", "..");
-  const py = path.join(repo, "dira_apm.py");
+  const py = path.join(repo, name);
   return existsSync(py) ? py : null;
 }
+const enginePy = () => engineFile("dira_apm.py");
 
 const runPy = (py: string, args: string[]) =>
   new Promise<{ rc: number; out: string }>((resolve) => {

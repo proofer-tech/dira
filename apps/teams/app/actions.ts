@@ -59,6 +59,7 @@ import {
 import { discardGateDirty } from "@/lib/engine";
 import type { FeedbackMeta } from "@/lib/feedback";
 import { DEFAULT_KEYMAP, comboOf, validateBinding, type KeyLike } from "@/lib/keymap";
+import { readSlim, setSlim, type SlimView } from "@/lib/slim";
 import { markResumeRead } from "@/lib/machine-state";
 import {
   ProjectError,
@@ -1040,6 +1041,18 @@ export async function saveIntegrationBranchAction(
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
+}
+
+// ── 슬림 체크아웃 (§P519 결정 5, 6, 9) ──
+
+export async function readSlimAction(id: string): Promise<SlimView | null> {
+  const project = await getProject(id);
+  return project ? readSlim(project.root) : null;
+}
+
+export async function setSlimAction(id: string, on: boolean): Promise<SlimView | null> {
+  const project = await getProject(id);
+  return project ? setSlim(project.root, on) : null;
 }
 
 // ── 프로젝트 환경변수 (요구 04daa929 · ENV-3) ──

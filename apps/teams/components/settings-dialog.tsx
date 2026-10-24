@@ -44,6 +44,8 @@ import {
   readAutonomyAction,
   readEngineProfileRowsAction,
   readIntegrationBranchAction,
+  readSlimAction,
+  setSlimAction,
   readMultiplayAction,
   readMultitokenAction,
   readTokenRowsAction,
@@ -99,6 +101,7 @@ import { ConfigTable, OntologyMetricsField, OntologyMigration } from "@/componen
 import { StatusBadge, statusLabel } from "@/components/status-badge";
 import type { Locale } from "@/lib/i18n";
 import type { Autonomy, AutonomyLevel } from "@/lib/projects";
+import type { SlimView } from "@/lib/slim";
 import { VercelEnvLine } from "@/components/vercel-env-line";
 import { codeAfterList, rowMarkKey, type EnvErrorCode, type EnvItem, type VercelMeta, type VercelOnlyItem } from "@/lib/project-env";
 import { saveFailure } from "@/lib/selfish-mode";
@@ -1745,6 +1748,59 @@ function IntegrationBranchField({ projectId, open }: { projectId: string; open: 
   );
 }
 
+/** 슬림 체크아웃 스위치와 상태 줄(§P519 결정 9). `components/ui`에 Switch가 없어 role="switch" 버튼이다. */
+function SlimCheckoutField({ projectId, open }: { projectId: string; open: boolean }) {
+  const t = useT();
+  const [v, setV] = useState<SlimView | null>(null);
+  const [pending, start] = useTransition();
+
+  useEffect(() => {
+    if (open) void readSlimAction(projectId).then(setV);
+  }, [projectId, open]);
+
+  if (!v) return null;
+  const toggle = () =>
+    start(async () => {
+      const r = await setSlimAction(projectId, !v.enabled);
+      if (r) setV(r);
+    });
+  const reason = v.eligible ? v.message || (v.enabled ? v.reason : null) : t("project.slim.ineligible");
+
+  return (
+    <div data-setting="project.slimCheckout" className="space-y-1 border-t pt-4">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={v.enabled}
+          disabled={pending || !v.eligible}
+          onClick={toggle}
+          className={cn(
+            "relative h-5 w-9 shrink-0 rounded-full border transition-colors disabled:opacity-50",
+            v.enabled ? "bg-primary border-primary" : "bg-muted",
+          )}
+        >
+          <span
+            className={cn(
+              "absolute top-0.5 left-0.5 size-3.5 rounded-full bg-background transition-transform",
+              v.enabled && "translate-x-4",
+            )}
+          />
+        </button>
+        <span className="text-sm">{t("project.slim.label")}</span>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("project.slim.desc")}</p>
+      {v.eligible && (
+        <p data-slim-state={v.state} className="text-xs text-muted-foreground">
+          {t(v.state === "empty" ? "project.slim.empty" : "project.slim.full")}
+          {v.last_active ? ` · ${t("project.slim.lastActive")} ${v.last_active}` : ""}
+        </p>
+      )}
+      {reason && <p className="text-xs text-status-stale">{reason}</p>}
+    </div>
+  );
+}
+
 /** 프로젝트 환경변수(요구 04daa929 · ENV-3). 이름 · 수정 시각 · 고정 마스크만 그린다 — 값을 읽는
  *  길이 없고(브리지가 목록에 값을 안 준다) 입력은 빈 비밀번호 칸으로 시작해 성공이나 닫힘에서
  *  버린다. 목록은 성공 응답으로만 바꾼다(실패한 쓰기는 오류 줄만 남긴다). 프로젝트가 바뀌면
@@ -2134,6 +2190,7 @@ function ProjectSection({
       </div>
 
       <IntegrationBranchField projectId={id} open={open} />
+      <SlimCheckoutField projectId={id} open={open} />
       <ProjectEnvField projectId={id} open={open} />
 
       {/* 자리 5 — 등록 해제. 확인은 이 자리 안에서 뜬다(결정 4) — 다이얼로그 머리도 트리도
@@ -2287,6 +2344,13 @@ export function SettingsDialog({
             crumbs: `${projectGroupCrumb} › ${project.name}`,
             name: t("project.settings.renameLabel"),
             anchor: "project.rename",
+          },
+          {
+            node: "project",
+            crumbs: `${projectGroupCrumb} › ${project.name}`,
+            name: t("project.slim.label"),
+            anchor: "project.slimCheckout",
+            alias: "비우기 slim", // 어느 언어에서든 둘 다 잡힌다
           },
           {
             node: "project",
