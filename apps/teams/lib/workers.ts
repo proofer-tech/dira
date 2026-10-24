@@ -2462,6 +2462,10 @@ if [ "\${1:-tick}" = tick ] || [ "\${1:-tick}" = dryrun ]; then
         else
           git -C "$_gate_project" worktree add "$TICKET_CWD" -b "wt/$_gate_me" >/dev/null 2>&1 || _gate_made=0
         fi
+        # 슬림 체크아웃(P519)으로 루트가 비어 있으면 add가 sparse 설정을 물려받아 새 트리도 빈다 — 이 트리만 푼다
+        if [ "$_gate_made" = 1 ]; then
+          git -C "$TICKET_CWD" sparse-checkout disable >/dev/null 2>&1
+        fi
         # ln -s 함정(실사고 bf4d8878) — 대상이 이미 있으면 절대 안 친다. 있는 채로 치면 실패하는
         # 대신 그 안쪽에 .dira/.dira를 만든다
         if [ "$_gate_made" = 1 ] && [ ! -e "$TICKET_CWD/.dira" ]; then
@@ -3065,6 +3069,8 @@ export async function prepareWorktree(
     );
     try {
       await git("worktree", "add", dir, ...(has ? [branch] : ["-b", branch]));
+      // 슬림 체크아웃(P519)으로 루트가 비어 있으면 새 트리가 sparse 설정을 물려받아 빈다 — 이 트리만 푼다
+      await promisify(execFile)("git", ["-C", dir, "sparse-checkout", "disable"]).catch(() => {});
     } catch (e) {
       return stop(0, `${t(locale, "workers.worktree.addFailedPrefix")} ${why(e)}`);
     }

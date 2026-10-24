@@ -6,6 +6,7 @@ import {
   mkdirSync,
   chmodSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   readlinkSync,
   realpathSync,
@@ -2955,6 +2956,29 @@ test("dispatchGateSh — 없는 표준 워크트리를 게이트가 만든다 (�
   });
   assert.match(empty, /GATE 디스패치 보류/);
   assert.doesNotMatch(empty, /끝/);
+});
+
+/** P519 - 슬림 체크아웃으로 루트가 비어 있어도(sparse 설정이 루트 전용 config에 있다) 게이트가 새로 만든
+ *  워커 워크트리는 추적 파일을 다 가진다. 진짜 git + 진짜 bash. */
+test("dispatchGateSh - 비워 둔 루트에서 만든 새 워크트리도 채워져 있고 루트는 비어 있다 (P519)", () => {
+  const { base, root } = makeRepo();
+  const gate = path.join(root, "dispatch-gate.sh");
+  writeFileSync(gate, dispatchGateSh("main"));
+  const git = (...a: string[]) => execFileSync("git", ["-C", base, ...a], { encoding: "utf8" });
+  git("config", "extensions.worktreeConfig", "true");
+  git("sparse-checkout", "set", "--no-cone", "/.dira-slim-empty"); // slim.py empty가 하는 일
+  const tracked = (dir: string) => readdirSync(dir).filter((n) => n !== ".git" && n !== ".dira");
+  assert.deepStrictEqual(tracked(base), []);
+
+  const tree = path.join(root, "worktrees", "w2");
+  const out = execFileSync("bash", ["-c", `. ${JSON.stringify(gate)} tick; echo 끝`, path.join(root, "workers", "w2.sh")], {
+    encoding: "utf8",
+    env: { ...process.env, TICKET_CWD: tree },
+  });
+  assert.match(out, /끝/);
+  assert.strictEqual(readFileSync(path.join(tree, "README.md"), "utf8"), "# t\n");
+  assert.deepStrictEqual(tracked(base), []); // 루트는 그대로 빈다
+  assert.match(git("sparse-checkout", "list"), /\.dira-slim-empty/);
 });
 
 /** §4-14 결정 3(P349-2) — `<루트>/push.sh`가 있으면 그 큐는 push를 헬퍼로 통합하므로, 더러운
