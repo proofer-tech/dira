@@ -265,7 +265,7 @@ refresh_fixed_engine() {
   case "$rec" in ''|*[!0-9]*) rec= ;; esac
   if [ -z "$rec" ] || [ "$mine" -ge "$rec" ]; then
   # P476: MCP 서버와 그것이 부르는 엔진 파일도 같은 자리에 굽는다(내용이 다르면 원자 교체).
-  for f in mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py dispatch.py; do
+  for f in mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py dispatch.py slim.py; do
     [ -f "$CODE/$f" ] && ! cmp -s "$CODE/$f" "$ENGINES_DIR/$f" 2>/dev/null || continue
     cp "$CODE/$f" "$ENGINES_DIR/$f.tmp.$$" 2>/dev/null \
       && python3 -c 'import os,sys;os.replace(sys.argv[1],sys.argv[2])' "$ENGINES_DIR/$f.tmp.$$" "$ENGINES_DIR/$f" \
@@ -830,6 +830,13 @@ if [ "$CMD" = "tick" ]; then
   python3 "$PY" reap "$TICKET_ROOT" "$LOCAL" 2>/dev/null | while IFS= read -r line; do
     [ -n "$line" ] && log "$line"
   done
+fi
+
+# --- P519: 슬림 체크아웃 자동 비우기. 옵션이 꺼진 큐는 아무것도 부르지 않는다. 실패는 tick을 막지 않는다 ---
+slim_on() { [ "$(head -n1 "$TICKET_ROOT/slim-checkout" 2>/dev/null)" = "on" ] && [ -f "$CODE/slim.py" ]; }
+if [ "$CMD" = "tick" ] && slim_on; then
+  _TO=""; command -v timeout >/dev/null 2>&1 && _TO="timeout 120"
+  $_TO python3 "$CODE/slim.py" auto "$TICKET_ROOT" >/dev/null 2>&1
 fi
 
 # --- 로그 보존: workers/logs·workers/health 아래 오래된 파일을 지운다 ---
@@ -1812,6 +1819,13 @@ python3 "$PY" assign "$TPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:
 LOGF="$LOGDIR/$(date '+%Y%m%d-%H%M%S')-${TICKET_NAME}-${THASH}.log"
 PRIOLOG=$(prio_log "$TPRIO" "$TBASE" "$TEFF")
 log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $PRIOLOG"
+
+# P519: 티켓을 소비할 때 슬림 체크아웃을 다시 채운다. 세션은 자기 워크트리에서 일하므로 실패해도 띄운다.
+if slim_on; then
+  _TO=""; command -v timeout >/dev/null 2>&1 && _TO="timeout 300"
+  _SO="$($_TO python3 "$CODE/slim.py" fill "$TICKET_ROOT" 2>&1)" || log "WARN 슬림 채우기 실패: $_SO"
+  touch "$TICKET_ROOT/slim-checkout.active" 2>/dev/null
+fi
 
 cleanup_stray_wip "$TICKET_CWD"
 

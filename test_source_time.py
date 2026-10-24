@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FILES = "mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py dispatch.py".split()
+FILES = "mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py dispatch.py slim.py".split()
 
 
 def mkcode(tmp, name, stamp):
