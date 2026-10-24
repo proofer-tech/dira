@@ -920,14 +920,16 @@ field. It takes you there without walking the tree.
 
 - **Project** — the first group in the tree. It only appears when you open settings from inside a
   project. There is a single line under it, and its name is the name of the project you are looking
-  at. Press it and nine things for that one project come up in this order — `Resolved values`,
+  at. Press it and ten things for that one project come up in this order — `Resolved values`,
   `Ontology migration`, `Folder to import`, `Edit ontology location`, the twelve metric cells,
-  `Name`, `Integration branch`, `Environment variables`, `Unregister`. The four in the middle all deal with the ontology, so
+  `Name`, `Integration branch`, `Empty the working tree while idle`, `Environment variables`,
+  `Unregister`. The four in the middle all deal with the ontology, so
   they stand together. Two of those four moved here from the ontology screen: `Edit ontology
   location` and the twelve metric cells (see [Archiving and the ontology](/docs/ontology)).
   `Integration branch` is the branch sessions push to, the one you set when you created the project
-  (see [Your first project](/docs/first-ticket)). `Environment variables` is covered in
-  [Project environment variables](#project-environment-variables) below.
+  (see [Your first project](/docs/first-ticket)). `Empty the working tree while idle` is covered in
+  [Empty the working tree while idle](#empty-the-working-tree-while-idle) below, and
+  `Environment variables` in [Project environment variables](#project-environment-variables).
 - **Authentication** — `claude` is at the top, with `codex` · `grok` · `agy` one line each below it.
   This is where you put in the long-lived token the cron-mounted workers use. The screen runs the
   issuing command for you. The details are in [Authentication](/docs/auth).
@@ -962,14 +964,90 @@ several accounts).
 
 Everything outside the `Project` group belongs to this computer and applies to every registered
 project. Authentication, language, the session limit — none of them are set per project. Values
-that do differ per project sit in two places. One is the nine things in the `Project` group you
+that do differ per project sit in two places. One is the ten things in the `Project` group you
 just saw; the other is `Worker settings`, opened separately from the top right of the workers screen (see
 [Workers](/docs/worker)).
+
+### Empty the working tree while idle
+
+If the project folder takes up a lot of disk, turn this switch on. In the `Project` group,
+`Empty the working tree while idle` sits right under `Integration branch`. The line under the switch
+sums it up: turning it on empties everything but `.dira` and `.git` right away, the folder is
+filled from the integration branch again when a ticket is processed, and it is emptied again after
+three days without work.
+
+Only the project folder is emptied. Sessions work in their own worktrees under `.dira/worktrees`,
+so tickets keep getting done while the project folder is empty. Nothing is downloaded again either.
+`.git` stays, so the integration branch is checked out from it, with no fetch from origin. Commits
+the workers pushed may not be on origin yet.
+
+What stays and what goes the moment you turn it on:
+
+| | What |
+|---|---|
+| Stays | `.dira` and `.git` |
+| Stays | Files named `.env` or starting with `.env.`, at any depth. git cannot bring secrets back |
+| Stays | Other worktrees listed by `git worktree list`, and the folders above them. A worktree you made inside the project folder is not touched |
+| Goes | Every file git tracks |
+| Goes | Files matched by `.gitignore`. `node_modules` and build output are in this group |
+
+`git status` still comes back clean after emptying. The tracked files are only taken out of the
+working tree with git sparse-checkout, so git does not see them as deleted. To check from a
+terminal whether the folder is empty right now, run `git sparse-checkout list`. If the output is
+the single line `/.dira-slim-empty`, it is empty.
+
+#### When it fills again
+
+The folder is filled right before a worker picks up a ticket and starts a session. If filling
+fails, the session starts anyway and the failure gets one line in runner.log. Turning the switch
+off fills the folder on the spot. A project with the switch off is never left empty.
+
+Filling brings back only the files git tracks. `node_modules` and build output stay gone. To run
+the app from the project folder yourself, install packages and build again.
+
+#### Three days idle empties it on its own
+
+Each time the worker runs, every 30 seconds, it checks these four and empties the folder when all
+of them hold.
+
+- The switch is on.
+- The folder is filled right now.
+- No ticket in the queue is in progress.
+- The last work time is 72 hours or more in the past.
+
+The last work time is when a session was last started to process a ticket. If no session has
+started since the switch went on, the time the switch went on is used. Work a person does directly
+in the project folder does not count. If you spent more than three days working only in that
+folder, the refusal rules below protect your edits, but a clean tree with everything committed
+gets emptied.
+
+#### When emptying is refused
+
+The folder is not emptied while a person's work is in it. Any one of these refuses it.
+
+- There are uncommitted changes.
+- There is a new file not matched by `.gitignore`.
+- A branch other than the integration branch is checked out.
+- HEAD is detached.
+
+The app does not stash or commit for you. The status line under the switch shows the reason and up
+to five of the paths involved. Commit or delete those paths, and if you are on another branch, go
+back to the integration branch. A refusal still saves the switch as on, and the automatic emptying
+tries again once the three-day rule holds. To empty right away, turn the switch off and on again.
+
+Otherwise the status line says whether the folder is empty or filled, along with the last work time. If the switch
+does not respond and the line says the folder is not the top-level folder of a git repository, the
+project folder is a subfolder of a repository or a worktree belonging to another one. The option
+cannot be turned on for such a project.
+
+The switch's value is one line in `.dira/slim-checkout`. `on` means on and anything else means off.
+Workers read this file even when the app is closed. Typing `slim` in the search field also brings
+you here.
 
 ### Project environment variables
 
 This is where you leave secret values for a project, such as an API token a session needs. In the
-`Project` group, `Environment variables` sits below `Integration branch` and above `Unregister`.
+`Project` group, `Environment variables` sits below `Empty the working tree while idle` and above `Unregister`.
 Values are encrypted with this Mac's OS key storage (the Keychain on macOS) and kept in the app's
 data folder. They are never written to the queue, tickets, git, or a `.env` file.
 
@@ -1138,7 +1216,7 @@ writing as the page you see on the web. In the app, the list rides on top of it 
 - For a project that is not connected, the three count cells are empty. Not zero. Could not read and
   zero are different facts.
 - The gear in the `Actions` column opens `Settings`. That row's project comes up already selected
-  under the first tree group, `Project`, and the nine things from resolved values through
+  under the first tree group, `Project`, and the ten things from resolved values through
   unregister are there. No separate `Project settings` dialog opens any more (see [The settings
   dialog](#the-settings-dialog) above).
 - The right of the header carries `Manual` · `Market` · `Star` · `New project` ·
