@@ -8938,6 +8938,111 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P519. 슬림 체크아웃 - 쉬는 프로젝트는 `.dira`와 `.git`만 남기고 비웠다가, 티켓을 소비할 때 통합 브랜치로 다시 채운다 (요구 `7bc5fe0b`, 왕복 0회)
+
+사람 요구(2026-10-24): *"프로젝트 디렉토리(여기의 경우 ~/Projects/dira)를 지정했을 때 만약 git repo라면 .dira 만
+남겨서 용량을 확보하고 필요하면 git 으로 설정에 지정되어있는 브랜치를 clone 해오는 옵션을 프로젝트 설정에
+제공해주세요. 1. 이 옵션을 활성화시키면 바로 프로젝트 폴더에 .dira를 제외하고 비워집니다. 2. 실제 티켓을 소비할
+때 다시 clone 해옵니다. 3. 이 옵션이 켜져있으면서 사흘 이상 프로젝트에 작업이 없었다면 자동으로 비워줍니다(1번에서
+하는것처럼)"*
+
+#### 실측 (2026-10-24)
+
+- `~/Projects/dira`는 37 GB다. 그중 `.dira` 20 GB(거의 전부 `.dira/worktrees`), `apps` 17 GB(빌드 산출물과
+  `node_modules`), `.git` 148 MB다. 비워서 얻는 용량은 통합 체크아웃의 작업 트리이고 `.git`은 작다.
+- 워커 워크트리(`.dira/worktrees/<w>`)는 프로젝트 루트의 `.git`에 매인 linked worktree다. 워커는
+  `push.sh`로 **로컬** 통합 브랜치에 push하고(`receive.denyCurrentBranch=updateInstead`), origin push는 사람이
+  한다. 그래서 로컬 통합 브랜치에는 origin에 없는 커밋이 늘 있다. `.git`을 지우면 그 커밋과 모든 워크트리가
+  함께 사라진다.
+- `push.sh` `cleanup_dirty_tree`는 받는 트리의 `status --porcelain -uno`를 본다. 추적 파일을 그냥 지우면 모든
+  파일이 삭제로 잡혀 잔해 복원이나 사람 편집 stash로 처리된다.
+- cron은 설치 경로의 `dispatch.py`를 부르고 엔진은 `~/Library/Application Support/dira/engine`에서 돈다.
+  프로젝트 루트의 작업 트리가 비어도 디스패치 자체는 돈다. 통합 브랜치 값은 `.dira/integration-branch`에 있다.
+- 사람 체크아웃 안에 다른 linked worktree가 있을 수 있다(`~/Projects/dira/.claude/worktrees/site`).
+
+#### 결정
+
+1. **비우기는 작업 트리만이다. `.dira`와 `.git`은 남긴다.** 요구의 "`.dira`만 남겨서"를 글자대로 하면 `.git`이
+   지워져 로컬에만 있는 통합 브랜치 커밋과 워커 워크트리가 모두 사라진다. `.git`은 148 MB라 남겨도 용량 목적이
+   유지된다. 그래서 다시 채우기는 네트워크 clone이 아니라 로컬 `.git`에서 통합 브랜치를 꺼내는 것이다. origin
+   fetch는 하지 않는다(origin은 사람 몫이고, 로컬 브랜치가 앞서 있다).
+2. **비운 상태는 git sparse-checkout으로 만든다.** 추적 파일은 `git sparse-checkout set --no-cone`에 아무 파일과도
+   맞지 않는 패턴 `/.dira-slim-empty` 하나를 주어 작업 트리에서 내리고, 인덱스에는 skip-worktree로 남긴다.
+   그래서 `status`가 깨끗하고 `push.sh`의 `updateInstead` push가 그대로 성공한다. 설정은 **루트 워크트리 전용
+   config**(`extensions.worktreeConfig` + `git config --worktree`)에만 쓰고, 다른 워크트리는 전부 채워진 채로 둔다.
+   - **판정**: `git -C <루트> sparse-checkout list`의 출력이 정확히 `/.dira-slim-empty` 한 줄이면 "비어 있음"이다.
+     그 밖은 "채워짐"이다.
+3. **비울 때 지우는 것과 남기는 것.** 추적 파일은 결정 2가 내린다. 무시 파일(ignored)은 지운다. 아래는 남긴다.
+   - `.dira` `.git`
+   - `git worktree list`에 나오는 경로와 그 상위 디렉터리(사람의 다른 워크트리를 지우지 않는다)
+   - 이름이 `.env` 또는 `.env.*`인 파일(어느 깊이든). 비밀값은 git으로 되살릴 수 없다.
+4. **사람 작업이 있으면 비우지 않는다.** `git status --porcelain`(추적 변경 + 무시되지 않은 미추적 파일)이 한
+   줄이라도 있거나, 통합 브랜치가 아닌 브랜치가 체크아웃돼 있거나, HEAD가 detached면 비우기를 거절한다. 거절
+   사유와 경로 최대 5개를 돌려준다. 자동으로 stash하거나 커밋하지 않는다.
+5. **엔진 도우미 하나 - `slim.py`.** 표준 라이브러리만 쓰고 명령은 넷이다. 화면과 `tick.sh`는 이 파일만 부른다.
+   - `python3 slim.py status <큐 루트>` -> JSON 한 줄 `{"enabled", "eligible", "state": "empty"|"full", "last_active", "reason"}`
+   - `python3 slim.py empty <큐 루트>` -> 결정 3-4대로 비운다. 거절이면 rc 2와 `reason`.
+   - `python3 slim.py fill <큐 루트>` -> `git sparse-checkout disable` 후 통합 브랜치가 체크아웃돼 있는지
+     확인한다. 이미 채워져 있으면 아무것도 안 하고 rc 0이다.
+   - `python3 slim.py auto <큐 루트>` -> 결정 7의 자동 비우기 판정 후 해당하면 `empty`.
+   `eligible`은 큐 루트의 부모(프로젝트 루트)에 `.git` **디렉터리**가 있고 `git rev-parse --show-toplevel`이 그
+   루트일 때만 참이다. 하위 폴더나 linked worktree인 프로젝트는 옵션을 못 켠다.
+6. **설정 값은 큐 파일 하나다 - `.dira/slim-checkout`.** 내용이 `on` 한 줄이면 켜짐이고 그 밖(없음 포함)은
+   꺼짐이다. `.dira/integration-branch`와 같은 자리라 GUI가 꺼져 있어도 엔진이 읽는다.
+   - 켜는 순간 `empty`를 바로 부른다(요구 1). 거절되면 켜짐은 저장하되 화면에 사유를 보이고, 자동 비우기가
+     나중에 다시 시도한다.
+   - 끄는 순간 `fill`을 부른다. 꺼진 프로젝트를 비운 채로 두지 않는다.
+7. **자동 비우기 - 사흘 쉬면.** `tick.sh`가 매 틱 `slim.py auto`를 부른다. 아래가 모두 참일 때 비운다.
+   - 옵션이 켜져 있고 `state`가 `full`이다.
+   - 큐에 `.wip` 티켓이 0장이다.
+   - 마지막 작업 시각(`last_active`)이 지금보다 72시간 이상 앞이다. `last_active`는 `.dira/slim-checkout.active`의
+     mtime이고, 그 파일이 없으면 `.dira/slim-checkout`의 mtime이다.
+8. **티켓을 소비할 때 채운다.** `tick.sh`가 claim한 티켓으로 세션을 띄우기 직전에, 옵션이 켜져 있으면
+   `slim.py fill`을 부르고 `.dira/slim-checkout.active`를 touch한다(요구 2). 채우기가 실패하면 세션은 그대로
+   띄운다 - 세션은 자기 워크트리에서 일하고 루트 작업 트리를 쓰지 않으므로 채우기 실패가 작업 실패는 아니다.
+   실패는 runner.log에 한 줄 남긴다. 옵션이 꺼져 있으면 아무것도 안 한다(지금과 같다).
+   - 다시 채우는 것은 추적 파일뿐이다. `node_modules`와 빌드 산출물은 사람이나 세션이 필요할 때 다시 만든다.
+9. **화면 - 프로젝트 설정의 통합 브랜치 칸 바로 아래 스위치 하나.** 라벨 `쉬는 동안 작업 트리 비우기` -
+   `Empty the working tree while idle`. 설명 한 줄: *"켜면 지금 .dira와 .git만 남기고 비웁니다. 티켓을 처리할
+   때 통합 브랜치로 다시 채우고, 사흘 동안 작업이 없으면 다시 비웁니다."* 그 아래 상태 한 줄: `비어 있음` -
+   `채워짐` 중 하나와 마지막 작업 시각, 거절됐으면 사유. `eligible`이 거짓이면 스위치는 `disabled`이고 이유 한
+   줄(`git 저장소의 최상위 폴더가 아닙니다`)이 뜬다. 스위치는 P517 결정 7과 같은 `button role="switch"` 구현을
+   쓰고 새 npm을 들이지 않는다. `data-setting="project.slimCheckout"`. 검색 인덱스에 `비우기` - `slim`이 들어간다.
+
+주도성 5 판단: 엔진 수정(`slim.py` 추가, `tick.sh`의 채우기 - 자동 비우기 호출, 고정 경로 굽기 목록)을 사람 승인
+없이 낸다. 사람이 이 요구로 디스패치 직전 동작을 바꾸라고 했고, 상태 3종 - 파일명 - claim 락은 안 바뀐다.
+주도성 5 판단: 요구의 "`.dira`만 남긴다"와 "clone 해온다"를 `.git`을 남기고 로컬에서 꺼내는 것으로 바꿨다.
+글자대로 하면 로컬에만 있는 통합 브랜치 커밋과 워커 워크트리가 사라지고, 남기는 `.git`은 148 MB라 용량 목적이
+유지된다.
+주도성 5 판단: `.env` 파일과 사람의 다른 워크트리를 비우기에서 뺐고, 사람 편집이 있으면 비우기를 거절한다.
+git으로 되살릴 수 없는 것을 지우지 않기 위해서다.
+주도성 5 판단: 72시간 판정은 디스패치 시각 파일로 한다. 티켓 파일 mtime은 claim(링크)과 rename으로 바뀌지 않아
+"작업"을 재지 못한다.
+주도성 5 판단: `.dira/worktrees` 아래 워커 워크트리(이 머신에서 20 GB)는 이번 범위에 넣지 않는다. 요구가
+`.dira`를 남기라고 했다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P519-1 | 엔진 - `slim.py`(결정 2-5, 7) + `tick.sh` 채우기와 자동 비우기 호출(결정 7-8) + 굽기 목록 + `test_slim.py` | developer | - | 발행 전 |
+| P519-2 | GUI - 프로젝트 설정 스위치와 상태 줄(결정 6, 9), 서버 액션이 `slim.py`를 부른다, ko - en | developer | - | 발행 전 |
+| P519-3 | 매뉴얼 - 프로젝트 설정 장에 슬림 체크아웃(무엇이 지워지고 남는지, 언제 다시 채워지는지), ko - en | writer | - | 발행 전 |
+| P519-4 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P519-1, P519-2 | 발행 전 |
+
+**네 장이다.** 1과 2는 `slim.py`의 명령 - JSON 계약이 이 절에 다 있어 서로 기다리지 않는다. 매뉴얼도 이 절만 보고
+쓴다.
+
+#### 수용조건
+
+- [ ] `python3 test_slim.py`가 통과한다. 그 안에서 임시 저장소(linked worktree 하나, 무시 파일 `node_modules/x`, `.env.local`, 추적 파일 셋)에 `slim.py empty`를 부르면 추적 파일과 `node_modules`가 사라지고 `.dira` `.git` `.env.local` linked worktree가 남으며, `git status --porcelain`이 빈 출력이고 `slim.py status`의 `state`가 `empty`다. linked worktree의 `git ls-files -t`에는 `S ` 줄이 0개다.
+- [ ] 같은 테스트에서 비운 상태의 저장소에 linked worktree가 커밋을 `push.sh` 방식(`updateInstead`)으로 통합 브랜치에 push하면 성공하고, `slim.py fill` 뒤 그 커밋의 파일이 루트 작업 트리에 있다.
+- [ ] 같은 테스트에서 추적 파일을 고친 저장소, 미추적 파일이 있는 저장소, 다른 브랜치가 체크아웃된 저장소에 `empty`를 부르면 rc 2이고 파일이 하나도 안 지워진다.
+- [ ] 같은 테스트에서 `auto`는 `.wip`이 있거나 `last_active`가 71시간 전이면 비우지 않고, `.wip`이 0장이고 73시간 전이면 비운다. 옵션 파일이 없으면 아무것도 안 한다.
+- [ ] 옵션이 켜진 임시 큐에서 `tick.sh`가 티켓을 claim해 세션을 띄우면 그 전에 루트가 `full`이 되고 `.dira/slim-checkout.active`의 mtime이 갱신된다. 옵션이 꺼진 큐는 `slim.py`를 부르지 않는다(`grep -n 'slim.py' tick.sh`가 옵션 판정 안쪽에만 있다).
+- [ ] 굽기 뒤 `~/.config/dira/bin/engines/slim.py`가 있고 `python3 test_source_time.py`가 통과한다.
+- [ ] 설정 다이얼로그의 프로젝트 노드에서 `[data-setting="project.slimCheckout"]` 스위치를 켜면 `.dira/slim-checkout`이 `on`이 되고 프로젝트 루트에 `.dira` `.git`(그리고 결정 3의 남는 것)만 남으며 상태 줄이 `비어 있음`이다. 끄면 추적 파일이 돌아오고 `채워짐`이다. git 저장소가 아닌 프로젝트에서는 스위치가 `disabled`다. 설정 검색에 `비우기`를 치면 그 노드가 나온다.
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`과 `pnpm test`가 통과하고 새 npm이 0개다.
+- [ ] 매뉴얼 ko - en 두 벌에 슬림 체크아웃 설명(남는 것 - 지워지는 것 - 다시 채워지는 때 - 사흘 자동 비우기)이 있다.
+
 ### P518. MCP로 올린 요구가 즉시 배정된다 - 고정 경로에 `dispatch.py`도 굽는다 (요구 `95bbba8e`, 왕복 0회)
 
 사람 요구(2026-10-23): 외부 에이전트에게 dira로 요구를 올려 달라고 하자 "이 맥에 `~/.config/dira/bin/engines/dispatch.py`가
