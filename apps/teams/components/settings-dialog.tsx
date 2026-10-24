@@ -570,55 +570,60 @@ function AutonomySection({ className }: { className?: string }) {
             aria-label={t("settings.autonomy.label")}
             className="space-y-1.5"
           >
-            {rows.map((row) => (
-              <div
-                key={row.value}
-                data-setting={`autonomy.${row.value}`}
-                className="flex items-center gap-2"
-              >
-                <Button
-                  type="button"
-                  role="radio"
-                  aria-checked={level === row.value}
-                  variant={level === row.value ? "default" : "outline"}
-                  size="icon-sm"
-                  disabled={pending}
-                  onClick={() => choose(row.value)}
+            {rows.map((row) => {
+              const isFive = row.value === 5;
+              return (
+                <div
+                  key={row.value}
+                  data-setting={`autonomy.${row.value}`}
+                  className={isFive ? "grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1" : "flex items-center gap-2"}
                 >
-                  {row.value}
-                </Button>
-                <span className="text-sm">{row.label}</span>
-                {row.value === 4 && (
-                  <Badge variant="outline">{t("settings.autonomy.default")}</Badge>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* §P517 결정 7 — 5 아래 스위치. `components/ui`에 Switch가 없어 role="switch" 버튼이다. */}
-          <div data-setting="autonomy.autopilot" className="ml-9 space-y-1">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                role="switch"
-                aria-checked={state?.autopilot ?? false}
-                disabled={pending || level !== 5}
-                onClick={toggleAutopilot}
-                className={cn(
-                  "relative h-5 w-9 shrink-0 rounded-full border transition-colors disabled:opacity-50",
-                  state?.autopilot ? "bg-destructive border-destructive" : "bg-muted",
-                )}
-              >
-                <span
-                  className={cn(
-                    "absolute top-0.5 left-0.5 size-3.5 rounded-full bg-background transition-transform",
-                    state?.autopilot && "translate-x-4",
+                  <Button
+                    type="button"
+                    role="radio"
+                    aria-checked={level === row.value}
+                    variant={level === row.value ? "default" : "outline"}
+                    size="icon-sm"
+                    disabled={pending}
+                    onClick={() => choose(row.value)}
+                  >
+                    {row.value}
+                  </Button>
+                  <span className="text-sm">{row.label}</span>
+                  {row.value === 4 && (
+                    <Badge variant="outline">{t("settings.autonomy.default")}</Badge>
                   )}
-                />
-              </button>
-              <span className="text-sm">{t("settings.autonomy.autopilot")}</span>
-            </div>
-            <p className="text-xs text-destructive">{t("settings.autonomy.autopilotWarn")}</p>
+                  {isFive && (
+                    /* §P517 결정 8 - 5 줄의 하위 요소. 둘째 열이라 들여쓰기가 버튼 폭과 gap에서 나온다.
+                       `components/ui`에 Switch가 없어 role="switch" 버튼이다. */
+                    <div data-setting="autonomy.autopilot" className="col-start-2 space-y-1">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={state?.autopilot ?? false}
+                          disabled={pending || level !== 5}
+                          onClick={toggleAutopilot}
+                          className={cn(
+                            "relative h-5 w-9 shrink-0 rounded-full border transition-colors disabled:opacity-50",
+                            state?.autopilot ? "bg-destructive border-destructive" : "bg-muted",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "absolute top-0.5 left-0.5 size-3.5 rounded-full bg-background transition-transform",
+                              state?.autopilot && "translate-x-4",
+                            )}
+                          />
+                        </button>
+                        <span className="text-sm">{t("settings.autonomy.autopilot")}</span>
+                      </div>
+                      <p className="text-xs text-destructive">{t("settings.autonomy.autopilotWarn")}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* 1·2에서만 뜬다(결정 4, 수용조건 9) — 되묻기가 큐를 늦춘다는 사실 한 줄 */}
