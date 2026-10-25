@@ -301,3 +301,7 @@ test("poll 효과 — r.stopped일 때만 interjectResume을 비우고 run(resum
   assert.ok(stoppedResumeBody.includes("interjectResume.current = null;"), "다음 정지에 같은 글을 또 이어붙이면 안 된다 — 한 번 쓰면 비운다");
   assert.ok(stoppedResumeBody.includes("void run(resumeText);"), "비운 값이 아니라 뜬 사본(resumeText)으로 불러야 한다");
 });
+
+test("홈 스레드가 StreamTimerProvider로 timeout 타이머 칸을 얻는다 (f072187a)", () => {
+  assert.match(s, /<StreamTimerProvider[\s\S]*?live: busy \|\| anyRunning[\s\S]*?<Bundle /);
+});

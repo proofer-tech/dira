@@ -115,7 +115,7 @@ import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { splitAttachments } from "@/lib/attachment-format";
 import type { RefIndex } from "@/lib/markdown-refs";
 import type { PtyStatus } from "@/lib/pty";
-import { Bundle } from "@/components/session-stream";
+import { Bundle, StreamTimerProvider } from "@/components/session-stream";
 import { StatusBadge } from "@/components/status-badge";
 import {
   AlertDialog,
@@ -1312,6 +1312,9 @@ export function HomeUI({
                   {/* `pb-4` — 마지막 답의 자리(§24 §마지막 답의 자리, 개정 `bfadd068`). 항목이
                       아니라 스크롤 컨텐츠 바닥에 건다: 도는 답도 언제나 마지막 항목이라 상태에
                       안 걸려야 답이 끝나는 순간 높이 점프가 0이다. */}
+                  <StreamTimerProvider
+                    value={{ events: turns.flatMap((t) => (t.event ? [t.event] : [])), live: busy || anyRunning }}
+                  >
                   <MessageScrollerContent className="pb-4">
                     {grouped.map((g) => {
                       // 접힌 줄 묶음(§9 · §2-6 ②) — 렌더러는 `session-stream.tsx`의 `<Bundle>`
@@ -1525,6 +1528,7 @@ export function HomeUI({
                       </MessageScrollerItem>
                     )}
                   </MessageScrollerContent>
+                  </StreamTimerProvider>
                 </MessageScrollerViewport>
                 {/* 아래가 가려졌을 때만 뜬다(`data-active`). 라벨을 `sr-only`로 숨기지 않는다(§13) */}
                 <MessageScrollerButton>

@@ -159,6 +159,9 @@ const StreamTimerContext = createContext<{ events: StreamEvent[]; live: boolean 
 
 /** P521 결정 3-4 - `timeoutMs`가 있는 `tool_use`의 `<경과> / <한도>` 글자와 막대. 진행 중일 때만 자기 1초
  *  간격을 갖는다(2초 폴링을 안 기다린다). */
+/** 홈 대화 스레드처럼 `SessionStream` 밖에서 `Bundle`을 그리는 자리가 같은 타이머 칸을 얻는 공급자다. */
+export const StreamTimerProvider = StreamTimerContext.Provider;
+
 function TimeoutTimer({ e }: { e: StreamEvent }) {
   const tc = useContext(StreamTimerContext);
   const paired = tc ? pairTool(e, tc.events).elapsedMs : null;
