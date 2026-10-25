@@ -216,5 +216,81 @@ class TickT(unittest.TestCase):
         self.assertEqual([f.name for f in (self.root / "tickets").iterdir()], ["8a1b2c3d.md"])  # .wip 없음
 
 
+class Sync(unittest.TestCase):
+    PIN = "    - github.com/proofer-tech/dira/packages/dira-protocols#dira-protocols-v%s\n"
+    LOCAL = "    - ../packages/dira-protocols\n"
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        b = Path(os.path.realpath(self.tmp.name))
+        self.root, self.eng, self.calls = b / "proj", b / "packages", b / "calls"
+        self.team = self.root / ".dira/team"
+        self.fake = b / "apm"
+        self.fake.write_text('#!/bin/sh\necho "$@" >> %s\n[ "$1" = install ] && [ -e %s ] && { echo x >> apm.lock.yaml; exit 1; }\nexit 0\n'
+                             % (self.calls, b / "failflag"))
+        self.fake.chmod(0o755)
+        self.failflag = b / "failflag"
+        self.lock0 = b"lock0\n"
+        self.set_pin("1.0.1")
+        w(self.team / "apm.lock.yaml", self.lock0.decode())
+        self.engine("1.0.2")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def set_pin(self, v):
+        w(self.team / "apm.yml", "name: team\nversion: 1.0.0\ndependencies:\n  apm:\n" + self.PIN % v + self.LOCAL)
+
+    def engine(self, v):
+        w(self.eng / "dira-protocols/apm.yml", "name: dira-protocols\nversion: %s\n" % v)
+
+    def sync(self):
+        e = dict(os.environ, DIRA_APM_BIN=str(self.fake), DIRA_APM_PACKAGES=str(self.eng))
+        r = subprocess.run([sys.executable, str(APM), "sync", str(self.root)], capture_output=True, text=True, env=e)
+        return r.returncode, r.stdout.strip()
+
+    def installs(self):
+        return [l for l in (self.calls.read_text().splitlines() if self.calls.exists() else []) if l.startswith("install")]
+
+    def test_bump(self):
+        rc, out = self.sync()
+        self.assertEqual(rc, 0)
+        self.assertIn("APM-SYNC dira-protocols v1.0.1 -> v1.0.2", out)
+        txt = (self.team / "apm.yml").read_text()
+        self.assertIn("dira-protocols-v1.0.2\n", txt)
+        self.assertIn(self.LOCAL, txt)  # 로컬 경로 줄은 그대로
+        self.assertEqual(self.installs(), ["install"])  # --frozen 없음
+
+    def test_not_higher(self):
+        for v in ("1.0.2", "1.0.1"):
+            self.engine(v)
+            self.set_pin("1.0.2")
+            before = (self.team / "apm.yml").read_bytes()
+            self.assertEqual(self.sync(), (0, ""))
+            self.assertEqual((self.team / "apm.yml").read_bytes(), before)
+        self.assertEqual(self.installs(), [])
+
+    def test_fail_restores_and_backs_off(self):
+        self.failflag.write_text("")
+        yml0 = (self.team / "apm.yml").read_bytes()
+        rc, out = self.sync()
+        self.assertEqual(rc, 0)
+        self.assertIn("SKIP apm-sync", out)
+        self.assertEqual((self.team / "apm.yml").read_bytes(), yml0)
+        self.assertEqual((self.team / "apm.lock.yaml").read_bytes(), self.lock0)
+        self.assertTrue((self.team / ".apm-sync-fail").exists())
+        self.assertEqual(len(self.installs()), 1)
+        self.assertEqual(self.sync(), (0, ""))
+        self.assertEqual(len(self.installs()), 1)  # 30분 안에는 다시 안 부른다
+
+    def test_live_lock(self):
+        (self.team / ".apm-sync.lock").mkdir()
+        w(self.team / ".apm-sync.lock/pid", str(os.getppid()))
+        yml0 = (self.team / "apm.yml").read_bytes()
+        self.assertEqual(self.sync(), (0, ""))
+        self.assertEqual((self.team / "apm.yml").read_bytes(), yml0)
+        self.assertEqual(self.installs(), [])
+
+
 if __name__ == "__main__":
     unittest.main()

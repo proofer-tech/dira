@@ -1016,6 +1016,9 @@ fi
 APMROOT="$(dirname "$TICKET_ROOT")"
 APMTEAM=$(python3 "$CODE/dira_apm.py" team "$APMROOT" 2>/dev/null)
 if [ "$CMD" = "tick" ] && [ -n "$APMTEAM" -o -f "$APMROOT/apm.yml" ]; then
+  # P520: 엔진 번들 버전이 더 높으면 큐 고정값을 올린다(실패해도 rc 0, 뒤의 gate는 옛 고정값으로 통과한다)
+  SYNCMSG=$(python3 "$CODE/dira_apm.py" sync "$APMROOT" 2>/dev/null)
+  [ -n "$SYNCMSG" ] && log "$SYNCMSG"
   if ! APMMSG=$(python3 "$CODE/dira_apm.py" gate "$APMROOT" 2>/dev/null); then
     log "SKIP apm 설치 상태가 lock과 다르다 - ${APMMSG:-check 실패}"
     exit 0

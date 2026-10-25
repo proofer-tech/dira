@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""dira 패키지(APM) 보조: ensure-cli | install | check | resolve | materialize | skills | team. 표준 라이브러리만."""
-import hashlib, os, re, shutil, subprocess, sys
+"""dira 패키지(APM) 보조: ensure-cli | install | sync | check | resolve | materialize | skills | team. 표준 라이브러리만."""
+import hashlib, os, re, shutil, subprocess, sys, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -288,6 +288,81 @@ def install(root, frozen):
     return rc
 
 
+DEP_PIN = re.compile(r"(proofer-tech/dira/packages/([\w.-]+)#\2-v)(\d+)\.(\d+)\.(\d+)")
+SYNC_BACKOFF = 1800
+
+
+def sync(root):
+    """P520 결정 3: 큐 apm.yml의 공용 패키지 고정값이 엔진 번들 버전보다 낮으면 올리고 --no-frozen 으로 설치한다. 실패해도 rc 0."""
+    team = team_dir(root)
+    if not team or os.environ.get("DIRA_APM_NO_INSTALL") == "1":
+        return 0
+    yml = team / "apm.yml"
+    text = yml.read_text()
+    pkgs = Path(os.environ.get("DIRA_APM_PACKAGES") or HERE / "packages")
+    ups = []
+
+    def bump(m):
+        y = pkgs / m.group(2) / "apm.yml"
+        v = read_yml(y)["version"] if y.exists() else None
+        if not v or not re.fullmatch(r"\d+\.\d+\.\d+", v):
+            return m.group(0)
+        have = tuple(int(m.group(i)) for i in (3, 4, 5))
+        if tuple(int(x) for x in v.split(".")) <= have:
+            return m.group(0)
+        ups.append((m.group(2), "%s.%s.%s" % have, v))
+        return m.group(1) + v
+
+    new = DEP_PIN.sub(bump, text)
+    if not ups:
+        return 0
+    top = max(v for _, _, v in ups)
+    fail, lock = team / ".apm-sync-fail", team / ".apm-sync.lock"
+    try:
+        f = fail.read_text().split()
+        if f[0] == top and time.time() - float(f[1]) < SYNC_BACKOFF:
+            return 0
+    except (OSError, ValueError, IndexError):
+        pass
+    try:
+        lock.mkdir()
+    except FileExistsError:
+        try:
+            os.kill(int((lock / "pid").read_text()), 0)
+            return 0  # 다른 tick이 돌고 있다
+        except (OSError, ValueError):
+            shutil.rmtree(lock, ignore_errors=True)
+            try:
+                lock.mkdir()
+            except OSError:
+                return 0
+    (lock / "pid").write_text(str(os.getpid()))
+    lockf = team / "apm.lock.yaml"
+    old_lock = lockf.read_bytes() if lockf.exists() else None
+    try:
+        yml.write_text(new)
+        try:
+            rc = install(root, False)
+            err = "install rc %d" % rc if rc else ""
+        except (SystemExit, OSError) as e:
+            err = str(e) or "install 실패"
+        if err:
+            yml.write_text(text)
+            if old_lock is None:
+                lockf.unlink(missing_ok=True)
+            else:
+                lockf.write_bytes(old_lock)
+            fail.write_text("%s %d\n" % (top, time.time()))
+            print("SKIP apm-sync %s: %s" % (", ".join(n for n, _, _ in ups), err))
+        else:
+            fail.unlink(missing_ok=True)
+            for n, a, b in ups:
+                print("APM-SYNC %s v%s -> v%s" % (n, a, b))
+    finally:
+        shutil.rmtree(lock, ignore_errors=True)
+    return 0
+
+
 def listing(root, kind):
     """<이름>\t<디렉터리> 줄들. 로컬(<팀>/<kind>s/*)이 같은 이름의 설치본을 가린다."""
     team = team_dir(root)
@@ -360,6 +435,8 @@ def main(a):
     root = Path(pos[0]).resolve() if pos else None
     if cmd == "install":
         return install(root, "--no-frozen" not in flags)
+    if cmd == "sync":
+        return sync(root)
     if cmd == "list":
         return listing(root, pos[1])
     if cmd == "gate":
