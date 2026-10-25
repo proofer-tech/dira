@@ -1549,6 +1549,12 @@ def _reap(troot, local):
         if live is None:
             # ps 시간 초과(P514 결정 4): fm pid를 kill -0으로 본다. 죽었으면 회수, 살았거나 pid 없으면 보류
             pid = (fm.get("pid") or "").strip().strip("\"'")
+            if not pid.isdigit() and not any((fm.get(k) or "").strip() for k in REAP_CLEAR):
+                # P522 결정 6: claim 직후 tick이 죽어 REAP_CLEAR가 전부 빈 .wip은 ps 없이도 판정된다
+                mtime = datetime.fromtimestamp(os.path.getmtime(p), timezone.utc)
+                if (now - mtime).total_seconds() >= REAP_GRACE_SEC:
+                    msgs.append(reclaim(p, fm, "주인 없는 `.wip`(REAP_CLEAR 전부 빔, ps 조회 실패)"))
+                continue
             if not pid.isdigit() or _kill0(pid):
                 continue
             if not _reap_grace_over(troot, local, fm, now):
