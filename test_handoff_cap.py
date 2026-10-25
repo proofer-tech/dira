@@ -25,6 +25,8 @@ def mk(troot, h, handoffs=None, extra_fm=""):
 
 
 ws = tempfile.mkdtemp()
+# 주도성 5(autonomy.json)가 켜진 머신에서는 상한 판정이 꺼진다(_check_handoff_cap) - 빈 로컬로 격리한다
+os.environ["TICKET_LOCAL"] = os.path.join(ws, "local")
 try:
     # ③ handoffs: 4 (상한 3 초과) - claim 실패, 열린 채 `## 질문 n` + awaiting + 존재하지 않는 dep
     p = mk(ws, "aaaa0001", handoffs=4)
