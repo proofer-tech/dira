@@ -8938,6 +8938,120 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P522. cron tick이 끝나지 않아도 워커 셸이 쌓이지 않고, 죽은 락과 세션 없는 tick이 디스패치를 막지 않는다 - 엔진 수정 (요구 `e319c13e`, 왕복 0회)
+
+사람 요구(2026-10-25, 홈 대화에서 옮김): *"워커 프로세스가 이렇게 쌓이지 않게 만들어 달라."* 요구 일곱 가지는 같은
+tick이 돌면 새 tick이 바로 끝날 것, tick 상한 시간, 고부하 때 cron tick 건너뛰기, 엔진 세션 없는 tick을 "물고
+있다"로 보지 않을 것, owner와 pid 없는 `.wip` 회수, 쌓임을 사람이 알 수 있는 한 줄, 죽은 pid의 락은 busy로 보지
+않고 걷을 것이다. 마지막 하나는 16:28 추가 실측으로 더해졌다.
+
+#### 실측 (2026-10-25)
+
+- crontab에는 `dispatch.py run --reason cron` 줄이 60개 있다(8개 프로젝트, 워커마다 `* * * * *`와 `sleep 30;` 두
+  줄). 분당 tick 120번이다. 16:21 load average는 510이었고, 프로세스는 약 1,000개였으며, 워커 `.sh` bash가 123개
+  떠 있었다. 이 가운데 206개를 `kill -9`로 지웠지만 45초 뒤 100개로 다시 쌓였다. 부하의 주원인은 dira 밖(1Password
+  native messaging host 35개)이었다.
+- P514(진입 잠금 - reap 루트 잠금)는 설치본 엔진에 이미 들어가 있다. 그래도 쌓였다. **진입 잠금은 워커 `.sh`가
+  `tick.sh`를 source한 뒤에야 잡힌다.** 그 앞에 bash 기동 - 큐 훅(`watchdog.sh tick` 등) - `python3`로 잠금 이름을
+  구하는 단계가 있다. 부하가 500이면 이 단계만 수십 초가 걸리고, 그동안 `dispatch.py`는 진입 잠금이 아직 없으므로
+  그 워커를 idle로 보고 30초마다 셸을 또 띄운다.
+- 큐 훅 `tick-lock.sh`는 tinyus - gallae - with-cto 큐의 워커 `.sh`에 없다. dira 큐에서는 `watchdog.sh tick` 다음에
+  놓여 있어서 감시자 셸은 막지 못한다.
+- tinyus w1의 tick(pid 44456)은 16:17:08에 `NOTE 엔진:` 줄까지 쓰고 `DISPATCH` 줄을 쓰지 못했다. 티켓 `ff9b1732`를
+  claim한 뒤 fm에 `session_id` - `pid`를 쓰기 전에 멈췄고, 그 밑에 엔진 세션은 없었다. 그런데 그 뒤 tick은 워커 락의
+  pid가 살아 있다는 이유만으로 `SKIP 이 워커가 아직 티켓을 물고 있다 pid=44456`을 냈다.
+- `dispatch.py`의 `idle_workers`는 워커 락 디렉터리(`$LOCAL/run/<워커>-<h>.lock`)가 **있기만 하면** busy로 본다.
+  pid 생존은 보지 않는다(진입 잠금은 본다). 워커 락의 스테일 회수는 `tick.sh`만 하는데, `dispatch.py`가 셸을 안
+  띄우므로 그 회수가 영영 돌지 않는다. 16:28 tinyus w1(pid 44456)과 w3(pid 47513)의 락이 죽은 pid였고, 전
+  프로젝트에서 죽은 pid의 lock과 entry 17개를 손으로 지우자 곧바로 디스패치됐다.
+- 주인 없는 `.wip`의 회수는 이미 있다(`reap_manual`, 결정 16 - `REAP_CLEAR` 키가 전부 비어 있고 mtime이
+  `REAP_GRACE_SEC` 180초를 넘기면 `reclaim`). 하지만 `ps`가 시간을 넘겨 `live_session_ids()`가 `None`이면 P514
+  결정 4의 pid 판정 길로 가고, 그 길은 `pid:`가 비었으면 보류한다. 그래서 고부하 때는 주인 없는 `.wip`이 남는다.
+- 이 머신의 평소 load1은 높다. 세션 health 로그 25,479줄에서 중앙값 165, p90 318, p95 442, p99 927이다(코어 10개).
+  "코어 수의 몇 배"를 작게 잡으면 평소에도 디스패치가 멈춘다.
+
+#### 결정
+
+1. **죽은 pid의 워커 락은 busy가 아니다.** `dispatch.py`의 idle 판정은 워커 락도 진입 잠금과 같은 방식으로 본다. 락
+   안의 `pid`가 양의 정수이고 `kill -0`이 성공하면 busy다. pid가 죽었거나, 숫자가 아니거나, `pid` 파일 없이 5초가
+   지났으면 그 락을 걷고(`rmtree`) idle로 본다. 걷을 때 `runner.log`에 `[dispatch] WARN 죽은 워커 락 회수 <워커>
+   pid=<pid>` 한 줄을 남긴다. 진입 잠금의 죽은 디렉터리도 같은 자리에서 걷되 로그는 남기지 않는다.
+2. **cron이 띄운 셸은 워커당 한 벌이다.** `dispatch.py run --reason cron`이 셸을 띄우면 그 자식 pid를
+   `$LOCAL/run/<워커>-<h>.launch/pid`에 적는다(`<h>`는 워커 락과 같은 해시). 다음 cron 호출은 **무엇보다 먼저**(
+   `crontab -l` - `tickets.py select`보다 앞) 이 pid를 `kill -0`으로 보고, 살아 있으면 로그 없이 `go: false`, `why:
+   "앞 tick이 아직 돈다"`로 끝난다. 죽었으면 걷고 지금의 판정으로 넘어간다. 그래서 진입 잠금이 잡히기 전 단계(bash
+   기동 - 큐 훅 - `python3`)에 있는 셸도 셀 수 있고, cron 길로 뜬 워커 `.sh`는 워커 수를 넘지 않는다. `request` -
+   `direct` - `judge` 길은 이 잠금을 보지 않는다(사람과 GUI가 부르는 손이다). 새 의존성 0 - `mkdir`과 `kill -0`만
+   쓴다.
+3. **고부하 때 cron tick을 건너뛴다.** `--reason cron`이고 `os.getloadavg()[0]`이 `cron_load_max`를 넘으면 셸을
+   띄우지 않는다. `cron_load_max`는 `~/.config/dira/dispatch.json`의 같은 이름 키이고, 없으면 **코어 수 x 40**이다
+   (이 머신은 400 - 위 실측 p90과 p95 사이). 결정 2의 검사 다음, `crontab -l`보다 앞에서 본다. 건너뛸 때
+   `runner.log`에 `[dispatch] SKIP-LOAD 부하 <값> > 상한 <값> - cron tick 건너뜀`을 남기되, 같은 루트에서 600초에
+   한 줄만 남긴다(`$LOCAL/run/loadskip-<루트 해시>` 파일 mtime으로 잰다). 돌고 있는 세션은 건드리지 않는다. 기존
+   `load_max`(judge 길)는 바꾸지 않는다.
+4. **인자 없는 tick에는 세션 전 상한이 있다.** 진입부터 엔진 세션을 띄우기까지를 `TICKET_PRE_MAX`초(기본 600 -
+   P519 슬림 체크아웃 다시 채우기의 `timeout 300`을 담는다)로 묶는다. 넘으면 tick이 스스로 끝난다. 이미 claim한
+   티켓이 있으면 `.wip`을 열림으로 되돌리고(`unassign`과 같은 길, `attempts`는 올리지 않는다), 잠금을 풀고,
+   `runner.log`에 `WARN tick 세션 전 상한 <초>초 초과 - 끝낸다` 한 줄을 남긴다. 세션이 뜬 뒤는 지금의
+   `TICKET_MAXRUN`이 맡는다. `tick <해시>`도 이 상한을 갖는다.
+5. **세션 표지 - 엔진 세션 없는 tick은 "물고 있다"가 아니다.** `tick.sh`는 엔진 세션을 띄운 직후 워커 락 안에
+   `session` 파일(엔진 pid 한 줄)을 쓴다. 재활용으로 다음 세션을 띄우면 덮는다. 워커 락의 pid가 살아 있어도 `session`
+   파일이 없고 락의 `pid` 파일 mtime이 `TICKET_PRE_MAX + 60`초를 넘었으면 그 tick은 세션 전 단계에 갇힌 것이다.
+   `dispatch.py`의 idle 판정(결정 1)과 `tick.sh`의 워커 락 SKIP 판정이 둘 다 이 규칙을 쓴다. 갇힌 tick은 그
+   프로세스 그룹에 TERM, 10초 뒤 살아 있으면 KILL을 보내고 락을 걷은 뒤 `WARN 세션 없는 tick 회수 pid=<pid>
+   <초>초` 한 줄을 남긴다. 그 tick이 claim한 `.wip`은 결정 6이 회수한다.
+6. **주인 없는 `.wip`은 `ps`가 실패해도 회수한다.** `_reap`의 `live is None` 길에서 `pid:`가 비었으면, 보류하기 전에
+   `reap_manual`과 같은 판정(`REAP_CLEAR` 키 전부 빔 + mtime 180초 경과 -> `reclaim`)을 먼저 한다. `REAP_CLEAR` 중
+   하나라도 차 있으면 지금처럼 보류한다.
+7. **사람이 볼 자리는 `runner.log`다.** 위 다섯 줄(`WARN 죽은 워커 락 회수` - `SKIP-LOAD` - `WARN tick 세션 전
+   상한` - `WARN 세션 없는 tick 회수` - reap의 `reclaim` 줄)이 쌓임의 신호다. GUI는 이번에 바꾸지 않는다.
+8. **큐 훅은 걷지 않고 더하지도 않는다.** 결정 2가 엔진에서 워커당 한 벌을 보장하므로 tinyus - gallae - with-cto에
+   `tick-lock.sh`를 넣지 않는다.
+
+주도성 5 판단: 엔진 수정은 사람 승인이 원칙이지만, 사람이 엔진 동작(tick 겹침 - 락 판정 - reap)을 고치라고 직접
+요구했으므로 그것을 승인으로 보고 발행한다(P514와 같은 판단).
+주도성 5 판단: "코어 수의 몇 배"를 40배로 정했다. 위 실측대로 이 머신은 세션이 돌 때 load1 중앙값이 165라서, 4배나
+10배로 잡으면 평소에도 디스패치가 멈춘다. 머신마다 다르므로 `dispatch.json`에서 바꿀 수 있게 둔다.
+주도성 5 판단: "간격을 늘린다" 대신 "건너뛴다"를 골랐다. crontab 줄을 고쳐 쓰는 것은 GUI 등록 경로까지 바뀌고, 건너뛰기만으로
+분당 120번이 0번이 된다.
+주도성 5 판단: 세션이 끝난 뒤 사후처리 단계의 상한은 이번에 두지 않는다. 실측된 갇힘은 세션 전 단계였고, 사후처리는
+P360-2 유예가 이미 다룬다.
+
+설치본 엔진(`~/Library/Application Support/dira/engine/`)에는 다음 앱 릴리스부터 들어간다. 릴리스는 이 에픽 밖이다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P522-1 | 엔진 `dispatch.py` - 죽은 락 걷기(결정 1) - cron 띄움 잠금(결정 2) - 부하 건너뛰기(결정 3) - 세션 표지 판정(결정 5의 `dispatch.py` 쪽), 테스트 | developer | - | 발행 |
+| P522-2 | 엔진 `tick.sh` - 세션 전 상한(결정 4) - 세션 표지 쓰기와 워커 락 SKIP 판정(결정 5의 `tick.sh` 쪽), 테스트 | developer | - | 발행 |
+| P522-3 | 엔진 `tickets.py` - `ps` 실패 때 주인 없는 `.wip` 회수(결정 6), 테스트 | developer | - | 발행 |
+| P522-4 | QA - 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P522-1, P522-2, P522-3 | 발행 |
+
+**네 장이다.** designer 0장, writer 0장 - 화면과 매뉴얼이 바뀌지 않는다. 에픽을 안 연다(묶음은 `req:`로 충분하다).
+P522-1과 P522-2는 결정 5의 규칙(`session` 파일 - `TICKET_PRE_MAX + 60`초)을 각자 구현한다. 규칙은 이 절이
+정본이므로 서로 기다리지 않는다.
+
+#### 수용조건
+
+- [ ] 임시 `TICKET_LOCAL`에 죽은 pid를 적은 워커 락 `<워커>-<h>.lock`을 만들고 crontab에 그 워커가 있는 상태에서
+      `dispatch.py run <루트> --reason cron --worker <워커>.sh --dryrun`을 돌리면 `go: true`이고, 락 디렉터리가 없어지며,
+      `runner.log`에 `WARN 죽은 워커 락 회수 <워커> pid=<pid>` 한 줄이 생긴다. 산 pid를 적은 락이면 `go: false`다.
+- [ ] 60초 자는 가짜 워커 `.sh`를 두고 `dispatch.py run ... --reason cron --worker <워커>.sh`를 1초 간격으로 10번
+      돌리면, 그 워커 `.sh`의 bash 프로세스는 1개만 산다(`pgrep -f` 수가 1). 두 번째부터는 `why`가 `앞 tick이 아직
+      돈다`다. 가짜 셸을 죽인 뒤 다음 호출은 다시 띄운다.
+- [ ] `dispatch.json`에 `{"cron_load_max": 0.01}`을 두고 cron 호출을 3번 돌리면 셋 다 `go: false`이고 셸이 뜨지
+      않으며, `runner.log`의 `SKIP-LOAD` 줄은 1개다. 같은 설정에서 `--reason direct --hash <후보>`는 부하로 막히지 않는다.
+- [ ] 워커 락의 pid를 산 프로세스(`sleep 600`)로 두고 `session` 파일 없이 락 `pid` 파일 mtime을 `TICKET_PRE_MAX + 61`초
+      전으로 돌리면, cron `dispatch.py`는 그 프로세스를 끝내고 락을 걷은 뒤 `go: true`를 낸다. `runner.log`에 `WARN 세션
+      없는 tick 회수` 한 줄이 생긴다. 같은 상태에서 `session` 파일에 산 pid가 있으면 `go: false`이고 프로세스는 산다.
+- [ ] `TICKET_PRE_MAX=5`로 두고 세션 전 단계를 10초 걸리게 만든 tick을 돌리면, 10초 안에 끝나고 claim했던 티켓은
+      열림(`<해시>.md`)으로 돌아가며 `attempts`는 그대로이고, `runner.log`에 `WARN tick 세션 전 상한 5초 초과` 줄이
+      생긴다. 워커 락과 진입 잠금 디렉터리는 남지 않는다.
+- [ ] 정상 tick이 엔진 세션을 띄우면 워커 락 안에 `session` 파일이 생기고 그 값이 fm `pid:`와 같다.
+- [ ] `PATH` 앞에 15초 자는 가짜 `ps`를 두고, `REAP_CLEAR` 키가 전부 빈 `.wip`(mtime 181초 전)과 `owner:`만 찬
+      `.wip`을 두고 `tickets.py reap`을 돌리면, 앞의 것은 열림으로 돌아가고 뒤의 것은 그대로 남는다.
+- [ ] 고친 엔진 파일이 들어간 `test_*.py`가 모두 `python3 <파일>`로 rc=0이고(`tick.sh` - `tickets.py`를 고쳤으므로
+      전량 `(for t in test_*.py; do python3 "$t" || exit 1; done)`도 rc=0), `git diff --stat`에 `apps/teams/`가 없다.
+
 ### P521. 진행 기록에서 `timeout`이 붙은 도구 호출은 결과가 올 때까지 `경과 / 한도` 타이머가 돈다 (요구 `10adca08`, 왕복 0회)
 
 사람 요구(2026-10-25): *"이런식으로 타임아웃이 붙는 경우 시각적으로 타이머를 스크립트에서 볼 수 있으면 좋겠네요"*.
