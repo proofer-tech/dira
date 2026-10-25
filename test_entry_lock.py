@@ -24,7 +24,7 @@ def make():
         f.write("#!/bin/sh\necho '* * * * * %s/workers/w1.sh'\n" % root)
     os.chmod(os.path.join(bindir, "crontab"), 0o755)
     with open(os.path.join(local, "dispatch.json"), "w") as f:  # 머신 부하와 무관하게
-        json.dump({"load_max": 1e9}, f)
+        json.dump({"load_max": 1e9, "cron_load_max": 1e9}, f)
     w = os.path.join(root, "workers", "w1.sh")
     with open(w, "w") as f:
         f.write('. "%s/tick.sh"\n' % os.path.join(d, "code"))
@@ -76,6 +76,7 @@ def main():
     assert rc == 0 and j["go"], (rc, j, os.listdir(os.path.join(local, "run")))
     # 4b. 깨진 pid 값(-1 0 abc 빈 문자열)은 죽은 것이다: dispatch는 idle로 보고 tick은 잠금을 걷고 reap에 든다
     for bad in ("-1", "0", "abc", ""):
+        os.makedirs(entry, exist_ok=True)  # P522: dispatch가 죽은 진입 잠금을 걷는다
         with open(os.path.join(entry, "pid"), "w") as f:
             f.write(bad)
         rc, j = dispatch(d, root, local)

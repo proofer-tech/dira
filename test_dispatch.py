@@ -29,14 +29,17 @@ def setup(hashes, idle=("w1",), cron=("w1", "w2")):
         f.write("#!/bin/sh\n" + "".join("echo '* * * * * %s/workers/%s.sh'\n" % (root, w) for w in cron))
     os.chmod(os.path.join(bindir, "crontab"), 0o755)
     with open(os.path.join(local, "dispatch.json"), "w") as f:  # 실제 머신 부하와 무관하게
-        json.dump({"load_max": 1e9}, f)
+        json.dump({"load_max": 1e9, "cron_load_max": 1e9}, f)
     return d, root, local, bindir
 
 
 def lock(root, local, name):
     import hashlib
     h = hashlib.sha1(os.path.join(root, "workers", name).encode()).hexdigest()[:8]
-    os.makedirs(os.path.join(local, "run", "%s-%s.lock" % (name, h)))
+    d = os.path.join(local, "run", "%s-%s.lock" % (name, h))
+    os.makedirs(d)
+    with open(os.path.join(d, "pid"), "w") as f:  # P522: pid 없는 락은 5초 뒤 걷히므로 산 pid를 적는다
+        f.write("%d\n" % os.getpid())
 
 
 def run(d, root, local, bindir, *args):
@@ -106,7 +109,7 @@ def main():
     # load_max 0: judge만 no-go(부하), request와 direct는 go
     S = setup(["aaaaaaaa", "bbbbbbbb"])
     with open(os.path.join(S[2], "dispatch.json"), "w") as f:
-        json.dump({"load_max": 0}, f)
+        json.dump({"load_max": 0, "cron_load_max": 1e9}, f)
     rc, j = run(*S, "--reason", "judge", "--hash", "aaaaaaaa", "--dryrun")
     assert rc == 1 and not j["go"] and "부하" in j["why"], j
     for r in ("request", "direct"):
@@ -127,7 +130,7 @@ def main():
     # cron: --worker의 idle만 본다. 다른 후보 있어도 go, 부하 무관, runner.log 무변
     S = setup(["aaaaaaaa", "bbbbbbbb"])
     with open(os.path.join(S[2], "dispatch.json"), "w") as f:
-        json.dump({"load_max": 0}, f)
+        json.dump({"load_max": 0, "cron_load_max": 1e9}, f)
     rc, j = run(*S, "--reason", "cron", "--worker", os.path.join(S[1], "workers", "w2.sh"))
     assert rc == 0 and j["worker"] == "w2" and ran(S[0], "w2") == ""
     assert runlog(S[1]) == ""

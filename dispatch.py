@@ -12,8 +12,11 @@ import datetime
 import hashlib
 import json
 import os
+import shutil
+import signal
 import subprocess
 import sys
+import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REASONS = ("cron", "request", "direct", "judge")
@@ -35,6 +38,18 @@ def load_max():
     return float(os.cpu_count() or 1)
 
 
+def cron_load_max():
+    # ponytail: load_max와 같이 형식이 틀리면 기본값(코어 수 x 40)으로 조용히 돌아간다.
+    try:
+        with open(os.path.join(local_dir(), "dispatch.json"), encoding="utf-8") as f:
+            v = json.load(f)["cron_load_max"]
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            return float(v)
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return float((os.cpu_count() or 1) * 40)
+
+
 def crontab_text():
     try:
         r = subprocess.run(["crontab", "-l"], capture_output=True, text=True, timeout=10)
@@ -48,11 +63,14 @@ def lock_path(workers_dir, name):
     return os.path.join(local_dir(), "run", "%s-%s.lock" % (name, h))
 
 
-def entry_busy(workers_dir, name):
-    """P514: 산 pid가 쥔 tick 진입 잠금이 있으면 True."""
-    h = hashlib.sha1(os.path.join(workers_dir, name).encode()).hexdigest()[:8]
+def whash(workers_dir, name):
+    return hashlib.sha1(os.path.join(workers_dir, name).encode()).hexdigest()[:8]
+
+
+def pid_alive(path):
+    """path 파일의 pid가 양의 정수이고 산 프로세스면 True. 파일이 없거나 숫자가 아니면 False."""
     try:
-        with open(os.path.join(local_dir(), "run", "%s-%s.entry" % (name, h), "pid")) as f:
+        with open(path) as f:
             pid = int(f.read().strip())
         if pid <= 0:  # kill(0)/kill(-1)은 항상 성공한다
             return False
@@ -62,6 +80,88 @@ def entry_busy(workers_dir, name):
         return True
     except (OSError, ValueError):
         return False
+
+
+def entry_busy(workers_dir, name):
+    """P514: 산 pid가 쥔 tick 진입 잠금이 있으면 True. 죽은 잠금은 로그 없이 걷는다(P522 결정 1)."""
+    d = os.path.join(local_dir(), "run", "%s-%s.entry" % (name, whash(workers_dir, name)))
+    if not os.path.isdir(d) or pid_alive(os.path.join(d, "pid")):
+        return os.path.isdir(d)
+    shutil.rmtree(d, ignore_errors=True)
+    return False
+
+
+def pre_max():
+    try:
+        return int(os.environ.get("TICKET_PRE_MAX") or 600)
+    except ValueError:
+        return 600
+
+
+def kill_group(pid):
+    # 프로세스 그룹 리더일 때만 그룹째 보낸다. 아니면 사람 셸의 그룹을 죽일 수 있다.
+    try:
+        pg = os.getpgid(pid)
+    except OSError:
+        return
+    send = (lambda sig: os.killpg(pg, sig)) if pg == pid else (lambda sig: os.kill(pid, sig))
+    try:
+        send(signal.SIGTERM)
+        for _ in range(100):
+            time.sleep(0.1)
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                return
+        send(signal.SIGKILL)
+    except OSError:
+        pass
+
+
+def worker_lock_busy(root, wdir, name):
+    """P522 결정 1, 5: 워커 락이 산 pid이고 세션 전 단계에 갇히지 않았으면 True. 아니면 락을 걷고 False."""
+    d = lock_path(wdir, name)
+    if not os.path.isdir(d):
+        return False
+    pidf = os.path.join(d, "pid")
+    try:
+        mtime = os.stat(pidf).st_mtime
+        has_pid = True
+    except OSError:
+        mtime, has_pid = os.stat(d).st_mtime if os.path.isdir(d) else time.time(), False
+    age = time.time() - mtime
+    if not has_pid:
+        if age <= 5:
+            return True
+        pid = "-"
+    elif pid_alive(pidf):
+        if pid_alive(os.path.join(d, "session")) or age <= pre_max() + 60:
+            return True
+        with open(pidf) as f:
+            pid = f.read().strip()
+        kill_group(int(pid))
+        log(root, "WARN 세션 없는 tick 회수 pid=%s %d초" % (pid, age))
+        shutil.rmtree(d, ignore_errors=True)
+        return False
+    else:
+        try:
+            pid = open(pidf).read().strip()
+        except OSError:
+            pid = "-"
+    log(root, "WARN 죽은 워커 락 회수 %s pid=%s" % (name, pid))
+    shutil.rmtree(d, ignore_errors=True)
+    return False
+
+
+def launch_busy(wdir, name):
+    """P522 결정 2: cron이 띄운 셸이 아직 살아 있으면 True. 죽은 표지는 걷는다."""
+    d = os.path.join(local_dir(), "run", "%s-%s.launch" % (name, whash(wdir, name)))
+    if not os.path.isdir(d):
+        return False
+    if pid_alive(os.path.join(d, "pid")):
+        return True
+    shutil.rmtree(d, ignore_errors=True)
+    return False
 
 
 def idle_workers(root, only):
@@ -78,7 +178,7 @@ def idle_workers(root, only):
             continue
         if full not in cron:
             continue
-        if os.path.exists(lock_path(wdir, name)):
+        if worker_lock_busy(root, wdir, name):
             continue
         if entry_busy(wdir, name):
             continue
@@ -94,6 +194,28 @@ def candidates(root):
 
 def decide(root, reason, h, worker):
     """-> (worker 또는 None, why)"""
+    if reason == "cron":
+        wdir = os.path.join(os.path.abspath(root), "workers")
+        if worker and launch_busy(wdir, worker):
+            return None, "앞 tick이 아직 돈다"
+        load, mx = os.getloadavg()[0], cron_load_max()
+        if load > mx:
+            mark = os.path.join(local_dir(), "run", "loadskip-" + hashlib.sha1(
+                os.path.abspath(root).encode()).hexdigest()[:8])
+            try:
+                fresh = time.time() - os.stat(mark).st_mtime < 600
+            except OSError:
+                fresh = False
+            if not fresh:
+                log(root, "SKIP-LOAD 부하 %.2f > 상한 %.2f - cron tick 건너뜀" % (load, mx))
+                try:
+                    os.makedirs(os.path.dirname(mark), exist_ok=True)
+                    with open(mark, "w"):
+                        pass
+                    os.utime(mark)
+                except OSError:
+                    pass
+            return None, "부하 %.2f가 cron 상한 %.2f를 넘는다" % (load, mx)
     idle = idle_workers(root, worker)
     gated = reason == "judge"
     cands = candidates(root) if (reason in ("request", "judge") or (h and reason == "direct")) else []
@@ -123,13 +245,18 @@ def log(root, line):
         pass
 
 
-def launch(root, worker, h):
+def launch(root, worker, h, cron=False):
     wdir = os.path.join(os.path.abspath(root), "workers")
     cmd = ["bash", os.path.join(wdir, worker + ".sh")] + (["tick", h] if h else [])
     out = open(os.path.join(wdir, "cron.log"), "ab")
-    subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
-                     start_new_session=True, close_fds=True)
+    proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=out, stderr=out,
+                            start_new_session=True, close_fds=True)
     out.close()
+    if cron:  # P522 결정 2: 다음 cron 호출이 이 셸을 센다
+        d = os.path.join(local_dir(), "run", "%s-%s.launch" % (worker, whash(wdir, worker)))
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "pid"), "w") as f:
+            f.write("%d\n" % proc.pid)
 
 
 def main(argv):
@@ -160,7 +287,7 @@ def main(argv):
                       "reason": a.reason, "why": why}, ensure_ascii=False))
     if not a.dryrun:
         if w:
-            launch(a.root, w, a.hash)
+            launch(a.root, w, a.hash, a.reason == "cron")
             if a.reason != "cron":
                 log(a.root, "KICK %s %s %s" % (a.reason, a.hash or "-", w))
         elif a.reason != "cron":
