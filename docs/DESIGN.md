@@ -9003,9 +9003,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P520-1 | 릴리스와 생성기 - `packages/*/apm.yml` 기준선(결정 1), `release.sh` 패키지 태그 단계(결정 2), `scaffold.ts`가 버전을 읽어 의존성 줄을 만들고 `scaffold.test.ts`를 고친다 | developer | - | |
-| P520-2 | 엔진 - `dira_apm.py sync`(결정 3) + tick.sh의 `gate` 앞 호출 + `test_dira_apm.py` | developer | - | |
-| P520-3 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P520-1, P520-2 | |
+| P520-1 | 릴리스와 생성기 - `packages/*/apm.yml` 기준선(결정 1), `release.sh` 패키지 태그 단계(결정 2), `scaffold.ts`가 버전을 읽어 의존성 줄을 만들고 `scaffold.test.ts`를 고친다 | developer | - | 발행 `e576d122` |
+| P520-2 | 엔진 - `dira_apm.py sync`(결정 3) + tick.sh의 `gate` 앞 호출 + `test_dira_apm.py` | developer | - | 발행 `01c5b572` |
+| P520-3 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P520-1, P520-2 | 발행 `9802d271` |
 
 **세 장이다.** 1과 2는 서로 기다리지 않는다. sync는 엔진의 `apm.yml` 버전만 읽고, 그 값을 누가 올렸는지 모른다.
 
