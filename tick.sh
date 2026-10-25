@@ -70,6 +70,39 @@ if [ "$#" -eq 0 ]; then
   trap '[ -n "$ENTRYLOCK" ] && rm -rf "$ENTRYLOCK"' EXIT
 fi
 
+# --- P522 세션 전 상한: 인자 없는 tick과 `tick <해시>`가 엔진 세션을 띄우기까지 TICKET_PRE_MAX초를 넘기면 스스로 끝낸다 ---
+# claim한 .wip은 열림으로 되돌리고(attempts 그대로) 잠금은 EXIT trap이 푼다. 세션을 띄운 직후 disarm_pre가 감시를 끈다.
+# 감시자는 main에 TERM을 먼저 걸고 main의 자식(막힌 python3 - timeout 등)도 끊어서, 막힌 호출이 끝나길 trap이 기다리지 않게 한다.
+TICKET_PRE_MAX="${TICKET_PRE_MAX:-600}"
+PRE_WATCH=""; PRE_DONE=""
+pre_abort() {
+  [ -n "$PRE_DONE" ] && return 0
+  log "WARN tick 세션 전 상한 ${TICKET_PRE_MAX}초 초과 - 끝낸다"
+  if [ -n "${TPATH:-}" ]; then
+    _PO=$(reap_silent "$TPATH"); [ -n "$_PO" ] && log "$_PO"
+  fi
+  exit 0
+}
+disarm_pre() {
+  PRE_DONE=1
+  [ -n "$PRE_WATCH" ] && { kill "$PRE_WATCH" 2>/dev/null; PRE_WATCH=""; }
+  trap - TERM
+}
+if [ "$#" -eq 0 ] || [ "${1:-}" = tick ]; then
+  trap pre_abort TERM
+  _MAIN=$$
+  # 짧은 sleep으로 돈다: main이 어떤 경로로 끝나도 감시가 TICKET_PRE_MAX초씩 남지 않는다
+  ( SECONDS=0
+    while [ "$SECONDS" -lt "$TICKET_PRE_MAX" ]; do
+      kill -0 "$_MAIN" 2>/dev/null || exit 0
+      sleep 1
+    done
+    kill -TERM "$_MAIN" 2>/dev/null
+    pkill -TERM -P "$_MAIN" 2>/dev/null
+  ) </dev/null >/dev/null 2>&1 &
+  PRE_WATCH=$!
+fi
+
 # 기본 작업 디렉터리 = 루트의 부모(<프로젝트>/.dira/workers/w1.sh -> <프로젝트>)
 TICKET_CWD="${TICKET_CWD:-$(dirname "$TICKET_ROOT")}"
 # P499-1: `remote H`는 `tick H`와 같은 길이다. 원격 슬롯(TICKET_NAME=remote<n>)은 기준 워커의 워크트리를
@@ -959,13 +992,28 @@ if [ "$CMD" = "tick" ]; then
   if ! mkdir "$LOCK" 2>/dev/null; then
     OWNER=$(cat "$LOCK/pid" 2>/dev/null)
     if [ -n "$OWNER" ] && kill -0 "$OWNER" 2>/dev/null; then
-      maybe_preempt
-      log "SKIP 이 워커가 아직 티켓을 물고 있다 pid=$OWNER"
-      exit 0
-    fi
+      # P522 결정 5: 락 pid가 살아 있어도 session 표지가 없고 pid 파일이 PRE_MAX+60초를 넘었으면 세션 전 단계에 갇힌 tick이다
+      _AGE=$(python3 -c 'import os,sys,time;print(int(time.time()-os.stat(sys.argv[1]).st_mtime))' "$LOCK/pid" 2>/dev/null || echo 0)
+      if [ ! -e "$LOCK/session" ] && [ "${_AGE:-0}" -gt $((TICKET_PRE_MAX + 60)) ]; then
+        log "WARN 세션 없는 tick 회수 pid=$OWNER ${_AGE}초"
+        _PG=$(ps -o pgid= -p "$OWNER" 2>/dev/null | tr -d ' ')
+        _MYPG=$(ps -o pgid= -p "$$" 2>/dev/null | tr -d ' ')
+        if [ -n "$_PG" ] && [ "$_PG" = "$OWNER" ] && [ "$_PG" != "$_MYPG" ]; then _KT="-$OWNER"; else _KT="$OWNER"; fi
+        kill -TERM -- "$_KT" 2>/dev/null
+        for _i in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$OWNER" 2>/dev/null || break; sleep 1; done
+        kill -0 "$OWNER" 2>/dev/null && kill -KILL -- "$_KT" 2>/dev/null
+        rm -rf "$LOCK"
+        mkdir "$LOCK" 2>/dev/null || exit 0
+      else
+        maybe_preempt
+        log "SKIP 이 워커가 아직 티켓을 물고 있다 pid=$OWNER"
+        exit 0
+      fi
+    else
     log "WARN 스테일 락 회수 pid=${OWNER:-?}"
     rm -rf "$LOCK"
     mkdir "$LOCK" 2>/dev/null || exit 0
+    fi
   fi
   printf %s "$$" > "$LOCK/pid"
   [ -n "$ENTRYLOCK" ] && { rm -rf "$ENTRYLOCK"; ENTRYLOCK=""; }
@@ -1942,6 +1990,8 @@ fi
 # 프롬프트 주입보다 **먼저** 적는다. 주입이 막히는 동안 pid가 비어 있으면 reap이 판정할 근거가
 # 없어 티켓이 진행중에 영구 잔류한다(2026-08-01 실사고).
 python3 "$PY" setpid "$TPATH" "$CPID"
+disarm_pre
+[ -n "${LOCK:-}" ] && printf %s "$CPID" > "$LOCK/session"
 
 if [ -n "$INBOX" ]; then
   # 디스패치가 섰는지는 둘을 같이 본다. 하나만으로는 새는 구멍이 있다:
@@ -2445,6 +2495,7 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
       log "DONE $THASH sid=$SID"
       python3 "$PY" assign "$RTPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:0:8}"
       python3 "$PY" setpid "$RTPATH" "$CPID"
+      [ -n "${LOCK:-}" ] && printf %s "$CPID" > "$LOCK/session"
       RPROMPT=$(printf "$TICKET_PROMPT_FMT" "$RTHASH")
       python3 -c 'import json,sys
 sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
