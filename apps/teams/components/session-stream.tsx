@@ -22,7 +22,7 @@
  *  `engineCan("interject", …)`(`lib/urls.ts`. codex는 둘 다 안 되고 grok은 앞만 된다).
  *  없는 쪽은 상자 자리에 `<EmptyState>`, 폼 자리에 비활성 + 사유 한 줄이다.
  *  **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTrackedRouter } from "@/lib/route-pending";
 import {
   ArrowDown,
@@ -94,6 +94,7 @@ import {
   engineCan,
   expandable,
   formatElapsed,
+  timeoutTimer,
   type GroupedItem,
   groupProgress,
   interjectMode,
@@ -151,6 +152,43 @@ type WorkerRowCtx = {
   selectedKey: string | null;
   onSelect: (e: StreamEvent) => void;
 };
+
+/** P521 - 타이머 칸이 짝 `tool_result`와 `live`를 알아야 한다. 줄이 `Row` 하나라 prop을 세 층 내리는 대신
+ *  컨텍스트 하나로 준다. 공급자 밖이면 `null`이라 타이머 칸이 안 뜬다. */
+const StreamTimerContext = createContext<{ events: StreamEvent[]; live: boolean } | null>(null);
+
+/** P521 결정 3-4 - `timeoutMs`가 있는 `tool_use`의 `<경과> / <한도>` 글자와 막대. 진행 중일 때만 자기 1초
+ *  간격을 갖는다(2초 폴링을 안 기다린다). */
+function TimeoutTimer({ e }: { e: StreamEvent }) {
+  const tc = useContext(StreamTimerContext);
+  const paired = tc ? pairTool(e, tc.events).elapsedMs : null;
+  const running = !!tc && tc.live && paired === null;
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    if (!running) return;
+    setNowMs(Date.now());
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [running]);
+  if (!tc || !e.timeoutMs) return null;
+  const { text, ratio } = timeoutTimer({
+    timeoutMs: e.timeoutMs,
+    startMs: Date.parse(e.ts),
+    nowMs,
+    pairedElapsedMs: paired,
+    live: tc.live,
+  });
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-2 font-mono tabular-nums">
+      {ratio !== null && (
+        <span aria-hidden className="h-1 w-16 overflow-hidden bg-muted">
+          <span className="block h-full bg-muted-foreground" style={{ width: `${ratio * 100}%` }} />
+        </span>
+      )}
+      {text}
+    </span>
+  );
+}
 
 export function SessionStream({
   project,
@@ -493,6 +531,7 @@ export function SessionStream({
     // `DialogContent`가 `grid`라 이 절은 그리드 아이템이고 `min-width: auto` = 내용의 min-content다.
     // 펼친 `<pre>`의 `break-words`는 min-content를 안 줄여서(줄이는 건 `break-all`) 긴 한 줄이
     // 그대로 열 폭이 된다 — 실측 768px 다이얼로그의 `scrollWidth`가 13125px이었다.
+    <StreamTimerContext.Provider value={{ events, live }}>
     <div
       className={cn(
         "min-w-0 space-y-2",
@@ -842,6 +881,7 @@ export function SessionStream({
         </Dialog>
       )}
     </div>
+    </StreamTimerContext.Provider>
   );
 }
 
@@ -1751,10 +1791,15 @@ function Row({
           summary
         )}
       </MarkerContent>
-      {ctx && e.kind === "tool_use" && (
-        <span className="ml-auto shrink-0 font-mono tabular-nums">
-          {elapsedMs !== null ? formatElapsed(elapsedMs) : null}
-        </span>
+      {e.kind === "tool_use" && e.timeoutMs ? (
+        <TimeoutTimer e={e} />
+      ) : (
+        ctx &&
+        e.kind === "tool_use" && (
+          <span className="ml-auto shrink-0 font-mono tabular-nums">
+            {elapsedMs !== null ? formatElapsed(elapsedMs) : null}
+          </span>
+        )
       )}
     </>
   );
@@ -2053,8 +2098,11 @@ function DetailPanel({
         <span className="shrink-0 font-mono tabular-nums" title={localTime(event.ts)}>
           {relativeElapsed(event.ts, baseTs)}
         </span>
-        {event.kind === "tool_use" && elapsedMs !== null && (
-          <span className="shrink-0 font-mono tabular-nums">{formatElapsed(elapsedMs)}</span>
+        {event.kind === "tool_use" && event.timeoutMs ? (
+          <TimeoutTimer e={event} />
+        ) : (
+          event.kind === "tool_use" &&
+          elapsedMs !== null && <span className="shrink-0 font-mono tabular-nums">{formatElapsed(elapsedMs)}</span>
         )}
         <Button variant="ghost" size="icon-sm" className="ml-auto" onClick={onClose}>
           <X aria-hidden />

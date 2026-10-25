@@ -1152,3 +1152,32 @@ test("codex - 불완전한 마지막 줄은 완성된 뒤 한 번만 나온다",
   assert.equal(b.events.length, 1);
   assert.equal((await tailEvents(f, b.offset, "codex")).events.length, 0);
 });
+
+test("timeoutMs - 양의 정수 timeout만 붙고, 백그라운드와 다른 줄에는 키가 없다 (P521 결정 1-2)", () => {
+  const ev = (input: unknown, name = "Bash") =>
+    recordToEvents({
+      type: "assistant",
+      uuid: "u1",
+      timestamp: "2026-10-25T00:00:00.000Z",
+      message: { role: "assistant", content: [{ type: "tool_use", name, id: "t1", input }] },
+    })[0];
+  assert.equal(ev({ command: "ls", timeout: 400000 }).timeoutMs, 400000);
+  assert.equal(ev({ pattern: "x", timeout: 1000 }, "Monitor").timeoutMs, 1000); // 도구 이름을 안 본다
+  for (const input of [
+    { command: "ls" },
+    { command: "ls", timeout: 0 },
+    { command: "ls", timeout: -5 },
+    { command: "ls", timeout: 1.5 },
+    { command: "ls", timeout: "400000" },
+    { command: "ls", timeout: 400000, run_in_background: true },
+  ]) {
+    assert.equal("timeoutMs" in ev(input), false, JSON.stringify(input));
+  }
+  const res = recordToEvents({
+    type: "user",
+    uuid: "u2",
+    timestamp: "2026-10-25T00:00:01.000Z",
+    message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] },
+  })[0];
+  assert.equal("timeoutMs" in res, false);
+});

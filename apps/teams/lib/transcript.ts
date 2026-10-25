@@ -46,7 +46,18 @@ export type StreamEvent = {
   // `tool_use`·`tool_result`인 사건에만 뜬다 — 다른 종에는 `diff`·`error`와 같은 이유로 키
   // 자체가 없다.
   toolId?: string;
+  // 입력의 양의 정수 `timeout`(ms) — `run_in_background`가 `true`가 아닌 `tool_use`에서만 뜬다(P521).
+  // 다른 줄에는 키 자체가 없다(`diff`·`error`와 같은 이유).
+  timeoutMs?: number;
 };
+
+/** P521 결정 1: 입력 모양 하나로 판정한다(도구 이름을 안 본다). */
+function timeoutOf(input: unknown): number | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  const o = input as Record<string, unknown>;
+  const v = o.timeout;
+  return typeof v === "number" && Number.isInteger(v) && v > 0 && o.run_in_background !== true ? v : undefined;
+}
 
 /** §경로 방어. `session_id`는 사람 입력이 아니라 티켓 fm에서만 오고, 경로가 되기 전에 이걸 통과한다.
  *  트랜스크립트는 등록된 root 밖이라 이 정규식이 그 예외의 유일한 방어다. */
@@ -870,6 +881,7 @@ export function recordToEvents(
         const name = typeof b.name === "string" ? b.name : t(locale, "transcriptLib.tool");
         const s = toolSummary(name, b.input, cwd);
         const edit = editShape(b.input);
+        const timeoutMs = timeoutOf(b.input);
         push(i, {
           kind: "tool_use",
           label: name,
@@ -878,6 +890,7 @@ export function recordToEvents(
           body: b.input === undefined ? "" : typeof b.input === "string" ? b.input : JSON.stringify(b.input, null, 2),
           ...(typeof b.id === "string" ? { toolId: b.id } : {}),
           ...(edit ? { diff: lineDiff(edit.old, edit.new), replaceAll: edit.replaceAll } : {}),
+          ...(timeoutMs ? { timeoutMs } : {}),
         });
         break;
       }

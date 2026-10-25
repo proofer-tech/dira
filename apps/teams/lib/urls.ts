@@ -796,6 +796,23 @@ export function formatElapsed(ms: number): string {
   return `${m}m ${Math.floor(s - m * 60)}s`;
 }
 
+/** P521 결정 3 - `timeout`이 붙은 `tool_use` 줄의 타이머 글자와 막대 비율. 진행 중(짝 없음 + live)은
+ *  `지금 - 시작`이고 막대가 있다. 끝남(짝 있음)은 `elapsedMs`로 고정되고 막대가 없다. 멈춘 스트림(짝 없음 +
+ *  live 아님)은 숫자를 세지 않고 `- / <한도>`다. */
+export function timeoutTimer(a: {
+  timeoutMs: number;
+  startMs: number;
+  nowMs: number;
+  pairedElapsedMs: number | null;
+  live: boolean;
+}): { text: string; ratio: number | null } {
+  const limit = formatElapsed(a.timeoutMs);
+  if (a.pairedElapsedMs !== null) return { text: `${formatElapsed(Math.max(0, a.pairedElapsedMs))} / ${limit}`, ratio: null };
+  if (!a.live) return { text: `- / ${limit}`, ratio: null };
+  const el = Math.max(0, a.nowMs - a.startMs);
+  return { text: `${formatElapsed(el)} / ${limit}`, ratio: Math.min(el / a.timeoutMs, 1) };
+}
+
 /** 워커 스트림 다이얼로그 필터 넷(§2-15 ⑥ 표) — 파싱이 이미 아는 `kind`(+ `interject`의 `label`)
  *  하나로 갈린다. `StreamEvent`(transcript.ts)를 직접 import하지 않는 이유는 이 파일 머리와
  *  같다 — 제네릭 최소 형태만 받는다. */

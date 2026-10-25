@@ -16,6 +16,7 @@ import {
   escDestination,
   findMatches,
   formatElapsed,
+  timeoutTimer,
   formatRemaining,
   groupProgress,
   hasFindBar,
@@ -1045,4 +1046,21 @@ test("relativeUnderAny — 겹치는 기준 · 어디에도 안 걸림 · 기준
 
   // 기준 0개 — 마찬가지로 절대경로 그대로
   assert.equal(relativeUnderAny("/elsewhere/README.md", []), "/elsewhere/README.md");
+});
+
+test("timeoutTimer - 진행 중 - 끝남 - 멈춘 스트림 세 상태의 글자 (P521 결정 3)", () => {
+  const base = { timeoutMs: 400000, startMs: 1000, nowMs: 31000 };
+  // 진행 중: 지금 - 시작, 막대 비율이 있다
+  assert.deepEqual(timeoutTimer({ ...base, pairedElapsedMs: null, live: true }), { text: "30s / 6m 40s", ratio: 0.075 });
+  // 한도를 넘으면 글자는 오르고 비율은 1에서 멈춘다
+  assert.deepEqual(timeoutTimer({ ...base, nowMs: 1000 + 500000, pairedElapsedMs: null, live: true }), {
+    text: "8m 20s / 6m 40s",
+    ratio: 1,
+  });
+  // 끝남: 짝의 소요로 고정되고 막대가 없다(live 여부와 무관)
+  for (const live of [true, false]) {
+    assert.deepEqual(timeoutTimer({ ...base, pairedElapsedMs: 4200, live }), { text: "4.2s / 6m 40s", ratio: null });
+  }
+  // 멈춘 스트림: 숫자를 세지 않는다
+  assert.deepEqual(timeoutTimer({ ...base, pairedElapsedMs: null, live: false }), { text: "- / 6m 40s", ratio: null });
 });
