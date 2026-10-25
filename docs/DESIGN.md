@@ -8984,8 +8984,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P521-1 | `transcript.ts` `timeoutMs` 파싱(결정 1-2) + `Row` - `DetailPanel` 타이머 칸(결정 3-4) + 테스트 | developer | - | 발행 예정 |
-| P521-2 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P521-1 | 발행 예정 |
+| P521-1 | `transcript.ts` `timeoutMs` 파싱(결정 1-2) + `Row` - `DetailPanel` 타이머 칸(결정 3-4) + 테스트 | developer | - | 발행 `ed077adf` |
+| P521-2 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P521-1 | 발행 `548383fb` |
 
 **두 장이다.**
 
