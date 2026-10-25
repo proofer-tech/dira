@@ -37,15 +37,23 @@ const TEMPLATE_FILES = ["watchdog_gates.py", "watchdog_alert.py"];
 
 /** 공용 패키지는 GitHub 태그로 고정한다(P506 결정 2 - 태그는 `<패키지>-v<버전>`). */
 const PUBLIC_PKG_REPO = "proofer-tech/dira/packages";
-const DIRA_TEAM_APM_YML = `name: project-team
+/** 엔진 `packages/<패키지>/apm.yml`의 `version:`이 고정 태그의 유일한 정본이다(P520 결정 1). */
+async function pkgVersion(repoPath: string, pkg: string): Promise<string> {
+  const yml = await readFile(path.join(repoPath, "packages", pkg, "apm.yml"), "utf8");
+  const m = /^version:\s*(\S+)\s*$/m.exec(yml);
+  if (!m) throw new Error(`packages/${pkg}/apm.yml에 version이 없다`);
+  return m[1];
+}
+async function dirApmYml(repoPath: string): Promise<string> {
+  const dep = async (pkg: string) => `    - ${PUBLIC_PKG_REPO}/${pkg}#${pkg}-v${await pkgVersion(repoPath, pkg)}\n`;
+  return `name: project-team
 version: 1.0.0
 targets: [claude]
 dependencies:
   apm:
-    - ${PUBLIC_PKG_REPO}/dira-protocols#dira-protocols-v1.0.1
-    - ${PUBLIC_PKG_REPO}/squad-default#squad-default-v1.0.1
-    - ./protocols
+${await dep("dira-protocols")}${await dep("squad-default")}    - ./protocols
 `;
+}
 const DIRA_TEAM_PROTOCOLS_APM_YML = "name: project-protocols\nversion: 1.0.0\ndescription: 이 프로젝트의 AGENTS.md와 공용 문서를 바꿔 쓴 파일\n";
 const DIRA_TEAM_GITIGNORE = "apm_modules/\n.claude/\n.agents/\n";
 
@@ -303,7 +311,7 @@ export async function scaffold(
     }
   };
   const agentsTemplate = await readFile(path.join(repo.path, "packages/dira-protocols/AGENTS.template.md"), "utf8");
-  await putTeam("apm.yml", DIRA_TEAM_APM_YML);
+  await putTeam("apm.yml", await dirApmYml(repo.path));
   await putTeam(
     "protocols/AGENTS.md",
     fillPlaceholders(agentsTemplate, { project, branch: opts.branch, specDoc: opts.specDoc }),

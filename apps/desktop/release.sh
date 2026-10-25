@@ -59,9 +59,15 @@ fi
 # bump만 하고 0으로 끝난다 — 커밋 0 · 태그 0. 4번은 그대로 돌아서 자산이 나오고, 5번의
 # push가 `Everything up-to-date`인 채 `gh release create`가 **버전 커밋이 없는 원격 HEAD에**
 # `v<x.y.z>` 태그를 단다: 받는 사람의 앱 버전과 태그가 가리키는 소스가 갈린다(실측 2026-08-01).
+#
+# 패키지 태그(P520 결정 2)도 같은 커밋·같은 push에 실린다: 바뀐 패키지는 apm.yml version이 올라 이 커밋에
+# 들어가고, 단계 4가 이 커밋을 구우므로 번들에도 올린 버전이 든다. 사람이 손으로 올리거나 달지 않는다.
+root=$(git rev-parse --show-toplevel) || exit 1
+pkg_tags=$(here=$(pwd) && cd "$root" && sh "$here/pkg-tags.sh") || exit 1
 npm version "$bump" --no-git-tag-version || exit 1
 ver=$(node -p "require('./package.json').version")
-git commit -q -m "release v$ver" package.json || exit 1
+git commit -q -m "release v$ver" package.json "$root/packages" || exit 1
+for tg in $pkg_tags; do git tag -a "$tg" -m "release $tg" || exit 1; done
 # `-a`가 빠지면 lightweight 태그가 되고 **5번의 `--follow-tags`가 그걸 안 민다.** 커밋만
 # 올라가고 태그는 로컬에 남아서, 6번의 `gh release create`가 원격 기본 브랜치 HEAD에 같은
 # 이름의 태그를 새로 만든다 — 로컬 태그와 원격 태그가 다른 객체가 된다(실측 2026-08-01).
