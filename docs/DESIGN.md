@@ -8938,6 +8938,87 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P520. 공용 패키지가 바뀌면 릴리스가 태그를 달고, 등록된 큐는 다음 틱에 그 태그로 따라간다 (요구 `e3c991ec`, 왕복 0회)
+
+사람 요구(2026-10-25): *"앞으로도 dira 시스템 차원에서 누락되지 않도록 해주세요. 프로토콜이 업데이트됐으면
+프로젝트에 늦기전에 반영해줘야하고요"*. 계기는 타이니어스 큐의 `43a44dab`다. 10월 20일 P511-1(`442bc18e`)이
+`packages/dira-protocols/계획-규약.md`를 고쳤지만, 다른 큐 아홉 곳은 `dira-protocols-v1.0.1`에 고정되어 옛 견본
+`( -> )`를 계속 받았다. 밀린 것을 따라잡는 일은 `e9cd35f4` - `d2faecde`가 맡았고, 이 절은 같은 누락이 다시 생기지
+않게 하는 구조다.
+
+#### 실측 (2026-10-25)
+
+- 고정 태그가 코드에 문자열로 들어 있다. `apps/teams/lib/scaffold.ts:45-46`(`dira-protocols-v1.0.1`,
+  `squad-default-v1.0.1`), `migrations/0002_apm_packages.py:190`(`dira-protocols-v1.0.1`), 그리고 이 값을 검사하는
+  `apps/teams/lib/scaffold.test.ts:135`이다.
+- `packages/*/apm.yml`의 `version:`은 여덟 패키지 모두 `1.0.0`이다. 태그 이름과 이 값이 연결되어 있지 않다.
+- 아홉 큐의 `apm.yml`과 `apm.lock.yaml`은 `.dira/team/` 아래에 있고 각 저장소에서 gitignore다(P509). 고정값을
+  올리는 데 프로젝트 저장소 커밋은 필요 없다.
+- `.dira/protocols/` 사본은 `dira_apm.py install`이 끝에 부르는 `materialize()`가 다시 쓴다. tick.sh는 claim 전에
+  `gate`만 부르고(tick.sh:1017-1023), 고정값을 올리는 단계는 어디에도 없다.
+- master가 origin에 올라가면 `.github/workflows/release.yml`이 매번 `apps/desktop/release.sh`로 앱을 릴리스한다.
+  release.sh가 버전 커밋, 태그 `v<x.y.z>`, `git push --atomic origin master --follow-tags`를 한다. 앱 번들에는
+  `engine/packages/<패키지>/`가 들어가고, cron이 부르는 엔진(`~/Library/Application Support/dira/engine/`)에도
+  `packages/`가 있다.
+
+#### 결정
+
+1. **고정값의 정본은 `packages/<패키지>/apm.yml`의 `version:` 하나다.** 태그 이름은 `<패키지>-v<version>`이다.
+   `scaffold.ts`와 앞으로 낼 마이그레이션은 엔진의 `packages/<패키지>/apm.yml`을 읽어 의존성 줄을 만들고, 태그
+   문자열을 코드에 적지 않는다. 기준선으로 `dira-protocols`는 `1.0.2`(`d2faecde`가 단 태그), `squad-default`는
+   `1.0.1`로 맞춘다. 이미 실행이 끝난 `0002_apm_packages.py`는 기록이므로 고치지 않는다.
+2. **릴리스가 패키지 태그를 단다 - `release.sh` 단계 2~3.** 앱 버전 커밋을 만들기 전에 `packages/*`를 하나씩 본다.
+   - 태그 `<패키지>-v<version>`이 없으면 이번 릴리스 커밋에 그 태그를 단다.
+   - 태그가 있고 `git diff --quiet <태그> HEAD -- packages/<패키지> ':!packages/<패키지>/apm.yml'`이 실패하면(내용이
+     달라졌으면) `version`의 patch를 1 올려 같은 릴리스 커밋에 넣고 새 태그를 단다.
+   - 태그는 `-a`(annotated)다. 기존 `--atomic --follow-tags` push가 앱 태그와 함께 내보낸다. 단계 4가 이 커밋을
+     굽기 때문에 번들의 `apm.yml`에는 올린 버전이 들어간다.
+   그래서 정본을 고치는 세션이 할 일은 없다. 버전을 손으로 올리지 않고, 태그도 손으로 달지 않는다.
+3. **큐는 틱마다 엔진 번들의 버전을 따라간다 - `dira_apm.py sync <프로젝트>`.** tick.sh가 `tick` 명령에서 `gate`
+   바로 앞에 부른다.
+   - `.dira/team/apm.yml`에서 `proofer-tech/dira/packages/<패키지>#<패키지>-v<X>` 꼴의 줄만 본다. 엔진의
+     `packages/<패키지>/apm.yml` 버전 V가 X보다 semver로 크면 그 줄을 V로 고치고 `install --no-frozen`을 돌린다.
+     로컬 경로 의존성(dira 큐 자신의 `../packages/...`)과 다른 저장소 의존성은 건드리지 않는다. 내리지 않는다.
+   - 성공하면 runner.log에 `APM-SYNC <패키지> v<X> -> v<V>` 한 줄을 남긴다.
+   - 실패하면 `apm.yml`과 `apm.lock.yaml`을 시작 전 바이트로 되돌리고 `SKIP apm-sync <요약>` 한 줄을 남긴다.
+     `.dira/team/.apm-sync-fail`에 V와 시각을 적고, 같은 V는 30분 동안 다시 시도하지 않는다. 실패해도 rc 0이다 -
+     옛 고정값과 lock이 그대로라 뒤의 `gate`가 통과하고 디스패치는 멎지 않는다.
+   - 같은 큐의 tick 여러 개가 같은 분에 뜨므로 `.dira/team/.apm-sync.lock`을 mkdir 락으로 잡는다(pid 기록, `kill -0`
+     스테일 회수). 못 잡으면 기다리지 않고 건너뛴다.
+   - 옛 배치(`team` rc 3)이거나 `DIRA_APM_NO_INSTALL=1`이면 아무것도 안 한다. 고칠 줄이 없으면 네트워크를 쓰지 않고
+     파일 두 개만 읽고 끝난다.
+4. **반영 시점은 엔진 릴리스와 같다.** 큐가 따라가는 것은 origin의 최신 태그가 아니라 지금 도는 엔진에 든
+   버전이다. 규약 문서는 엔진 동작(`push.sh ship`, `unassign` 등)을 설명하므로, 엔진보다 앞선 규약이 들어가면 없는
+   명령을 시킨다. master가 origin에 올라간 다음 릴리스가 끝나고 앱이 자동 업데이트되면, 다음 틱에 아홉 큐가 함께
+   바뀐다. dira 큐는 지금처럼 로컬 경로로 master를 바로 쓴다(P506 결정 9, canary).
+
+주도성 5 판단: 엔진 수정(`dira_apm.py sync`, tick.sh 호출 한 줄)을 사람 승인 없이 낸다. 사람이 이 요구로 "시스템
+차원에서" 막으라고 했고, 상태 3종 - 파일명 - claim 락은 안 바뀌며, 실패해도 디스패치를 막지 않는다.
+주도성 5 판단: 태그 push는 원격 push가 사람 몫이라는 원칙에 걸리지 않게 CI 릴리스(release.sh)에 붙였다. CI는
+이미 origin에 앱 태그를 내보내고 있고, 세션과 워커는 origin에 아무것도 push하지 않는다.
+주도성 5 판단: 요구는 `dira-protocols`만 말했지만 `squad-default`도 같은 방식으로 고정되어 있어 `packages/*` 전부에
+같은 규칙을 적용한다. 페르소나 패키지는 지금 어느 큐도 git 의존성으로 받지 않으므로, 태그만 생기고 큐에는 변화가
+없다.
+주도성 5 판단: 매뉴얼 장은 내지 않는다. 사람이 할 일이 생기지 않는 내부 동작이고, runner.log 한 줄로 추적된다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P520-1 | 릴리스와 생성기 - `packages/*/apm.yml` 기준선(결정 1), `release.sh` 패키지 태그 단계(결정 2), `scaffold.ts`가 버전을 읽어 의존성 줄을 만들고 `scaffold.test.ts`를 고친다 | developer | - | |
+| P520-2 | 엔진 - `dira_apm.py sync`(결정 3) + tick.sh의 `gate` 앞 호출 + `test_dira_apm.py` | developer | - | |
+| P520-3 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P520-1, P520-2 | |
+
+**세 장이다.** 1과 2는 서로 기다리지 않는다. sync는 엔진의 `apm.yml` 버전만 읽고, 그 값을 누가 올렸는지 모른다.
+
+#### 수용조건
+
+- [ ] `grep -rnE '#(dira-protocols|squad-default)-v[0-9]' apps/teams/lib --include='*.ts' | grep -v '\.test\.ts'`가 아무것도 내지 않는다. `scaffold.ts`로 만든 새 프로젝트의 `.dira/team/apm.yml`에는 `dira-protocols#dira-protocols-v<packages/dira-protocols/apm.yml의 version>`이 들어간다(`scaffold.test.ts`가 이 값을 파일에서 읽어 비교한다).
+- [ ] `packages/dira-protocols/apm.yml`의 `version`이 `1.0.2`, `packages/squad-default/apm.yml`이 `1.0.1`이다.
+- [ ] 임시 저장소(패키지 둘, 하나는 태그 뒤에 파일이 바뀌고 하나는 그대로)에서 release.sh의 패키지 태그 단계만 떼어 돌리면, 바뀐 패키지는 `version` patch가 1 오르고 새 annotated 태그가 릴리스 커밋을 가리키며, 그대로인 패키지는 태그가 늘지 않는다. 태그가 없던 패키지는 지금 `version`으로 태그가 생긴다. 이 검증은 스크립트나 테스트 파일로 저장소에 남는다.
+- [ ] `python3 test_dira_apm.py`가 통과한다. 그 안에서 `.dira/team/apm.yml`이 `v1.0.1`에 고정된 임시 큐와 `version: 1.0.2`인 가짜 엔진 `packages/`로 `sync`를 부르면 그 줄이 `v1.0.2`가 되고 install이 `--no-frozen`으로 불린다. 엔진 쪽이 더 낮거나 같으면 파일이 바뀌지 않고 install이 불리지 않는다. 로컬 경로 의존성 줄은 바뀌지 않는다.
+- [ ] 같은 테스트에서 install이 실패하면 `apm.yml`과 `apm.lock.yaml`이 시작 전 바이트와 같고, rc가 0이며, `.apm-sync-fail`이 생긴다. 30분 안에 다시 부르면 install이 불리지 않는다. 락 디렉터리가 살아 있는 pid로 잡혀 있으면 아무것도 하지 않고 rc 0이다.
+- [ ] `grep -n 'dira_apm.py" sync' tick.sh`가 한 줄을 내고, 그 줄은 `dira_apm.py" gate` 줄보다 앞이며 `[ "$CMD" = "tick" ]` 판정 안쪽이다.
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`과 `pnpm test`가 통과한다.
+
 ### P519. 슬림 체크아웃 - 쉬는 프로젝트는 `.dira`와 `.git`만 남기고 비웠다가, 티켓을 소비할 때 통합 브랜치로 다시 채운다 (요구 `7bc5fe0b`, 왕복 0회)
 
 사람 요구(2026-10-24): *"프로젝트 디렉토리(여기의 경우 ~/Projects/dira)를 지정했을 때 만약 git repo라면 .dira 만
