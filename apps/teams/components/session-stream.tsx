@@ -166,7 +166,6 @@ function TimeoutTimer({ e }: { e: StreamEvent }) {
   const [nowMs, setNowMs] = useState(() => Date.now());
   useEffect(() => {
     if (!running) return;
-    setNowMs(Date.now());
     const id = setInterval(() => setNowMs(Date.now()), 1000);
     return () => clearInterval(id);
   }, [running]);
