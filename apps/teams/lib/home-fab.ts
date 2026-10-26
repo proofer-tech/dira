@@ -13,3 +13,8 @@ export function fabPlan(surface: Surface): { primary: CreateAction | null; dial:
   const primary = ORDER.find((a) => a === surface) ?? null;
   return { primary, dial: ORDER.filter((a) => a !== primary) };
 }
+
+/** FAB 아이콘 키 (§P527). 주 액션이 있으면 그 `CreateAction`의 아이콘, 없으면 `plus`다. */
+export function fabIconKey(surface: Surface): CreateAction | "plus" {
+  return fabPlan(surface).primary ?? "plus";
+}

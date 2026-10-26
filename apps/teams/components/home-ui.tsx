@@ -115,7 +115,7 @@ import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
-import { fabPlan, type CreateAction } from "@/lib/home-fab";
+import { fabIconKey, fabPlan, type CreateAction } from "@/lib/home-fab";
 import { splitAttachments } from "@/lib/attachment-format";
 import type { RefIndex } from "@/lib/markdown-refs";
 import type { PtyStatus } from "@/lib/pty";
@@ -2746,6 +2746,8 @@ function CreateFab({
   const wrap = useRef<HTMLDivElement>(null);
   const escaping = useRef(false);
   const { primary, dial } = fabPlan(surface);
+  const iconKey = fabIconKey(surface);
+  const FabIcon = iconKey === "plus" ? Plus : CREATE_META[iconKey].icon;
   // `session`에서는 입력창 박스(InputGroup) 위 변보다 16px 위에 앉는다. 박스가 여러 줄로 자라거나
   // 창이 바뀔 때마다 다시 잰다. 그 밖의 표면은 `bottom-6` 그대로다.
   const [lift, setLift] = useState<number | null>(null);
@@ -2813,7 +2815,7 @@ function CreateFab({
           else if (!disabled) onCreate(primary);
         }}
       >
-        <Plus />
+        <FabIcon />
       </Button>
       <div
         role="menu"
