@@ -320,6 +320,17 @@
       opacity: 0.3;
     }
   }
+  /* P530 결정 3 - 타임아웃 타이머 모래시계. 앞 75%는 서 있고 끝 25%에 180도 뒤집힌다(대칭이라 이음새가 안 튄다). */
+  --animate-hourglass-flip: hourglass-flip 2s ease-in-out infinite;
+  @keyframes hourglass-flip {
+    0%,
+    75% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(180deg);
+    }
+  }
 }
 
 @theme {

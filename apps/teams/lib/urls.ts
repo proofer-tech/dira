@@ -796,8 +796,8 @@ export function formatElapsed(ms: number): string {
   return `${m}m ${Math.floor(s - m * 60)}s`;
 }
 
-/** P521 결정 3 - `timeout`이 붙은 `tool_use` 줄의 타이머 글자와 막대 비율. 진행 중(짝 없음 + live)은
- *  `지금 - 시작`이고 막대가 있다. 끝남(짝 있음)은 `elapsedMs`로 고정되고 막대가 없다. 멈춘 스트림(짝 없음 +
+/** P521 결정 3 - `timeout`이 붙은 `tool_use` 줄의 타이머 글자와 진행 중 여부(P530 결정 2-4: 모래시계). 진행 중
+ *  (짝 없음 + live)은 `지금 - 시작`이고 `running`이다. 끝남(짝 있음)은 `elapsedMs`로 고정되고 모래시계가 없다. 멈춘 스트림(짝 없음 +
  *  live 아님)은 숫자를 세지 않고 `- / <한도>`다. */
 export function timeoutTimer(a: {
   timeoutMs: number;
@@ -805,12 +805,12 @@ export function timeoutTimer(a: {
   nowMs: number;
   pairedElapsedMs: number | null;
   live: boolean;
-}): { text: string; ratio: number | null } {
+}): { text: string; running: boolean } {
   const limit = formatElapsed(a.timeoutMs);
-  if (a.pairedElapsedMs !== null) return { text: `${formatElapsed(Math.max(0, a.pairedElapsedMs))} / ${limit}`, ratio: null };
-  if (!a.live) return { text: `- / ${limit}`, ratio: null };
+  if (a.pairedElapsedMs !== null) return { text: `${formatElapsed(Math.max(0, a.pairedElapsedMs))} / ${limit}`, running: false };
+  if (!a.live) return { text: `- / ${limit}`, running: false };
   const el = Math.max(0, a.nowMs - a.startMs);
-  return { text: `${formatElapsed(el)} / ${limit}`, ratio: Math.min(el / a.timeoutMs, 1) };
+  return { text: `${formatElapsed(el)} / ${limit}`, running: true };
 }
 
 /** 워커 스트림 다이얼로그 필터 넷(§2-15 ⑥ 표) — 파싱이 이미 아는 `kind`(+ `interject`의 `label`)

@@ -31,6 +31,7 @@ import {
   CirclePlay,
   Copy,
   FilePlus2,
+  Hourglass,
   Send,
   Square,
   SquareCheck,
@@ -157,7 +158,7 @@ type WorkerRowCtx = {
  *  컨텍스트 하나로 준다. 공급자 밖이면 `null`이라 타이머 칸이 안 뜬다. */
 const StreamTimerContext = createContext<{ events: StreamEvent[]; live: boolean } | null>(null);
 
-/** P521 결정 3-4 - `timeoutMs`가 있는 `tool_use`의 `<경과> / <한도>` 글자와 막대. 진행 중일 때만 자기 1초
+/** P521 결정 3-4 - `timeoutMs`가 있는 `tool_use`의 `<경과> / <한도>` 글자와 모래시계. 진행 중일 때만 자기 1초
  *  간격을 갖는다(2초 폴링을 안 기다린다). */
 /** 홈 대화 스레드처럼 `SessionStream` 밖에서 `Bundle`을 그리는 자리가 같은 타이머 칸을 얻는 공급자다. */
 export const StreamTimerProvider = StreamTimerContext.Provider;
@@ -173,7 +174,7 @@ function TimeoutTimer({ e }: { e: StreamEvent }) {
     return () => clearInterval(id);
   }, [running]);
   if (!tc || !e.timeoutMs) return null;
-  const { text, ratio } = timeoutTimer({
+  const { text, running: spinning } = timeoutTimer({
     timeoutMs: e.timeoutMs,
     startMs: Date.parse(e.ts),
     nowMs,
@@ -182,10 +183,8 @@ function TimeoutTimer({ e }: { e: StreamEvent }) {
   });
   return (
     <span className="ml-auto flex shrink-0 items-center gap-2 font-mono tabular-nums">
-      {ratio !== null && (
-        <span aria-hidden className="h-1 w-16 overflow-hidden bg-muted">
-          <span className="block h-full bg-muted-foreground" style={{ width: `${ratio * 100}%` }} />
-        </span>
+      {spinning && (
+        <Hourglass aria-hidden className="size-3 animate-hourglass-flip text-muted-foreground motion-reduce:animate-none" />
       )}
       {text}
     </span>
