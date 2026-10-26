@@ -6,7 +6,7 @@ import type { FrontmatterRow } from "./markdown-frontmatter-rows.ts";
 export const FOLD_DEFAULT_THRESHOLD = 8;
 
 export interface FoldInfo {
-  /** 조상 키 + 형제 순번으로 만든 식별자 - 행 번호가 아니라 다른 행의 편집에 안 흔들린다(결정 4). */
+  /** 조상 키 + 자기 키 + 같은 키 형제 중 순번으로 만든 식별자 - 행 번호도 앞 형제의 추가-삭제도 안 탄다(결정 4). */
   id: string;
   /** 바로 뒤에 이어지는 `level`이 더 큰 연속 행의 수(손자 포함). 0이면 접을 수 없다. */
   descendants: number;
@@ -17,15 +17,17 @@ export interface FoldInfo {
 }
 
 export function foldInfos(rows: FrontmatterRow[]): FoldInfo[] {
-  const stack: { level: number; path: string; childCount: number }[] = [];
-  let rootCount = 0;
+  const stack: { level: number; path: string; seen: Map<string, number> }[] = [];
+  const rootSeen = new Map<string, number>();
   return rows.map((row, i) => {
     while (stack.length > 0 && stack[stack.length - 1].level >= row.level) stack.pop();
     const parent = stack[stack.length - 1];
-    const ordinal = parent ? parent.childCount++ : rootCount++;
-    const path = parent ? parent.path : "";
+    const seen = parent ? parent.seen : rootSeen;
+    const path = `${parent ? parent.path : ""}/${row.key ?? "-"}`;
+    const ordinal = seen.get(path) ?? 0;
+    seen.set(path, ordinal + 1);
     const id = `${path}#${ordinal}`;
-    stack.push({ level: row.level, path: `${path}/${row.key ?? "-"}`, childCount: 0 });
+    stack.push({ level: row.level, path, seen: new Map() });
 
     let descendants = 0;
     while (i + 1 + descendants < rows.length && rows[i + 1 + descendants].level > row.level) descendants++;

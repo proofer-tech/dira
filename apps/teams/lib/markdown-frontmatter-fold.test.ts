@@ -42,7 +42,23 @@ test("행을 고치거나 더해도 앞쪽 행의 식별자가 유지된다", ()
   const rows = parseFrontmatterHead(HEAD).rows;
   const before = foldInfos(rows).map((f) => f.id);
   const typed = updateRow(rows, 0, { key: "kind", value: "x" });
-  assert.deepEqual(foldInfos(typed).map((f) => f.id), before);
+  assert.deepEqual(foldInfos(typed).map((f) => f.id).slice(1), before.slice(1)); // 고친 행 자신의 키는 식별자에 든다
   const added = insertRow(rows, rows.length, { key: "z", value: "", shape: "pair" });
   assert.deepEqual(foldInfos(added).map((f) => f.id).slice(0, rows.length), before);
+});
+
+test("앞 형제를 더하거나 지워도 뒤 행의 접힘 식별자가 유지된다 (P531 결정 4)", () => {
+  const rows = parseFrontmatterHead(HEAD).rows;
+  const links = rows.findIndex((r) => r.key === "links");
+  const idOf = (rs: typeof rows, key: string) => foldInfos(rs)[rs.findIndex((r) => r.key === key)].id;
+  const added = insertRow(rows, 0, { key: "name", value: "", shape: "pair" });
+  assert.equal(idOf(added, "links"), idOf(rows, "links"));
+  assert.ok(defaultCollapsed(added).has(idOf(added, "links")));
+  // 접힌 links의 `+`: links 아래 첫 자리에 행이 들어가도 dependsOn과 feeds가 그대로다
+  const plus = insertRow(rows, links + 1, { key: "new", value: "", shape: "pair" });
+  plus[links + 1] = { ...plus[links + 1], level: rows[links + 1].level };
+  assert.equal(idOf(plus, "dependsOn"), idOf(rows, "dependsOn"));
+  assert.equal(idOf(plus, "feeds"), idOf(rows, "feeds"));
+  assert.ok(defaultCollapsed(plus).has(idOf(plus, "dependsOn")));
+  assert.ok(!defaultCollapsed(plus).has(idOf(plus, "feeds")));
 });
