@@ -12,6 +12,7 @@ import {
   grokCwd,
   lastActivity,
   nthInitOffset,
+  roundStartOffset,
   recordToEvents,
   sessionIdOf,
   tailEvents,
@@ -1180,4 +1181,29 @@ test("timeoutMs - 양의 정수 timeout만 붙고, 백그라운드와 다른 줄
     message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] },
   })[0];
   assert.equal("timeoutMs" in res, false);
+});
+
+test("roundStartOffset - init 0건 재활용 세션: 2회차는 디스패치 프롬프트 레코드에서 시작하고 프롬프트는 한 번만 뜬다 (P532)", async () => {
+  const f = path.join(tmp, "p532.jsonl");
+  const ask = (h: string) => `${h} 티켓을 확인해 주세요. (해당 티켓은 이미 진행중으로 잡아두었습니다.)`;
+  const ts = (n: number) => `2026-10-26T12:00:0${n}.000Z`;
+  const user = (h: string, n: number) =>
+    rec({ type: "user", timestamp: ts(n), uuid: `u${n}`, message: { role: "user", content: [{ type: "text", text: ask(h) }] } });
+  const a = (text: string, n: number) =>
+    rec({ type: "assistant", timestamp: ts(n), uuid: `a${n}`, message: { role: "assistant", content: [{ type: "text", text }] } });
+  const head = rec({ type: "queue-operation", operation: "enqueue", timestamp: ts(0) }) + user("d3c20100", 1) + a("1회차 사건", 2);
+  const enq2 = rec({ type: "queue-operation", operation: "enqueue", timestamp: ts(3), content: ask("2d6ce5af") });
+  const deq2 = rec({ type: "queue-operation", operation: "dequeue", timestamp: ts(3) });
+  writeFileSync(f, head + enq2 + deq2 + user("2d6ce5af", 4) + a("2회차 사건", 5));
+
+  const off2 = Buffer.byteLength(head);
+  assert.equal(await roundStartOffset(f, 2), off2); // enqueue가 앞이다
+  const round2 = await tailEvents(f, off2);
+  assert.equal(round2.events[0].body, ask("2d6ce5af")); // 첫 사건이 2회차 프롬프트
+  assert.equal(round2.events.filter((e) => e.body.includes("2d6ce5af")).length, 1); // 한 번만
+  assert.ok(!round2.events.some((e) => e.body.includes("1회차")));
+  const first = await tailEvents(f, 0);
+  assert.equal(round2.events[0].kind, first.events[0].kind); // 1회차 첫 프롬프트와 같은 줄 종류
+  // 3회차 레코드도 init도 없으면 종전대로 지금 파일 끝
+  assert.equal(await roundStartOffset(f, 3), Buffer.byteLength(head + enq2 + deq2 + user("2d6ce5af", 4) + a("2회차 사건", 5)));
 });

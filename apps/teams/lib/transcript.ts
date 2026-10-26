@@ -390,6 +390,60 @@ export async function nthInitOffset(file: string, n: number): Promise<number> {
   return buf.length; // n개보다 적다 — 지금 끝에서부터(위 계약)
 }
 
+/** 디스패치 프롬프트 레코드의 텍스트(P532) - `enqueue`의 `content` 또는 `user` 프롬프트 텍스트가
+ *  `<해시> 티켓을 확인해 주세요`(`tick.sh` `TICKET_PROMPT_FMT`)로 시작하면 그 글, 아니면 `null`. */
+function dispatchPromptText(rec: unknown): string | null {
+  if (!rec || typeof rec !== "object") return null;
+  const r = rec as { type?: unknown; content?: unknown; message?: unknown };
+  let text: unknown;
+  if (r.type === "queue-operation") text = isEnqueue(rec) ? r.content : null;
+  else if (r.type === "user") {
+    const c = (r.message as { content?: unknown } | undefined)?.content;
+    text = typeof c === "string" ? c : Array.isArray(c) ? (c[0] as { type?: unknown; text?: unknown } | undefined)?.type === "text" ? (c[0] as { text?: unknown }).text : null : null;
+  }
+  if (typeof text !== "string") return null;
+  return /^[0-9a-f]{8} 티켓을 확인해 주세요/.test(text) || isTicketAssignment(text) ? text : null;
+}
+
+/** `n`회차(1부터)의 시작 바이트 오프셋(P532 결정 1-2). `n >= 2`는 디스패치 프롬프트 레코드의
+ *  `n`번째 묶음(`enqueue`와 `user`가 연달아 있으면 앞의 것)이고, 없으면 `nthInitOffset`으로
+ *  물러선다(그것도 없으면 그 함수의 "지금 파일 끝"). 회차 1은 부르지 않는다. */
+export async function roundStartOffset(file: string, n: number): Promise<number> {
+  let buf: Buffer;
+  try {
+    buf = await readFile(file);
+  } catch {
+    return 0;
+  }
+  let count = 0;
+  let pos = 0;
+  let prev: string | null = null; // 바로 앞 레코드가 디스패치 프롬프트였으면 그 글
+  while (pos < buf.length) {
+    const nl = buf.indexOf(0x0a, pos);
+    const line = buf.toString("utf8", pos, nl < 0 ? buf.length : nl);
+    if (line.trim()) {
+      let text: string | null = null;
+      try {
+        text = dispatchPromptText(JSON.parse(line));
+      } catch {
+        // 깨진 줄은 건너뛴다
+      }
+      if (text !== null) {
+        // `enqueue` 바로 뒤에서 같은 글로 시작하는 `user`는 같은 묶음이다
+        if (prev === null || !(text.startsWith(prev.slice(0, 8)))) {
+          if (++count === n) return pos;
+        }
+        prev = text;
+      } else if (!/"type":"queue-operation"/.test(line) && !/"type":"attachment"/.test(line)) {
+        prev = null;
+      }
+    }
+    if (nl < 0) break;
+    pos = nl + 1;
+  }
+  return nthInitOffset(file, n);
+}
+
 /** `offset` 뒤에 붙은 바이트만 읽어 사건 + 새 offset. 2MB를 매번 다시 읽지 않는다.
  *
  *  - **불완전한 마지막 줄을 버린다.** 새 offset은 마지막 `\n`까지로 되돌리고 다음 폴링이
@@ -429,6 +483,19 @@ export async function tailEvents(
     const events: StreamEvent[] = [];
     let promptSeen = start > 0; // offset>0이면 세션 프롬프트도 그 `enqueue`도 이미 지나갔다
     let enqueueSeen = start > 0;
+    // 재활용 회차(P532)가 그 회차 디스패치 프롬프트 레코드에서 시작하면 1회차 첫 프롬프트처럼 다룬다:
+    // `enqueue`는 안 흘리고 `user`가 접힌 줄이 된다 - 한 번만 뜬다
+    if (start > 0) {
+      for (const line of chunk.subarray(0, cut).toString("utf8").split("\n")) {
+        if (!line.trim()) continue;
+        try {
+          if (!grok && dispatchPromptText(JSON.parse(line)) !== null) promptSeen = enqueueSeen = false;
+        } catch {
+          // 깨진 줄이면 종전 그대로
+        }
+        break;
+      }
+    }
     // grok 레코드에는 `cwd`가 없다 — 담긴 자리가 **디렉터리 이름**이라 그것을 되돌려 쓴다
     const cwd = grok === true ? grokCwd(path.basename(path.dirname(path.dirname(file)))) : undefined;
     for (const line of chunk.subarray(0, cut).toString("utf8").split("\n")) {

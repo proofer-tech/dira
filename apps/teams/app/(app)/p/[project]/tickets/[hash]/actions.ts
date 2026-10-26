@@ -28,7 +28,7 @@ import { parseFrontmatterHead } from "@/lib/markdown-frontmatter-rows";
 import { mayHaveRefs, type RefIndex } from "@/lib/markdown-refs";
 import { isHash, openInApp, parseAssignment, resolveWithin, type OpenResult } from "@/lib/paths";
 import { dispatchPollingNow, extendPollingUntil } from "@/lib/polling-control";
-import { findStream, nthInitOffset, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
+import { findStream, roundStartOffset, sessionIdOf, tailEvents, type StreamEvent } from "@/lib/transcript";
 import { dispatchRoundsForHash, lastDispatchSid } from "@/lib/workers";
 import {
   awaitingOf,
@@ -159,8 +159,8 @@ export async function tailSession(
       const s = await findStream(r.sid, { hash: t.stem, root: t.root });
       if (!s) return { events: [], offset: at, live: false, inbox: false, done: false, refs: NO_REFS };
       // grok은 init 레코드가 없다 — 그 회차의 구간은 파일 전체다(§2-3 개정 표의 물러남 그대로).
-      const start = s.fmt || r.n === 1 ? 0 : await nthInitOffset(s.file, r.n);
-      const end = s.fmt ? undefined : await nthInitOffset(s.file, r.n + 1);
+      const start = s.fmt || r.n === 1 ? 0 : await roundStartOffset(s.file, r.n);
+      const end = s.fmt ? undefined : await roundStartOffset(s.file, r.n + 1);
       const chunk = await tailEvents(s.file, start, s.fmt, await readLanguage(), end);
       return { ...chunk, live: false, inbox: false, done: false, refs: NO_REFS };
     } catch {

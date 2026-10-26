@@ -79,7 +79,7 @@ import {
   squadNames,
   squadsDir,
 } from "@/lib/projects";
-import { findStream, nthInitOffset, sessionIdOf } from "@/lib/transcript";
+import { findStream, roundStartOffset, sessionIdOf } from "@/lib/transcript";
 import { ticketCostChunk } from "@/lib/usage";
 import { dateTimeLabel, decodeHash, engineCan, formatRemaining, type RoundHeader } from "@/lib/urls";
 import {
@@ -243,7 +243,7 @@ export default async function TicketDetail({
   let startOffset = 0;
   if (transcript && sessionId && !transcript.fmt) {
     const round = await dispatchRound(project.root, ticket.stem, sessionId);
-    if (round >= 2) startOffset = await nthInitOffset(transcript.file, round);
+    if (round >= 2) startOffset = await roundStartOffset(transcript.file, round);
   }
   // 회차 카드(§2-3 개정 2, 요구 `2aa9bdf0`) — 이 해시의 `DISPATCH` 줄 전부, 시간순. 1개 이하면
   // `SessionStream`이 카드를 안 세운다(개정 표) — 여기서는 그냥 넘긴다, 갈림길은 그 컴포넌트

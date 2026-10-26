@@ -875,6 +875,8 @@ export function SessionStream({
               answerFile={answerFile}
               vault={vault}
               refs={liveRefs}
+              startOffset={startOffset}
+              rounds={rounds}
               variant="worker"
               rev={rev}
             />
