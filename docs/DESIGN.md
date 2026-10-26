@@ -9003,9 +9003,9 @@ developer, Sonnet 5.5) 상세다. 넷째 항목을 하는 중인데 머리 줄�
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P536-1 | 엔진 - `plan_gate.py`와 `tick.sh` 배선(결정 1-7) + `test_plan_gate.py` | developer | - | 발행 |
-| P536-2 | 프로토콜 - `계획-규약.md`에 진행중 하나 규칙과 게이트(결정 8), materialize 사본 반영 | developer | - | 발행 |
-| P536-3 | QA - 실제 claude 세션에서 게이트가 막고 풀리는지 수용조건을 `kind: tc`로 판정한다 | qa | P536-1 | 발행 |
+| P536-1 | 엔진 - `plan_gate.py`와 `tick.sh` 배선(결정 1-7) + `test_plan_gate.py` | developer | - | 발행 `2e9e7e67` |
+| P536-2 | 프로토콜 - `계획-규약.md`에 진행중 하나 규칙과 게이트(결정 8), materialize 사본 반영 | developer | - | 발행 `82eece1e` |
+| P536-3 | QA - 실제 claude 세션에서 게이트가 막고 풀리는지 수용조건을 `kind: tc`로 판정한다 | qa | P536-1 | 발행 `44a24a88` |
 
 **P536-2는 P536-1을 안 기다린다.** 규약 문장은 게이트 코드 없이 쓸 수 있다. QA만 진짜 세션이 필요해 P536-1에 엮는다 -
 훅이 stream-json 세션에서 실제로 불리는지는 단위 테스트가 증명하지 못한다. designer - writer 0장(화면 - 매뉴얼 문구 0).
