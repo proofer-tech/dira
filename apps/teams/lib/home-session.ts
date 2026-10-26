@@ -84,7 +84,7 @@ import { kickNewRequest } from "./home-kick.ts";
 import { childEnv } from "./child-env.ts";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execClaude, tokenPath } from "./auth.ts";
@@ -112,6 +112,7 @@ import { browserPortPath, isValidCdpHash, LINK_SLOT_HASH, portFromDevToolsFile }
 import { listBrowserPoolSlots } from "./browser-pool.ts";
 import { ptyStatuses, terminalTail } from "./pty.ts";
 import { findStream, findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
+import { COMMAND_ID_RE, createCommand, listCommands } from "./commands.ts";
 import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, engineRepo, listWorkers, workerOf, type Worker } from "./workers.ts";
 
@@ -247,10 +248,14 @@ function parseSchedule(v: unknown): Schedule | null {
  *  자리다. */
 export type { Tab };
 
+export type CommandRun = { due: string; at: string; code?: number };
+
 export type Home = {
   conversations: Conversation[];
   current: string | null;
   schedules: Schedule[];
+  /** §P535 결정 7 - 예약 커맨드의 `last`. 기계 상태라 커맨드 파일이 아니라 여기에 커맨드 id 키로 둔다. */
+  commandRuns: Record<string, CommandRun>;
   /** §11 결정 2 - 옛 파일에는 이 칸이 없다(`parseHome`이 빈 배열로 흡수한다). */
   tabs: Tab[];
 };
@@ -290,8 +295,8 @@ function parseHome(v: unknown): Home {
   if (typeof v === "string") {
     const id = uuid(v);
     return id
-      ? { conversations: [{ id, title: "", created: "" }], current: id, schedules: [], tabs: [] }
-      : { conversations: [], current: null, schedules: [], tabs: [] };
+      ? { conversations: [{ id, title: "", created: "" }], current: id, schedules: [], commandRuns: {}, tabs: [] }
+      : { conversations: [], current: null, schedules: [], commandRuns: {}, tabs: [] };
   }
   const o = (v && typeof v === "object" && !Array.isArray(v) ? v : {}) as Record<string, unknown>;
   const conversations = (Array.isArray(o.conversations) ? o.conversations : []).flatMap((r): Conversation[] => {
@@ -362,7 +367,14 @@ function parseHome(v: unknown): Home {
       },
     ];
   });
-  return { conversations, current: uuid(o.current) || null, schedules, tabs };
+  const commandRuns: Record<string, CommandRun> = {};
+  const rawRuns = o.commandRuns && typeof o.commandRuns === "object" ? (o.commandRuns as Record<string, unknown>) : {};
+  for (const [id, r] of Object.entries(rawRuns)) {
+    const x = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
+    if (COMMAND_ID_RE.test(id) && typeof x.due === "string" && typeof x.at === "string")
+      commandRuns[id] = { due: x.due, at: x.at, ...(typeof x.code === "number" ? { code: x.code } : {}) };
+  }
+  return { conversations, current: uuid(o.current) || null, schedules, commandRuns, tabs };
 }
 
 /** 목록 읽기 — 화면이 대화 목록을 그리는 출처(§비주얼 §24). */
@@ -2242,6 +2254,7 @@ export async function runSchedules(nowMs: number = Date.now()): Promise<void> {
   for (const project of projects) {
     const home = await readHome(project.id).catch(() => null);
     if (!home) continue;
+    await runScheduledCommands(project, home, nowMs).catch(() => {});
     for (const schedule of home.schedules) {
       const createdMs = Date.parse(schedule.created);
       const lastDueMs = schedule.last ? Date.parse(schedule.last.due) : null;
@@ -2255,6 +2268,127 @@ export async function runSchedules(nowMs: number = Date.now()): Promise<void> {
       if (due !== null) await runScheduleTurn(project, schedule, due, nowMs).catch(() => {});
     }
   }
+}
+
+// ── 예약 커맨드 (§P535 결정 7-8) ────────────────────────────────────────────
+//
+// 15초 박동이 `<프로젝트>/.dira/commands/*.sh` 중 `# schedule:`이 있는 파일을 `judgeSchedule`로 판정해
+// 터미널 없이 돌린다. 출력은 `<id>.log`에 덮어쓰고, `last`는 `home-sessions.json`의 `commandRuns`에 둔다.
+
+/** 지금 도는 예약 실행(`<프로젝트>:<id>`). 살아 있으면 이번 차례는 건너뛴다. */
+const commandRunning = new Set<string>();
+
+const DIRA_ENV_CLIENT = path.join(os.homedir(), ".config", "dira", "bin", "engines", "dira_env.py");
+
+async function patchCommandRun(projectId: string, id: string, run: CommandRun): Promise<void> {
+  return withHomeLock(async () => {
+    const home = await readHome(projectId);
+    await writeHome(projectId, { ...home, commandRuns: { ...home.commandRuns, [id]: run } });
+  });
+}
+
+/** 한 커맨드의 예약 실행 하나. env가 있으면 `dira_env.py run --keys`로, 없으면 파일을 바로 돈다(결정 6과 같은 명령). */
+async function runCommandFile(project: Pick<Project, "id" | "root">, id: string, env: string[], due: string, at: string): Promise<void> {
+  const file = path.join(project.root, "commands", `${id}.sh`);
+  const log = file.replace(/\.sh$/, ".log");
+  const [cmd, args] = env.length
+    ? ["python3", [DIRA_ENV_CLIENT, "run", "--keys", env.join(","), "--", file]]
+    : [file, [] as string[]];
+  const code = await new Promise<number>((resolve) => {
+    let out = "";
+    const child = spawn(cmd, args, {
+      cwd: path.dirname(project.root),
+      env: { ...childEnv(), TICKET_ROOT: project.root },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    child.stdout.on("data", (d) => (out += d));
+    child.stderr.on("data", (d) => (out += d));
+    const done = (c: number, extra = "") => void writeFile(log, out + extra).then(() => resolve(c), () => resolve(c));
+    child.on("error", (e) => done(127, `${e.message}\n`));
+    child.on("close", (c) => done(c ?? 1));
+  });
+  await patchCommandRun(project.id, id, { due, at, code });
+}
+
+/** `# schedule:`이 있는 커맨드를 판정해 때가 된 것을 띄운다. 기다리지 않는다 - 박동이 긴 명령에 묶이면 안 된다. */
+async function runScheduledCommands(project: Project, home: Home, nowMs: number): Promise<void> {
+  for (const e of await listCommands(path.join(project.root, "commands")).catch(() => [])) {
+    if (!e.editable || !e.spec.schedule) continue;
+    const key = `${project.id}:${e.id}`;
+    const last = home.commandRuns[e.id];
+    const lastDueMs = last ? Date.parse(last.due) : NaN;
+    // 파일 mtime이 아니라 첫 판정 시각을 창의 시작으로 쓰면 되지만, 만든 시각은 파일 birthtime이 가장 가깝다.
+    const due = judgeSchedule({
+      when: e.spec.schedule,
+      createdMs: await birthMs(path.join(project.root, "commands", `${e.id}.sh`), nowMs),
+      lastDueMs: Number.isFinite(lastDueMs) ? lastDueMs : null,
+      nowMs,
+    });
+    if (due === null) continue;
+    const dueIso = new Date(due).toISOString();
+    const atIso = new Date(nowMs).toISOString();
+    if (commandRunning.has(key)) {
+      await patchCommandRun(project.id, e.id, { ...last, due: dueIso, at: atIso }); // 건너뛴 차례도 올려 쌓이지 않게 한다
+      continue;
+    }
+    commandRunning.add(key);
+    void runCommandFile(project, e.id, e.spec.env, dueIso, atIso)
+      .catch(() => {})
+      .finally(() => commandRunning.delete(key));
+    // 같은 틱에 다시 안 뽑히도록 시작 시점에 `last`를 올린다(종료 코드는 끝나면 채워진다).
+    await patchCommandRun(project.id, e.id, { due: dueIso, at: atIso });
+  }
+}
+
+/** 몸통이 읽는 마지막 예약 실행: 시각, 종료 코드, 로그 끝 200줄. 아직 안 돌았으면 null. */
+export async function readLastCommandRun(
+  projectId: string,
+  id: string,
+): Promise<{ due: string; at: string; code: number | null; log: string } | null> {
+  if (!COMMAND_ID_RE.test(id)) return null;
+  const project = (await readProjects().catch(() => [] as Project[])).find((p) => p.id === projectId);
+  if (!project) return null;
+  const last = (await readHome(projectId)).commandRuns[id];
+  if (!last) return null;
+  const text = await readFile(path.join(project.root, "commands", `${id}.log`), "utf8").catch(() => "");
+  const lines = text.split("\n");
+  if (lines[lines.length - 1] === "") lines.pop();
+  return { due: last.due, at: last.at, code: last.code ?? null, log: lines.slice(-200).join("\n") };
+}
+
+async function birthMs(file: string, fallback: number): Promise<number> {
+  const st = await stat(file).catch(() => null);
+  return st ? st.birthtimeMs : fallback;
+}
+
+/** §P535 결정 8 - 옛 `schedules`를 prompt 단계 하나 + 같은 `when`의 커맨드 파일로 옮기고 배열을 비운다.
+ *  파일을 만든 뒤에만 비우므로 중간에 죽어도 줄을 잃지 않고, 비운 뒤라 다시 떠도 늘지 않는다.
+ *  // ponytail: 만든 뒤 비우기 전에 죽으면 다음 기동에 한 번 더 옮긴다(중복 파일). 건수가 한 자리라 감수한다. */
+export async function migrateSchedulesToCommands(): Promise<number> {
+  let moved = 0;
+  for (const project of await readProjects().catch(() => [] as Project[])) {
+    const home = await readHome(project.id).catch(() => null);
+    if (!home?.schedules.length) continue;
+    const dir = path.join(project.root, "commands");
+    const ok = new Set<string>();
+    for (const s of home.schedules) {
+      const body = s.prompt.replace(/\r/g, "");
+      const name = body.split("\n").find((l) => l.trim())?.trim().slice(0, 80) ?? "schedule";
+      try {
+        await createCommand(dir, { name, env: [], schedule: s.when, steps: [{ kind: "prompt", body }] });
+        ok.add(s.id);
+      } catch {
+        // 못 옮긴 줄은 배열에 남겨 다음 기동이 다시 시도한다
+      }
+    }
+    await withHomeLock(async () => {
+      const cur = await readHome(project.id);
+      await writeHome(project.id, { ...cur, schedules: cur.schedules.filter((s) => !ok.has(s.id)) });
+    });
+    moved += ok.size;
+  }
+  console.log(`[commands] migrated ${moved} legacy schedule(s)`);
+  return moved;
 }
 
 /** 폴링 한 번 = 화면이 아는 전부. 페이지의 첫 렌더도 이걸 부른다(`offset` 0 · `sessionId` null). */

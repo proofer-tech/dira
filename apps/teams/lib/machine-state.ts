@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { runSchedules } from "./home-session.ts";
+import { migrateSchedulesToCommands, runSchedules } from "./home-session.ts";
 import { localDir } from "./paths.ts";
 import { selfishHeartbeat } from "./selfish-server.ts";
 import { webhookTick } from "./webhook.ts";
@@ -225,6 +225,7 @@ async function initState(): Promise<LiveState> {
   const [heartbeatMark, boottime] = await Promise.all([readHeartbeatMark(), boottimeMs()]);
   const resume = boottime !== null ? powerOffGap(heartbeatMark?.at ?? null, boottime, now) : null;
   await writeHeartbeatMark(now);
+  await migrateSchedulesToCommands().catch(() => {}); // §P535 결정 8 - 뜰 때 한 번
   // wasOwner는 false로 시작한다 — 위 writeHeartbeatMark로 이미 표식은 내 것이지만, 그것은
   // tickOnce가 아직 한 번도 안 돈 상태다. 첫 tickOnce가 소유자로 판정되면 그 박이 재획득으로
   // 잡히는데, 신선한 프로세스라 `webhookTick`의 모듈 메모리도 어차피 비어 있어 결과는 같다.

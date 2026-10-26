@@ -49,6 +49,8 @@ const {
   nextScheduleDue,
   SCHEDULE_LOOKBACK_MS,
   runSchedules,
+  migrateSchedulesToCommands,
+  readLastCommandRun,
   FLUENT_KO,
 } = await import("./home-session.ts");
 type HomeChunk = Awaited<ReturnType<typeof pollHome>>;
@@ -719,7 +721,7 @@ const uuid = (n: number) => `021f80d9-294c-4bea-948b-3b6f0c4501${String(n).padSt
 
 test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 줄은 없는 것과 같다", async () => {
   assert.strictEqual(sessionsPath(), path.join(LOCAL, "home-sessions.json"));
-  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], tabs: [] }); // 파일이 없다
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], commandRuns: {}, tabs: [] }); // 파일이 없다
   assert.strictEqual(await readSessionId("p1"), null);
 
   // 이미 대화가 하나 있는 프로젝트(= 첫 질문이 끝난 상태)
@@ -767,7 +769,7 @@ test("대화 목록 — 새 대화 · 전환 · 경로 관문. UUID가 아닌 �
 
   // 깨진 JSON은 빈 맵이다 — 홈 화면이 500이 되는 것보다 대화 하나를 새로 시작하는 게 낫다
   writeFileSync(sessionsPath(), "{ not json");
-  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], tabs: [] });
+  assert.deepStrictEqual(await readHome("p1"), { conversations: [], current: null, schedules: [], commandRuns: {}, tabs: [] });
 });
 
 test("탭 줄 — 새 대화·전환이 탭을 열고, closeHomeTab은 탭만 지우고 current는 안 건드린다(§11-10 결정 3)", async () => {
@@ -897,10 +899,11 @@ test("옛 형식(문자열 한 줄)은 대화 한 개짜리 목록으로 읽힌�
     conversations: [{ id: sid, title: "", created: "" }], // 첫 질문도 만든 시각도 그 형식에 없다
     current: sid, // 돌던 대화가 그대로 열린다 — 못 읽으면 그 사람은 그걸 잃는다
     schedules: [],
+    commandRuns: {},
     tabs: [],
   });
   assert.strictEqual(await readSessionId("old"), sid);
-  assert.deepStrictEqual(await readHome("broken"), { conversations: [], current: null, schedules: [], tabs: [] });
+  assert.deepStrictEqual(await readHome("broken"), { conversations: [], current: null, schedules: [], commandRuns: {}, tabs: [] });
 
   // 그 위에 `새 대화`를 열면 옛 대화가 목록에 남는다(종전은 지우는 것이었다)
   const next = await newConversation("old");
@@ -2687,4 +2690,41 @@ test("parseEnvelope — 같은 이름 봉투를 이어 붙인 입력은 null이�
   assert.strictEqual(parseEnvelope("<a>1</a><a>2</a>"), null);
   const n = parseEnvelope("<foo><status>failed</status><summary>sum</summary></foo>");
   assert.deepStrictEqual(n?.fields.map((f) => f.name), ["status", "summary"]);
+});
+
+test("예약 커맨드 - 때가 되면 파일을 돌려 로그와 last를 남기고, 옛 스케줄 이전은 두 번 떠도 안 는다", async () => {
+  const root = fixture();
+  const project = await addProject("커맨드 큐", root, "cmd-run");
+  const { createCommand, listCommands } = await import("./commands.ts");
+  const dir = path.join(root, "commands");
+  const id = await createCommand(dir, { name: "예약", env: [], schedule: "* * * * *", steps: [{ kind: "shell", body: "echo hello; exit 3" }] });
+  const before = readFileSync(path.join(dir, `${id}.sh`), "utf8");
+  writeFileSync(
+    sessionsPath(),
+    JSON.stringify({
+      [project.id]: {
+        conversations: [], current: null, tabs: [],
+        schedules: [{ id: "old1", created: new Date().toISOString(), when: "*/5 * * * *", prompt: "옛 질문\n둘째 줄", session_id: "" }],
+      },
+    }),
+  );
+
+  assert.strictEqual(await migrateSchedulesToCommands(), 1);
+  assert.strictEqual(await migrateSchedulesToCommands(), 0); // 두 번 떠도 늘지 않는다
+  assert.deepStrictEqual((await readHome(project.id)).schedules, []);
+  const all = await listCommands(dir);
+  assert.strictEqual(all.length, 2);
+  const moved = all.find((e) => e.id !== id)!;
+  assert.ok(moved.editable && moved.spec.schedule === "*/5 * * * *" && moved.spec.name === "옛 질문");
+  assert.deepStrictEqual(moved.editable && moved.spec.steps, [{ kind: "prompt", body: "옛 질문\n둘째 줄" }]);
+
+  await runSchedules(Date.now() + 120_000);
+  let last = await readLastCommandRun(project.id, id);
+  for (let i = 0; i < 200 && last?.code == null; i++) {
+    await new Promise((r) => setTimeout(r, 25));
+    last = await readLastCommandRun(project.id, id);
+  }
+  assert.strictEqual(last?.code, 3);
+  assert.strictEqual(last?.log, "hello");
+  assert.strictEqual(readFileSync(path.join(dir, `${id}.sh`), "utf8"), before); // 파일은 안 바뀐다
 });
