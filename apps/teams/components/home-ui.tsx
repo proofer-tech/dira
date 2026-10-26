@@ -50,6 +50,7 @@ import Link from "@/components/link";
 // 좌측 패널 얘기다.
 import {
   ArrowDown,
+  Bell,
   CalendarClock,
   Check,
   Copy,
@@ -60,6 +61,7 @@ import {
   MessageSquare,
   Send,
   SquareTerminal,
+  Terminal,
   Trash2,
   TriangleAlert,
   X,
@@ -129,6 +131,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
@@ -1334,7 +1337,9 @@ export function HomeUI({
                         // `group/answer`는 답·질문 항목 둘 다 받는다(§24 §드러나는 조건) — 질문
                         // 안에는 이 이름을 읽는 것이 없어 조건부 클래스를 만들 이유가 없다.
                         <MessageScrollerItem key={turn.key} messageId={turn.key} className="group/answer">
-                          {turn.role === "question" ? (
+                          {turn.role === "notice" && turn.notice ? (
+                            <NoticeLine notice={turn.notice} />
+                          ) : turn.role === "question" ? (
                             /* 사람 질문 — §13 말풍선 그대로(`outline` · `align="end"`). 헤더는 말풍선
                                **밖 · 위**이고(§13) 라벨만 `sr-only`로 내려간다: 클래스 하나로 끝나서
                                새 요소가 아니다. 아바타는 없다(§24가 한 줄로 거절했다 — 페르소나 색과
@@ -1755,6 +1760,75 @@ function Prose({ text, refs }: { text: string; refs?: RefIndex }) {
  *  **`-mb-4`가 아래 16px을 흐름 밖으로 낸다**(§24 §띠가 흐름 밖에 뜬다, 개정 `bfadd068`). 항목이
  *  예약하는 높이는 산문 + 16px(24 - 16)이고, 겹쳐 쓰는 것은 항목 사이 `gap-4` 16px 하나다 —
  *  `absolute`가 아니라 이 한 클래스라 `mt-2` 8px 규칙이 산술 유도값이 되지 않는다. */
+/** §P523 결정 4-6 — 하니스가 보낸 봉투. 말풍선이 아니라 왼쪽 정렬 한 줄이다. */
+function NoticeLine({ notice }: { notice: NonNullable<Turn["notice"]> }) {
+  const t = useT();
+  const get = (n: string) => notice.fields.find((f) => f.name === n)?.value;
+  const isTask = notice.tag === "task-notification";
+  const status = isTask ? get("status") : undefined;
+  const body = get("summary") ?? (isTask ? undefined : (get("message") ?? notice.fields[0]?.value));
+  const rest = notice.fields.filter((f) => f.name !== "status" && f.name !== "summary" && !(!isTask && f.value === body));
+  const badge = !status
+    ? null
+    : status === "completed"
+      ? { text: t("home.noticeCompleted"), cls: "text-emerald-600" }
+      : status === "failed" || status === "error"
+        ? { text: t("home.noticeFailed"), cls: "" }
+        : status === "killed" || status === "stopped"
+          ? { text: t("home.noticeStopped"), cls: "text-muted-foreground" }
+          : { text: status, cls: "text-muted-foreground" };
+  const Icon = isTask ? Terminal : Bell;
+  // 큰따옴표로 감싼 명령 부분만 font-mono
+  const parts = (body ?? "").split(/("[^"]*")/);
+  return (
+    <div className="flex flex-col gap-1 text-xs text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon aria-hidden className="size-3.5 shrink-0" />
+        <span className="shrink-0">{t("home.noticeLabel")}</span>
+        {!isTask && <span className="shrink-0 font-mono">{notice.tag}</span>}
+        {badge && (
+          <Badge
+            variant={status === "failed" || status === "error" ? "destructive" : "secondary"}
+            className={badge.cls}
+          >
+            {badge.text}
+          </Badge>
+        )}
+        {body !== undefined && (
+          <span className="min-w-0 truncate" title={body}>
+            {parts.map((p, i) =>
+              p.startsWith('"') && p.length > 1 ? (
+                <span key={i} className="font-mono">
+                  {p}
+                </span>
+              ) : (
+                p
+              ),
+            )}
+          </span>
+        )}
+      </div>
+      {(rest.length > 0 || notice.fields.length === 0) && (
+        <details className="pl-5">
+          <summary className="cursor-pointer select-none">{t("home.noticeDetails")}</summary>
+          {notice.fields.length === 0 ? (
+            <div className="whitespace-pre-wrap">{notice.raw}</div>
+          ) : (
+            <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+              {rest.map((f, i) => (
+                <div key={i} className="contents">
+                  <dt>{f.name}</dt>
+                  <dd className="break-all font-mono">{f.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </details>
+      )}
+    </div>
+  );
+}
+
 function Band({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-2 -mb-4 flex items-center gap-2 px-3 text-xs leading-6 text-muted-foreground">

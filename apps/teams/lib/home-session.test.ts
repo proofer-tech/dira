@@ -2651,3 +2651,33 @@ test("envBlockOf - 설치된 클라이언트가 없으면 빈 문자열이다 (�
     process.env.HOME = prev;
   }
 });
+
+test("toTurns — 하니스 봉투는 notice 줄이고 봉투 밖 글·이름 불일치는 question이다 (§P523)", () => {
+  const ev = (key: string, body: string) =>
+    ({ key, kind: "prompt", body, summary: "", label: "", sidechain: false }) as unknown as Parameters<typeof toTurns>[0][number];
+  const env =
+    "<task-notification>\n<task-id>b1</task-id>\n<tool-use-id>toolu_1</tool-use-id>\n<output-file>/tmp/o</output-file>\n" +
+    "<status>completed</status>\n<summary>Background command \"ls 2&gt;/dev/null\" completed (exit code 0)</summary>\n</task-notification>";
+  const turns = toTurns([
+    ev("a", "질문"),
+    ev("b", env),
+    ev("c", "앞글 " + env),
+    ev("d", "<a>x</b>"),
+    ev("e", "<foo>한 줄</foo>"),
+  ]);
+  assert.deepStrictEqual(turns.map((t) => t.role), ["question", "notice", "question", "question", "notice"]);
+  const n = turns[1].notice!;
+  assert.strictEqual(n.tag, "task-notification");
+  assert.deepStrictEqual(n.fields.map((f) => f.name), ["task-id", "tool-use-id", "output-file", "status", "summary"]);
+  assert.ok(n.fields[4].value.includes("2>/dev/null") && !n.fields[4].value.includes("&gt;"));
+  assert.deepStrictEqual(turns[4].notice!.fields, []);
+  assert.strictEqual(turns[4].notice!.raw, "한 줄");
+  // 결정 3 — 중지 표식은 notice를 건너뛰고 앞 답에 닿는다
+  const stopped = toTurns([
+    ev("q", "질문"),
+    { ...ev("r", "답"), kind: "text" } as never,
+    ev("n", env),
+    ev("i", "[Request interrupted by user]"),
+  ]);
+  assert.strictEqual(stopped[1].stopped, true);
+});

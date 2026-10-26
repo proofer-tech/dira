@@ -1856,7 +1856,7 @@ export async function runClaudeAt(
  *  §2-1과 같은 문법을 쓰는 화면(다음 티켓 `08345f02`)의 일이다. */
 export type Turn = {
   key: string; // `StreamEvent.key` 그대로 — `<레코드 uuid>:<블록 index>`
-  role: "question" | "answer" | "line";
+  role: "question" | "answer" | "line" | "notice";
   /** `question`·`answer`는 사람이 읽는 산문이다. `line`은 접힌 줄의 **한 줄 요약**(펼치기 전에
    *  보이는 값) — 아래 `event`가 있으면 펼친 모양은 그걸로 그린다(§2-1과 같은 그릇). */
   text: string;
@@ -1867,7 +1867,34 @@ export type Turn = {
    *  `body`·`diff`를 이 화면이 다시 뽑지 않는다(§2-1 렌더러 재사용, `lib/transcript.ts`가 이미
    *  낸 값이다). */
   event?: StreamEvent;
+  /** `role === "notice"`일 때만 있다 — 하니스가 보낸 봉투(§P523 결정 2). `text`는 `raw`와 같다. */
+  notice?: Notice;
 };
+
+export type Notice = { tag: string; fields: { name: string; value: string }[]; raw: string };
+
+const ENVELOPE = /^<([a-z][a-z0-9_-]*)>([\s\S]*)<\/\1>$/;
+
+function unescapeEntities(s: string): string {
+  return s
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/** §P523 결정 1-2 — 전체가 `<이름>...</이름>` 한 벌이면 봉투다. 태그 이름은 나열하지 않는다.
+ *  // ponytail: 자식은 중첩 없는 한 겹만 잡는다. 중첩 봉투가 오면 `raw`로 떨어진다. */
+export function parseEnvelope(text: string): Notice | null {
+  const m = ENVELOPE.exec(text.trim());
+  if (!m) return null;
+  const fields: Notice["fields"] = [];
+  for (const c of m[2].matchAll(/<([a-z][a-z0-9_-]*)>([\s\S]*?)<\/\1>/g)) {
+    fields.push({ name: c[1], value: unescapeEntities(c[2].trim()) });
+  }
+  return { tag: m[1], fields, raw: unescapeEntities(m[2].trim()) };
+}
 
 /** **사람도 에이전트도 쓰지 않은 줄 셋**(§7 §도는 답을 멈춘다 — 실측 ⑷). `중지`가 첫째를 남기고,
  *  중지한 세션을 `--resume`으로 이으면 나머지 둘이 뒤따라 들어온다(중지 직후엔 없다).
@@ -1916,6 +1943,11 @@ export function toTurns(events: StreamEvent[]): Turn[] {
       if (!text) continue;
       if (GHOST_LINES.has(text)) {
         if (text === INTERRUPTED) markInterrupted();
+        continue;
+      }
+      const notice = e.kind === "prompt" ? parseEnvelope(text) : null;
+      if (notice) {
+        turns.push({ key: e.key, role: "notice", text: notice.raw, notice });
         continue;
       }
       turns.push({ key: e.key, role: e.kind === "prompt" ? "question" : "answer", text });
