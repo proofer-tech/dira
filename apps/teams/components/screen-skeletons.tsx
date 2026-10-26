@@ -39,9 +39,46 @@ function BoardSkeleton() {
   );
 }
 
+/** 왼쪽 트리 - 목록과 오른쪽 본문 두 칸 - 스쿼드 - 프로토콜 - 온톨로지가 같이 쓴다. */
+function SidebarBodySkeleton() {
+  return (
+    <div className="flex min-h-0 flex-1 gap-6">
+      <div className="flex w-64 shrink-0 flex-col gap-2">
+        {Array.from({ length: 8 }, (_, i) => (
+          <Skeleton key={i} className="h-8 w-full" />
+        ))}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        <Skeleton className="h-8 w-1/3" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="min-h-0 flex-1" />
+      </div>
+    </div>
+  );
+}
+
+function WorkersSkeleton() {
+  return (
+    <>
+      <Skeleton className="h-8 w-48" />
+      <div className="flex flex-col gap-2">
+        {Array.from({ length: 6 }, (_, i) => (
+          <Skeleton key={i} className="h-14 w-full" />
+        ))}
+      </div>
+    </>
+  );
+}
+
 const SKELETONS: Partial<Record<Screen, () => React.ReactNode>> = {
   home: HomeSkeleton,
   board: BoardSkeleton,
+  personas: SidebarBodySkeleton,
+  protocols: SidebarBodySkeleton,
+  ontology: SidebarBodySkeleton,
+  workers: WorkersSkeleton,
 };
 
 /** 누른 이동의 목적지가 등록된 화면이고 지금과 프로젝트나 화면이 다르면 그 목적지, 아니면
