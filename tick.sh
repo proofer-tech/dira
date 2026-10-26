@@ -153,6 +153,9 @@ TICKET_PLAN_NUDGE="${TICKET_PLAN_NUDGE:-1200}"
 # 그 세션을 끊고 티켓을 되돌린다. 0이면 장치가 꺼진다(기본값) - 반례가 4.8%뿐인 실측표라
 # 켜는 값은 운영이 관측하며 고른다. 사람 참견이 그 사이 들어왔으면 안 끊는다(check_plan_kill).
 TICKET_PLAN_KILL="${TICKET_PLAN_KILL:-0}"
+# P536: 진행 계획 게이트(PreToolUse 훅). 0이면 --settings를 안 붙인다. GRACE는 절이 없을 때 봐주는 초.
+TICKET_PLAN_GATE="${TICKET_PLAN_GATE:-1}"
+TICKET_PLAN_GATE_GRACE="${TICKET_PLAN_GATE_GRACE:-120}"
 
 # 엔진 수정 마흔한 번째 승인 §판정 1. `result ok`를 낸 세션이 티켓을 `.wip`으로 남긴 채
 # 죽기 전, 이번 구간에 하네스가 밀어낸(`moved to the background`) 명령이 있으면 그 알림이
@@ -1018,7 +1021,7 @@ if [ "$CMD" = "tick" ]; then
   printf %s "$$" > "$LOCK/pid"
   [ -n "$ENTRYLOCK" ] && { rm -rf "$ENTRYLOCK"; ENTRYLOCK=""; }
   # 빈 값이면 rm -f ""가 되고 아무 일도 안 한다 -- 어떻게 죽든 FIFO가 남지 않게 여기 한 번만 건다.
-  trap 'rm -rf "$LOCK" "$SLOCK" "$PLUGDIR"; rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}" "${INBOX:+$INBOX.human}"' EXIT
+  trap 'rm -rf "$LOCK" "$SLOCK" "$PLUGDIR"; rm -f "${GATEF:-}" "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}" "${INBOX:+$INBOX.human}"' EXIT
 fi
 
 # 엔진 쿨다운 게이트·claude 인증 게이트는 여기 없다 - 페르소나가 엔진을 정하므로 어느
@@ -1286,6 +1289,19 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff c_squad
   # (로컬에서 사람 스킬을 빌려써야 하는 디버깅 등).
   if [ "$ENGINE_NAME" = "claude" ] && [ "${DIRA_INHERIT_USER_CONFIG:-}" != "1" ]; then
     TICKET_ENGINE+=(--setting-sources project,local --strict-mcp-config)
+  fi
+
+  # P536: claude 세션의 도구 호출마다 plan_gate.py가 `## 진행 계획` 상태를 검사한다(결정 1-7).
+  # 지금 티켓 경로는 세션 전용 런타임 파일($GATEF)에서 읽고, 티켓이 바뀌면 그 파일만 다시 쓴다.
+  # TICKET_PLAN_GATE=0이면 안 붙인다. DIRA_INHERIT_USER_CONFIG=1이어도 붙는다.
+  GATEF=""
+  if [ "$ENGINE_NAME" = "claude" ] && [ "$TICKET_PLAN_GATE" != "0" ]; then
+    GATEF="$LOCAL/run/gate-$SID"
+    GATE_SETTINGS=$(python3 -c 'import json,shlex,sys
+cmd="DIRA_PLAN_GATE_FILE=%s DIRA_PLAN_GATE_LOG=%s TICKET_PLAN_GATE_GRACE=%s python3 %s" % tuple(shlex.quote(a) for a in sys.argv[1:5])
+print(json.dumps({"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":cmd}]}]}}))' \
+      "$GATEF" "$RUNLOG" "$TICKET_PLAN_GATE_GRACE" "$CODE/plan_gate.py")
+    [ -n "$GATE_SETTINGS" ] && TICKET_ENGINE+=(--settings "$GATE_SETTINGS")
   fi
 
   # 어느 엔진인지가 후보에 달렸으므로 ENGINE_NAME·claude 인증·쿨다운도 후보 확정 뒤에 판정한다
@@ -1867,6 +1883,7 @@ fi
 # 세션키 선발급 -> 즉시 frontmatter 기록(디스패치 순간부터 '할당됨'으로 큐에서 제외)
 python3 "$PY" assign "$TPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:0:8}" || {
   log "ERROR assign 실패 $THASH"; OUT=$(reap_silent "$TPATH"); [ -n "$OUT" ] && log "$OUT"; exit 1; }
+[ -n "${GATEF:-}" ] && { mkdir -p "$LOCAL/run"; printf %s "$TPATH" > "$GATEF"; }
 LOGF="$LOGDIR/$(date '+%Y%m%d-%H%M%S')-${TICKET_NAME}-${THASH}.log"
 PRIOLOG=$(prio_log "$TPRIO" "$TBASE" "$TEFF")
 log "DISPATCH $THASH kind=${TKIND:--} persona=${TPERSONA:-none} sid=$SID log=$(basename "$LOGF") $PRIOLOG"
@@ -2496,6 +2513,7 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
       python3 "$PY" assign "$RTPATH" "$SID" "${TPERSONA:-agent} / ${TICKET_NAME}-${SID:0:8}"
       python3 "$PY" setpid "$RTPATH" "$CPID"
       [ -n "${LOCK:-}" ] && printf %s "$CPID" > "$LOCK/session"
+      [ -n "${GATEF:-}" ] && printf %s "$RTPATH" > "$GATEF"  # P536 - 주입 전에 훅이 새 티켓을 가리킨다
       RPROMPT=$(printf "$TICKET_PROMPT_FMT" "$RTHASH")
       python3 -c 'import json,sys
 sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sys.argv[1]}},
@@ -2543,6 +2561,7 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
 fi
 wait "$CPID"; RC=$?
 kill "$WPID" 2>/dev/null; wait "$WPID" 2>/dev/null
+[ -n "${GATEF:-}" ] && rm -f "$GATEF"
 [ -n "$INBOX" ] && rm -f "$INBOX" "$PRIMEF" "${PRIMEF:+$PRIMEF.fed}" "$INBOX.human"
 [ -n "$PLUGDIR" ] && rm -rf "$PLUGDIR"
 OUT=$(cat "$OUTF" 2>/dev/null); rm -f "$OUTF"
