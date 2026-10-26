@@ -2689,6 +2689,7 @@ export const ko: Record<string, string> = {
   "transcriptLib.thinking": "생각",
   "transcriptLib.tool": "도구",
   "transcriptLib.result": "결과",
+  "transcriptLib.image": "이미지",
   "transcriptLib.linesUnit": "줄",
 
   // 에픽 갈래(§0-16 §묶음 표 행 12, `c6b995d6`) — `lib/epics.ts`. en은 후속 티켓이 채운다.
@@ -5711,6 +5712,7 @@ export const en: Record<string, string> = {
   "transcriptLib.thinking": "Thinking",
   "transcriptLib.tool": "Tool",
   "transcriptLib.result": "Result",
+  "transcriptLib.image": "Image",
   "transcriptLib.linesUnit": " line(s)",
 
   // 에픽 갈래(§0-16 §묶음 표 행 12) - `lib/epics.ts`. 뒤에 값이 붙는 넷은 콜론까지가 접두다.

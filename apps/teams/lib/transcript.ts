@@ -24,7 +24,7 @@ import { engineRepo } from "./scaffold.ts";
 export type StreamEvent = {
   key: string; // 렌더 키. `<레코드 uuid>:<블록 index>`
   ts: string; // 레코드의 timestamp (UTC ISO). **로컬 시간 렌더는 화면이 한다**
-  kind: "prompt" | "text" | "thinking" | "tool_use" | "tool_result" | "interject";
+  kind: "prompt" | "text" | "thinking" | "tool_use" | "tool_result" | "interject" | "image";
   label: string;
   summary: string;
   // §9: 요약이 리터럴이면 mono, 읽는 문장이면 sans. 판정이 도구 이름에 달렸으므로(파일 도구의
@@ -49,7 +49,42 @@ export type StreamEvent = {
   // 입력의 양의 정수 `timeout`(ms) — `run_in_background`가 `true`가 아닌 `tool_use`에서만 뜬다(P521).
   // 다른 줄에는 키 자체가 없다(`diff`·`error`와 같은 이유).
   timeoutMs?: number;
+  // 이 줄이 담은 이미지의 **참조**(P539 결정 2). 바이트는 안 싣는다 - 폴링마다 수 MB가 오가지 않게
+  // 라우트(`/api/transcript-image`)가 jsonl을 다시 열어 `key`(레코드·블록)와 `sub`로 찾아 준다.
+  // 바이트가 없는 이미지는 여기 안 들어가고 `[image]` 글자로 남는다. 없으면 키 자체가 없다.
+  // `session`은 `tailEvents`가 채운다(파일 이름 = 세션 id, claude만).
+  images?: ImageRef[];
 };
+
+/** `sub`는 `tool_result.content` 안의 순번이고, 최상위 `image` 블록이면 없다. */
+export type ImageRef = { sub?: number; mime: string; session?: string };
+
+/** `/api/attachment`의 이미지 6종 표(확장자 6개)와 같은 MIME이다. 그 밖(`svg` 포함)은 이미지로 안 준다. */
+const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"]);
+
+/** base64 바이트를 든 `image` 블록이면 그 MIME, 아니면 null(결정 6 - `[image]` 글자로 남는다). */
+function imageMime(raw: unknown): string | null {
+  if (!raw || typeof raw !== "object") return null;
+  const b = raw as { type?: unknown; source?: { type?: unknown; media_type?: unknown; data?: unknown } };
+  if (b.type !== "image" || b.source?.type !== "base64") return null;
+  const { media_type: mime, data } = b.source;
+  return typeof mime === "string" && IMAGE_MIMES.has(mime) && typeof data === "string" && data ? mime : null;
+}
+
+/** 레코드 하나에서 (블록, sub)의 이미지 바이트 - 라우트가 쓴다. 못 찾으면 null. */
+export function imageBytes(rec: unknown, block: number, sub?: number): { mime: string; bytes: Buffer } | null {
+  const content = (rec as { message?: { content?: unknown } } | null)?.message?.content;
+  if (!Array.isArray(content)) return null;
+  let b: unknown = content[block];
+  if (sub !== undefined) {
+    const inner = (b as { type?: unknown; content?: unknown } | undefined)?.content;
+    b = (b as { type?: unknown } | undefined)?.type === "tool_result" && Array.isArray(inner) ? inner[sub] : null;
+  }
+  const mime = imageMime(b);
+  if (!mime) return null;
+  const bytes = Buffer.from((b as { source: { data: string } }).source.data, "base64");
+  return bytes.length ? { mime, bytes } : null;
+}
 
 /** P521 결정 1: 입력 모양 하나로 판정한다(도구 이름을 안 본다). */
 function timeoutOf(input: unknown): number | undefined {
@@ -522,6 +557,11 @@ export async function tailEvents(
       if (evs.some((e) => e.kind === "prompt")) promptSeen = true;
       events.push(...evs);
     }
+    // 이미지 참조에 세션을 붙인다 - 화면이 URL을 지을 때 쓴다(claude 파일 이름이 세션 id다)
+    if (!grok) {
+      const session = path.basename(file, ".jsonl");
+      for (const e of events) e.images?.forEach((im) => (im.session = session));
+    }
     return { events, offset: start + cut + 1 };
   } finally {
     await fh.close();
@@ -927,6 +967,8 @@ export function recordToEvents(
     const b = raw as Block;
     switch (b.type) {
       case "text":
+        // 하네스가 이미지 크기를 알리려고 붙이는 문장이다 - 사람이 쓴 글이 아니다(P539 결정 4)
+        if (role === "user" && (b.text ?? "").startsWith("[Image: original ")) break;
         if (role === "user") prompt(i, b.text ?? "");
         else push(i, { kind: "text", label: "", summary: "", body: b.text ?? "" });
         break;
@@ -963,17 +1005,29 @@ export function recordToEvents(
       }
       case "tool_result": {
         const body = resultText(b.content);
+        const images = Array.isArray(b.content)
+          ? b.content.flatMap((c, sub) => {
+              const mime = imageMime(c);
+              return mime ? [{ sub, mime }] : [];
+            })
+          : [];
         push(i, {
           kind: "tool_result",
           label: t(locale, "transcriptLib.result"),
           summary: `${lines(body)}${t(locale, "transcriptLib.linesUnit")}`,
           body,
+          ...(images.length ? { images } : {}),
           ...(typeof b.tool_use_id === "string" ? { toolId: b.tool_use_id } : {}),
           ...(b.is_error === true ? { error: true } : {}),
         });
         break;
       }
-      // 모르는 블록(`image` 등)은 조용히 건너뛴다
+      case "image": {
+        const mime = imageMime(b);
+        if (mime) push(i, { kind: "image", label: t(locale, "transcriptLib.image"), summary: "", body: "", images: [{ mime }] });
+        break;
+      }
+      // 모르는 블록은 조용히 건너뛴다
     }
   });
   return events;
@@ -1021,7 +1075,9 @@ function resultText(content: unknown): string {
       const b = raw as Block;
       if (typeof b.text === "string") return b.text;
       if (b.type === "tool_reference") return `[${b.tool_name ?? "tool_reference"}]`;
+      if (imageMime(b)) return null; // 썸네일이 대신 뜬다(P539). 바이트 없는 image만 아래서 `[image]`로 남는다
       return `[${b.type ?? "?"}]`; // image 등 — 원문 대신 종류만
     })
+    .filter((x) => x !== null)
     .join("\n");
 }

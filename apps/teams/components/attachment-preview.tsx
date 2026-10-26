@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useT } from "@/components/language-provider";
 import { attachmentDisplayName, isImageAttachment } from "@/lib/attachment-format";
+import type { ImageRef } from "@/lib/transcript";
 
 /** 그림 갈래 - 축소판 버튼과 원본 크기 다이얼로그. `img`에 크기 제한 클래스가 없다(`max-w-none`, 고유 1:1). */
 function AttachmentImage({ href, name }: { href: string; name: string }) {
@@ -58,6 +59,34 @@ export function AttachmentPreview({ project, paths }: { project: string; paths: 
           </a>
         );
       })}
+    </div>
+  );
+}
+
+/** 진행 기록·홈 대화의 도구 결과 이미지(P539) - 같은 썸네일과 원본 크기 다이얼로그다.
+ *  `eventKey`는 `StreamEvent.key`(`<레코드>:<블록 순번>`)이고 바이트는 `/api/transcript-image`가 준다.
+ *  세션이 안 붙은 참조(grok 등)는 그리지 않는다. */
+export function TranscriptImages({ project, eventKey, images }: { project: string; eventKey: string; images: ImageRef[] }) {
+  const cut = eventKey.lastIndexOf(":");
+  const rec = eventKey.slice(0, cut);
+  const block = eventKey.slice(cut + 1);
+  return (
+    <div className="flex flex-wrap gap-2 px-3 py-1 pl-9">
+      {images.map((im) =>
+        im.session ? (
+          <AttachmentImage
+            key={im.sub ?? "top"}
+            href={`/api/transcript-image?${new URLSearchParams({
+              project,
+              session: im.session,
+              rec,
+              block,
+              ...(im.sub === undefined ? {} : { sub: String(im.sub) }),
+            })}`}
+            name={`image ${im.sub ?? ""}`.trim()}
+          />
+        ) : null,
+      )}
     </div>
   );
 }

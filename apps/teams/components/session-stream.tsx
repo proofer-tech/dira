@@ -23,6 +23,7 @@
  *  없는 쪽은 상자 자리에 `<EmptyState>`, 폼 자리에 비활성 + 사유 한 줄이다.
  *  **진입점을 지우지 않는다** — 조용히 사라지면 사람은 고장으로 읽는다. */
 import { createContext, Fragment, useContext, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import { useTrackedRouter } from "@/lib/route-pending";
 import {
   ArrowDown,
@@ -52,7 +53,7 @@ import {
   AttachmentProblems,
   useAttachments,
 } from "@/components/attachment-field";
-import { AttachmentPreview } from "@/components/attachment-preview";
+import { AttachmentPreview, TranscriptImages } from "@/components/attachment-preview";
 import { EmptyState } from "@/components/empty-state";
 import { Markdown } from "@/components/markdown";
 import { splitAttachments } from "@/lib/attachment-format";
@@ -1742,7 +1743,21 @@ function diffOrBody(e: StreamEvent) {
  *  고정폭 4열은 (a)가 버렸다(요구 `e3020347`) — 시각(mono 8자)만 세로로 맞고 도구명부터 줄마다
  *  어긋난다. 도구명에 `max-w-[7rem]`만 남은 것이 종전 고정폭이 묶던 흔들림 범위를 대신한다.
  *  Marker 기본값(`flex gap-2 items-center text-sm text-muted-foreground w-full`)은 하나도 안 덮는다. */
-function Row({
+function Row(props: { e: StreamEvent; onToggle: (ev: React.SyntheticEvent<HTMLDetailsElement>) => void; ctx?: WorkerRowCtx }) {
+  const params = useParams<{ project?: string }>();
+  const { e, ctx } = props;
+  return (
+    <>
+      <RowLine {...props} />
+      {/* 도구가 읽은 이미지(P539) - 접힌 줄 아래에 뜬다. 워커 다이얼로그는 줄이 선택 버튼이라 안 건다 */}
+      {!ctx && e.images && typeof params.project === "string" && (
+        <TranscriptImages project={params.project} eventKey={e.key} images={e.images} />
+      )}
+    </>
+  );
+}
+
+function RowLine({
   e,
   onToggle,
   ctx,
