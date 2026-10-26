@@ -53,38 +53,6 @@ does not filter by prefix format. That format is not ours, and if it changes we 
 rejecting perfectly good tokens. So the screen tells you no more than
 `Saved. Whether it works shows up on the next dispatch.`
 
-## Multiplaying - the switches for keeping several accounts
-
-Before the account list can hold two rows, there is a switch you have to turn on. That panel is
-inside the same dialog, but the left tree has no row for it. **You have to type `Multiplaying`
-into the search field to find it.** Pick any of the three results and the panel opens. If you
-know the name of the switch, `multi-account` brings up the lower two rows as well. Scanning
-the tree will never find this panel.
-
-There is one line of explanation at the top of the panel and two switches under it. A switch row
-carries the name and its current state, with a button at the right end. The state reads either
-`Allowed` or `Not allowed`, and the button is either `Turn on` or `Turn off`.
-
-- **Allow multi-account** - decides how many accounts you may register. Off, the list holds
-  one row and the button below reads `Change` rather than `Add`. Saving a new token has the app
-  swap that one row out. On, the list grows to several rows and each carries `Enable` or
-  `Disable`. Rows other than the one in use get a `Use` button too. This is when the rotation
-  that leaves an account that hit its limit and moves to the next one starts running.
-- **Simultaneous multi-account use** - decides whether workers share one account or split across
-  them. Off, every worker attaches to the one `Active` account. On, a worker's account is its
-  index modulo the number of usable accounts. Three accounts and eight workers splits 3-3-2 with
-  no worker left idle. In this mode every usable account carries an `Active` badge in the list.
-
-A usable account is a row in the list carrying neither a `Disabled` nor an `Exhausted` badge.
-Rows with either of those two drop out of the count, and come back into it once the exhaustion
-cooldown lifts. So while you have only one account, turning on using them at once changes
-nothing.
-
-The app writes the two switches to different files, so either one can be on by itself. Both apply
-separately to the three engines `claude`, `codex`, and `grok`. `agy` is left out because it has
-only one account. The story of tokens growing along with your workers is in [How many to run at
-once](/docs/concurrency) §Tokens and collisions.
-
 ## agy - the engine that runs only while you are logged in to the Mac
 
 agy does not put a token into the app. Its authentication lives in the macOS login keychain, and

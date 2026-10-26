@@ -957,11 +957,6 @@ list instead, or open the switcher in a project's header and press the gear insi
 sit where they always did, with the same icon, and pressing either opens `Settings` with that
 project's node already selected.
 
-One more panel has no line in the tree. You have to type `Multiplaying` into the search field to
-find it. Whether to register several accounts, and whether to split those accounts across workers,
-is decided there (see [Authentication](/docs/auth), under multiplaying — the switch for keeping
-several accounts).
-
 Everything outside the `Project` group belongs to this computer and applies to every registered
 project. Authentication, language, the session limit — none of them are set per project. Values
 that do differ per project sit in two places. One is the ten things in the `Project` group you

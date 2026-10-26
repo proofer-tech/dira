@@ -206,8 +206,8 @@ most recent run.
   limit, sessions killed by the account limit, and the time of the last dispatch.
 
 The numbers are counts of lines written to each project's `<root>/workers/runner.log` during that
-window. If many sessions died on the account limit, the account ran dry before the computer did;
-see [Authentication](/docs/auth) §Multiplaying - the switches for keeping several accounts. If the last dispatch stopped early in the night,
+window. If many sessions died on the account limit, the account ran dry before the computer did.
+If the last dispatch stopped early in the night,
 the queue ran out of tickets or something else held it up.
 
 ### With the app closed, the schedule does not run
@@ -378,9 +378,7 @@ Adding workers does not grow throughput alone.
 
 - **Tokens.** Five workers running at once spend tokens five times over. The limit is one per
   machine and per account, so every worker drinks out of that one tank. There is no such thing as
-  a per-worker limit anywhere. Register several accounts and turn on using them at once, and
-  workers are divided among the accounts and the tanks divide with them
-  ([Authentication](/docs/auth) §Multiplaying - the switches for keeping several accounts).
+  a per-worker limit anywhere.
   Sessions running in other projects drink from the same tank too. How much has been used and how
   much is left is in the token status bar at the bottom of the screen
   (see [The screens](/docs/screens)).
