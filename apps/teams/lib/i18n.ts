@@ -446,7 +446,7 @@ export const ko: Record<string, string> = {
   // 달리 지나간 사건이 아니라 지금 걸려 있는 상태다).
   "bell.backoff.titlePrefix": "되풀이해 죽어서 쉬는 티켓",
   "bell.backoff.titleSuffix": "건",
-  "bell.backoff.body": "같은 자리에서 여러 번 죽어서, 이 티켓들은 잠시 쉬었다가 다시 디스패치됩니다. 잃는 것은 없습니다.",
+  "bell.backoff.body": "같은 단계에서 여러 번 죽어서, 이 티켓들은 잠시 쉬었다가 다시 디스패치됩니다. 잃는 것은 없습니다.",
   "bell.backoff.countPrefix": "죽은 횟수",
   "bell.backoff.countSuffix": "회",
   "bell.backoff.retryPrefix": "다시 가져가는 시각",
@@ -481,7 +481,7 @@ export const ko: Record<string, string> = {
   "stall.auth.todo": "설정 > 인증에서 토큰을 넣으면 다음 tick에 뜹니다",
   "stall.cooldown.line": "계정 한도 - {n}초 뒤 풀립니다",
   "stall.cooldown.todo": "기다리면 풀립니다. 바로 돌리려면 설정 > 인증에서 다른 계정을 켭니다",
-  "stall.machineCap.line": "머신 전체 세션 {a}/{b} - 다른 프로젝트가 자리를 쓰고 있습니다",
+  "stall.machineCap.line": "머신 전체 세션 {a}/{b} - 다른 프로젝트가 세션 슬롯을 쓰고 있습니다",
   "stall.machineCap.todo": "다른 세션이 끝나면 풀립니다. 바로 돌리려면 설정 > 워커 > 머신 전체 세션 상한을 올립니다",
   "stall.personaCap.line": "{persona} 상한 {a}/{b}",
   "stall.personaCap.todo": "그 페르소나의 진행중 티켓이 끝나면 풀립니다. 상한은 페르소나 화면에서 바꿉니다",
@@ -633,7 +633,7 @@ export const ko: Record<string, string> = {
   // 파일에 쓰는 템플릿 본문(TEMPLATE_FILES)은 사전에 안 든다(§0-16 §장치 §사전의 범위).
   "scaffold.engineNotFoundPrefix": "엔진 레포를 찾지 못했습니다 —",
   "scaffold.engineNotFoundMid": "에 tick.sh가 없습니다.",
-  "scaffold.engineNotFoundEnvHint": "DIRA_ENGINE이 가리키는 자리입니다.",
+  "scaffold.engineNotFoundEnvHint": "DIRA_ENGINE이 가리키는 경로입니다.",
   "scaffold.engineNotFoundDefaultHint": "GUI는 <엔진 레포>/apps/teams/에서 실행돼야 합니다.",
   "scaffold.notAbsolutePrefix": "절대경로여야 합니다:",
   "scaffold.emptyPlaceholder": "(비어 있음)",
@@ -842,7 +842,7 @@ export const ko: Record<string, string> = {
   "vercel.err.io": "Vercel에 연결하지 못했습니다. 네트워크를 확인하세요.",
   "project.createdRegisterFailedPrefix": "— .dira는",
   "project.createdRegisterFailedSuffix": "에 만들어졌습니다. 등록 카드에서 그 경로를 등록하세요.",
-  "project.moveNoRoom": "더 옮길 자리가 없습니다.",
+  "project.moveNoRoom": "이미 맨 끝이라 더 옮길 수 없습니다.",
 
   // `components/projects-ui.tsx` — 생성 폼·다이얼로그(§7 생성). en은 P338-12가 채운다.
   "project.create.blurb": ".dira를 만들고 워커 하나를 crontab에 올립니다 — 30초 뒤부터 티켓을 가져갑니다.",
@@ -857,7 +857,7 @@ export const ko: Record<string, string> = {
   "project.create.branchLabel": "통합 브랜치",
   "project.create.specLabel": "스펙 문서",
   "project.create.specHelp": "선택. 비우면 그 줄(AGENTS.md 지도 표 한 행)을 자리표시자 그대로 둡니다",
-  "project.create.ontologyLabel": "온톨로지 자리",
+  "project.create.ontologyLabel": "온톨로지 위치",
   "project.create.ontologyPlaceholder": "<프로젝트 폴더>/.dira/ontology",
   "project.create.ontologyHelp": "선택. 비우면 기본값(<프로젝트 폴더>/.dira/ontology)을 씁니다",
   "project.create.existsTitle": "만들지 않았습니다",
@@ -1744,7 +1744,7 @@ export const ko: Record<string, string> = {
   "workers.context.commonReadFailMid": "를 읽을 수 없습니다:",
   "workers.context.commonEditMid1": "의 ",
   "workers.context.commonEditMid2": " 블록을 GUI가 안전하게 고칠 수 없습니다:",
-  "workers.context.sourceLineCantPlaceMid": "에 source 줄을 넣을 자리를 GUI가 짚을 수 없습니다:",
+  "workers.context.sourceLineCantPlaceMid": "에 source 줄을 넣을 위치를 GUI가 찾을 수 없습니다:",
   "workers.context.lineChangedAfterInsert": "줄을 넣은 뒤 파일이 예상과 달라집니다. 쓰지 않았습니다.",
 
   "workers.engine.unknownEnginePrefix": "모르는 엔진입니다:",
@@ -1767,10 +1767,10 @@ export const ko: Record<string, string> = {
     "이 프로젝트의 통합 브랜치를 protocols/AGENTS.md에서 읽을 수 없습니다 — 파일을 손으로 편집하세요.",
   "workers.integrationBranch.invalidPrefix": "통합 브랜치 이름은 영문·숫자·. _ / - 만 됩니다:",
   "workers.dispatchGate.noSourceLineMid":
-    "에 `. <레포>/tick.sh` 줄이 없습니다 — 통합 게이트를 넣을 자리를 GUI가 짚을 수 없습니다. 파일을 손으로 편집하세요.",
+    "에 `. <레포>/tick.sh` 줄이 없습니다 — 통합 게이트를 넣을 위치를 GUI가 찾을 수 없습니다. 파일을 손으로 편집하세요.",
 
   "workers.selfHeal.noSourceLineMid":
-    "에 `. <레포>/tick.sh` 줄이 없습니다 — 자가 정리를 넣을 자리를 GUI가 짚을 수 없습니다. 파일을 손으로 편집하세요.",
+    "에 `. <레포>/tick.sh` 줄이 없습니다 — 자가 정리를 넣을 위치를 GUI가 찾을 수 없습니다. 파일을 손으로 편집하세요.",
   "workers.selfHeal.enginePathMid": "의 엔진 경로를 셸 없이 펼 수 없습니다:",
 
   "workers.worktree.notGitRepoSuffix": "는 git 레포가 아닙니다. 워크트리를 쓰지 않는 배치라면 정상입니다.",
@@ -1922,7 +1922,7 @@ export const ko: Record<string, string> = {
   "workers.context.missingLineMiddle": "줄",
   "workers.context.missingLineBold": "위",
   "workers.context.missingLineSuffix":
-    "아무 곳에 붙이면 열립니다. GUI가 대신 넣지는 않습니다(삽입 자리를 짚을 앵커가 없습니다).",
+    "아무 곳에 붙이면 열립니다. GUI가 대신 넣지는 않습니다(삽입 위치를 찾을 앵커가 없습니다).",
   "workers.context.pathAriaLabel": "경로",
   "workers.context.descAriaLabel": "설명",
   "workers.context.descPlaceholder": "설명(선택) — 세션이 읽을 이유",
@@ -2086,10 +2086,10 @@ export const ko: Record<string, string> = {
   // 편집한다(§결정 1 (b)). 거절 사유 둘은 여기서 prefix로 쓰고 값이 뒤에 붙는다
   // (`projectActions.unknownProjectPrefix`와 같은 관용구) — 셋째 거절(워크트리 안)은 위
   // `ontology.location.inWorktree`를 그대로 재사용한다(새 문구를 안 만든다).
-  "ontology.location.edit": "온톨로지 자리 편집",
+  "ontology.location.edit": "온톨로지 위치 편집",
   // 티켓 71eac784 — 이 화면에 `찾아보기` 피커가 둘이라(§데스크톱 앱 N3 §온톨로지 자리)
   // `PickPath`의 `label` prop으로 아래 import 카드의 `가져올 폴더`와 구분한다.
-  "ontology.location.browse": "온톨로지 자리",
+  "ontology.location.browse": "온톨로지 위치",
   "ontology.location.placeholder": "이 프로젝트의 git 작업 트리 밖 절대경로",
   "ontology.location.save": "저장",
   "ontology.location.saveFailed": "저장하지 못했습니다",
@@ -2523,7 +2523,7 @@ export const ko: Record<string, string> = {
   // `linkCapToastMessage`(`lib/i18n.ts`)가 접두·수·구분자·수·접미 순으로 이어 붙인다 —
   // `settings.workers.sessionCapTotalPrefix` 한 벌과 같은 조립 방식이다.
   "home.surface.browser.owner.link": "링크",
-  "browser.linkCap.prefix": "브라우저 자리가 ",
+  "browser.linkCap.prefix": "브라우저 슬롯이 ",
   "browser.linkCap.sep": "/",
   "browser.linkCap.suffix": "으로 다 차서 링크를 못 엽니다.",
   "browser.linkError.text": "링크를 못 열었습니다.",
@@ -2747,7 +2747,7 @@ export const ko: Record<string, string> = {
   "landing.result.engineRepoLabel": "엔진 레포",
   "landing.result.cronRegistered": "crontab에 등록됨 — 30초 뒤부터 티켓을 가져갑니다",
   "landing.result.cronFailedTitle": "crontab에 등록하지 못했습니다",
-  "landing.result.ontologyFailedTitle": "온톨로지 자리를 정하지 못했습니다",
+  "landing.result.ontologyFailedTitle": "온톨로지 위치를 정하지 못했습니다",
   "landing.result.ontologyFailedLink": "온톨로지 화면에서 다시 정하세요",
   "landing.result.denyCurrentBranchNotePrefix": "받는 트리의 receive.denyCurrentBranch가 이미 다른 값입니다 — 그대로 두었습니다:",
   "landing.result.apmErrorPrefix": "페르소나와 프로토콜 패키지를 설치하지 못했습니다. 연결을 확인하고 다시 설치하면 채워집니다:",
@@ -2798,7 +2798,7 @@ export const ko: Record<string, string> = {
   "landing.archiving.item2Prefix": "아카이빙을 맡은 워커가 방금 끝난 일에서 사실을 추려 프로젝트 폴더의",
   "landing.archiving.item2Mid": "에 적고 그 티켓 본문에는",
   "landing.archiving.item2Suffix": "절을 붙입니다",
-  "landing.archiving.item3Bold": "다음 세션은 그 자리를 알고 시작합니다.",
+  "landing.archiving.item3Bold": "다음 세션은 그 위치를 알고 시작합니다.",
   "landing.archiving.item3Body": "온톨로지가 어디에 있고 어떻게 찾는지가 워커에게 나가는 프롬프트마다 실립니다",
   "landing.archiving.item4Bold": "파일은 그냥 마크다운입니다.",
   "landing.archiving.item4Wikilink": "[[링크]]",
@@ -2825,7 +2825,7 @@ export const ko: Record<string, string> = {
   "landing.gallery.runningArrowLink": "업무 투명성",
   "landing.gallery.ontologyAlt":
     "온톨로지 화면. 제목 아래에 카드가 든 폴더 경로가 회색 한 줄로 있고, 그 아래는 왼쪽이 카드 파일트리, 오른쪽이 고른 파일 _ontology/SCHEMA.md를 위지윅으로 연 편집기입니다. 트리에서는 그 파일이 든 _ontology만 펴져 있습니다.",
-  "landing.gallery.ontologyCaption": "티켓이 끝날 때마다 그 일에서 추린 사실이 한 장씩 여기 쌓입니다. 프로젝트 폴더 안에 마크다운으로 남아서 다음 세션도 사람도 같은 자리를 열어 봅니다.",
+  "landing.gallery.ontologyCaption": "티켓이 끝날 때마다 그 일에서 추린 사실이 한 장씩 여기 쌓입니다. 프로젝트 폴더 안에 마크다운으로 남아서 다음 세션도 사람도 같은 폴더를 열어 봅니다.",
 
   "landing.noAccount.title": "계정을 만들 필요가 없습니다",
   "landing.noAccount.item1Bold": "dira에는 서버가 없습니다.",
@@ -2833,7 +2833,7 @@ export const ko: Record<string, string> = {
   "landing.noAccount.item2Bold": "티켓도 기록도 프로젝트 폴더 안에 있습니다.",
   "landing.noAccount.item2Prefix": "큐는",
   "landing.noAccount.projectPlaceholder": "프로젝트",
-  "landing.noAccount.item2Suffix": "디렉터리 하나이고 담긴 것은 마크다운 파일입니다. 따로 권한을 설정하는 자리가 없어서 그 폴더를 열 수 있으면 그것이 곧 권한입니다",
+  "landing.noAccount.item2Suffix": "디렉터리 하나이고 담긴 것은 마크다운 파일입니다. 따로 권한을 설정하는 화면이 없어서 그 폴더를 열 수 있으면 그것이 곧 권한입니다",
   "landing.noAccount.item3Bold": "모델에는 일감이 나갑니다.",
   "landing.noAccount.item3Body": "워커가 세션을 띄울 때 티켓 본문과 필요한 코드가 고르신 엔진을 거쳐 모델로 갑니다. 그 통로 밖으로 작업한 내용을 dira가 따로 가져가지는 않습니다",
   "landing.noAccount.item4Bold": "사용 통계는 끄면 그만입니다.",

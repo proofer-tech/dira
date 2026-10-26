@@ -469,7 +469,7 @@ test("wrap — 빈 조각은 빠지고 공백이 겹치지 않는다", () => {
 
 // §11-15 결정 4 — 문구에 상한과 지금 쓰는 수가 들어간다. 언어를 바꾸면 그 자리가 영어다.
 test("linkCapToastMessage — 상한과 지금 쓰는 수가 문구에 들어간다(ko·en)", () => {
-  assert.strictEqual(linkCapToastMessage("ko", 6, 6), "브라우저 자리가 6/6으로 다 차서 링크를 못 엽니다.");
+  assert.strictEqual(linkCapToastMessage("ko", 6, 6), "브라우저 슬롯이 6/6으로 다 차서 링크를 못 엽니다.");
   assert.strictEqual(linkCapToastMessage("en", 6, 6), "Browser slots are full (6/6) — can't open the link.");
 });
 
