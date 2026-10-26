@@ -146,9 +146,9 @@ settings do not have it.
 
 ### Turning it on now, and a daily schedule
 
-To turn it on right away, press `Turn on now`. A 60-second countdown appears with the list of apps
+To turn it on right away, press `Turn on now`. A 30-second countdown appears with the list of apps
 that will be quit. If you see one in the list that must stay up, press `Cancel` before the countdown
-ends. Nothing changes. Once the 60 seconds pass the mode is on, and the button in the same spot
+ends. Nothing changes. Once the 30 seconds pass the mode is on, and the button in the same spot
 becomes `Turn off`. Press `Turn off` and it switches off on the spot, but the apps it quit do not
 come back up.
 
