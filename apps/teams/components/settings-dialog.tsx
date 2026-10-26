@@ -914,7 +914,7 @@ function WorkersFilterAxis({
   );
 }
 
-/** P487 이기적 모드 섹션. `지금 켜기`는 60초 카운트다운과 종료될 앱 목록을 먼저 보여 주고, 그 안에
+/** P487 이기적 모드 섹션. `지금 켜기`는 30초 카운트다운과 종료될 앱 목록을 먼저 보여 주고, 그 안에
  *  `취소`하면 아무것도 안 바뀐다. 예약 저장은 서버가 권한 확인을 먼저 하고 거절되면 저장하지 않는다. */
 const fmt = (s: string, v: Record<string, string | number>) => s.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));
 const hhmm = (cron: string | undefined, fallback: string) => {
@@ -974,7 +974,7 @@ function SelfishModeSection() {
       const p = await previewSelfishAction();
       if (!p.ok) return setMsg(k("permission"));
       setMsg(null);
-      setCountdown({ left: 60, targets: p.targets });
+      setCountdown({ left: 30, targets: p.targets });
     });
   const save = () =>
     run(async () => {
