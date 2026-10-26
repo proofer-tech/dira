@@ -8938,6 +8938,41 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P538. 이기적 모드 `지금 켜기`의 카운트다운을 60초에서 30초로 줄인다 (요구 `2882787c`, 왕복 0회)
+
+사람 요구(2026-10-27): *"이기적모드 쿠션시간 60초 너무길어요 30초로합시다"*.
+
+**실측.** "쿠션 시간"은 P487 값 표 `수동으로 켜기` 줄의 카운트다운이다. 코드에서는
+`apps/teams/components/settings-dialog.tsx`의 `setCountdown({ left: 60, ... })` 한 곳에 있다. 매뉴얼은
+`apps/teams/docs/concurrency.md`와 `apps/teams/en/docs/concurrency.md`의 이기적 모드 절에 60초라고 적고 있다.
+화면 문구(`settings.workers.selfish.countdown`)는 남은 초를 `{s}`로 받기 때문에 바꿀 필요가 없다.
+
+#### 결정
+
+1. `지금 켜기`를 누른 뒤의 카운트다운은 **30초**다. 취소 - 종료 대상 목록 - 끝나면 켜지는 동작은 P487 그대로다.
+2. 예약(`schedule`)으로 켜질 때는 지금처럼 카운트다운이 없다. 이번 변경과 관계없다.
+3. P487 값 표의 `60초`는 이 절을 가리키도록 `30초(P538)`로 고친다.
+
+```autonomy
+주도성 5 판단: "쿠션시간"을 P487의 `지금 켜기` 카운트다운으로 읽었다. 이기적 모드에서 사람이 기다리는 고정 시간은 이것 하나뿐이다.
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P538-1 | 구현 - 카운트다운 시작 값을 30으로(결정 1) | developer | - | 발행 |
+| P538-2 | 매뉴얼 - `concurrency.md`와 영문판의 60초를 30초로 | writer | - | 발행 |
+
+**두 장이다.** 둘 다 이 절의 값만 알면 착수할 수 있어서 `deps`를 걸지 않았다. QA 티켓은 따로 없다 - 값 하나를
+바꾸는 수선이다. 에픽을 열지 않는다.
+
+#### 수용조건
+
+- [ ] 설정 > 워커 > 이기적 모드에서 `지금 켜기`를 누르면 카운트다운이 `30초`부터 줄어들고, 30초 뒤에 켜진다.
+- [ ] 그 안에 `취소`하면 `selfish.json`의 `active`가 `null`이다.
+- [ ] `git grep -n '60' -- apps/teams/components/settings-dialog.tsx | grep -i count`가 0줄이다.
+- [ ] `apps/teams/docs/concurrency.md`와 영문판의 이기적 모드 절에 `60초`/`60-second`/`60 seconds`가 없고 30초로 적혀 있다.
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`이 0줄이다.
+
 ### P537. 화면 문구와 에이전트가 읽는 원문에서 위치 - 경로 - 단계를 비유 명사로 뭉뚱그린 표현을 그 대상의 이름으로 바꾼다 (요구 `90043689`, 왕복 0회)
 
 사람 요구(2026-10-27, archive-manager와 나눈 홈 대화에서 범위를 합의): *"dira UX 내에서 '자리' 라고 표현하는 구간들이
@@ -12870,7 +12905,7 @@ v1.2.23 설치본 엔진(`~/Library/Application Support/dira/engine/`)에 `dispa
 | 기본 제외 | dira 앱 자신, `Finder`, `Terminal`, `iTerm2`, `Google Drive`, `Amphetamine`, `1Password`, `1Password 7`, 그리고 이름에 `VPN`이 들어간 앱. 사람이 목록에서 더하고 뺄 수 있다 |
 | 종료 방법 | 앱마다 `osascript -e 'quit app "<이름>"'`, 앱 하나당 10초 상한. 상한 안에 프로세스가 안 사라지면 그대로 두고 `left`에 이름을 적는다. **강제 종료(`kill`-`force quit`)는 없다** - 저장 안 한 문서가 사라진다. Chrome을 내리면 그 자식 `1PasswordSLSNativeMessageHost`도 같이 내려간다(2026-09-28 load 400 사건의 원인) |
 | 상한 교체 | `cap`이 정수면 켤 때 `session-limit`에 쓰고, 끌 때 `saved_limit`으로 되돌린다(`null`이면 파일을 지운다). `cap`이 `null`이면 상한은 건드리지 않고 앱만 내린다 - **기본값은 `null`이다.** 측정 전에는 앱 정리만의 효과를 먼저 본다 |
-| 수동으로 켜기 | 섹션의 `지금 켜기`를 누르면 60초 카운트다운과 종료될 앱 목록이 뜬다. 그 안에 `취소`를 누르면 아무것도 안 바뀐다. 끝나면 켜진다. 켜진 동안 같은 자리 버튼은 `끄기`이고, 누르면 바로 복원한다(앱을 다시 띄우지는 않는다) |
+| 수동으로 켜기 | 섹션의 `지금 켜기`를 누르면 30초(P538) 카운트다운과 종료될 앱 목록이 뜬다. 그 안에 `취소`를 누르면 아무것도 안 바뀐다. 끝나면 켜진다. 켜진 동안 같은 자리 버튼은 `끄기`이고, 누르면 바로 복원한다(앱을 다시 띄우지는 않는다) |
 | 예약 | `schedule`이 있으면 하트비트가 `judgeSchedule`로 `start`와 `end`를 각각 판정한다. `start` 회차에 이미 켜져 있으면 건너뛴다. `end` 회차에 켜져 있으면 끈다. 늦은 회차는 §7-2대로 한 번만 돈다 - 앱이 07:00에 꺼져 있었다면 다음 기동의 첫 하트비트가 끈다 |
 | 권한 | 첫 `System Events` 호출에 macOS 자동화 권한 창이 뜬다. 사람이 자는 23:00에 처음 뜨면 안 되므로, 예약을 저장하는 순간과 `지금 켜기`를 누르는 순간 목록 조회를 한 번 해 둔다. 거절되면 섹션에 그 사실을 글자로 띄우고 예약을 저장하지 않는다 |
 | 아침 보고 | 끌 때 `~/.config/dira/selfish-log.jsonl`에 한 줄 `{since, until_actual, cap, quit, left, per_project: [{project, dispatch, done, stall, cap_skip, limit_reap, last_dispatch}]}`을 더한다. 숫자는 등록 프로젝트(`gui-projects.json`)마다 `<root>/workers/runner.log`에서 `since` 이후 줄을 위 표식으로 센다. 섹션은 마지막 한 줄을 "지난 실행" 칸으로 보여 준다 - 몇 시부터 몇 시까지, 내린 앱 수와 못 내린 앱 이름, 프로젝트마다 디스패치-완료-STALL 비율-상한 건너뜀-한도 사망, 마지막 디스패치 시각 |
@@ -12887,7 +12922,7 @@ v1.2.23 설치본 엔진(`~/Library/Application Support/dira/engine/`)에 `dispa
 |---|---|---|---|---|
 | P487-1 | 앱 - `lib/selfish-mode.ts` 순수 함수(설정 파일 검증-예약 판정-제외 필터-`runner.log` 세기-보고) + 테스트 | developer | - | 발행 `4baf399e` |
 | P487-2 | 앱 - 서버: 켜기(목록-`quit`-상한 교체)-끄기(복원-보고 기록)-하트비트 예약 판정-권한 확인 라우트 + 테스트 | developer | P487-1 | 발행 `fe9f5bab` |
-| P487-3 | 앱 - 설정 > 워커 `이기적 모드` 섹션(지금 켜기와 60초 카운트다운, 예약 시각 둘, 상한, 제외 목록, 지난 실행) | developer | P487-2 | 발행 `bddcca73` |
+| P487-3 | 앱 - 설정 > 워커 `이기적 모드` 섹션(지금 켜기와 60초 카운트다운 - P538에서 30초, 예약 시각 둘, 상한, 제외 목록, 지난 실행) | developer | P487-2 | 발행 `bddcca73` |
 | P487-4 | 매뉴얼 - `concurrency.md`에 이기적 모드 절, 영문판 같이 | writer | - | 발행 `f495f2f8` |
 | P487-5 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P487-2, P487-3 | 발행 `dd70be99` |
 
