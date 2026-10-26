@@ -2731,6 +2731,7 @@ function CreateFab({
   const t = useT();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
+  const escaping = useRef(false);
   const { primary, dial } = fabPlan(surface);
   // `session`에서는 입력창 박스(InputGroup) 위 변보다 16px 위에 앉는다. 박스가 여러 줄로 자라거나
   // 창이 바뀔 때마다 다시 잰다. 그 밖의 표면은 `bottom-6` 그대로다.
@@ -2761,14 +2762,19 @@ function CreateFab({
       style={lift === null ? undefined : { bottom: lift }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
+      onFocus={() => {
+        if (!escaping.current) setOpen(true);
+      }}
       onBlur={(e) => {
         if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
       }}
       onKeyDown={(e) => {
         if (e.key === "Escape") {
           setOpen(false);
+          // 포커스 이동이 일으키는 onFocus 가 방금 닫은 다이얼을 다시 열지 않게 한다
+          escaping.current = true;
           wrap.current?.querySelector<HTMLElement>("[data-fab]")?.focus();
+          escaping.current = false;
         } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
           e.preventDefault();
           setOpen(true);
