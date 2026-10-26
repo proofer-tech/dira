@@ -1767,7 +1767,7 @@ function NoticeLine({ notice }: { notice: NonNullable<Turn["notice"]> }) {
   const isTask = notice.tag === "task-notification";
   const status = isTask ? get("status") : undefined;
   const body = get("summary") ?? (isTask ? undefined : (get("message") ?? notice.fields[0]?.value));
-  const rest = notice.fields.filter((f) => f.name !== "status" && f.name !== "summary" && !(!isTask && f.value === body));
+  const rest = notice.fields.filter((f) => (isTask ? f.name !== "status" : true) && f.name !== "summary" && !(!isTask && f.value === body));
   const badge = !status
     ? null
     : status === "completed"

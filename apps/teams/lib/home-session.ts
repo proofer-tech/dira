@@ -1888,7 +1888,8 @@ function unescapeEntities(s: string): string {
  *  // ponytail: 자식은 중첩 없는 한 겹만 잡는다. 중첩 봉투가 오면 `raw`로 떨어진다. */
 export function parseEnvelope(text: string): Notice | null {
   const m = ENVELOPE.exec(text.trim());
-  if (!m) return null;
+  // 같은 이름 봉투를 이어 붙인 입력(`<a>1</a><a>2</a>`)은 한 벌이 아니다.
+  if (!m || m[2].includes(`</${m[1]}>`)) return null;
   const fields: Notice["fields"] = [];
   for (const c of m[2].matchAll(/<([a-z][a-z0-9_-]*)>([\s\S]*?)<\/\1>/g)) {
     fields.push({ name: c[1], value: unescapeEntities(c[2].trim()) });

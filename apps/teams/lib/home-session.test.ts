@@ -2681,3 +2681,10 @@ test("toTurns — 하니스 봉투는 notice 줄이고 봉투 밖 글·이름 �
   ]);
   assert.strictEqual(stopped[1].stopped, true);
 });
+
+test("parseEnvelope — 같은 이름 봉투를 이어 붙인 입력은 null이고 단일 봉투는 그대로다", async () => {
+  const { parseEnvelope } = await import("./home-session.ts");
+  assert.strictEqual(parseEnvelope("<a>1</a><a>2</a>"), null);
+  const n = parseEnvelope("<foo><status>failed</status><summary>sum</summary></foo>");
+  assert.deepStrictEqual(n?.fields.map((f) => f.name), ["status", "summary"]);
+});
