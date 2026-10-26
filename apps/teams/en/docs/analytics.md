@@ -113,4 +113,4 @@ Deleting the file does not delete error reports already sent. Those stay on the 
 What is sent and why, how long it is kept, and who processes it are in the [privacy
 policy](/privacy).
 
-Next is [Schedules](/docs/schedules).
+Next is [Commands](/docs/schedules).

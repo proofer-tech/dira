@@ -755,9 +755,9 @@ and answers.
   three more each time you press `Show more`. `Worker sessions` are the sessions this queue's
   workers held. Pick a finished one and you can ask on from inside that context. You cannot talk to
   a running session from here. That is `Interject`, on the ticket page.
-- `Schedules`, which wakes this agent at times you set, is not in that lower half. It is on the
-  surface row at the top of the panel, second icon from the left. How to make one and everything
-  else about it is in [Schedules](/docs/schedules).
+- `Commands`, which chain shell commands and prompts that you run by hand or at set times, are
+  not in that lower half. They are on the surface row at the top of the panel, second icon from the
+  left. How to make one and everything else about them is in [Commands](/docs/schedules).
 - The answer flows in as the characters arrive. If it takes too long, cut it with `Stop`.
 - You can send the next message while an answer is still running. It waits under its bubble with
   `Waiting for the answer`. If the answer is calling a tool, the message slips into the current

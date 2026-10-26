@@ -45,7 +45,7 @@ New here? Read the four below in order. By the time you finish them, dira is alr
 - [Troubleshooting](/docs/troubleshooting)
 - [Reading the logs](/docs/logs)
 - [Usage analytics, and how to turn them off](/docs/analytics)
-- [Schedules](/docs/schedules)
+- [Commands](/docs/schedules)
 - [Sending Awaiting answer somewhere else](/docs/webhook)
 
 ## Appendix

@@ -9,7 +9,7 @@ left-hand panel.
 
 ## The six surfaces
 
-`Sessions` · `Schedules` · `Terminal` · `Source control` · `Explorer` · `Browser`. These six are
+`Sessions` · `Commands` · `Terminal` · `Source control` · `Explorer` · `Browser`. These six are
 the surfaces. The row carries icons only, with no names written out, so if you cannot tell which
 icon is which surface, hover over it. The name comes up as a tooltip. Those are the names this
 chapter uses below. Until you have a tab open, `Sessions` is the one picked, and below it are
@@ -24,14 +24,14 @@ else.
 | Surface picked | Lower half of the left panel | The column on the right |
 |---|---|---|
 | `Sessions` | `Conversations` · `Worker sessions` | The conversation tab strip and the thread |
-| `Schedules` | The schedule list and the way in to `New schedule` | The conversation thread of the schedule you picked |
+| `Commands` | The command list and the way in to `New command` | The steps and last scheduled run of the command you picked |
 | `Terminal` | The list of terminals you have open, the `Working directory` picker, and the way in to `New terminal` | The terminal tab strip and the shell |
 | `Source control` | The root and the worktrees, and `git status` for whichever one you picked | The conversation tab strip and thread, unchanged |
 | `Explorer` | The file tree and find | The one file you have open |
 | `Browser` | The browsers workers are holding right now | The screen of the one you picked |
 
-What you do on the `Schedules` surface is covered in a chapter of its own,
-[Schedules](/docs/schedules). What is left for this one is the other five.
+What you do on the `Commands` surface is covered in a chapter of its own,
+[Commands](/docs/schedules). What is left for this one is the other five.
 
 Four things become tabs: conversations, terminals, files you open in the explorer, and browsers.
 Twelve tabs open in all. Past that, the one you have looked at least recently closes on its own.
@@ -46,10 +46,9 @@ The left panel follows that tab. A file tab picks `Explorer`, a terminal tab pic
 browser tab picks `Browser`, and a conversation tab picks `Sessions`. Only a project with no
 tabs open starts on `Sessions`.
 
-`Source control` and `Schedules` are the two exceptions. Both put the same conversation column
-on the right that `Sessions` does, so nothing on the screen after a refresh tells the three
-apart. The conversation you were reading comes back in the column on the right, but the left
-panel goes to `Sessions`. Press the icon once more to get your surface back.
+`Source control` and `Commands` are the two exceptions. Neither opens a tab, so nothing on the
+screen after a refresh tells which surface you were on. The left panel goes to `Sessions` and the
+conversation you were reading shows on the right. Press the icon once more to get your surface back.
 
 The shell does not come back with it, though. Refresh the browser, or leave a surface and come
 back, and the terminal tab reads `Terminal disconnected`, while its row in the list on the left
@@ -126,8 +125,8 @@ that profile is.
 - **One run in and the select locks.** When two personas speak in one conversation, nobody can
   work out later what any given answer was based on. To ask as a different persona, press
   `New conversation`.
-- The schedule dialog has the same field. What wakes at the time you set is that same session,
-  so which one to wake is written on that row as well (see [Schedules](/docs/schedules)).
+- A command's `Prompt` step has no such field. It runs as a single `claude -p` without a profile
+  (see [Commands](/docs/schedules)).
 
 **Changing the persona does not widen what it may do.** Pick developer and it still cannot edit
 under `apps/`; pick pm and it still cannot commit or push from here. The tools the session
