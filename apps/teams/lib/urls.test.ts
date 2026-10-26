@@ -1064,3 +1064,18 @@ test("timeoutTimer - 진행 중 - 끝남 - 멈춘 스트림 세 상태의 글자
   // 멈춘 스트림: 숫자를 세지 않는다
   assert.deepEqual(timeoutTimer({ ...base, pairedElapsedMs: null, live: false }), { text: "- / 6m 40s", running: false });
 });
+
+import { pendingTarget } from "./urls.ts";
+
+test("pendingTarget: 프로젝트나 화면이 다르면 목적지, 같은 화면 안이면 null (§P534 결정 1 - 2)", () => {
+  assert.deepStrictEqual(pendingTarget("/p/a", "/p/a/board?x=1"), {
+    id: "a",
+    screen: "board",
+    path: "/p/a/board",
+  });
+  assert.strictEqual(pendingTarget("/p/a/board", "/p/a/board?status=open"), null);
+  assert.strictEqual(pendingTarget("/p/a/board", "/p/b/board")?.id, "b");
+  assert.strictEqual(pendingTarget("/p/a/board", "/p/a/tickets/abc"), null);
+  assert.strictEqual(pendingTarget("/p/a/board", "/"), null);
+  assert.strictEqual(pendingTarget("/p/a/board", null), null);
+});

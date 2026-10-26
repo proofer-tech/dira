@@ -8,11 +8,11 @@
  *  `next/link`가 이미 그리던 `<a>` 하나뿐이다. */
 
 import NextLink, { useLinkStatus } from "next/link";
-import { useLinkPendingReporter } from "@/lib/route-pending";
+import { destOf, useLinkPendingReporter } from "@/lib/route-pending";
 
-function LinkPendingReporter() {
+function LinkPendingReporter({ dest }: { dest: string | null }) {
   const { pending } = useLinkStatus();
-  useLinkPendingReporter(pending);
+  useLinkPendingReporter(pending, dest);
   return null;
 }
 
@@ -24,7 +24,7 @@ export default function Link({
   return (
     <NextLink ref={ref} {...props}>
       {children}
-      <LinkPendingReporter />
+      <LinkPendingReporter dest={destOf(props.href)} />
     </NextLink>
   );
 }

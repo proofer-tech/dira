@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
+import { ScreenSkeleton, usePendingTarget } from "@/components/screen-skeletons";
 import { escDestination, projectPath, screenOf } from "@/lib/urls";
 import {
   discardGateDirtyAction,
@@ -430,7 +431,10 @@ export function ProjectSwitcher({
     setOpen((v) => !v);
   });
 
-  const current = going ?? projects.find((p) => p.id === currentId);
+  // 누른 이동이 다른 프로젝트로 가면 같은 프레임에 이름이 목적지로 바뀐다(§P534 결정 1).
+  const pendingId = usePendingTarget()?.id;
+  const current =
+    going ?? projects.find((p) => p.id === (pendingId ?? currentId)) ?? projects.find((p) => p.id === currentId);
   if (!current) return null;
 
   // 닫을 때 검색어를 버린다 — 입력이 팝오버와 함께 언마운트되므로, 안 버리면 다시 열었을 때
@@ -585,7 +589,10 @@ const NAV = [
 
 export function ProjectNav({ id }: { id: string }) {
   const t = useT();
-  const pathname = usePathname();
+  // 활성 탭은 누른 이동의 목적지를 먼저 따른다(§P534 결정 1).
+  const target = usePendingTarget();
+  const realPathname = usePathname();
+  const pathname = target?.path ?? realPathname;
   // 셸 안에서 끝나는 이동뿐이다(핫키 · `Esc`) — 셸 표식이 그대로 붙는다(§0-22 결정 2).
   const router = useTrackedRouter();
   const base = `/p/${id}`;
@@ -613,12 +620,12 @@ export function ProjectNav({ id }: { id: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented || isTyping(e.target)) return;
-      const dest = escDestination(pathname);
+      const dest = escDestination(realPathname);
       if (dest) router.push(dest);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pathname, router]);
+  }, [realPathname, router]);
 
   // §비주얼 §76 — 내비가 여섯 화면 전부에서 우측 묶음(`매뉴얼` - `[종] [전환기] [설정]`) 왼쪽에
   // 붙는다. `ml-auto`가 상시라 화면을 옮겨도 자리가 안 바뀐다 — 헤더 안 auto 마진의 개수는
@@ -660,7 +667,9 @@ export function ProjectNav({ id }: { id: string }) {
  *  상시 패딩이다(브레이크포인트가 아니다). `h-12` - `sticky top-0 z-50` - `bg-background` -
  *  `border-b` - `gap-6`은 화면 여섯이 같이 쓰는 값이라 무수정이다. */
 export function ShellHeader({ children }: { children: React.ReactNode }) {
-  const home = screenOf(usePathname()) === "home";
+  const target = usePendingTarget();
+  const pathname = usePathname();
+  const home = (target?.screen ?? screenOf(pathname)) === "home";
   return (
     <header
       className={cn(
@@ -687,7 +696,9 @@ export function ShellHeaderRight({ children }: { children: React.ReactNode }) {
  *  대화 컬럼(x 288 - 폭 1128)은 이 뺄셈에서 한 픽셀도 안 움직인다. `px-6`-`py-6`-`gap-6`은
  *  다섯 화면과 같이 써서 무수정이다. */
 export function ShellMain({ children }: { children: React.ReactNode }) {
-  const home = screenOf(usePathname()) === "home";
+  const target = usePendingTarget();
+  const pathname = usePathname();
+  const home = (target?.screen ?? screenOf(pathname)) === "home";
   return (
     <main
       className={cn(
@@ -695,7 +706,11 @@ export function ShellMain({ children }: { children: React.ReactNode }) {
         home ? "-mt-12 pt-12" : "px-6 py-6",
       )}
     >
-      {children}
+      {/* 종전 화면은 숨길 뿐 언마운트하지 않는다 - 취소되면 그대로 돌아온다(§P534 결정 5). */}
+      {target && <ScreenSkeleton screen={target.screen} />}
+      <div className={target ? "hidden" : "contents"}>
+        {children}
+      </div>
     </main>
   );
 }

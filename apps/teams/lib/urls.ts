@@ -121,6 +121,31 @@ export function screenOf(pathname: string): Screen | null {
     : null;
 }
 
+/** 스켈레톤이 서는 여섯 화면(DESIGN.md §P534 결정 1). */
+const SKELETON_SCREENS: readonly Screen[] = [
+  "home",
+  "board",
+  "personas",
+  "protocols",
+  "ontology",
+  "workers",
+];
+
+/** 누른 이동의 목적지가 **지금과 다른 프로젝트나 화면**이면 그 목적지를 돌려준다(§P534 결정 1 -
+ *  2). 같은 화면 안의 이동(필터 - 파일 선택)이나 여섯 화면 밖이면 `null`이다. */
+export function pendingTarget(
+  pathname: string,
+  dest: string | null,
+): { id: string; screen: Screen; path: string } | null {
+  if (!dest) return null;
+  const path = dest.split(/[?#]/)[0];
+  const screen = screenOf(path);
+  const id = projectIdFromPath(path);
+  if (!id || !screen || !SKELETON_SCREENS.includes(screen)) return null;
+  if (id === projectIdFromPath(pathname) && screen === screenOf(pathname)) return null;
+  return { id, screen, path };
+}
+
 /** **N5의 찾기 바가 이 경로에 서나** (DESIGN.md §데스크톱 앱 N5). 보드·홈은 `⌘F`가 자기 일을
  *  하고(§0-6) 나머지 다섯은 이 바가 크롬 찾기 바를 대신한다 — `screenOf`가 이미 그 다섯을
  *  이름으로 갈라 놓아서 여기서 경로를 다시 파싱하지 않는다(두 벌이 되면 한쪽만 화면이 는다).

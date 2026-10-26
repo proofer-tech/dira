@@ -8,12 +8,13 @@
  *  신호를 한 값으로 모은다 - 하나라도 남으면 켜진 채다(dedup - 같은 값 재설정은 구독자를 안
  *  깨운다). */
 export function createPendingSet() {
-  const sources = new Set<object>();
+  // 값은 목적지 경로다(P534 결정 3) - 없는 소스(`trackPending`)는 `null`이다.
+  const sources = new Map<object, string | null>();
   const listeners = new Set<() => void>();
-  function setPending(token: object, pending: boolean) {
+  function setPending(token: object, pending: boolean, dest: string | null = null) {
     const had = sources.has(token);
-    if (pending === had) return;
-    if (pending) sources.add(token);
+    if (pending === had && (!pending || sources.get(token) === dest)) return;
+    if (pending) sources.set(token, dest);
     else sources.delete(token);
     listeners.forEach((l) => l());
   }
@@ -25,6 +26,14 @@ export function createPendingSet() {
     },
     getSnapshot() {
       return sources.size > 0;
+    },
+    /** 가장 나중에 켠 소스의 목적지 - 켜진 것이 없거나 목적지를 안 실은 소스면 `null`이다. */
+    getDest() {
+      let last: string | null = null;
+      sources.forEach((d) => {
+        last = d;
+      });
+      return last;
     },
     /** 훅이 아닌 입구(§11-20 결정 2) - 토큰 하나를 받자마자 켜고, 넘긴 프라미스가 끝나면
      *  (성공 - 실패 둘 다) 끈다. `openLink`처럼 컴포넌트 밖 함수가 셸 표식을 켜고 싶을 때

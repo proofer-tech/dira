@@ -21,9 +21,26 @@ const routePending = createPendingSet();
 const setSourcePending = routePending.setPending;
 const subscribe = routePending.subscribe;
 const getSnapshot = routePending.getSnapshot;
+const getDest = routePending.getDest;
 
 function getServerSnapshot() {
   return false;
+}
+
+function getServerDest() {
+  return null;
+}
+
+/** 지금 켜진 대기 신호가 실은 목적지 경로(P534 결정 3) - 없으면 `null`이다. 셸이 구독해
+ *  목적지 화면 스켈레톤을 고른다. `router.refresh()`는 신호를 안 내므로 폴링에는 늘 `null`이다. */
+export function usePendingDest() {
+  return useSyncExternalStore(subscribe, getDest, getServerDest);
+}
+
+/** `href`(문자열 - `UrlObject`)에서 경로만 뽑는다 - 목적지 판정은 쿼리와 해시를 안 본다. */
+export function destOf(href: string | { pathname?: string | null }): string | null {
+  const raw = typeof href === "string" ? href : (href.pathname ?? null);
+  return raw && raw.startsWith("/") ? raw.split(/[?#]/)[0] : null;
 }
 
 /** 300ms 지나서도 `active`면 `true`를 낸다 - 그 전에 꺼지면 한 프레임도 안 뜬다(§65 ③).
@@ -53,12 +70,12 @@ export function useRoutePending() {
 }
 
 /** `<Link>` 자손(우리 `Link` 래퍼)이 부르는 리포터 - 그리는 것은 0이다(§65 ⑨). */
-export function useLinkPendingReporter(pending: boolean) {
+export function useLinkPendingReporter(pending: boolean, dest: string | null = null) {
   const [token] = useState(() => ({}));
   useEffect(() => {
-    setSourcePending(token, pending);
+    setSourcePending(token, pending, dest);
     return () => setSourcePending(token, false);
-  }, [token, pending]);
+  }, [token, pending, dest]);
 }
 
 /** 훅이 아닌 입구(§11-20 결정 2) - `openLink`처럼 컴포넌트 밖 함수가 셸에 대기 신호를 내고
@@ -75,16 +92,22 @@ export function useTrackedRouter() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [token] = useState(() => ({}));
+  // 목적지는 부른 호출이 정한다 - 이동이 끝나 `pending`이 꺼지면 다음 호출이 새로 덮는다.
+  const [dest, setDest] = useState<string | null>(null);
   useEffect(() => {
-    setSourcePending(token, pending);
+    setSourcePending(token, pending, dest);
     return () => setSourcePending(token, false);
-  }, [token, pending]);
+  }, [token, pending, dest]);
   return useMemo(
     () => ({
-      push: (...args: Parameters<typeof router.push>) =>
-        startTransition(() => router.push(...args)),
-      replace: (...args: Parameters<typeof router.replace>) =>
-        startTransition(() => router.replace(...args)),
+      push: (...args: Parameters<typeof router.push>) => {
+        setDest(destOf(args[0]));
+        startTransition(() => router.push(...args));
+      },
+      replace: (...args: Parameters<typeof router.replace>) => {
+        setDest(destOf(args[0]));
+        startTransition(() => router.replace(...args));
+      },
     }),
     [router, startTransition],
   );
