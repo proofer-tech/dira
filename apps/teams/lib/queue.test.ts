@@ -23,6 +23,7 @@ import {
   awaitingUnlocked,
   continuedOf,
   derivedFrom,
+  replyTo,
   dueAlertOf,
   epicOf,
   filterTickets,
@@ -2447,4 +2448,20 @@ test("정리 티켓이 열려 있으면 openFixTicket이 잡는다, .done이면 
   assert.strictEqual(openFixTicket([mk("done")], TICKET_FILES_FIX_MARKER), null);
   const { t } = await import("./i18n.ts");
   for (const k of ["fix", "fixTicket", "failTitle", "none"]) assert.ok(!/[가-힣]/.test(t("en", `boardAnomaly.${k}`)));
+});
+
+test("replyTo - feedback+req가 큐의 request로 풀릴 때만 답이다 (P525 결정 1)", async () => {
+  const r = newRoot();
+  await write(r, "q0000001.md", fm({ ticket: "q0000001", title: "요구", kind: "request" }));
+  await write(r, "k0000001.md", fm({ ticket: "k0000001", title: "작업", kind: "work" }));
+  await write(r, "f0000001.md", fm({ ticket: "f0000001", title: "답", kind: "feedback", req: "q0000001" }));
+  await write(r, "f0000002.md", fm({ ticket: "f0000002", title: "큐에 없음", kind: "feedback", req: "zzzz9999" }));
+  await write(r, "f0000003.md", fm({ ticket: "f0000003", title: "work 가리킴", kind: "feedback", req: "k0000001" }));
+  await write(r, "k0000002.md", fm({ ticket: "k0000002", title: "work+req", kind: "work", req: "q0000001" }));
+  const tickets = await listTickets(r, DEFAULT);
+  const at = (h: string) => tickets.find((t) => t.hash === h)!;
+  assert.strictEqual(replyTo(tickets, at("f0000001"), DEFAULT), at("q0000001"));
+  assert.strictEqual(replyTo(tickets, at("f0000002"), DEFAULT), null);
+  assert.strictEqual(replyTo(tickets, at("f0000003"), DEFAULT), null);
+  assert.strictEqual(replyTo(tickets, at("k0000002"), DEFAULT), null);
 });

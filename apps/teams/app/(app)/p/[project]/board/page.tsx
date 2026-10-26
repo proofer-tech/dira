@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { stat } from "node:fs/promises";
 import Link from "@/components/link";
 import { notFound } from "next/navigation";
-import { Archive, ArrowDown, ArrowUp, ChevronsUpDown, TriangleAlert, X } from "lucide-react";
+import { Archive, ArrowDown, ArrowUp, ChevronsUpDown, Reply, TriangleAlert, X } from "lucide-react";
 import {
   BoardDoneLane,
   BoardFilter,
@@ -73,6 +73,7 @@ import {
   sortEpicsForSidebar,
 } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
+import { t as tr } from "@/lib/i18n";
 import { mayHaveRefs } from "@/lib/markdown-refs";
 import {
   HIDE_DONE_STATUSES,
@@ -109,6 +110,7 @@ import {
   threadOf,
   type SortKey,
   type Ticket,
+  replyTo,
 } from "@/lib/queue";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
@@ -704,7 +706,9 @@ export default async function Board({
 
   /** 칸반 카드 하나 — 기본 3레인·스윔레인 둘 다 같은 카드를 그린다(§에픽 결정 1: 카드 내용은
    *  무수정 — 에픽은 띠 머리·사이드바가 이미 말하므로 카드에 배지를 더 안 단다). */
-  const renderCard = (t: Ticket) => (
+  const renderCard = (t: Ticket) => {
+    const reply = replyTo(tickets, t, config);
+    return (
     // 카드 전체가 상세로 가는 링크다(테이블 행과 같은 규칙 — 행 액션 버튼이
     // 없어서 안전하다). deps 배지는 늘어난 링크 위에 뜬다.
     <Card
@@ -727,6 +731,18 @@ export default async function Board({
           말을 못 한다. 그래서 이 배지 하나만 남는다(§1 보드 요구사항 항).
           `deps 대기`는 배지를 얹지 않는다 — 아래 deps 줄의 주황색
           <DepBadge>가 그 표시다(사람 요청 `bd2062cb`) */}
+      {reply && (
+        // 요구의 답(§P525 결정 2) — 요구 상세로 가는 링크라 카드 전체 링크 위(`z-10`)에 뜬다
+        <Link
+          href={href(reply)}
+          title={reply.title}
+          className="relative z-10 flex items-center gap-1 text-xs text-muted-foreground hover:underline"
+        >
+          <Reply className="size-3.5 shrink-0" aria-hidden />
+          <span className="font-mono">{reply.hash}</span>
+          <span className="truncate">{reply.title}</span>
+        </Link>
+      )}
       <div className="flex items-start justify-between gap-2">
         {/* 우선순위 미터(§비주얼 §49) — 해시 줄, `<Link>` 앞. 흐름 안이라
             `<Card>`의 `overflow-hidden` 기본값에 안 닿는다(테이블 해시 셀과
@@ -782,7 +798,7 @@ export default async function Board({
           `flex-wrap`은 워커 마크 몫이다(§비주얼 §19 잘림): 워커 이름은
           식별자라 안 자르고, 길면 카드가 한 줄 자라며 배지를 안 민다 */}
       <span className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-        {t.kind ? kindLabel(t.kind, locale) : "—"} ·
+        {reply ? tr(locale, "kind.label.reply") : t.kind ? kindLabel(t.kind, locale) : "—"} ·
         {(() => {
           const assignee = assigneeOf(t);
           if (!assignee.name) return "—";
@@ -839,7 +855,8 @@ export default async function Board({
           `-mb-2`(8)를 뺀 값이다(§36 §자리와 간격 — 새 간격 값 0) */}
       {wipLines?.get(t.path) ?? archiveLine(archives.get(t.path), href, locale)}
     </Card>
-  );
+    );
+  };
 
   // `?lane=epic`(§에픽 결정 7) — 모르는 값·없으면 지금 모양 그대로다. 순서·존재는 `rows`
   // (이미 필터를 지난 목록)에서 나온다 — `?epic=`과 직교하는 것도 그래서 저절로다: 그 필터가
@@ -1347,7 +1364,11 @@ export default async function Board({
                               </span>
                             </TableCell>
                             <TableCell className="px-3 py-0 text-sm">
-                              {t.kind ? kindLabel(t.kind, locale) : "—"}
+                              {replyTo(tickets, t, config)
+                                ? tr(locale, "kind.label.reply")
+                                : t.kind
+                                  ? kindLabel(t.kind, locale)
+                                  : "—"}
                             </TableCell>
                             {/* 배지가 셀의 `text-sm`을 대체한다(§비주얼 §12) — 셀에 남은 `text-sm`은
                                 배지가 없는 `—`(담당 없음) 한 글자용이다. Badge는 제 `text-xs`를 갖는다 */}

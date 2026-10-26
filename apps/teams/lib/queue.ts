@@ -1263,6 +1263,15 @@ export function derivedFrom(tickets: Ticket[], target: Ticket, sfx: Suffixes): T
   });
 }
 
+/** 요구의 답 판정(§P525 결정 1) — `kind: feedback`이고 `req:`가 큐의 `kind: request` 티켓으로 풀리면
+ *  그 요구를 돌려준다. 아니면 `null`(큐에 없는 `req`도 답이 아니다). 보드와 상세가 이 함수 하나를 부른다. */
+export function replyTo(tickets: Ticket[], t: Ticket, sfx: Suffixes): Ticket | null {
+  if (t.kind !== "feedback") return null;
+  const req = reqOf(t);
+  const target = req ? resolveDep(tickets, req, sfx) : null;
+  return target && target.kind === "request" ? target : null;
+}
+
 /** 이 티켓을 아카이빙하는 티켓 — `archives:`가 이 티켓을 가리키는 것들(§5-3 §표시 규약 ④).
  *  `derivedFrom`과 같은 모양·같은 `resolveDep`이다. 보통 하나지만 사람이 손으로 더 냈거나
  *  재발행된 경우가 있어 목록이다(보드 카드는 그중 하나만 그린다 — ③). */

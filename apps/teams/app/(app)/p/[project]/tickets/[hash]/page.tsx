@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { findTicket } from "@/lib/engine";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
+import { t as tr } from "@/lib/i18n";
 import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { buildVault } from "@/lib/markdown-wikilinks";
 import { listTree } from "@/lib/protocols";
@@ -50,6 +51,7 @@ import {
   defaultAnswerOf,
   depBadges,
   derivedFrom,
+  replyTo,
   isAutopilotFailed,
   isAwaiting,
   isPolling,
@@ -93,10 +95,23 @@ import {
 export const dynamic = "force-dynamic";
 
 /** 관계 절의 티켓 한 줄 — 상태 배지 + stem 링크. 세 목록(막는 것 · 요구사항 · 나온 티켓)이 같은 모양이다. */
-function TicketLine({ t, href, locale }: { t: Ticket; href: string; locale: Locale }) {
+function TicketLine({
+  t,
+  href,
+  locale,
+  reply = false,
+}: {
+  t: Ticket;
+  href: string;
+  locale: Locale;
+  reply?: boolean;
+}) {
   return (
     <div className="flex items-center gap-2">
       <StatusBadge status={statusOf(t)} locale={locale} />
+      {reply && (
+        <span className="shrink-0 text-xs text-muted-foreground">{tr(locale, "kind.label.reply")}</span>
+      )}
       {/* 오른쪽 단(352px)에서 title에 남는 폭이 ≈200px(≈14자)다 — 잘린 문장을 툴팁이 받는다
           (§6 "title은 truncate + 툴팁 전문"). 해시는 자르지 않는다 */}
       <Link href={href} title={t.title} className="truncate text-sm hover:underline">
@@ -196,7 +211,10 @@ export default async function TicketDetail({
   // 출처/파생 (§요구사항 레이어 결정 5). `deps` 관계와 **섞지 않는다** — 선후가 아니라 출처다.
   const req = reqOf(ticket);
   const reqTicket = req ? resolveDep(tickets, req, config) : null;
-  const derived = derivedFrom(tickets, ticket, config);
+  // 답(§P525 결정 5)은 작업 티켓보다 위로 — 안정 정렬이라 각 묶음 안은 큐 순서 그대로다
+  const replyOf = (x: Ticket) => replyTo(tickets, x, config) === ticket;
+  const derived = derivedFrom(tickets, ticket, config).sort((a, b) => Number(replyOf(b)) - Number(replyOf(a)));
+  const replied = replyTo(tickets, ticket, config);
 
   // 아카이브 (§5-3 §표시 규약 ④). 양방향이고 그릇은 위 출처/파생 그대로다 — 새 컴포넌트 0.
   // `deps`와도 `req`와도 섞지 않는다: 선후도 출처도 아니라 **이 티켓을 기록으로 옮긴 티켓**이다.
@@ -462,6 +480,20 @@ export default async function TicketDetail({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-center gap-3">
           {/* §9 뒤쪽 절반 — 위에 덮인 앵커가 없어 `layered`를 안 준다(§비주얼 §31 §층) */}
+          <div className="min-w-0 space-y-2">
+          {replied && (
+            // 무엇에 대한 답인가(§P525 결정 4)
+            <blockquote className="space-y-0.5 border-l-2 pl-3 text-sm text-muted-foreground">
+              <p>
+                {t(locale, "ticketDetail.replyTo").split("{hash}")[0]}
+                <Link href={href(replied)} className="font-mono hover:underline">
+                  {replied.hash}
+                </Link>
+                {t(locale, "ticketDetail.replyTo").split("{hash}")[1]}
+              </p>
+              <p>{replied.title}</p>
+            </blockquote>
+          )}
           <h1 className="text-lg font-semibold">
             {ticket.title ? (
               <TitleRefs title={ticket.title} refs={refs} locale={locale} />
@@ -469,6 +501,7 @@ export default async function TicketDetail({
               t(locale, "ticketDetail.noTitle")
             )}
           </h1>
+          </div>
           {/* 보드와 **같은 말**을 쓴다 — 같은 티켓이 한쪽에서 `deps 대기`, 다른 쪽에서
               `답변 대기`로 보이면 배지가 상태 표현의 유일한 출처인 의미가 없다(§1 보드) */}
           {isAwaiting(ticket) ? (
@@ -922,7 +955,7 @@ export default async function TicketDetail({
                     ) : (
                       <div className="space-y-1">
                         {derived.map((t) => (
-                          <TicketLine key={t.path} t={t} href={href(t)} locale={locale} />
+                          <TicketLine key={t.path} t={t} href={href(t)} locale={locale} reply={replyOf(t)} />
                         ))}
                       </div>
                     )}

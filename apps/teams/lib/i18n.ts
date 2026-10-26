@@ -562,6 +562,7 @@ export const ko: Record<string, string> = {
   "kind.label.work": "작업",
   "kind.label.request": "요구사항",
   "kind.label.feedback": "피드백",
+  "kind.label.reply": "요구 답변",
   "kind.label.answer": "답변",
   "kind.label.tc": "TC",
 
@@ -1582,6 +1583,7 @@ export const ko: Record<string, string> = {
   "ticketDetail.requirementLabel": "요구사항",
   "ticketDetail.missingReqHint": "큐에 없는 요구사항 stem — 출처를 따라갈 수 없다",
   "ticketDetail.derivedTicketsLabel": "이 요구사항에서 나온 티켓",
+  "ticketDetail.replyTo": "요구 {hash}에 대한 답",
   "ticketDetail.noDerivedTickets": "아직 쪼갠 티켓 없음",
   "ticketDetail.archiveTargetLabel": "아카이브 대상",
   "ticketDetail.missingArchiveHint": "큐에 없는 아카이브 대상 stem — 대상을 따라갈 수 없다",
@@ -3520,6 +3522,7 @@ export const en: Record<string, string> = {
   "kind.label.work": "Work",
   "kind.label.request": "Request",
   "kind.label.feedback": "Feedback",
+  "kind.label.reply": "Reply",
   "kind.label.answer": "Answer",
   "kind.label.tc": "TC",
 
@@ -4607,6 +4610,7 @@ export const en: Record<string, string> = {
   "ticketDetail.requirementLabel": "Requirement",
   "ticketDetail.missingReqHint": "This requirement stem isn't in the queue — there's no source to follow",
   "ticketDetail.derivedTicketsLabel": "Tickets split out of this requirement",
+  "ticketDetail.replyTo": "Reply to requirement {hash}",
   "ticketDetail.noDerivedTickets": "Nothing split out yet",
   "ticketDetail.archiveTargetLabel": "Archive target",
   "ticketDetail.missingArchiveHint": "This archive target stem isn't in the queue — there's no target to follow",
