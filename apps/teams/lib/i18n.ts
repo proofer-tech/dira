@@ -2451,6 +2451,7 @@ export const ko: Record<string, string> = {
   // 터미널 표면(§11-1, P366-4) — `script`가 pty를 주는 셸 탭.
   "terminal.pickCwd": "작업 디렉터리",
   "terminal.newTab": "새 터미널",
+  "home.fab.label": "새로 만들기",
   "terminal.disconnected": "끊긴 터미널입니다",
   "terminal.reopen": "다시 열기",
   "terminal.invalidCwd": "등록되지 않은 작업 디렉터리입니다.",
@@ -4967,6 +4968,7 @@ export const en: Record<string, string> = {
 
   "terminal.pickCwd": "Working directory",
   "terminal.newTab": "New terminal",
+  "home.fab.label": "Create",
   "terminal.disconnected": "Terminal disconnected",
   "terminal.reopen": "Reopen",
   "terminal.invalidCwd": "Not a registered working directory.",

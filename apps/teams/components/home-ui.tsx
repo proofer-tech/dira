@@ -59,6 +59,7 @@ import {
   GitBranch,
   Globe,
   MessageSquare,
+  Plus,
   Send,
   SquareTerminal,
   Terminal,
@@ -114,6 +115,7 @@ import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
+import { fabPlan, type CreateAction } from "@/lib/home-fab";
 import { splitAttachments } from "@/lib/attachment-format";
 import type { RefIndex } from "@/lib/markdown-refs";
 import type { PtyStatus } from "@/lib/pty";
@@ -466,6 +468,13 @@ export function HomeUI({
   // 자체는 뜻이 없고 바뀌는 사건만 `BrowserMirror`의 이펙트가 본다 — 매 클릭마다 증가시켜
   // 같은 탭(`c0ffee00`)으로 두 번 눌러도 이펙트가 다시 돈다.
   const [browserFocusToken, setBrowserFocusToken] = useState(0);
+  // `새 스케줄` 다이얼로그 열림 - 좌측 머리 행 버튼과 우측 아래 FAB가 같이 쓴다(§P526).
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  // `새 터미널`의 `작업 디렉터리` 고르기 값 - 좌측 패널이 아니라 여기가 든다(§P526 결정 3).
+  const [termCheckouts, setTermCheckouts] = useState<Checkout[]>([]);
+  const [termCwd, setTermCwd] = useState("");
+  const [termBusy, setTermBusy] = useState(false);
+  const [termError, setTermError] = useState<string | null>(null);
   // 폴링이 들고 다니는 두 값. 렌더에 안 쓰므로 상태가 아니다(바뀔 때마다 그릴 것이 없다).
   const session = useRef(initial.sessionId);
   const offset = useRef(initial.offset);
@@ -1072,6 +1081,53 @@ export function HomeUI({
     setBrowserFocusToken((n) => n + 1);
   };
 
+  useEffect(() => {
+    let stop = false;
+    void (async () => {
+      const list = await scmCheckouts(project);
+      if (stop) return;
+      setTermCheckouts(list);
+      setTermCwd((now) => now || (list.find((c) => c.isRoot)?.path ?? list[0]?.path ?? ""));
+    })();
+    return () => {
+      stop = true;
+    };
+  }, [project]);
+
+  const openNewTerminal = async () => {
+    if (!termCwd || termBusy) return;
+    setTermBusy(true);
+    setTermError(null);
+    const r = await openTerminal(project, termCwd);
+    setTermBusy(false);
+    if ("error" in r) {
+      setTermError(r.error);
+      return;
+    }
+    apply(r);
+    setTerminalDisconnected((now) => {
+      if (!now.has(r.tabId)) return now;
+      const next = new Set(now);
+      next.delete(r.tabId);
+      return next;
+    });
+    setActiveTab(r.tabId);
+  };
+
+  /** `새 대화`의 잠금 - 좌측 머리 행 버튼과 같은 조건이다(`SidePanel`의 `noTurns`). */
+  const newConversationLocked = turns.length === 0 && !busy;
+
+  /** FAB가 부르는 새로 만들기 - 좌측 머리 행 버튼과 같은 함수다(§P526 결정 3). 지금 표면이 아니면
+   *  표면부터 옮긴다(결정 5). 잠긴 `새 대화`는 표면만 옮긴다. */
+  const runCreate = async (a: CreateAction) => {
+    if (a !== surface) changeSurface(a);
+    if (a === "session") {
+      if (!newConversationLocked) apply(await clearHome(project));
+    } else if (a === "schedules") setScheduleOpen(true);
+    else if (a === "terminal") await openNewTerminal();
+    else await openNewBrowser();
+  };
+
   /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
    *  §13 스크롤러(`message-scroller.tsx`)는 그 `stuck` 판정을 Provider 안 `useRef`로 감춰서
    *  뗄 손잡이가 없다 — 그 절이 "배선은 developer의 값"이라 넘긴 자리다.
@@ -1143,14 +1199,16 @@ export function HomeUI({
             terminalDisconnected={terminalDisconnected}
             browserRows={browserRows}
             onNewBrowser={openNewBrowser}
-            onTerminalReconnect={(id) =>
-              setTerminalDisconnected((now) => {
-                if (!now.has(id)) return now;
-                const next = new Set(now);
-                next.delete(id);
-                return next;
-              })
-            }
+            scheduleOpen={scheduleOpen}
+            setScheduleOpen={setScheduleOpen}
+            terminalNew={{
+              checkouts: termCheckouts,
+              cwd: termCwd,
+              setCwd: setTermCwd,
+              busy: termBusy,
+              error: termError,
+              open: openNewTerminal,
+            }}
             // 세 그룹을 통틀어 지금 떠 있는 표식 하나(§비주얼 §62 (2) §선택 표식 — "표식은 세
             // 그룹을 통틀어 한 줄에만 든다"). 회차 0건 스케줄을 보는 동안은 `home.current`가
             // 못 갈리므로(위 `pendingSchedule` 주석) 그 스케줄의 `id`가 대신 뜬다.
@@ -1198,7 +1256,7 @@ export function HomeUI({
             (§11 결정 1) — 왼쪽에서 표면을 갈아도(`세션` <-> `터미널` <-> `탐색기`) 이 줄은
             그대로다: `chat`·`terminal`·`file` 셋을 한 목록으로 그린다(체크아웃은 P366-8).
             `min-w-0`은 아래 대화 컬럼과 같은 이유 — flex 자식 기본값을 덮는다. */}
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <TabBar
             tabs={home.tabs}
             activeTab={activeTab}
@@ -1707,6 +1765,11 @@ export function HomeUI({
           </div>
             </>
           )}
+          <CreateFab
+            surface={surface}
+            locked={newConversationLocked}
+            onCreate={(a) => void runCreate(a)}
+          />
         </div>
       </SidebarProvider>
 
@@ -2634,6 +2697,120 @@ function TerminalSurface({
   );
 }
 
+/** `새 터미널` 한 벌(§P526 결정 3) - `HomeUI`가 들고 좌측 패널과 FAB에 같이 내린다. */
+type TerminalNew = {
+  checkouts: Checkout[];
+  cwd: string;
+  setCwd: (cwd: string) => void;
+  busy: boolean;
+  error: string | null;
+  open: () => Promise<void>;
+};
+
+const CREATE_META: Record<CreateAction, { labelKey: string; icon: typeof MessageSquare }> = {
+  session: { labelKey: "home.newConversation", icon: MessageSquare },
+  schedules: { labelKey: "home.schedule.new", icon: CalendarClock },
+  terminal: { labelKey: "terminal.newTab", icon: SquareTerminal },
+  browser: { labelKey: "home.surface.browser.new", icon: Globe },
+};
+
+/** 홈 우측 아래 FAB와 다이얼(§P526). 누르면 지금 표면의 새로 만들기, 올리거나 포커스하면 나머지가
+ *  위로 펼친다. 표면 -> 항목 규칙은 `fabPlan`(순수 함수)이 정한다. */
+function CreateFab({
+  surface,
+  locked,
+  onCreate,
+}: {
+  surface: Surface;
+  locked: boolean;
+  onCreate: (a: CreateAction) => void;
+}) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const wrap = useRef<HTMLDivElement>(null);
+  const { primary, dial } = fabPlan(surface);
+  const disabled = primary === "session" && locked;
+  const label = primary ? t(CREATE_META[primary].labelKey) : t("home.fab.label");
+  const items = () => Array.from(wrap.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+
+  return (
+    <div
+      ref={wrap}
+      // ponytail: 입력창 높이를 재지 않고 `session`만 고정값으로 올린다. 입력창이 크게 늘면 측정으로 바꾼다
+      className={cn("absolute right-6 z-40 flex flex-col-reverse items-end gap-2", surface === "session" ? "bottom-28" : "bottom-6")}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          setOpen(false);
+          wrap.current?.querySelector<HTMLElement>("[data-fab]")?.focus();
+        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+          e.preventDefault();
+          setOpen(true);
+          const list = items();
+          if (list.length === 0) return;
+          const i = list.indexOf(document.activeElement as HTMLElement);
+          const next = e.key === "ArrowUp" ? (i < 0 ? 0 : (i + 1) % list.length) : i <= 0 ? -1 : i - 1;
+          if (next < 0) wrap.current?.querySelector<HTMLElement>("[data-fab]")?.focus();
+          else list[next]?.focus();
+        }
+      }}
+    >
+      <Button
+        data-fab
+        size="icon-lg"
+        className="rounded-full shadow-lg aria-disabled:opacity-50"
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-disabled={disabled || undefined}
+        onClick={() => {
+          if (!primary) setOpen((o) => !o);
+          else if (!disabled) onCreate(primary);
+        }}
+      >
+        <Plus />
+      </Button>
+      <div
+        role="menu"
+        aria-label={t("home.fab.label")}
+        hidden={!open}
+        className="flex flex-col-reverse items-end gap-2 transition-opacity duration-150 motion-reduce:transition-none"
+      >
+        {dial.map((a) => {
+          const { labelKey, icon: Icon } = CREATE_META[a];
+          const off = a === "session" && locked;
+          return (
+            <div key={a} className="flex items-center gap-2">
+              <span className="rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow">
+                {t(labelKey)}
+              </span>
+              <Button
+                role="menuitem"
+                size="icon"
+                variant="secondary"
+                className="rounded-full shadow aria-disabled:opacity-50"
+                aria-label={t(labelKey)}
+                aria-disabled={off || undefined}
+                onClick={() => {
+                  setOpen(false);
+                  onCreate(a);
+                }}
+              >
+                <Icon />
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** 좌측 아래 단(§11-6) — `소스 컨트롤` · `탐색기`와 같은 모양이다: 머리 행(라벨 + `새 터미널`) +
  *  `작업 디렉터리` 고르기 + 줄 목록. cwd 후보는 소스 컨트롤과 **같은 목록**이다(결정 3 —
  *  `scmCheckouts`를 새로 안 부른다).
@@ -2646,41 +2823,23 @@ function TerminalLeftPanel({
   tabs,
   activeTab,
   disconnected,
-  apply,
   onFocus,
-  onReconnect,
+  terminalNew,
 }: {
   project: string;
   tabs: Tab[];
   activeTab: string | null;
+  terminalNew: TerminalNew;
   /** 우측 칸(`TerminalSurface`)과 같은 값 — `HomeUI`가 든 `terminalDisconnected`(§11-1
    *  §개정, §11-6 결정 6 `끊김` 배지). 마운트 직후(새로고침 포함)는 늘 비어 있다 — 그래서
    *  전부 살아 있다고 가정하고 곧장 이어 붙는다(수용조건). 죽은 pty(`row.alive === false`)는
    *  이 집합에 없어도 같이 `끊김`이다 — 아직 죽었다고 확인 못 받은 탭까지 서버 값으로 잡는다. */
   disconnected: Set<string>;
-  apply: (c: HomeChunk) => void;
   onFocus: (id: string) => void;
-  onReconnect: (id: string) => void;
 }) {
   const t = useT();
-  const [checkouts, setCheckouts] = useState<Checkout[]>([]);
-  const [cwd, setCwd] = useState<string>("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { checkouts, cwd, setCwd, busy, error, open } = terminalNew;
   const [rows, setRows] = useState<Record<string, PtyStatus>>({});
-
-  useEffect(() => {
-    let stop = false;
-    void (async () => {
-      const list = await scmCheckouts(project);
-      if (stop) return;
-      setCheckouts(list);
-      setCwd((now) => now || (list.find((c) => c.isRoot)?.path ?? list[0]?.path ?? ""));
-    })();
-    return () => {
-      stop = true;
-    };
-  }, [project]);
 
   // §11-6 결정 4 — 표면이 열려 있는 동안 5초마다. 언마운트(표면 이탈)가 곧 정지다.
   //
@@ -2715,21 +2874,6 @@ function TerminalLeftPanel({
       clearTimeout(timer);
     };
   }, [project, ids]);
-
-  const open = async () => {
-    if (!cwd || busy) return;
-    setBusy(true);
-    setError(null);
-    const r = await openTerminal(project, cwd);
-    setBusy(false);
-    if ("error" in r) {
-      setError(r.error);
-      return;
-    }
-    apply(r);
-    onReconnect(r.tabId);
-    onFocus(r.tabId);
-  };
 
   const cwdLabel = (path: string | undefined) => {
     if (!path) return "";
@@ -2994,9 +3138,11 @@ function SidePanel({
   activeTab,
   onFocusTab,
   terminalDisconnected,
-  onTerminalReconnect,
   browserRows,
   onNewBrowser,
+  scheduleOpen,
+  setScheduleOpen,
+  terminalNew,
 }: {
   project: string;
   /** 소스 컨트롤 표면 루트 줄의 이름(§비주얼 §72 ⑤) — `<ScmSurface>`로 그대로 내린다. */
@@ -3031,9 +3177,6 @@ function SidePanel({
   activeTab: string | null;
   /** `터미널` 좌측 목록에서 탭을 고르면 표식을 그 탭으로 옮긴다(§11-10 — 서버 왕복 없이 로컬). */
   onFocusTab: (tabId: string) => void;
-  /** `터미널` 좌측 목록이 `새 터미널` · `다시 열기`로 연 탭을 죽은 집합에서 뺀다 — `HomeUI`가
-   *  든 `terminalDisconnected`에 반영한다(우측 칸과 같은 값을 봐야 한다). */
-  onTerminalReconnect: (id: string) => void;
   /** `HomeUI`가 든 `terminalDisconnected` 그 값 — `TerminalLeftPanel`의 `끊김` 배지가 우측 칸과
    *  같은 것을 보게 그대로 내린다(§11-1 §개정, §11-6 결정 6, 버그 2 고침). */
   terminalDisconnected: Set<string>;
@@ -3043,6 +3186,11 @@ function SidePanel({
   /** `브라우저` 좌측 패널의 `새 브라우저`(§11-17 결정 1) — 슬롯 유무 분기와 포커스 신호까지
    *  `HomeUI`가 들고 있어서 이 컴포넌트는 그 결과만 부른다. */
   onNewBrowser: () => void;
+  /** `새 스케줄` 다이얼로그 열림 - `HomeUI`가 든다(우측 아래 FAB도 연다, §P526). */
+  scheduleOpen: boolean;
+  setScheduleOpen: (open: boolean) => void;
+  /** `새 터미널` 한 벌 - `cwd` 고르기 값까지 `HomeUI`가 들어서 패널과 FAB가 같은 값으로 연다(§P526 결정 3). */
+  terminalNew: TerminalNew;
 }) {
   const t = useT();
   const locale = useLocale();
@@ -3160,9 +3308,8 @@ function SidePanel({
             tabs={home.tabs.filter((tb) => tb.kind === "terminal")}
             activeTab={activeTab}
             disconnected={terminalDisconnected}
-            apply={apply}
             onFocus={onFocusTab}
-            onReconnect={onTerminalReconnect}
+            terminalNew={terminalNew}
           />
         )}
         {/* `브라우저`(§11-11 결정 5) — 풀 슬롯 줄이 한 줄씩 뜬다. 누르면 그 해시의 탭을 열거나
@@ -3341,7 +3488,13 @@ function SidePanel({
           <SidebarGroup className="p-0">
             <SidebarGroupLabel className="h-6 text-muted-foreground">
               {t("home.schedulesLabel")}
-              <ScheduleCreateDialog project={project} personas={personas} onCreated={onSchedulesChange} />
+              <ScheduleCreateDialog
+                project={project}
+                personas={personas}
+                onCreated={onSchedulesChange}
+                open={scheduleOpen}
+                setOpen={setScheduleOpen}
+              />
             </SidebarGroupLabel>
             {home.schedules.length === 0 ? (
               <EmptyState text={t("home.surface.schedules.empty")} />
@@ -3453,15 +3606,19 @@ function ScheduleCreateDialog({
   project,
   personas,
   onCreated,
+  open,
+  setOpen,
 }: {
   project: string;
   /** §7-4 결정 2 §스케줄에도 같은 칸이 붙는다 — `SidePanel`이 `HomeUI`에서 그대로 내린 목록. */
   personas: string[];
   onCreated: (schedules: ScheduleView[]) => void;
+  /** 열림은 `HomeUI`가 든다 — 우측 아래 FAB(§P526 결정 3)도 이 다이얼로그를 연다. */
+  open: boolean;
+  setOpen: (open: boolean) => void;
 }) {
   const t = useT();
   const locale = useLocale();
-  const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<ScheduleKind>("cron");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
