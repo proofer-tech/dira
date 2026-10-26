@@ -8938,6 +8938,81 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P523. 홈 대화에서 하니스가 보낸 알림은 사람의 말풍선이 아니라 시스템 알림 줄로 뜨고, 태그 대신 뜻에 맞는 모양으로 그린다 (요구 `0115ae1c`, 왕복 0회)
+
+사람 요구(2026-10-26): *"이렇게 오는거 좀 더 사용성 고려해서 개선해주세요. 1. 사용자가 직접 보낸게 아니니 지금의
+사용자가 보낸 메시지처럼 보이도록 하는게 아니라 시스템 메시지라는걸 표현해줘야합니다. 2. 지금은 태그가 그대로
+노출되는데 의미에 맞게 스타일에 적용해줘야합니다"*. 첨부는 홈 대화 스레드의 오른쪽 회색 말풍선이고, 본문이
+`<task-notification> <task-id>...</task-id> <tool-use-id>...</tool-use-id> <output-file>...</output-file>
+<status>completed</status> <summary>Background command "..." completed (exit code 0)</summary>
+</task-notification>`를 태그째 보여 준다. `2&gt;/dev/null`처럼 HTML 엔티티도 풀리지 않은 채 보인다.
+
+#### 실측 (2026-10-26)
+
+- 백그라운드 작업이 끝나면 하니스는 `role: "user"`인 `text` 블록으로 `<task-notification>` 봉투를 트랜스크립트에
+  쓴다. `recordToEvents`(`apps/teams/lib/transcript.ts`)는 `role === "user"`인 `text`를 전부 `kind: "prompt"`로
+  만든다.
+- `toTurns`(`apps/teams/lib/home-session.ts`)는 sidechain이 아닌 `prompt`를 전부 `role: "question"`으로 만든다.
+  거르는 것은 `GHOST_LINES` 문자열 셋뿐이다. 그래서 봉투가 사람 질문 말풍선(`home-ui.tsx`의 `Bubble
+  variant="secondary" align="end"`)으로 그려진다.
+- 같은 봉투가 `queue-operation` `enqueue`로 들어오는 갈래는 이미 `HARNESS_ENVELOPE`(첫 줄이 여는 태그 하나뿐)로
+  걸러진다. 티켓 상세와 워커 다이얼로그는 첫 아닌 `prompt`를 접힌 줄로 그리므로 말풍선 문제가 없다. 이 요구의
+  범위는 홈 대화 스레드다.
+
+#### 결정
+
+1. **판정** - sidechain이 아닌 `prompt` 사건의 본문(`questionOf` 적용 뒤)을 앞뒤 공백을 걷고 보았을 때, 전체가
+   `<이름>...</이름>` 한 벌이면(같은 이름, 이름은 `[a-z][a-z0-9_-]*`) 하니스 봉투다. 여는 태그 뒤에 줄바꿈이 있든
+   없든 같다. 판정은 태그 이름을 나열하지 않는다(`HARNESS_ENVELOPE`와 같은 이유). 봉투 앞이나 뒤에 다른 글이 한
+   글자라도 있으면 사람 질문으로 둔다.
+2. **새 줄 종류** - `Turn.role`에 `"notice"`를 더한다. `toTurns`는 봉투를 `question`이 아니라 `notice`로 낸다. 이
+   줄은 `notice: { tag: string; fields: { name: string; value: string }[]; raw: string }`를 갖는다. `fields`는 봉투
+   바로 아래 자식 `<이름>값</이름>`을 나온 순서대로 담고, 값의 HTML 엔티티(`&lt;` `&gt;` `&amp;` `&quot;` `&#39;`)를
+   푼다. 자식이 하나도 안 잡히면 `fields`는 빈 배열이고 `raw`(엔티티를 푼 안쪽 전문)를 그린다.
+3. **질문으로 세지 않는다** - `notice`는 중지 표식(`markInterrupted`)이 건너뛰는 줄이고, 앞 질문을 찾는 곳
+   (`home-ui.tsx`의 이전 질문 조회)과 대화 제목 및 미리보기를 고르는 곳에서도 질문이 아니다.
+4. **모양** - 말풍선을 쓰지 않는다. 스레드 전폭, 가운데 정렬이 아니라 왼쪽부터 시작하는 한 줄이고, 글자는
+   `text-xs text-muted-foreground`다. 줄 머리에 lucide 아이콘(`task-notification`은 `Terminal`, 그 밖은 `Bell`)과
+   라벨 `시스템 알림` / `System notice`(i18n 키 `home.noticeLabel`)를 둔다. 사람 질문 말풍선과 에이전트 답 산문 어느
+   쪽과도 그릇이 다르다.
+5. **`task-notification`의 뜻 매핑** -
+   - `status` -> 라벨 옆 배지. `completed`는 `완료` / `Completed`(성공 색), `failed`-`error`는 `실패` / `Failed`
+     (`destructive`), `killed`-`stopped`는 `중지됨` / `Stopped`(muted), 그 밖은 값 그대로(muted)다. 이미 있는
+     `components/ui/badge`와 색 토큰만 쓴다.
+   - `summary` -> 줄 본문. 한 줄로 자르고(`truncate`) 전문은 `title`에 둔다. 큰따옴표로 감싼 명령 부분은 `font-mono`로
+     그린다.
+   - `task-id` - `tool-use-id` - `output-file`과 나머지 필드 -> 기본으로 접힌 `<details>` `자세히` / `Details` 안의
+     이름-값 표(이름은 muted, 값은 `font-mono`, `break-all`)다. 태그 꺾쇠는 화면 어디에도 나오지 않는다.
+6. **모르는 봉투** - `task-notification`이 아닌 이름은 라벨 옆에 태그 이름을 `font-mono`로 쓴다. 본문은 `summary`
+   필드, 없으면 `message` 필드, 둘 다 없으면 첫 필드의 값이다. 나머지는 결정 5와 같은 `자세히` 표로 접는다.
+   `fields`가 비면 `raw`를 `자세히` 안에 `whitespace-pre-wrap`으로 둔다.
+7. 하는 일은 홈 대화 스레드의 표시뿐이다. 엔진 - 큐 파일 - 트랜스크립트 형식 - 티켓 상세 - 워커 다이얼로그는 바뀌지
+   않는다.
+
+주도성 5 판단: 첨부 화면이 홈 대화 스레드라 범위를 그 화면으로 정했다. 티켓 상세와 워커 다이얼로그는 이미 봉투를
+접힌 줄로 그려 사람 말풍선 문제가 없다.
+주도성 5 판단: 시스템 알림을 가운데 정렬 칩이 아니라 왼쪽 정렬 한 줄로 정했다. `summary`가 명령 전문을 담아
+길어서, 가운데 칩으로 두면 거의 매번 잘리고 줄마다 폭이 달라진다.
+주도성 5 판단: designer 티켓을 내지 않는다. 배지 - 아이콘 - muted 글자 - `<details>` 모두 이미 쓰는 부품과 토큰이고
+새 그릇이 없다. 매뉴얼 장도 내지 않는다(사람이 하는 일이 바뀌지 않는다).
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P523-1 | `home-session.ts` 봉투 판정과 `notice` 줄(결정 1-3) + `home-ui.tsx` 시스템 알림 렌더(결정 4-6) + i18n + 테스트 | developer | - | 발행 |
+| P523-2 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P523-1 | 발행 |
+
+**두 장이다.**
+
+#### 수용조건
+
+- [ ] `toTurns` 테스트에서 본문이 `<task-notification>\n<task-id>a</task-id>\n<status>completed</status>\n<summary>Background command "ls 2&gt;/dev/null" completed (exit code 0)</summary>\n</task-notification>`인 `prompt` 사건은 `role: "notice"`, `notice.tag: "task-notification"`이고 `fields`가 `task-id` - `status` - `summary` 순서이며 `summary` 값에 `2>/dev/null`(엔티티가 풀린 값)이 들어 있다.
+- [ ] 같은 테스트에서 여는 태그 뒤 줄바꿈 없는 한 줄 봉투도 `notice`이고, `안녕 <b>x</b>`처럼 봉투 밖에 글이 있는 본문과 `<a>x</b>`처럼 이름이 다른 본문은 `question`이다.
+- [ ] 홈 대화에서 세션에 `sleep 2; echo hi`를 `run_in_background`로 돌리게 하고 완료 알림이 오면, 스레드에 오른쪽 말풍선이 생기지 않고 왼쪽 정렬 한 줄에 아이콘, `시스템 알림`, `완료` 배지, summary 문장이 보이며 화면 글자에 `<task-notification>`과 `&gt;`가 없다(스크린샷 한 장).
+- [ ] 그 줄의 `자세히`를 펼치면 `task-id` - `tool-use-id` - `output-file` 이름과 값이 표로 보이고, 접으면 사라진다.
+- [ ] 알림 줄 다음에 온 에이전트 답을 `중지`하면 `중지됨` 표식이 그 답에 붙고, 새로고침해도 알림 줄은 여전히 시스템 알림 모양이다.
+- [ ] 화면 언어를 English로 바꾸면 같은 줄이 `System notice`와 `Completed`로 보인다.
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`과 `pnpm test`가 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
+
 ### P522. cron tick이 끝나지 않아도 워커 셸이 쌓이지 않고, 죽은 락과 세션 없는 tick이 디스패치를 막지 않는다 - 엔진 수정 (요구 `e319c13e`, 왕복 0회)
 
 사람 요구(2026-10-25, 홈 대화에서 옮김): *"워커 프로세스가 이렇게 쌓이지 않게 만들어 달라."* 요구 일곱 가지는 같은
