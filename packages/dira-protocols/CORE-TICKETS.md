@@ -54,7 +54,7 @@ wrong ticket.
 | `archives:` | | 대상 티켓의 스칼라 stem 하나. `deps:`처럼 목록(`[...]`)으로 쓰지 않는다. `resolveDep`가 `deps:`-`req:`와 같은 판정으로 푼다. 있으면 보드에서 독립 카드로 서지 않고 대상 티켓에 겹쳐 붙는다 |
 | `squad:` | | 스칼라 하나 - `squads/<이름>/members`의 스쿼드 이름. `persona:`와 둘 다 있으면 `squad:`가 이긴다. 손으로 고정하려면 `squad:` 줄을 지운다 - 스쿼드 티켓의 `persona:`는 입력이 아니라 기록이다(§5-5) |
 
-The engine writes these keys in exactly two places now (§5-5 승인 이후 - 자리가 둘이 됐다):
+The engine writes these keys in exactly two places now (§5-5 승인 이후 - 쓰는 코드 경로가 둘이 됐다):
 `reap`'s answer escalation - after auto-reclaiming a ticket twice it reopens it carrying
 `## 질문 n` + `awaiting:`, and `deps` holds every worker off until the answer lands
 ([CORE.md](CORE.md) §When blocked); and `claim`'s squad resolution - a `squad:` ticket's
