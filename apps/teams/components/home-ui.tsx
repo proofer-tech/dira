@@ -987,6 +987,19 @@ export function HomeUI({
     if (tab.kind === "file") explorer.dropFile(tab.id);
   };
 
+  /** §P528 — 데스크톱 `File > Close`(`Cmd+W`)가 보낸 취소 가능 이벤트다. 활성 탭이 있으면 X와 같은
+   *  `closeTab`으로 닫고 `preventDefault`로 처리했다고 알린다. 없으면 그대로 둬서 main이 창을 숨긴다. */
+  useEffect(() => {
+    const onCloseTab = (e: Event) => {
+      const tab = home.tabs.find((t) => t.id === activeTab);
+      if (!tab) return;
+      e.preventDefault();
+      void closeTab(tab);
+    };
+    window.addEventListener("dira:close-tab", onCloseTab);
+    return () => window.removeEventListener("dira:close-tab", onCloseTab);
+  });
+
   /** 탭 우클릭 메뉴의 `좌측 탭 모두 닫기`·`우측 탭 모두 닫기`(§11-7 결정 2). `tabsOnSide`가 이미
    *  우클릭한 탭 자신과 `unsaved` 파일 탭을 뺀 id 목록을 내므로, 그 목록을 **닫는 방법은 `closeTab`
    *  하나의 반복이다**(§11-7 결정 4 — 새 닫기 경로가 0개다). 순서대로 `await`하는 이유는 `apply`가

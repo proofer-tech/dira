@@ -26,6 +26,7 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { badgeText, nextCount, type DockCounts } from "./dock-badge.ts";
 import { classifyLink } from "./link.ts";
+import { closeTabOutcome } from "./close-tab.ts";
 import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
 import { createMainReporter } from "./error-report.ts";
 import { describeReadyTimeout, readyTimeoutHint, type ReadyTimeoutState } from "./ready-timeout.ts";
@@ -1043,6 +1044,17 @@ const openFeedback = () => dispatchToWindow("dira:feedback", "의견 폼");
  *  (보드 · 홈 — 그 둘은 `⌘F`가 자기 일을 한다)에서는 그 컴포넌트가 안 떠 있어 무동작이다. */
 const openFind = () => dispatchToWindow("dira:find", "찾기 바");
 
+/** §P528 — 취소 가능 이벤트를 보내 홈이 탭을 닫았으면 끝, 아니면 창을 닫는다(N1이 숨긴다).
+ *  숨은 창은 꺼내지 않는다. 판정은 `close-tab.ts`다. */
+function closeTabOrWindow() {
+  if (!win || win.isDestroyed()) return;
+  const w = win;
+  w.webContents
+    .executeJavaScript(`window.dispatchEvent(new CustomEvent("dira:close-tab", { cancelable: true }))`)
+    .then((r: unknown) => closeTabOutcome(r), () => closeTabOutcome(new Error("renderer")))
+    .then((o: "tab" | "window") => { if (o === "window" && !w.isDestroyed()) w.close(); });
+}
+
 /** `About dira`의 click을 잡으려면 **`{ role: "appMenu" }` 한 줄을 항목들로 펼쳐야 한다** —
  *  role `about`은 `app.showAboutPanel()`로 직행해서 가로챌 자리가 없다. 그 한 줄이 지금
  *  ⌘Q·⌘H·`Services`를 통째로 낳고 있어서, 펼치면서 하나라도 빠뜨리면 증상이 메뉴가 아니라
@@ -1068,7 +1080,8 @@ function installAppMenu() {
         { role: "quit" },
       ],
     },
-    { role: "fileMenu" },
+    // §P528 — `fileMenu` role을 펼쳤다. `Close`가 `Cmd+W`를 잡고 홈의 활성 탭을 먼저 닫아 보게 한다.
+    { label: "File", submenu: [{ label: "Close", accelerator: "CmdOrCtrl+W", click: closeTabOrWindow }] },
     { role: "editMenu" },
     { role: "viewMenu" },
     { role: "windowMenu" },
