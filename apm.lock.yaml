@@ -3,7 +3,7 @@ apm_version: 0.33.0
 dependencies:
 - repo_url: _local/dira-protocols
   name: dira-protocols
-  version: 1.0.0
+  version: 1.0.2
   package_type: apm_package
   source: local
   local_path: ./packages/dira-protocols
