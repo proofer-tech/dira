@@ -8979,7 +8979,11 @@ C() { grep -n '자리' "$@" | grep -v '자리표시자\|제자리\|[0-9N]자리'
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P537-1 | 화면 문구 - `i18n.ts` 한국어 16줄과 그 문구를 인용하는 DESIGN.md 줄 | writer | - | 발행 `2c13cdb6` || P537-2 | 큐 로컬 원문 - `.dira/team/protocols` - `.dira/team/personas` 45줄, 이어서 materialize | writer | - | 발행 `cd012240` || P537-3 | 공용 원문 - `packages/dira-protocols` - `packages/persona-*` 34줄 | writer | - | 발행 `2cb61baf` |
+| P537-1 | 화면 문구 - `i18n.ts` 한국어 16줄과 그 문구를 인용하는 DESIGN.md 줄 | writer | - | 발행 `2c13cdb6` |
+| P537-2 | 큐 로컬 원문 - `.dira/team/protocols` - `.dira/team/personas` 45줄, 이어서 materialize | writer | - | 발행 `cd012240` |
+| P537-3 | 공용 원문 - `packages/dira-protocols` - `packages/persona-*` 34줄 | writer | - | 발행 `2cb61baf` |
+
+
 **세 장이다.** 파일이 겹치지 않아 서로 기다릴 이유가 없다. QA 0장 - 판정이 `C` 명령과 `pnpm test`로 끝난다.
 
 #### 수용조건
