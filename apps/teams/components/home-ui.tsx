@@ -2802,21 +2802,31 @@ function CreateFab({
         }
       }}
     >
-      <Button
-        data-fab
-        size="icon-lg"
-        className="rounded-full shadow-lg aria-disabled:opacity-50"
-        aria-label={label}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-disabled={disabled || undefined}
-        onClick={() => {
-          if (!primary) setOpen((o) => !o);
-          else if (!disabled) onCreate(primary);
-        }}
-      >
-        <FabIcon />
-      </Button>
+      <div className="flex items-center gap-2">
+        {open && (
+          <span
+            aria-hidden
+            className="pointer-events-none rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow"
+          >
+            {label}
+          </span>
+        )}
+        <Button
+          data-fab
+          size="icon-lg"
+          className="rounded-full shadow-lg aria-disabled:opacity-50"
+          aria-label={label}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          aria-disabled={disabled || undefined}
+          onClick={() => {
+            if (!primary) setOpen((o) => !o);
+            else if (!disabled) onCreate(primary);
+          }}
+        >
+          <FabIcon />
+        </Button>
+      </div>
       <div
         role="menu"
         aria-label={t("home.fab.label")}
