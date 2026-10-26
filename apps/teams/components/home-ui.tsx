@@ -1768,6 +1768,7 @@ export function HomeUI({
           <CreateFab
             surface={surface}
             locked={newConversationLocked}
+            composer={input}
             onCreate={(a) => void runCreate(a)}
           />
         </div>
@@ -2719,16 +2720,36 @@ const CREATE_META: Record<CreateAction, { labelKey: string; icon: typeof Message
 function CreateFab({
   surface,
   locked,
+  composer,
   onCreate,
 }: {
   surface: Surface;
   locked: boolean;
+  composer: RefObject<HTMLTextAreaElement | null>;
   onCreate: (a: CreateAction) => void;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const { primary, dial } = fabPlan(surface);
+  // `session`에서는 입력창 박스(InputGroup) 위 변보다 16px 위에 앉는다. 박스가 여러 줄로 자라거나
+  // 창이 바뀔 때마다 다시 잰다. 그 밖의 표면은 `bottom-6` 그대로다.
+  const [lift, setLift] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const box = surface === "session" ? composer.current?.parentElement : null;
+    const host = wrap.current?.offsetParent as HTMLElement | null;
+    if (!box || !host) {
+      setLift(null);
+      return;
+    }
+    const measure = () =>
+      setLift(Math.max(24, Math.round(host.getBoundingClientRect().bottom - box.getBoundingClientRect().top + 16)));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    ro.observe(host);
+    return () => ro.disconnect();
+  }, [surface, composer]);
   const disabled = primary === "session" && locked;
   const label = primary ? t(CREATE_META[primary].labelKey) : t("home.fab.label");
   const items = () => Array.from(wrap.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
@@ -2736,8 +2757,8 @@ function CreateFab({
   return (
     <div
       ref={wrap}
-      // ponytail: 입력창 높이를 재지 않고 `session`만 고정값으로 올린다. 입력창이 크게 늘면 측정으로 바꾼다
-      className={cn("absolute right-6 z-40 flex flex-col-reverse items-end gap-2", surface === "session" ? "bottom-28" : "bottom-6")}
+      className="absolute right-6 bottom-6 z-40 flex flex-col-reverse items-end gap-2"
+      style={lift === null ? undefined : { bottom: lift }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
