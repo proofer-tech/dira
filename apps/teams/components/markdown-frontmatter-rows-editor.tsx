@@ -15,8 +15,8 @@
  *  `contentEditable` 블록처럼 `blur`/`⌘↵` 제출 순간에 커밋을 강제로 되읽을 필요가 없다(호출부의
  *  `commitEditable`은 `data-head`가 있는 원소만 찾으므로 이 표면의 `Input`들은 애초에 그 흐름을
  *  안 탄다) - 매 키 입력이 곧 커밋이라 마지막 편집이 버려질 자리가 없다. */
-import { useState } from "react";
-import { ChevronDown, Plus, X } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { ChevronDown, ChevronRight, Plus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
@@ -40,6 +40,7 @@ import {
   updateRow,
   valueCandidates,
 } from "@/lib/markdown-frontmatter-rows";
+import { defaultCollapsed, foldInfos } from "@/lib/markdown-frontmatter-fold";
 import { useT } from "@/components/language-provider";
 
 const INDENT_STEP_PX = 16;
@@ -355,6 +356,7 @@ export function FrontmatterRowsEditor({
   onKeyDown,
   candidates,
   vault,
+  headerLeading,
 }: {
   head: string;
   onHeadChange: (head: string) => void;
@@ -367,9 +369,45 @@ export function FrontmatterRowsEditor({
    *  `buildVault`가 내는 <이름 -> 파일> 벌 그대로다. 판정 자체(태그인가 아닌가)는 이 값과
    *  무관하다 - 없으면 이동 대상이 안 잡혀 모든 태그가 댕글링(`<span>`)으로 뜬다. */
   vault?: Vault | null;
+  /** §P531 결정 6 - 있으면 머리 줄(이 노드 + `모두 접기`)을 이 컴포넌트가 그린다. 없으면 `모두 접기`만
+   *  접을 행이 있을 때 오른쪽 정렬 한 줄로 그린다. */
+  headerLeading?: ReactNode;
 }) {
   const t = useT();
   const doc = parseFrontmatterHead(head);
+  // §P531 결정 3-4 - 접힘은 화면 상태다. 처음 마운트할 때만 기본값을 정하고 `head`를 안 건드린다.
+  const [collapsed, setCollapsed] = useState(() => defaultCollapsed(doc.rows));
+  const folds = foldInfos(doc.rows);
+  const foldable = folds.filter((f) => f.descendants > 0);
+  function setFold(id: string, fold: boolean) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (fold) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+  const anyExpanded = foldable.some((f) => !collapsed.has(f.id));
+  const foldAllButton =
+    foldable.length > 0 ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={() => setCollapsed(anyExpanded ? new Set(foldable.map((f) => f.id)) : new Set())}
+      >
+        {anyExpanded ? t("frontmatterRows.foldAll") : t("frontmatterRows.unfoldAll")}
+      </Button>
+    ) : null;
+  const header =
+    headerLeading !== undefined ? (
+      <div className="flex h-7 items-center">
+        {headerLeading}
+        {foldAllButton}
+      </div>
+    ) : foldAllButton ? (
+      <div className="flex h-7 items-center justify-end">{foldAllButton}</div>
+    ) : null;
 
   function commit(rows: FrontmatterRow[]) {
     onHeadChange(stringifyFrontmatterHead({ ...doc, rows } satisfies FrontmatterDoc));
@@ -377,6 +415,8 @@ export function FrontmatterRowsEditor({
 
   if (doc.rows.length === 0) {
     return (
+      <div>
+      {header}
       <div className="flex items-center gap-2 ps-3">
         <p className="text-sm text-muted-foreground">{t("frontmatterRows.empty")}</p>
         <Button
@@ -388,6 +428,7 @@ export function FrontmatterRowsEditor({
           {t("frontmatterRows.addRow")}
         </Button>
       </div>
+      </div>
     );
   }
 
@@ -395,9 +436,17 @@ export function FrontmatterRowsEditor({
   // 파일 하나 단위다 - 행마다 갈리면 열 정렬이 깨진다(결정 13의 문 1).
   const hasListItemRow = doc.rows.some((row) => row.shape === "list-item");
 
+  const hidden = new Set<number>(); // 접힌 조상 밑에 숨는 행 번호(결정 2)
+  folds.forEach((f, i) => {
+    if (f.descendants > 0 && collapsed.has(f.id)) for (let j = 1; j <= f.descendants; j++) hidden.add(i + j);
+  });
   return (
     <div>
+      {header}
       {doc.rows.map((row, i) => {
+        if (hidden.has(i)) return null; // DOM에 안 둔다
+        const fold = folds[i];
+        const isCollapsed = fold.descendants > 0 && collapsed.has(fold.id);
         const showKey = !(row.shape === "list-item" && row.key === null);
         const showValue = row.shape !== "parent";
         const addLabel =
@@ -417,6 +466,22 @@ export function FrontmatterRowsEditor({
             className="group flex items-start gap-x-2 ps-(--fm-indent)"
             style={indentStyle(row.level)}
           >
+            {foldable.length > 0 && (
+              <div className="flex w-6 shrink-0 items-center justify-center">
+                {fold.descendants > 0 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-expanded={!isCollapsed}
+                    aria-label={`${t(isCollapsed ? "frontmatterRows.unfoldPrefix" : "frontmatterRows.foldPrefix")}${row.key ?? ""}${t(isCollapsed ? "frontmatterRows.unfoldSuffix" : "frontmatterRows.foldSuffix")}`}
+                    onClick={() => setFold(fold.id, !isCollapsed)}
+                  >
+                    {isCollapsed ? <ChevronRight aria-hidden /> : <ChevronDown aria-hidden />}
+                  </Button>
+                )}
+              </div>
+            )}
             {hasListItemRow && (
               <div className="w-4 shrink-0 text-center font-mono text-sm opacity-60" aria-hidden>
                 {row.shape === "list-item" ? "-" : null}
@@ -444,7 +509,17 @@ export function FrontmatterRowsEditor({
                   onKeyDown={onKeyDown}
                 />
               ))}
-            {showValue ? (
+            {isCollapsed ? (
+              <button
+                type="button"
+                className={cn(FM_VALUE_LAYOUT, "h-7 text-left text-sm text-muted-foreground")}
+                onClick={() => setFold(fold.id, false)}
+              >
+                {fold.childrenAreItems
+                  ? `${t("frontmatterRows.summaryItemsPrefix")}${fold.children}${t("frontmatterRows.summaryItemsSuffix")}`
+                  : `${t("frontmatterRows.summaryKeysPrefix")}${fold.children}${t("frontmatterRows.summaryKeysSuffix")}`}
+              </button>
+            ) : showValue ? (
               isBracketList(row.value ?? "") ? (
                 <BracketListValue
                   className={FM_VALUE_LAYOUT}
@@ -499,7 +574,10 @@ export function FrontmatterRowsEditor({
                 size="icon-xs"
                 aria-label={addLabel}
                 className="opacity-60 group-hover:opacity-100 focus-visible:opacity-100"
-                onClick={() => commit(insertRow(doc.rows, i + 1, nextRowFields(row)))}
+                onClick={() => {
+                  if (isCollapsed) setFold(fold.id, false); // 숨은 자리에 행이 생기지 않게 먼저 펼친다(결정 5)
+                  commit(insertRow(doc.rows, i + 1, nextRowFields(row)));
+                }}
               >
                 <Plus aria-hidden />
               </Button>

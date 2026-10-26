@@ -258,6 +258,18 @@ export function MarkdownEditor({
   // 프론트매터 행/평문 손잡이(결정 4) — 화면 글자와 접근명이 같은 문장이라 툴팁을 안 붙인다
   // (§비주얼 §50 §머리 줄, 위 위지윅/원문 손잡이의 아이콘+툴팁 관용과 다르다).
   const fmToggleLabel = fmMode === "rows" ? t("frontmatterRows.toggle.toPlain") : t("frontmatterRows.toggle.toRows");
+  // 행 모드에서는 행 편집기가 이 손잡이를 머리 줄에 `모두 접기`와 함께 그린다(§P531 결정 6)
+  const toggleButton = (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      aria-label={fmToggleLabel}
+      onClick={() => writeFrontmatterMode(fmMode === "rows" ? "plain" : "rows")}
+    >
+      {fmToggleLabel}
+    </Button>
+  );
 
   // 위지윅 면의 첫 편집 표면 — 마운트 때 한 번 초점을 준다(원문 면은 `Textarea`의 네이티브
   // `autoFocus`가 대신한다). 다이얼로그가 열릴 때마다 이 컴포넌트가 새로 마운트되므로 재열 때도
@@ -343,17 +355,11 @@ export function MarkdownEditor({
                 // 행 편집기일 때만 `border-b pb-3 mb-3`으로 본문과 가른다 — 평문 칸은 자기
                 // `mb-3`(아래)이 이미 그 경계라 무수정으로 둔다(두 표면이 면을 안 나눈다).
                 <div className={cn("space-y-2", fmMode === "rows" && "border-b border-border pb-3 mb-3")}>
-                  <div className="flex h-7 items-center">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-label={fmToggleLabel}
-                      onClick={() => writeFrontmatterMode(fmMode === "rows" ? "plain" : "rows")}
-                    >
-                      {fmToggleLabel}
-                    </Button>
-                  </div>
+                  {fmMode !== "rows" && (
+                    <div className="flex h-7 items-center">
+                      {toggleButton}
+                    </div>
+                  )}
                   {fmMode === "rows" ? (
                     <FrontmatterRowsEditor
                       head={split.head}
@@ -362,6 +368,7 @@ export function MarkdownEditor({
                       onKeyDown={onKeyDown}
                       candidates={candidates}
                       vault={vault}
+                      headerLeading={toggleButton}
                     />
                   ) : (
                     <div
