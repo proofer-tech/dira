@@ -8,6 +8,7 @@ import {
   createCommand, deleteCommand, listCommands, updateCommand,
   type CommandEntry, type CommandSpec,
 } from "@/lib/commands";
+import { readLastCommandRun } from "@/lib/home-session";
 import { getProject } from "@/lib/projects";
 
 export type CommandResult = { ok: true; commands: CommandEntry[] } | { ok: false; error: string };
@@ -38,4 +39,9 @@ export async function updateCommandAction(projectId: string, id: string, spec: C
 
 export async function deleteCommandAction(projectId: string, id: string): Promise<CommandResult> {
   return run(projectId, (dir) => deleteCommand(dir, id));
+}
+
+/** 몸통이 그리는 마지막 예약 실행(시각, 종료 코드, 로그 끝 200줄). 아직 안 돌았으면 null. */
+export async function lastCommandRunAction(projectId: string, id: string) {
+  return readLastCommandRun(projectId, id);
 }

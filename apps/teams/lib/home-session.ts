@@ -356,7 +356,15 @@ function parseHome(v: unknown): Home {
     if (x.kind === "terminal") {
       // §11-1 결정 3 — cwd 없는 터미널 탭은 못 열므로(만든 뒤 안 갈린다) 없는 탭으로 친다.
       if (typeof x.cwd !== "string" || !x.cwd) return [];
-      return [{ id, kind: "terminal", lastViewed: typeof x.lastViewed === "string" ? x.lastViewed : "", cwd: x.cwd }];
+      return [
+        {
+          id,
+          kind: "terminal",
+          lastViewed: typeof x.lastViewed === "string" ? x.lastViewed : "",
+          cwd: x.cwd,
+          ...(typeof x.title === "string" && x.title ? { title: x.title } : {}),
+        },
+      ];
     }
     return [
       {
@@ -511,11 +519,12 @@ export async function closeHomeTab(projectId: string, tabId: string): Promise<Ho
 
 /** 터미널 탭 하나를 연다(§11-1 결정 1·3) — cwd는 만든 뒤 안 갈린다. `chat` 탭의 `switchConversation`과
  *  같은 모양이지만 `current`(대화 스레드)는 안 건드린다 - 터미널은 그 칸을 안 쓴다. */
-export async function openTerminalTab(projectId: string, ptyId: string, cwd: string): Promise<Home> {
+export async function openTerminalTab(projectId: string, ptyId: string, cwd: string, title?: string): Promise<Home> {
   return withHomeLock(async () => {
     const home = await readHome(projectId);
     const now = new Date().toISOString();
-    const next: Home = { ...home, tabs: openTab(home.tabs, ptyId, "terminal", now, cwd) };
+    const opened = openTab(home.tabs, ptyId, "terminal", now, cwd);
+    const next: Home = { ...home, tabs: title ? opened.map((tb) => (tb.id === ptyId ? { ...tb, title } : tb)) : opened };
     await writeHome(projectId, next);
     return next;
   });

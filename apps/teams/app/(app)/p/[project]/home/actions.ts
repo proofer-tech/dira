@@ -57,7 +57,9 @@ import {
 import { listBrowserPoolSlots, linkOpenBlocked } from "@/lib/browser-pool";
 import { openLinkBrowser, reclaimBrowserPool, releaseLinkBrowser, type Run } from "@/lib/engine";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
-import { killPty, openPty, ptyStatuses, restartPty, type PtyStatus } from "@/lib/pty";
+import { killPty, openPty, ptyStatuses, restartPty, writePty, type PtyStatus } from "@/lib/pty";
+import { COMMAND_ID_RE, listCommands } from "@/lib/commands";
+import os from "node:os";
 import {
   commitStaged,
   gitResult,
@@ -290,6 +292,38 @@ export async function openTerminal(
     const spawned = openPty(cwd, process.env.SHELL || "/bin/sh");
     if ("error" in spawned) return { error: t(locale, "terminal.limitReached") };
     await openTerminalTab(project.id, spawned.id, cwd);
+    const chunk = await pollHomeAnswer(projectId, null, 0);
+    return { ...chunk, tabId: spawned.id };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+const shq = (x: string) => `'${x.replace(/'/g, `'\\''`)}'`;
+
+/** 커맨드 `실행`(§P535 결정 6) - 터미널 탭을 하나 열고 제목을 커맨드 이름으로 단 뒤 같은 명령을 친다.
+ *  id는 8자 hex만 받고 파일은 등록된 프로젝트의 `commands/` 안에서만 찾는다(신뢰 경계). 안 끝나는 명령도
+ *  그 탭에서 돌고 탭을 닫으면 pty 그룹이 SIGTERM으로 끝난다(`closeTerminalTab`). */
+export async function runCommandInTerminal(
+  projectId: string,
+  cmdId: string,
+  locale: Locale = DEFAULT_LOCALE,
+): Promise<(HomeChunk & { tabId: string }) | { error: string }> {
+  try {
+    const project = await required(projectId, locale);
+    if (!COMMAND_ID_RE.test(cmdId)) return { error: "invalid command id" };
+    const dir = path.join(project.root, "commands");
+    const entry = (await listCommands(dir)).find((e) => e.id === cmdId);
+    if (!entry) return { error: "command not found" };
+    const file = path.join(dir, `${cmdId}.sh`);
+    const env = entry.editable ? entry.spec.env : [];
+    const line = env.length
+      ? `TICKET_ROOT=${shq(project.root)} python3 ${shq(path.join(os.homedir(), ".config", "dira", "bin", "engines", "dira_env.py"))} run --keys ${env.join(",")} -- ${shq(file)}`
+      : shq(file);
+    const spawned = openPty(repoOf(project.root), process.env.SHELL || "/bin/sh");
+    if ("error" in spawned) return { error: t(locale, "terminal.limitReached") };
+    await openTerminalTab(project.id, spawned.id, repoOf(project.root), entry.editable ? entry.spec.name : cmdId);
+    writePty(spawned.id, `${line}\r`);
     const chunk = await pollHomeAnswer(projectId, null, 0);
     return { ...chunk, tabId: spawned.id };
   } catch (e) {

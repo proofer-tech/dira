@@ -63,7 +63,6 @@ import {
   Send,
   SquareTerminal,
   Terminal,
-  Trash2,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -73,11 +72,10 @@ import {
   clearHome,
   closeTab as closeTabAction,
   closeTerminalTab,
-  createSchedule,
-  deleteSchedule,
   interjectHome,
   openBrowserTabAction,
   openTerminal,
+  runCommandInTerminal,
   pollHomeAnswer,
   pollTabs,
   refreshRefs,
@@ -98,6 +96,15 @@ import {
   type BrowserPoolRow,
   type ScmResult,
 } from "@/app/(app)/p/[project]/home/actions";
+import {
+  createCommandAction,
+  deleteCommandAction,
+  lastCommandRunAction,
+  listCommandsAction,
+  updateCommandAction,
+} from "@/app/(app)/p/[project]/home/command-actions";
+import { listEnvAction } from "@/app/actions";
+import type { CommandEntry, CommandSpec } from "@/lib/commands";
 import {
   AttachmentButton,
   AttachmentChips,
@@ -180,7 +187,6 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
-  SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
@@ -219,6 +225,7 @@ import {
   chatTabTitle,
   dateTimeLabel,
   groupProgress,
+  isOnceWhen,
   isValidWhen,
   nextScheduleDue,
   scheduleRows,
@@ -470,6 +477,10 @@ export function HomeUI({
   const [browserFocusToken, setBrowserFocusToken] = useState(0);
   // `새 스케줄` 다이얼로그 열림 - 좌측 머리 행 버튼과 우측 아래 FAB가 같이 쓴다(§P526).
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  // `커맨드` 표면(§P535) - 목록은 `.dira/commands`를 읽은 것이고 고른 줄이 우측 몸통이 된다.
+  const [commands, setCommands] = useState<CommandEntry[]>([]);
+  const [selectedCommand, setSelectedCommand] = useState<string | null>(null);
+  const [commandError, setCommandError] = useState<string | null>(null)
   // `새 터미널`의 `작업 디렉터리` 고르기 값 - 좌측 패널이 아니라 여기가 든다(§P526 결정 3).
   const [termCheckouts, setTermCheckouts] = useState<Checkout[]>([]);
   const [termCwd, setTermCwd] = useState("");
@@ -1026,6 +1037,43 @@ export function HomeUI({
    *  탭과 다를 때만 로컬로 표식을 옮긴다 — 갈 탭이 없으면(결정 3) `null`을 준다. **서버 왕복이
    *  0회다**(§11-10 결정 2 §표식을 옮기는 데 서버 왕복이 한 번도 안 든다) — `current`도
    *  안 건드리므로 스레드를 다시 읽을 이유가 없다. */
+  useEffect(() => {
+    if (surface !== "schedules") return;
+    let stop = false;
+    void listCommandsAction(project).then((r) => {
+      if (!stop && r.ok) setCommands(r.commands);
+    });
+    return () => {
+      stop = true;
+    };
+  }, [project, surface]);
+
+  /** 저장 - 삭제 뒤 목록을 갈아 끼운다. 새로 생긴 줄이 있으면 그 줄을 몸통에 고르고, 고른 줄이 지워졌으면 비운다. */
+  const onCommandsChange = (next: CommandEntry[]) => {
+    const fresh = next.find((c) => !commands.some((o) => o.id === c.id));
+    setCommands(next);
+    setSelectedCommand((cur) => (fresh ? fresh.id : next.some((c) => c.id === cur) ? cur : null));
+  };
+
+  /** 커맨드 `실행`(§P535 결정 6) - 서버가 탭을 만들고 같은 명령을 친 뒤, 표면이 터미널로 바뀐다. */
+  const runCommand = async (id: string) => {
+    setCommandError(null);
+    const r = await runCommandInTerminal(project, id, locale);
+    if ("error" in r) {
+      setCommandError(r.error);
+      return;
+    }
+    apply(r);
+    setTerminalDisconnected((now) => {
+      if (!now.has(r.tabId)) return now;
+      const next = new Set(now);
+      next.delete(r.tabId);
+      return next;
+    });
+    setSurface("terminal");
+    setActiveTab(r.tabId);
+  };
+
   const changeSurface = (s: Surface) => {
     setSurface(s);
     const target = tabForSurface(home.tabs, s, home.current, activeTab);
@@ -1235,34 +1283,13 @@ export function HomeUI({
               setHome((now) => ({ ...now, current: id })); // 체크만 낙관적으로(§24 로딩 항)
               apply(await switchHome(project, id));
             }}
-            onPickSchedule={async (s) => {
-              // **회차가 있으면 워커 세션 줄과 같은 자다**(§7-2 §고르면 무엇이 서나) — `current`가
-              // 그 `session_id`가 되고 트랜스크립트가 열린다. `switchConversation`이 스케줄의
-              // `session_id`도 이제 안다(위 `home-session.ts` 개정).
-              if (s.session_id) {
-                setPendingSchedule(null);
-                setHome((now) => ({ ...now, current: s.session_id }));
-                apply(await switchHome(project, s.session_id));
-                return;
-              }
-              // **회차 0건** — 걸 세션이 없다(§비주얼 §62 (6)). 서버 왕복 없이 로컬로만 연다.
-              setPendingSchedule(s);
-              setTurns([]);
-              setRunning(false);
-              setPartial("");
-              setActivity(null);
-              setFail(null);
-              setEcho(null);
-              setStopping(false);
+            commands={commands}
+            selectedCommand={selectedCommand}
+            onPickCommand={(id) => {
+              setSelectedCommand(id);
+              setCommandError(null);
             }}
-            onSchedulesChange={(schedules) => {
-              setHome((now) => ({ ...now, schedules }));
-              // 보고 있던 회차 0건 스케줄이 지워졌으면 화면이 그 유령을 붙들지 않는다.
-              setPendingSchedule((p) => {
-                if (!p) return null;
-                return schedules.find((s) => s.id === p.id) ?? null;
-              });
-            }}
+            onCommandsChange={onCommandsChange}
           />
 
         {/* 우측 칸 — 탭 줄(§11 결정 1 · §비주얼 §72 ②) + 대화 컬럼. **탭 줄이 표면을 가로지른다**
@@ -1319,6 +1346,15 @@ export function HomeUI({
               }
               onDisconnect={(id) => setTerminalDisconnected((now) => new Set(now).add(id))}
               apply={apply}
+            />
+          ) : surface === "schedules" ? (
+            <CommandPane
+              key={selectedCommand ?? ""}
+              project={project}
+              entry={commands.find((c) => c.id === selectedCommand) ?? null}
+              runError={commandError}
+              onRun={(id) => void runCommand(id)}
+              onChange={onCommandsChange}
             />
           ) : surface === "browser" ? (
             <BrowserSurface
@@ -2120,7 +2156,7 @@ function TabBar({
     tab.kind === "chat"
       ? chatTabTitle(tab.id, conversations, workers, schedules, locale)
       : tab.kind === "terminal"
-        ? (tab.cwd ?? tab.id)
+        ? (tab.title ?? tab.cwd ?? tab.id)
         : tab.id;
   return (
     // §72 ② §자리 표 §스크롤 그릇 — `pb-1.5`가 없으면 활성 표식(`after:h-0.5`)이 세로로 클리핑된다.
@@ -3175,7 +3211,6 @@ function SidePanel({
   project,
   projectName,
   home,
-  personas,
   surface,
   onSurfaceChange,
   onOpenExplorerFile,
@@ -3184,8 +3219,10 @@ function SidePanel({
   noTurns,
   onNew,
   onPick,
-  onPickSchedule,
-  onSchedulesChange,
+  commands,
+  selectedCommand,
+  onPickCommand,
+  onCommandsChange,
   apply,
   activeTab,
   onFocusTab,
@@ -3220,8 +3257,10 @@ function SidePanel({
   noTurns: boolean;
   onNew: () => void;
   onPick: (id: string) => void;
-  onPickSchedule: (s: ScheduleView) => void;
-  onSchedulesChange: (schedules: ScheduleView[]) => void;
+  commands: CommandEntry[];
+  selectedCommand: string | null;
+  onPickCommand: (id: string) => void;
+  onCommandsChange: (commands: CommandEntry[]) => void;
   /** `터미널` 좌측 목록의 `새 터미널` · `다시 열기`가 서버 액션 결과를 반영하는 통로 —
    *  `HomeUI`가 든 것을 그대로 내린다(§11-6 결정 1). */
   apply: (c: HomeChunk) => void;
@@ -3253,7 +3292,6 @@ function SidePanel({
   const { rows, showMore } = visibleChatRows(chatRows(home.conversations), openCount, selected);
   // **`스케줄` 표면 아래 단 — 상한이 없다**(§11-4 결정 3). `scheduleRows`가 만드는 순서
   // 그대로 전부 그린다 — `더보기`도 열린 줄 수 상태도 없다.
-  const scheduleRowsVisible = scheduleRows(home.schedules, undefined, locale);
   return (
     // 표면 층(§비주얼 §33) — **가르는 쌍에서 드는 것은 목록 쪽 하나다.** 대화 스레드는
     // 무수정이고(산문은 페이지 폭을 그대로 쓴다), 둘 다 얹으면 남는 경계가 `gap-8`뿐이라
@@ -3540,57 +3578,18 @@ function SidePanel({
           <SidebarGroup className="p-0">
             <SidebarGroupLabel className="h-6 text-muted-foreground">
               {t("home.schedulesLabel")}
-              <ScheduleCreateDialog
+              <CommandDialog
                 project={project}
-                personas={personas}
-                onCreated={onSchedulesChange}
+                withTrigger
                 open={scheduleOpen}
                 setOpen={setScheduleOpen}
+                onSaved={onCommandsChange}
               />
             </SidebarGroupLabel>
-            {home.schedules.length === 0 ? (
+            {commands.length === 0 ? (
               <EmptyState text={t("home.surface.schedules.empty")} />
             ) : (
-              <SidebarMenu aria-label={t("home.schedulesLabel")}>
-                {scheduleRowsVisible.map((r) => {
-                  const sched = home.schedules.find((s) => s.id === r.id);
-                  if (!sched) return null;
-                  return (
-                    <SidebarMenuItem key={r.id}>
-                      {/* **`워커 세션` 줄과 같은 문자열이다**(§62 (2)) — 갈리는 클래스가
-                          `items-start` 하나. 삭제가 뜨면서 이 줄만 `pr-8`이 붙어 오른쪽 끝이
-                          다른 두 그룹보다 24px 왼쪽이다(부품의 `group-has-data-*` 자동 패딩 —
-                          덮을 클래스 0). */}
-                      <SidebarMenuButton
-                        className={cn(ROW, "items-start")}
-                        isActive={r.id === selected}
-                        aria-current={r.id === selected ? "true" : undefined}
-                        onClick={() => {
-                          if (r.id !== selected) onPickSchedule(sched);
-                        }}
-                      >
-                        <div className="flex min-w-0 grow flex-col gap-0.5">
-                          <div className="flex items-center gap-2">
-                            {/* **제목 전문이 `title`로 뜬다 — 이 줄에만 그렇다**(§62 (2)): 회차
-                                0건인 스케줄에는 전문을 볼 다른 자리(첫 말풍선 · 상세)가 없다. */}
-                            <span className="min-w-0 grow truncate text-sm" title={sched.prompt}>
-                              {r.title}
-                            </span>
-                            {sched.session_id !== "" && runningIds.includes(sched.session_id) && (
-                              <span className={MARK}>{RUNNING}</span>
-                            )}
-                          </div>
-                          {/* 아랫줄 = 다음 예정 시각 하나(§62 (3)) — 갈래를 낱말로 같이 안 적는다.
-                              `<StatusBadge>`도 안 쓴다: 그 배지는 이 패널에서 이미 *티켓이 `.wip`*을
-                              말하고 스케줄에는 티켓이 없다. */}
-                          <span className={SCHEDULE_TIME}>{r.time}</span>
-                        </div>
-                      </SidebarMenuButton>
-                      <ScheduleDeleteAction project={project} schedule={sched} onDeleted={onSchedulesChange} />
-                    </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
+              <CommandRows commands={commands} selected={selectedCommand} onPick={onPickCommand} />
             )}
           </SidebarGroup>
         )}
@@ -3646,85 +3645,26 @@ function buildWhen(kind: ScheduleKind, date: string, time: string, weekday: stri
   return `${Number(m)} ${Number(h)} ${day} * *`;
 }
 
-/** `스케줄` 머리 행의 `새 스케줄`(§비주얼 §62 (4)(5)) — 조립은 `epic-sidebar-create.tsx`가
- *  이미 선 그것이다(그 파일 머리 주석 — "사이드바 그룹 머리의 버튼이 다이얼로그를 여는 화면이
- *  이 앱에 이미 있다"). **cron 문자열은 한 자도 화면에 안 보인다** — 갈래 넷이 `when` 한 칸으로
- *  접히고 사람은 낱말(반복 · 시각 · 문장)만 본다(§62 §검증 (11)).
- *
- *  **패널 안이 아니라 다이얼로그다**(§62 (5)) — 207px 레일에 select 둘 + 시각 + textarea가
- *  안 들고, 만드는 폼은 이 앱에서 늘 다이얼로그였다. 화면은 안 옮긴다 — 성공하면 다이얼로그만
- *  닫고 부모가 받은 `onCreated`가 목록을 갈아 끼운다. */
-function ScheduleCreateDialog({
-  project,
-  personas,
-  onCreated,
-  open,
-  setOpen,
-}: {
-  project: string;
-  /** §7-4 결정 2 §스케줄에도 같은 칸이 붙는다 — `SidePanel`이 `HomeUI`에서 그대로 내린 목록. */
-  personas: string[];
-  onCreated: (schedules: ScheduleView[]) => void;
-  /** 열림은 `HomeUI`가 든다 — 우측 아래 FAB(§P526 결정 3)도 이 다이얼로그를 연다. */
-  open: boolean;
-  setOpen: (open: boolean) => void;
+/** 반복 갈래 + 시각 칸(§비주얼 §62 (5)) - `새 커맨드` 다이얼로그의 `스케줄` 스위치를 켜면 나온다. 값 여덟은
+ *  부모가 들고(만들기 잠금과 `when` 조립이 부모 몫이다) 여기는 그리기만 한다. */
+function ScheduleWhenFields(w: {
+  kind: ScheduleKind;
+  setKind: (k: ScheduleKind) => void;
+  date: string;
+  setDate: (v: string) => void;
+  time: string;
+  setTime: (v: string) => void;
+  weekday: string;
+  setWeekday: (v: string) => void;
+  day: string;
+  setDay: (v: string) => void;
+  cron: string;
+  setCron: (v: string) => void;
 }) {
   const t = useT();
-  const locale = useLocale();
-  const [kind, setKind] = useState<ScheduleKind>("cron");
-  const [date, setDate] = useState("");
-  const [time, setTime] = useState("");
-  const [weekday, setWeekday] = useState("1");
-  const [day, setDay] = useState("1");
-  const [cron, setCron] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [persona, setPersona] = useState(DEFAULT_PERSONA);
-  const { error, fixing, setError, run } = useSelfHealRetry();
-  const [pending, start] = useTransition();
-
-  // 열 때도 닫을 때도 초기화한다(`epic-sidebar-create.tsx`와 같은 값) — 취소 · `Esc` ·
-  // 바깥 클릭 다 이 길이다(§62 (5) §닫으면 — "세 칸을 초기값으로 되돌린다").
-  const reset = () => {
-    setKind("cron");
-    setDate("");
-    setTime("");
-    setWeekday("1");
-    setDay("1");
-    setCron("");
-    setPrompt("");
-    setPersona(DEFAULT_PERSONA);
-    setError(null);
-  };
-
-  // `만들기` 잠금(§62 (5)) — "시각과 문장이 둘 다 비어 있지 않을 때만 열린다". 시각 칸은
-  // 갈래마다 다른 컨트롤이라 판정도 갈래를 본다 — `once`는 `date`, `cron`은 그 문자열, 나머지는
-  // `time`이다(요일 · 일은 select라 기본값이 있어 늘 채워져 있다). **`cron`은 채워져도 유효하지
-  // 않으면 잠긴다** — 위 §`만들기` 잠금이 낸 조건의 셋째 항(§62 (5)).
-  const timeFilled = kind === "once" ? date !== "" : kind === "cron" ? cron !== "" : time !== "";
-  const cronValid = kind !== "cron" || isValidWhen(cron);
-
+  const { kind, setKind, date, setDate, time, setTime, weekday, setWeekday, day, setDay, cron, setCron } = w;
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(o) => {
-        setOpen(o);
-        reset();
-      }}
-    >
-      <DialogTrigger render={<Button variant="ghost" size="xs" className="ml-auto text-foreground" />}>
-        {t("home.schedule.new")}
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{t("home.schedule.new")}</DialogTitle>
-          {/* 화면이 알려야 하는 사실 — 자리 (1/2)(§62 (7)). 회차 0건 판정 문장의 `action`과
-              **한 글자까지 같다**. */}
-          <DialogDescription>
-            {t("home.schedule.desc1")} {t("home.schedule.liveNote")}.{" "}
-            {t("home.schedule.desc3")}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-4">
+    <>
           <div className="space-y-2">
             <Label htmlFor="schedule-kind">{t("home.schedule.kindLabel")}</Label>
             <Select value={kind} onValueChange={(v) => setKind(v as ScheduleKind)}>
@@ -3846,63 +3786,255 @@ function ScheduleCreateDialog({
               </div>
             )}
           </div>
+    </>
+  );
+}
+
+type WhenState = { kind: ScheduleKind; date: string; time: string; weekday: string; day: string; cron: string };
+const EMPTY_WHEN: WhenState = { kind: "cron", date: "", time: "", weekday: "1", day: "1", cron: "" };
+
+/** 저장된 `when`을 다이얼로그 칸으로 되돌린다 - 단발은 `한 번만`, 나머지는 사람이 읽을 수 있는 cron 그대로다. */
+function whenState(when: string | undefined): WhenState {
+  if (!when) return EMPTY_WHEN;
+  if (isOnceWhen(when)) {
+    const d = new Date(when);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return {
+      ...EMPTY_WHEN,
+      kind: "once",
+      date: `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`,
+    };
+  }
+  return { ...EMPTY_WHEN, cron: when };
+}
+
+type StepDraft = { key: number; kind: "shell" | "prompt"; body: string };
+let stepKey = 0;
+const newStep = (kind: "shell" | "prompt" = "shell", body = ""): StepDraft => ({ key: ++stepKey, kind, body });
+
+/** `새 커맨드` / `커맨드 편집` 다이얼로그(§P535 결정 4) - 이름, 단계 체인, 환경변수 이름, 선택적 스케줄을 한 번에
+ *  정한다. 편집이면 `entry`가 있고 `저장`이다. 열림은 부모가 들고(FAB도 연다) 닫을 때 초기값으로 되돌린다.
+ *  환경변수는 이름만 고른다 - 값은 서버가 `dira_env.py`로 자식 프로세스에 넣는다. */
+function CommandDialog({
+  project,
+  entry,
+  open,
+  setOpen,
+  withTrigger,
+  onSaved,
+}: {
+  project: string;
+  entry?: Extract<CommandEntry, { editable: true }>;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  withTrigger?: boolean;
+  onSaved: (commands: CommandEntry[]) => void;
+}) {
+  const t = useT();
+  const init = () => ({
+    name: entry?.spec.name ?? "",
+    steps: entry ? entry.spec.steps.map((s) => newStep(s.kind, s.body)) : [newStep()],
+    env: entry?.spec.env ?? [],
+    on: Boolean(entry?.spec.schedule),
+    when: whenState(entry?.spec.schedule),
+  });
+  const [name, setName] = useState(() => init().name);
+  const [steps, setSteps] = useState<StepDraft[]>(() => init().steps);
+  const [env, setEnv] = useState<string[]>(() => init().env);
+  const [scheduleOn, setScheduleOn] = useState(() => init().on);
+  const [when, setWhen] = useState<WhenState>(() => init().when);
+  const [envNames, setEnvNames] = useState<string[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, start] = useTransition();
+
+  const reset = () => {
+    const v = init();
+    setName(v.name);
+    setSteps(v.steps);
+    setEnv(v.env);
+    setScheduleOn(v.on);
+    setWhen(v.when);
+    setError(null);
+  };
+  // 열릴 때 현재 파일 값으로 다시 채운다(렌더 중 조정 - 이펙트에서 setState를 안 부른다).
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) reset();
+  }
+  useEffect(() => {
+    if (!open) return;
+    let stop = false;
+    void listEnvAction(project).then((r) => {
+      if (!stop) setEnvNames(r.ok ? r.items.map((i) => i.name) : []);
+    });
+    return () => {
+      stop = true;
+    };
+  }, [open, project]);
+
+  const set = (key: keyof WhenState) => (v: string) => setWhen((w) => ({ ...w, [key]: v }));
+  const whenStr = scheduleOn ? buildWhen(when.kind, when.date, when.time, when.weekday, when.day, when.cron) : undefined;
+  // `만들기` 잠금(결정 4) - 이름 + 비지 않은 단계 하나 이상 + 스케줄을 켰으면 `when`이 성립할 때만 열린다.
+  const stepsOk = steps.length > 0 && steps.every((s) => s.body.trim() !== "");
+  const whenOk = !scheduleOn || (whenStr !== "" && isValidWhen(whenStr ?? ""));
+  const move = (i: number, d: -1 | 1) =>
+    setSteps((xs) => {
+      const j = i + d;
+      if (j < 0 || j >= xs.length) return xs;
+      const next = [...xs];
+      [next[i], next[j]] = [next[j]!, next[i]!];
+      return next;
+    });
+  const envChoices = [...new Set([...(envNames ?? []), ...env])];
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      {withTrigger && (
+        <DialogTrigger render={<Button variant="ghost" size="xs" className="ml-auto text-foreground" />}>
+          {t("home.schedule.new")}
+        </DialogTrigger>
+      )}
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{entry ? t("home.cmd.editTitle") : t("home.schedule.new")}</DialogTitle>
+          <DialogDescription>{t("home.cmd.dialogDesc")}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="schedule-prompt">{t("home.schedule.promptLabel")}</Label>
-            <Textarea
-              id="schedule-prompt"
-              rows={4}
-              placeholder={t("home.schedule.promptPlaceholder")}
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-            />
+            <Label htmlFor="command-name">{t("home.cmd.nameLabel")}</Label>
+            <Input id="command-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="schedule-persona">{t("home.personaLabel")}</Label>
-            <Select value={persona} onValueChange={(v) => setPersona(typeof v === "string" && v ? v : DEFAULT_PERSONA)}>
-              <SelectTrigger id="schedule-persona" className="w-full">
-                <SelectValue>{persona}</SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {personas.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    {p}
-                  </SelectItem>
+            <Label>{t("home.cmd.stepsLabel")}</Label>
+            {steps.map((s, i) => (
+              <div key={s.key} className="space-y-1 rounded-md border p-2">
+                <div className="flex items-center gap-1">
+                  {(["shell", "prompt"] as const).map((k) => (
+                    <Button
+                      key={k}
+                      type="button"
+                      size="xs"
+                      variant={s.kind === k ? "secondary" : "ghost"}
+                      aria-pressed={s.kind === k}
+                      onClick={() => setSteps((xs) => xs.map((x) => (x.key === s.key ? { ...x, kind: k } : x)))}
+                    >
+                      {t(k === "shell" ? "home.cmd.stepShell" : "home.cmd.stepPrompt")}
+                    </Button>
+                  ))}
+                  <span className="ml-auto flex gap-1">
+                    <Button type="button" size="xs" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)}>
+                      {t("home.cmd.moveUp")}
+                    </Button>
+                    <Button type="button" size="xs" variant="ghost" disabled={i === steps.length - 1} onClick={() => move(i, 1)}>
+                      {t("home.cmd.moveDown")}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      disabled={steps.length === 1}
+                      onClick={() => setSteps((xs) => xs.filter((x) => x.key !== s.key))}
+                    >
+                      {t("home.cmd.removeStep")}
+                    </Button>
+                  </span>
+                </div>
+                <Textarea
+                  rows={s.kind === "shell" ? 2 : 3}
+                  className={s.kind === "shell" ? "font-mono" : undefined}
+                  aria-label={`${t("home.cmd.stepsLabel")} ${i + 1}`}
+                  placeholder={t(s.kind === "shell" ? "home.cmd.stepShellPlaceholder" : "home.cmd.stepPromptPlaceholder")}
+                  value={s.body}
+                  onChange={(e) => setSteps((xs) => xs.map((x) => (x.key === s.key ? { ...x, body: e.target.value } : x)))}
+                />
+              </div>
+            ))}
+            <Button type="button" size="xs" variant="outline" onClick={() => setSteps((xs) => [...xs, newStep()])}>
+              {t("home.cmd.addStep")}
+            </Button>
+          </div>
+          <div className="space-y-2">
+            <Label>{t("home.cmd.envLabel")}</Label>
+            {envNames !== null && envChoices.length === 0 ? (
+              <p className="text-xs text-muted-foreground">{t("home.cmd.envNone")}</p>
+            ) : (
+              <div className="flex flex-wrap gap-1">
+                {envChoices.map((n) => (
+                  <Button
+                    key={n}
+                    type="button"
+                    size="xs"
+                    className="font-mono"
+                    variant={env.includes(n) ? "secondary" : "outline"}
+                    aria-pressed={env.includes(n)}
+                    onClick={() => setEnv((xs) => (xs.includes(n) ? xs.filter((x) => x !== n) : [...xs, n]))}
+                  >
+                    {n}
+                  </Button>
                 ))}
-              </SelectContent>
-            </Select>
+              </div>
+            )}
           </div>
-          {/* 실패하면 오류 카드가 먼저 뜨고, 그 카드 위에서 §0-25의 A/S가 돈다(결정 7-8) —
-              `useSelfHealRetry`가 그 왕복 순서를 쥔다. */}
-          {error && (
-            <SelfHealAlert
-              title={t("home.schedule.createFailTitle")}
-              error={error}
-              fixing={fixing}
-              fixingText={t("home.schedule.createFixing")}
+          <div className="space-y-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={scheduleOn}
+                onChange={(e) => setScheduleOn(e.target.checked)}
+              />
+              {t("home.cmd.scheduleLabel")}
+            </label>
+          </div>
+          {scheduleOn && (
+            <ScheduleWhenFields
+              kind={when.kind}
+              setKind={(k) => setWhen((w) => ({ ...w, kind: k }))}
+              date={when.date}
+              setDate={set("date")}
+              time={when.time}
+              setTime={set("time")}
+              weekday={when.weekday}
+              setWeekday={set("weekday")}
+              day={when.day}
+              setDay={set("day")}
+              cron={when.cron}
+              setCron={set("cron")}
             />
+          )}
+          {error && (
+            <Alert variant="destructive">
+              <AlertTitle>{t("home.cmd.saveFailTitle")}</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
         </div>
         <DialogFooter>
           <DialogClose render={<Button variant="outline" />}>{t("common.cancel")}</DialogClose>
           <Button
-            disabled={pending || !prompt.trim() || !timeFilled || !cronValid}
+            disabled={pending || !name.trim() || !stepsOk || !whenOk}
             onClick={() =>
               start(async () => {
-                const when = buildWhen(kind, date, time, weekday, day, cron);
-                const r = await run(
-                  () => createSchedule(project, when, prompt, locale, persona),
-                  (res) => (res.ok ? null : res.error),
-                  { projectId: project, surface: "home.schedule.create" },
-                );
-                if (r.ok) {
-                  onCreated(r.schedules);
-                  setOpen(false);
-                  reset();
+                const spec: CommandSpec = {
+                  name: name.trim(),
+                  steps: steps.map((s) => ({ kind: s.kind, body: s.body })),
+                  env,
+                  ...(whenStr ? { schedule: whenStr } : {}),
+                };
+                const r = entry
+                  ? await updateCommandAction(project, entry.id, spec)
+                  : await createCommandAction(project, spec);
+                if (!r.ok) {
+                  setError(r.error);
+                  return;
                 }
+                onSaved(r.commands);
+                setOpen(false);
               })
             }
           >
-            {pending ? t("common.creating") : t("common.create")}
+            {pending ? t("common.creating") : entry ? t("home.cmd.save") : t("common.create")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -3910,51 +4042,203 @@ function ScheduleCreateDialog({
   );
 }
 
-/** 줄마다 삭제(§비주얼 §62 (4)) — `SidebarMenuAction` + `alert-dialog`. **이 패널의 첫 행
- *  액션이다**(상시 노출 — `showOnHover`를 안 쓴다). 되돌리는 길이 화면에 0개라서 확인을
- *  끼운다: 지운 줄은 `schedules`에서 빠지고 `conversations`에도 없어서 그 스레드로 가는 길이
- *  사라진다. **트랜스크립트는 안 지운다**(`~/.claude`는 남의 디렉터리다). */
-function ScheduleDeleteAction({
-  project,
-  schedule,
-  onDeleted,
+/** 좌측 `커맨드` 표면의 행들(결정 5) - 행 하나가 커맨드 하나이고 이름과 스케줄 요약이 보인다. */
+function CommandRows({
+  commands,
+  selected,
+  onPick,
 }: {
-  project: string;
-  schedule: ScheduleView;
-  onDeleted: (schedules: ScheduleView[]) => void;
+  commands: CommandEntry[];
+  selected: string | null;
+  onPick: (id: string) => void;
 }) {
   const t = useT();
-  const [pending, start] = useTransition();
+  const locale = useLocale();
   return (
-    <AlertDialog>
-      <AlertDialogTrigger render={<SidebarMenuAction className="size-6" />}>
-        <Trash2 aria-hidden />
-        <span className="sr-only">{t("home.schedule.deleteTrigger")}</span>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{t("home.schedule.deleteTitle")}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {schedule.prompt.split("\n")[0] || schedule.prompt}
-            <br />
-            {t("home.schedule.deleteNote")}
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
-          <AlertDialogAction
-            variant="destructive"
-            disabled={pending}
-            onClick={() =>
-              start(async () => {
-                onDeleted(await deleteSchedule(project, schedule.id));
-              })
-            }
-          >
-            {t("home.schedule.deleteConfirm")}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <SidebarMenu aria-label={t("home.schedulesLabel")}>
+      {commands.map((c) => {
+        const spec = c.editable ? c.spec : null;
+        const time = spec?.schedule
+          ? scheduleRows(
+              [{ id: c.id, prompt: spec.name, ...(nextScheduleDue({ when: spec.schedule, created: new Date().toISOString() }) ?? { at: null, overdue: false }) }],
+              undefined,
+              locale,
+            )[0]!.time
+          : c.editable
+            ? t("home.cmd.noSchedule")
+            : t("home.cmd.notEditable");
+        return (
+          <SidebarMenuItem key={c.id}>
+            <SidebarMenuButton
+              className={cn(ROW, "items-start")}
+              isActive={c.id === selected}
+              aria-current={c.id === selected ? "true" : undefined}
+              onClick={() => onPick(c.id)}
+            >
+              <div className="flex min-w-0 grow flex-col gap-0.5">
+                <span className="min-w-0 truncate text-sm" title={spec?.name ?? c.id}>
+                  {spec?.name ?? c.id}
+                </span>
+                <span className={SCHEDULE_TIME}>{time}</span>
+              </div>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        );
+      })}
+    </SidebarMenu>
+  );
+}
+
+type LastRun = Awaited<ReturnType<typeof lastCommandRunAction>>;
+
+/** 우측 몸통(결정 5) - 단계, 환경변수 이름, 스케줄, 마지막 예약 실행(시각, 종료 코드, 출력 끝 200줄)과
+ *  `실행` `편집` `삭제`. 삭제는 확인 다이얼로그를 거쳐 파일을 지운다. 마지막 실행은 5초마다 다시 읽는다. */
+function CommandPane({
+  project,
+  entry,
+  runError,
+  onRun,
+  onChange,
+}: {
+  project: string;
+  entry: CommandEntry | null;
+  runError: string | null;
+  onRun: (id: string) => void;
+  onChange: (commands: CommandEntry[]) => void;
+}) {
+  const t = useT();
+  const locale = useLocale();
+  const [last, setLast] = useState<LastRun>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [pending, start] = useTransition();
+  const id = entry?.id ?? null;
+  useEffect(() => {
+    if (!id) return;
+    let stop = false;
+    const load = () =>
+      void lastCommandRunAction(project, id).then((r) => {
+        if (!stop) setLast(r);
+      });
+    load();
+    const timer = setInterval(load, 5000);
+    return () => {
+      stop = true;
+      clearInterval(timer);
+    };
+  }, [project, id]);
+  if (!entry) return <EmptyState text={t("home.cmd.pick")} />;
+  const spec = entry.editable ? entry.spec : null;
+  const nextLabel = spec?.schedule
+    ? scheduleRows(
+        [{ id: entry.id, prompt: spec.name, ...(nextScheduleDue({ when: spec.schedule, created: new Date().toISOString() }) ?? { at: null, overdue: false }) }],
+        undefined,
+        locale,
+      )[0]!.time
+    : t("home.cmd.noSchedule");
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-y-auto pl-8 pr-6 pb-6 pt-2">
+      <div className="flex items-center gap-2">
+        <h2 className="min-w-0 grow truncate text-sm font-medium">{spec?.name ?? entry.id}</h2>
+        {!entry.editable && <Badge variant="outline">{t("home.cmd.notEditable")}</Badge>}
+        <Button size="sm" onClick={() => onRun(entry.id)}>
+          {t("home.cmd.run")}
+        </Button>
+        {entry.editable && (
+          <>
+            <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>
+              {t("home.cmd.edit")}
+            </Button>
+            <CommandDialog project={project} entry={entry} open={editOpen} setOpen={setEditOpen} onSaved={onChange} />
+          </>
+        )}
+        <AlertDialog>
+          <AlertDialogTrigger render={<Button size="sm" variant="outline" />}>{t("home.cmd.deleteTrigger")}</AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>{t("home.cmd.deleteTitle")}</AlertDialogTitle>
+              <AlertDialogDescription>
+                {spec?.name ?? entry.id}
+                <br />
+                {t("home.cmd.deleteNote")}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel autoFocus>{t("common.cancel")}</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                disabled={pending}
+                onClick={() =>
+                  start(async () => {
+                    const r = await deleteCommandAction(project, entry.id);
+                    if (r.ok) onChange(r.commands);
+                  })
+                }
+              >
+                {t("home.schedule.deleteConfirm")}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+      {runError && (
+        <Alert variant="destructive">
+          <AlertTitle>{t("home.cmd.runFailTitle")}</AlertTitle>
+          <AlertDescription>{runError}</AlertDescription>
+        </Alert>
+      )}
+      {spec && (
+        <>
+          <section className="space-y-1">
+            <h3 className="text-xs text-muted-foreground">{t("home.cmd.stepsLabel")}</h3>
+            <ol className="space-y-1">
+              {spec.steps.map((s, i) => (
+                <li key={i} className="rounded-md border p-2 text-sm">
+                  <Badge variant="secondary" className="mb-1">
+                    {t(s.kind === "shell" ? "home.cmd.stepShell" : "home.cmd.stepPrompt")}
+                  </Badge>
+                  <pre className="whitespace-pre-wrap break-words font-mono text-xs">{s.body}</pre>
+                </li>
+              ))}
+            </ol>
+          </section>
+          <section className="space-y-1">
+            <h3 className="text-xs text-muted-foreground">{t("home.cmd.envLabel")}</h3>
+            <div className="flex flex-wrap gap-1">
+              {spec.env.length === 0 ? (
+                <span className="text-sm text-muted-foreground">-</span>
+              ) : (
+                spec.env.map((n) => (
+                  <Badge key={n} variant="outline" className="font-mono">
+                    {n}
+                  </Badge>
+                ))
+              )}
+            </div>
+          </section>
+        </>
+      )}
+      <section className="space-y-1">
+        <h3 className="text-xs text-muted-foreground">{t("home.cmd.scheduleLabel")}</h3>
+        <p className="text-sm">{nextLabel}</p>
+      </section>
+      {spec?.schedule && (
+        <section className="space-y-1">
+          <h3 className="text-xs text-muted-foreground">{t("home.cmd.lastRun")}</h3>
+          {last ? (
+            <>
+              <p className="text-sm tabular-nums">
+                {dateTimeLabel(Date.parse(last.at))} - {t("home.cmd.exitCode")}{" "}
+                {last.code === null ? t("home.cmd.running") : last.code}
+              </p>
+              <pre className="max-h-80 overflow-auto rounded-md border p-2 font-mono text-xs whitespace-pre-wrap break-words">
+                {last.log || t("home.cmd.logEmpty")}
+              </pre>
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground">{t("home.cmd.neverRun")}</p>
+          )}
+        </section>
+      )}
+    </div>
   );
 }

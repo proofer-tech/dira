@@ -8,8 +8,8 @@
  *  `browser`는 §11-11 결정 5가 늘렸다. `unsaved`는 편집 중인 파일 탭이 상한 계산에서 빠지는
  *  자리다(§11 수용조건). `file`·`browser` 탭의 `id`는 각각 relPath·티켓 해시라 `chat`·
  *  `terminal`의 uuid 관문(`home-session.ts parseHome`)을 안 탄다. `cwd`는 `terminal` 탭에만
- *  있다(§11-1 결정 3 — 만든 뒤에는 안 갈린다). */
-export type Tab = { id: string; kind: "chat" | "terminal" | "file" | "browser"; lastViewed: string; unsaved?: true; cwd?: string };
+ *  있다(§11-1 결정 3 — 만든 뒤에는 안 갈린다). `title`도 `terminal` 탭에만 있다(§P535 결정 6 — 커맨드를 실행한 탭의 제목). */
+export type Tab = { id: string; kind: "chat" | "terminal" | "file" | "browser"; lastViewed: string; unsaved?: true; cwd?: string; title?: string };
 
 /** §11 결정 1 — 탭 상한. 넘으면 가장 오래 안 본 탭이 닫힌다. */
 export const TAB_LIMIT = 12;
