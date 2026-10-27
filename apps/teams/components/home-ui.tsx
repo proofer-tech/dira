@@ -4116,6 +4116,7 @@ function CommandPane({
   const t = useT();
   const locale = useLocale();
   const [last, setLast] = useState<LastRun>(null);
+  const [openedMs] = useState(() => Date.now());
   const [editOpen, setEditOpen] = useState(false);
   const [pending, start] = useTransition();
   const id = entry?.id ?? null;
@@ -4136,7 +4137,7 @@ function CommandPane({
   if (!entry) return <EmptyState text={t("home.cmd.pick")} />;
   const spec = entry.editable ? entry.spec : null;
   // 창의 시작은 서버가 기록한 armed 시각이다(결정 9). 값이 바뀌어 아직 다시 기록되기 전이면 지금이다.
-  const armedMs = last?.armedWhen === spec?.schedule && last?.armedMs != null ? last.armedMs : Date.now();
+  const armedMs = last?.armedWhen === spec?.schedule && last?.armedMs != null ? last.armedMs : openedMs;
   const nextLabel = spec?.schedule
     ? scheduleRows(
         [{ id: entry.id, prompt: spec.name, ...(nextScheduleDue({ when: spec.schedule, created: new Date(armedMs).toISOString() }) ?? { at: null, overdue: false }) }],

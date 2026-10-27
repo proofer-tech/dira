@@ -84,7 +84,7 @@ import { kickNewRequest } from "./home-kick.ts";
 import { childEnv } from "./child-env.ts";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rename, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execClaude, tokenPath } from "./auth.ts";
