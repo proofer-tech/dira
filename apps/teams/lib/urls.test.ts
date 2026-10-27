@@ -1068,11 +1068,11 @@ test("timeoutTimer - 진행 중 - 끝남 - 멈춘 스트림 세 상태의 글자
 import { pendingTarget } from "./urls.ts";
 
 test("pendingTarget: 프로젝트나 화면이 다르면 목적지, 같은 화면 안이면 null (§P534 결정 1 - 2)", () => {
-  assert.deepStrictEqual(pendingTarget("/p/a", "/p/a/board?x=1"), {
-    id: "a",
-    screen: "board",
-    path: "/p/a/board",
-  });
+  const t = pendingTarget("/p/a", "/p/a/board?x=1");
+  assert.deepStrictEqual([t?.id, t?.screen, t?.path], ["a", "board", "/p/a/board"]);
+  assert.strictEqual(t?.query.get("x"), "1");
+  const v = pendingTarget("/p/a", "/p/a/board?view=table&sidebar=off#h")?.query;
+  assert.deepStrictEqual([v?.get("view"), v?.get("sidebar")], ["table", "off"]);
   assert.strictEqual(pendingTarget("/p/a/board", "/p/a/board?status=open"), null);
   assert.strictEqual(pendingTarget("/p/a/board", "/p/b/board")?.id, "b");
   assert.strictEqual(pendingTarget("/p/a/board", "/p/a/tickets/abc"), null);

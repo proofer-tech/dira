@@ -707,7 +707,7 @@ export function ShellMain({ children }: { children: React.ReactNode }) {
       )}
     >
       {/* 종전 화면은 숨길 뿐 언마운트하지 않는다 - 취소되면 그대로 돌아온다(§P534 결정 5). */}
-      {target && <ScreenSkeleton screen={target.screen} />}
+      {target && <ScreenSkeleton screen={target.screen} query={target.query} />}
       <div className={target ? "hidden" : "contents"}>
         {children}
       </div>

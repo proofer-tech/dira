@@ -136,14 +136,16 @@ const SKELETON_SCREENS: readonly Screen[] = [
 export function pendingTarget(
   pathname: string,
   dest: string | null,
-): { id: string; screen: Screen; path: string } | null {
+): { id: string; screen: Screen; path: string; query: URLSearchParams } | null {
   if (!dest) return null;
   const path = dest.split(/[?#]/)[0];
   const screen = screenOf(path);
   const id = projectIdFromPath(path);
   if (!id || !screen || !SKELETON_SCREENS.includes(screen)) return null;
   if (id === projectIdFromPath(pathname) && screen === screenOf(pathname)) return null;
-  return { id, screen, path };
+  // 목적지 쿼리는 보드 스켈레톤이 view - sidebar를 따르려고 싣는다(§P540 결정 1 - 2).
+  const query = new URLSearchParams(dest.split("#")[0].split("?")[1] ?? "");
+  return { id, screen, path, query };
 }
 
 /** **N5의 찾기 바가 이 경로에 서나** (DESIGN.md §데스크톱 앱 N5). 보드·홈은 `⌘F`가 자기 일을

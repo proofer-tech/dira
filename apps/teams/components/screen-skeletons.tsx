@@ -22,7 +22,11 @@ function HomeSkeleton() {
   );
 }
 
-function BoardSkeleton() {
+/** 실제 보드와 같은 두 칸이다(§P540). 왼쪽 에픽 사이드바(`w-64`, `sidebar=off`면 `w-10`),
+ *  오른쪽은 `view=table`이면 행 목록, 아니면 칸반 세 열(스윔레인도 세 열로 대신한다). */
+function BoardSkeleton({ query }: { query: URLSearchParams }) {
+  const table = query.get("view") === "table";
+  const sidebarOff = query.get("sidebar") === "off";
   return (
     <>
       <div className="flex items-center gap-3">
@@ -30,10 +34,30 @@ function BoardSkeleton() {
         <Skeleton className="h-8 w-24" />
         <Skeleton className="h-8 w-24" />
       </div>
-      <div className="flex flex-col gap-2">
-        {Array.from({ length: 10 }, (_, i) => (
-          <Skeleton key={i} className="h-10 w-full" />
-        ))}
+      <div className="flex min-h-0 flex-1 gap-6">
+        <div className={`flex shrink-0 flex-col gap-2 ${sidebarOff ? "w-10" : "w-64"}`}>
+          {Array.from({ length: sidebarOff ? 1 : 6 }, (_, i) => (
+            <Skeleton key={i} className="h-8 w-full" />
+          ))}
+        </div>
+        {table ? (
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            {Array.from({ length: 10 }, (_, i) => (
+              <Skeleton key={i} className="h-10 w-full" />
+            ))}
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 gap-4">
+            {Array.from({ length: 3 }, (_, c) => (
+              <div key={c} className="flex min-w-0 flex-1 flex-col gap-3">
+                <Skeleton className="h-6 w-1/2" />
+                {Array.from({ length: 3 }, (_, i) => (
+                  <Skeleton key={i} className="h-24 w-full" />
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );
@@ -72,7 +96,7 @@ function WorkersSkeleton() {
   );
 }
 
-const SKELETONS: Partial<Record<Screen, () => React.ReactNode>> = {
+const SKELETONS: Partial<Record<Screen, (p: { query: URLSearchParams }) => React.ReactNode>> = {
   home: HomeSkeleton,
   board: BoardSkeleton,
   personas: SidebarBodySkeleton,
@@ -89,7 +113,7 @@ export function usePendingTarget() {
   return target && SKELETONS[target.screen] ? target : null;
 }
 
-export function ScreenSkeleton({ screen }: { screen: Screen }) {
+export function ScreenSkeleton({ screen, query }: { screen: Screen; query: URLSearchParams }) {
   const Body = SKELETONS[screen];
-  return Body ? <Body /> : null;
+  return Body ? <Body query={query} /> : null;
 }
