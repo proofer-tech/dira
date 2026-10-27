@@ -79,7 +79,13 @@ pre_abort() {
   [ -n "$PRE_DONE" ] && return 0
   log "WARN tick 세션 전 상한 ${TICKET_PRE_MAX}초 초과 - 끝낸다"
   if [ -n "${TPATH:-}" ]; then
-    _PO=$(reap_silent "$TPATH"); [ -n "$_PO" ] && log "$_PO"
+    # P541 결정 7: 그 사이 다른 세션이 다시 잡은 claim은 되돌리지 않는다
+    _POS=$(sid_of "$TPATH" 2>/dev/null)
+    if [ -n "$_POS" ] && [ "$_POS" != "$SID" ]; then
+      log "NOTE pre_abort 되돌림 생략 - 다른 세션이 잡았다 ${THASH:-$(basename "$TPATH" | cut -c1-8)}"
+    else
+      _PO=$(reap_silent "$TPATH"); [ -n "$_PO" ] && log "$_PO"
+    fi
   fi
   exit 0
 }

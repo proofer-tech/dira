@@ -41,11 +41,21 @@ exec sleep 60
 """
 
 SLOW = """\
-import runpy, sys, time
+import os, runpy, sys, time
 try:
     runpy.run_path(__file__.replace("tickets.py", "tickets_real.py"), run_name="__main__")
 finally:
     if len(sys.argv) > 1 and sys.argv[1] == "assign":
+        OS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "other-sid")
+        if os.path.exists(OS):  # 남이 다시 잡은 상황: fm session_id를 남의 것으로 바꾼다
+            import glob, re
+            for f in glob.glob(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dira", "tickets", "*.wip.md")):
+                t = open(f, encoding="utf-8").read()
+                t = re.sub(r"(?m)^session_id:.*$", "session_id: " + open(OS).read().strip(), t)
+                open(f, "w", encoding="utf-8").write(t)
+        if os.path.exists(OS):  # 테스트가 이 표지를 보면 TERM을 건다(타이머에 안 기댄다: 느린 머신에서 흔들린다)
+            open(OS + ".ready", "w").close()
+            time.sleep(60)
         time.sleep(10)
 """
 
@@ -86,6 +96,23 @@ try:
                            env=dict(os.environ, TICKET_LOCAL=local, **over), timeout=180)
         return r, time.time() - t
 
+    def tick_term(sidtext):
+        """assign 직후(표지가 생긴 뒤)에 TERM을 걸어 pre_abort를 결정적으로 돌린다."""
+        flag = os.path.join(tmp, "other-sid")
+        mkfile(flag, sidtext)
+        p = subprocess.Popen([w1], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             env=dict(os.environ, TICKET_LOCAL=local))
+        procs.append(p)
+        t = time.time()
+        while not os.path.exists(flag + ".ready") and time.time() - t < 150 and p.poll() is None:
+            time.sleep(0.2)
+        assert os.path.exists(flag + ".ready"), log()
+        p.terminate()
+        subprocess.run(["pkill", "-TERM", "-P", str(p.pid)])  # 감시자와 같다: 막힌 자식도 끊어야 trap이 돈다
+        p.wait(timeout=60)
+        os.remove(flag)
+        os.remove(flag + ".ready")
+
     def new_ticket(n):
         mkfile(os.path.join(tickets, n + ".md"),
                "---\nticket: {}\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n".format(n))
@@ -101,6 +128,28 @@ try:
     assert not os.path.exists(lock) and not os.path.exists(entry), os.listdir(os.path.join(local, "run"))
     os.remove(os.path.join(tickets, "aaaa0001.md"))
     print("1 ok", round(el, 1), "s")
+
+    # 1a. 자기 sid면 종전대로 열림으로 돌아간다: assign이 끝난 뒤(DISPATCH 줄이 있다) 상한에 걸리게 길게 잔다
+    new_ticket("aaaa0002")
+    tick_term("")
+    assert "세션 전 상한" in log() and "되돌림 생략" not in log(), log()
+    body = open(os.path.join(tickets, "aaaa0002.md"), encoding="utf-8").read()
+    assert "attempts: 1" not in body and not glob.glob(os.path.join(tickets, "aaaa0002.wip*")), body
+    os.remove(os.path.join(tickets, "aaaa0002.md"))
+    print("1a ok")
+
+    # 1b. 남의 sid가 적힌 .wip은 pre_abort가 건드리지 않는다
+    new_ticket("aaaa0003")
+    tick_term("other-sid-1")
+    assert "NOTE pre_abort 되돌림 생략 - 다른 세션이 잡았다 aaaa0003" in log(), (log(), os.listdir(tickets), r.stderr[-500:])
+    wip = os.path.join(tickets, "aaaa0003.wip.md")
+    assert os.path.exists(wip), os.listdir(tickets)
+    assert "session_id: other-sid-1" in open(wip, encoding="utf-8").read()
+    os.remove(wip)
+    shutil.rmtree(lock, ignore_errors=True)
+    if os.path.exists(entry):
+        os.remove(entry)
+    print("1b ok")
 
     # 2. 정상 tick: 세션을 띄우면 워커 락 안 session 파일이 fm pid와 같다
     shutil.copy(os.path.join(code, "tickets_real.py"), os.path.join(code, "tickets.py"))
