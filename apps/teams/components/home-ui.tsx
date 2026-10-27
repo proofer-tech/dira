@@ -940,6 +940,7 @@ export function HomeUI({
   useLayoutEffect(() => {
     // 옛 주소 `?surface=schedules`는 저장된 탭보다 먼저다(P535 결정 1). 표식은 `changeSurface`와 같이 옮긴다
     if (surfaceFromQuery(window.location.search) !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- 마운트 한 판뿐이다(아래 저장 탭 복원과 같은 근거)
       setSurface("schedules");
       setActiveTabRaw(tabForSurface(home.tabs, "schedules", home.current, null));
       return;
