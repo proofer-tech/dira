@@ -248,7 +248,8 @@ function parseSchedule(v: unknown): Schedule | null {
  *  자리다. */
 export type { Tab };
 
-export type CommandRun = { due: string; at: string; code?: number };
+/** `armed`는 `# schedule:` 값과 그 값을 처음 본 시각(§P535 결정 9) - 판정 창의 시작이다. `due`·`at`·`code`는 마지막 실행이다. */
+export type CommandRun = { armed?: { when: string; at: string }; due?: string; at?: string; code?: number };
 
 export type Home = {
   conversations: Conversation[];
@@ -379,8 +380,14 @@ function parseHome(v: unknown): Home {
   const rawRuns = o.commandRuns && typeof o.commandRuns === "object" ? (o.commandRuns as Record<string, unknown>) : {};
   for (const [id, r] of Object.entries(rawRuns)) {
     const x = (r && typeof r === "object" ? r : {}) as Record<string, unknown>;
-    if (COMMAND_ID_RE.test(id) && typeof x.due === "string" && typeof x.at === "string")
-      commandRuns[id] = { due: x.due, at: x.at, ...(typeof x.code === "number" ? { code: x.code } : {}) };
+    if (!COMMAND_ID_RE.test(id)) continue;
+    const a = (x.armed && typeof x.armed === "object" ? x.armed : {}) as Record<string, unknown>;
+    const run: CommandRun = {
+      ...(typeof a.when === "string" && typeof a.at === "string" ? { armed: { when: a.when, at: a.at } } : {}),
+      ...(typeof x.due === "string" && typeof x.at === "string" ? { due: x.due, at: x.at } : {}),
+      ...(typeof x.code === "number" ? { code: x.code } : {}),
+    };
+    if (run.armed || run.due) commandRuns[id] = run;
   }
   return { conversations, current: uuid(o.current) || null, schedules, commandRuns, tabs };
 }
@@ -2292,7 +2299,7 @@ const DIRA_ENV_CLIENT = path.join(os.homedir(), ".config", "dira", "bin", "engin
 async function patchCommandRun(projectId: string, id: string, run: CommandRun): Promise<void> {
   return withHomeLock(async () => {
     const home = await readHome(projectId);
-    await writeHome(projectId, { ...home, commandRuns: { ...home.commandRuns, [id]: run } });
+    await writeHome(projectId, { ...home, commandRuns: { ...home.commandRuns, [id]: { ...home.commandRuns[id], ...run } } });
   });
 }
 
@@ -2324,20 +2331,26 @@ async function runScheduledCommands(project: Project, home: Home, nowMs: number)
   for (const e of await listCommands(path.join(project.root, "commands")).catch(() => [])) {
     if (!e.editable || !e.spec.schedule) continue;
     const key = `${project.id}:${e.id}`;
-    const last = home.commandRuns[e.id];
-    const lastDueMs = last ? Date.parse(last.due) : NaN;
-    // 파일 mtime이 아니라 첫 판정 시각을 창의 시작으로 쓰면 되지만, 만든 시각은 파일 birthtime이 가장 가깝다.
+    const run = home.commandRuns[e.id];
+    // 파일 birthtime은 `편집`으로 덮어써도 안 바뀌므로 창의 시작이 아니다. 이 `# schedule:` 값을 처음 본 시각(armed)이 시작이다.
+    if (run?.armed?.when !== e.spec.schedule) {
+      await patchCommandRun(project.id, e.id, { armed: { when: e.spec.schedule, at: new Date(nowMs).toISOString() } });
+      continue; // 이 박동은 돌리지 않는다
+    }
+    const armedMs = Date.parse(run.armed.at);
+    const lastDueMs = run.due ? Date.parse(run.due) : NaN;
     const due = judgeSchedule({
       when: e.spec.schedule,
-      createdMs: await birthMs(path.join(project.root, "commands", `${e.id}.sh`), nowMs),
-      lastDueMs: Number.isFinite(lastDueMs) ? lastDueMs : null,
+      createdMs: Number.isFinite(armedMs) ? armedMs : nowMs,
+      // armed 이전의 last는 값이 바뀌기 전 것이라 창의 시작으로 쓰지 않는다
+      lastDueMs: Number.isFinite(lastDueMs) && lastDueMs > armedMs ? lastDueMs : null,
       nowMs,
     });
     if (due === null) continue;
     const dueIso = new Date(due).toISOString();
     const atIso = new Date(nowMs).toISOString();
     if (commandRunning.has(key)) {
-      await patchCommandRun(project.id, e.id, { ...last, due: dueIso, at: atIso }); // 건너뛴 차례도 올려 쌓이지 않게 한다
+      await patchCommandRun(project.id, e.id, { due: dueIso, at: atIso }); // 건너뛴 차례도 올려 쌓이지 않게 한다
       continue;
     }
     commandRunning.add(key);
@@ -2353,21 +2366,19 @@ async function runScheduledCommands(project: Project, home: Home, nowMs: number)
 export async function readLastCommandRun(
   projectId: string,
   id: string,
-): Promise<{ due: string; at: string; code: number | null; log: string } | null> {
+): Promise<{ due: string; at: string; code: number | null; log: string; armedMs: number | null; armedWhen: string | null } | null> {
   if (!COMMAND_ID_RE.test(id)) return null;
   const project = (await readProjects().catch(() => [] as Project[])).find((p) => p.id === projectId);
   if (!project) return null;
   const last = (await readHome(projectId)).commandRuns[id];
   if (!last) return null;
+  const armedMs = last.armed ? Date.parse(last.armed.at) : NaN;
+  const armed = { armedMs: Number.isFinite(armedMs) ? armedMs : null, armedWhen: last.armed?.when ?? null };
+  if (!last.due || !last.at) return { due: "", at: "", code: null, log: "", ...armed };
   const text = await readFile(path.join(project.root, "commands", `${id}.log`), "utf8").catch(() => "");
   const lines = text.split("\n");
   if (lines[lines.length - 1] === "") lines.pop();
-  return { due: last.due, at: last.at, code: last.code ?? null, log: lines.slice(-200).join("\n") };
-}
-
-async function birthMs(file: string, fallback: number): Promise<number> {
-  const st = await stat(file).catch(() => null);
-  return st ? st.birthtimeMs : fallback;
+  return { due: last.due, at: last.at, code: last.code ?? null, log: lines.slice(-200).join("\n"), ...armed };
 }
 
 /** §P535 결정 8 - 옛 `schedules`를 prompt 단계 하나 + 같은 `when`의 커맨드 파일로 옮기고 배열을 비운다.

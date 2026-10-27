@@ -2718,7 +2718,11 @@ test("예약 커맨드 - 때가 되면 파일을 돌려 로그와 last를 남기
   assert.ok(moved.editable && moved.spec.schedule === "*/5 * * * *" && moved.spec.name === "옛 질문");
   assert.deepStrictEqual(moved.editable && moved.spec.steps, [{ kind: "prompt", body: "옛 질문\n둘째 줄" }]);
 
-  await runSchedules(Date.now() + 120_000);
+  const t0 = Date.now();
+  await runSchedules(t0); // 처음 본 박동은 armed만 기록하고 돌리지 않는다
+  assert.strictEqual((await readHome(project.id)).commandRuns[id]?.armed?.when, "* * * * *");
+  assert.strictEqual((await readHome(project.id)).commandRuns[id]?.due, undefined);
+  await runSchedules(t0 + 120_000);
   let last = await readLastCommandRun(project.id, id);
   for (let i = 0; i < 200 && last?.code == null; i++) {
     await new Promise((r) => setTimeout(r, 25));
@@ -2727,4 +2731,24 @@ test("예약 커맨드 - 때가 되면 파일을 돌려 로그와 last를 남기
   assert.strictEqual(last?.code, 3);
   assert.strictEqual(last?.log, "hello");
   assert.strictEqual(readFileSync(path.join(dir, `${id}.sh`), "utf8"), before); // 파일은 안 바뀐다
+});
+
+test("예약 커맨드 - 10일 전 birthtime에 월요일 9시 스케줄을 붙여도 지난 회차를 돌지 않고, 값이 바뀌면 옛 last를 버린다", async () => {
+  const root = fixture();
+  const project = await addProject("armed 큐", root, "cmd-armed");
+  const { createCommand } = await import("./commands.ts");
+  const id = await createCommand(path.join(root, "commands"), { name: "오래됨", env: [], schedule: "0 9 * * 1", steps: [{ kind: "shell", body: "echo x" }] });
+  const monday = local(2026, 9, 26, 9, 0); // 2026-10-26 월요일 9시
+  const now = monday + 3 * 86_400_000; // 목요일 - 파일은 방금 만들었어도 birthtime은 이 시계보다 10일 앞선다고 본다
+  await runSchedules(now); // 첫 판정: armed 기록만
+  const r1 = (await readHome(project.id)).commandRuns[id]!;
+  assert.deepStrictEqual(r1.armed, { when: "0 9 * * 1", at: new Date(now).toISOString() });
+  await runSchedules(now + 15_000); // 그 뒤 판정도 지난 월요일을 돌지 않는다
+  assert.strictEqual((await readHome(project.id)).commandRuns[id]?.due, undefined);
+  // armed 이전의 last는 값이 바뀐 뒤 창의 시작이 아니다
+  const home = await readHome(project.id);
+  writeFileSync(sessionsPath(), JSON.stringify({ [project.id]: { ...home, commandRuns: { [id]: { armed: { when: "0 8 * * 1", at: new Date(now).toISOString() }, due: new Date(monday - 7 * 86_400_000).toISOString(), at: new Date(monday).toISOString() } } } }));
+  await runSchedules(now + 30_000); // 파일의 값(0 9 * * 1)이 기록(0 8 * * 1)과 달라 다시 기록하고 돌리지 않는다
+  assert.strictEqual((await readHome(project.id)).commandRuns[id]?.armed?.when, "0 9 * * 1");
+  assert.strictEqual((await readHome(project.id)).commandRuns[id]?.due, new Date(monday - 7 * 86_400_000).toISOString()); // 안 돌았다
 });
