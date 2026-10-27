@@ -957,6 +957,7 @@ export function recordToEvents(
   };
 
   if (typeof content === "string") {
+    if (role === "user" && content.startsWith("[Image: original ")) return []; // 배열 분기와 같은 걸러내기
     prompt(0, content);
     return events;
   }

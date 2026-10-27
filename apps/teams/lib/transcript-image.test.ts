@@ -56,6 +56,16 @@ test("최상위 image 블록은 이미지 줄이 되고 [Image: original ...] �
   assert.deepEqual(evs[0].images, [{ mime: "image/png" }]);
 });
 
+test("문자열 content인 [Image: original ...] user 레코드도 사건을 만들지 않는다", () => {
+  const evs = recordToEvents({
+    type: "user",
+    uuid: "rec-3",
+    timestamp: ts,
+    message: { role: "user", content: "[Image: original 390x2400, displayed at 325x2000.]" },
+  });
+  assert.deepEqual(evs, []);
+});
+
 test("라우트 - 프로젝트 id와 세션 id가 맞아야 바이트를 주고, 아니면 404", async () => {
   const root = path.join(tmp, "q");
   mkdirSync(path.join(root, "tickets"), { recursive: true });
