@@ -947,7 +947,6 @@ export function HomeUI({
     }
     const stored = initialActiveTab(project, home.tabs);
     if (stored === null) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration을 맞추려 일부러 늦게 읽는다. 마운트 한 판뿐이라 연쇄가 안 난다(위 주석)
     setActiveTabRaw(stored);
     setSurface(surfaceForTab(home.tabs.find((t) => t.id === stored) ?? null));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 마운트 한 번뿐이다(§11-10 결정 2)
