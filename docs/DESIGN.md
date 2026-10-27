@@ -8981,7 +8981,11 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
    `assigned_at`에서 `TICKET_PRE_MAX`(환경 변수, 기본 600) + `REAP_POST_GRACE_SEC`이 지나기 전에는 회수하지 않는다. 그
    상한 안에서 끝나지 못하면 `tick.sh`의 `pre_abort`가 attempts를 안 올리고 되돌리므로 리퍼가 먼저 나설 까닭이 없다. pid가
    적힌 뒤의 판정과 워커 락이 죽은 경우의 판정은 종전 그대로다.
-6. **범위 밖.** 포폴 워크트리 w2와 w4에 보관한 stash의 처분과 포폴 티켓 209e2201의 재개는 포폴 큐의 일이다. 설치본에 손으로
+6. **`pre_abort`는 자기 claim만 되돌린다.** `tick.sh`가 세션 전 상한에서 `reap_silent "$TPATH"`를 부르기 전에 fm
+   `session_id`가 자기 `$SID`인지 확인하고, 다르면 되돌리지 않고 `NOTE` 한 줄만 남긴다. 실측: 이 큐에서 fb0aaebb를
+   11:07:53에 w3이 잡고 세션 전 단계에서 멈췄다. 11:13:15에 w1이 다시 잡아 작업하던 중, 11:17:15에 w3의 `pre_abort`가
+   살아 있는 w1의 `.wip`을 열림으로 되돌렸다.
+7. **범위 밖.** 포폴 워크트리 w2와 w4에 보관한 stash의 처분과 포폴 티켓 209e2201의 재개는 포폴 큐의 일이다. 설치본에 손으로
    복사한 `plan_gate.py`는 이 블록이 실린 다음 릴리스가 덮는다.
 
 ```autonomy
@@ -8995,9 +8999,10 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 | P541-1 | 배포 - 결정 1-2(`extraResources` 두 파일 + `tick.sh` 대조 테스트 + `dist` 검사 + 훅 파일 부재 시 생략) | developer | - | 발행 `74468c5f` |
 | P541-2 | 엔진 - 결정 3-4(`cleanup_stray_wip` 상수 포크 + 지금 티켓 보존) | developer | - | 발행 `be3af10c` |
 | P541-3 | 엔진 - 결정 5(리퍼가 세션 전 단계에 `TICKET_PRE_MAX`까지 양보) | developer | - | 발행 `4e80962d` |
+| P541-4 | 엔진 - 결정 6(`pre_abort`가 남의 claim을 되돌리지 않는다) | developer | - | 발행 `4c08e6a0` |
 
-**세 장이다.** 결함 넷 가운데 1과 2는 같은 함수라 한 장으로 묶었다. 고치는 자리가 `apps/desktop/package.json` - `tick.sh`
-`cleanup_stray_wip` - `tickets.py` `_reap_grace_over`로 갈려서 서로 기다릴 까닭이 없어 `deps`가 없다. QA 0장 - 수용조건이
+**네 장이다.** 결함 넷 가운데 1과 2는 같은 함수라 한 장으로 묶었고, 결정 6은 이 요구를 수행하던 중에 같은 큐에서 실측한 다섯 번째 결함이다. 고치는 자리가 `apps/desktop/package.json` - `tick.sh`
+`cleanup_stray_wip` - `tickets.py` `_reap_grace_over` - `tick.sh` `pre_abort`로 갈려서 서로 기다릴 까닭이 없어 `deps`가 없다. QA 0장 - 수용조건이
 전부 엔진 테스트와 명령 출력이라 developer가 같은 티켓에서 확인한다. 에픽을 안 연다.
 
 #### 수용조건
@@ -9008,6 +9013,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 변경 경로 70개와 티켓 600개를 심은 임시 큐에서 `cleanup_stray_wip`이 부르는 프로세스 수가 경로 1개일 때와 같은 자릿수이고, 판정 결과(버림 - 보존 - 로그 문구)는 종전 `test_dispatch_cleanup.py`가 그대로 통과한다.
 - [ ] 지금 디스패치하는 티켓 본문에만 적힌 경로의 변경은 디스패치 뒤에도 워크트리에 남고 runner.log에 `보존(지금 티켓)`이 남는다.
 - [ ] `pid:`가 비고 소유 워커 락이 살아 있는 `.wip`은 `assigned_at`에서 300초가 지나도 `reap`이 회수하지 않고, `TICKET_PRE_MAX` + `REAP_POST_GRACE_SEC`이 지나면 회수한다. 워커 락이 죽었으면 종전대로 `REAP_GRACE_SEC` 뒤에 회수한다.
+- [ ] 세션 전 상한에 걸린 tick은 fm `session_id`가 자기 것이 아닌 `.wip`을 되돌리지 않는다.
 - [ ] 엔진 `test_*.py` 전량이 `python3 <파일>`로 통과한다.
 
 ### P540. 보드 스켈레톤이 실제 보드처럼 에픽 사이드바와 칸반 세 열로 그려진다 (요구 `51248a52`, 왕복 0회)
