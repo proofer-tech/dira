@@ -88,6 +88,13 @@ export function tabForSurface(tabs: Tab[], surface: Surface, current: string | n
   return chat ? chat.id : null;
 }
 
+/** 옛 주소 `?surface=schedules`와 새 이름 `?surface=commands`는 커맨드 표면을 연다(P535 결정 1).
+ *  다른 값이나 쿼리가 없으면 `null`이라 지금 동작 그대로다. */
+export function surfaceFromQuery(search: string): Surface | null {
+  const v = new URLSearchParams(search).get("surface");
+  return v === "schedules" || v === "commands" ? "schedules" : null;
+}
+
 /** `tabForSurface`를 뒤집은 방향(§11-10 결정 1) — 활성 탭의 종류에서 표면을 계산한다.
  *  새로고침 뒤 몸통이 활성 탭을 따라가려면 표면을 저장하는 대신 이 함수로 매 마운트에 다시
  *  구한다. 활성 탭이 없으면(창을 처음 열었을 때) `session`이다. */

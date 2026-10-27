@@ -212,6 +212,7 @@ import {
   activeTabKey,
   mostRecentTab,
   surfaceForTab,
+  surfaceFromQuery,
   tabForSurface,
   tabsOnSide,
   tabsToCloseOthers,
@@ -937,6 +938,12 @@ export function HomeUI({
    *  페인트 전에 동기로 한 번 더 렌더링을 밀어붙이므로, 그 뒤에 도는 일반 이펙트는 이미 갈아
    *  끼운 값을 본다(QA `d1970adc` 결함 1, `suppressHydrationWarning` 없이 자연스럽게 처리). */
   useLayoutEffect(() => {
+    // 옛 주소 `?surface=schedules`는 저장된 탭보다 먼저다(P535 결정 1). 표식은 `changeSurface`와 같이 옮긴다
+    if (surfaceFromQuery(window.location.search) !== null) {
+      setSurface("schedules");
+      setActiveTabRaw(tabForSurface(home.tabs, "schedules", home.current, null));
+      return;
+    }
     const stored = initialActiveTab(project, home.tabs);
     if (stored === null) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydration을 맞추려 일부러 늦게 읽는다. 마운트 한 판뿐이라 연쇄가 안 난다(위 주석)

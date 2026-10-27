@@ -6,6 +6,7 @@ import {
   mostRecentTab,
   openTab,
   surfaceForTab,
+  surfaceFromQuery,
   tabForSurface,
   tabsOnSide,
   tabsToCloseOthers,
@@ -170,4 +171,11 @@ test("surfaceForTab: no active tab lands on session", () => {
 
 test("surfaceForTab: browser tab lands on browser", () => {
   assert.equal(surfaceForTab(kindTab("aabbccdd", "browser", "0")), "browser");
+});
+
+test("surfaceFromQuery: schedules와 commands만 커맨드 표면을 연다", () => {
+  assert.strictEqual(surfaceFromQuery("?surface=schedules"), "schedules");
+  assert.strictEqual(surfaceFromQuery("?a=1&surface=commands"), "schedules");
+  assert.strictEqual(surfaceFromQuery("?surface=terminal"), null);
+  assert.strictEqual(surfaceFromQuery(""), null);
 });
