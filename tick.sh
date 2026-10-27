@@ -1170,35 +1170,85 @@ reap_silent() { python3 "$PY" reapclear "$1" "${2:-}"; }
 # 순서 계약: 이 함수는 DISPATCH 로그 직후, cd "$TICKET_CWD" 전에 돈다(판정 1의 dirty-<해시>
 # 기록보다 먼저 -> AC13). 실패해도 디스패치를 막지 않는다(AC12) - NOTE만 남기고 넘어간다.
 cleanup_stray_wip() {
-  local wt="$1" tdir="$TICKET_ROOT/tickets" line status path owner_hash owner_file hit_count f
-  git -C "$wt" status --porcelain 2>/dev/null | while IFS= read -r line; do
-    status="${line:0:2}"
-    path="${line:3}"
-    # 이름바꾸기(R  old -> new)는 새 이름만 본다 - 옛 이름은 이미 트리에 없다
-    case "$path" in *' -> '*) path="${path##*' -> '}" ;; esac
-    [ -z "$path" ] && continue
-    hit_count=0; owner_file=""
-    for f in "$tdir"/*.md; do
-      [ -e "$f" ] || continue
-      if grep -qF -- "$path" "$f" 2>/dev/null; then
-        hit_count=$((hit_count + 1))
-        owner_file="$f"
-      fi
-    done
-    [ "$hit_count" -eq 1 ] || continue
-    case "$owner_file" in
-      *.done.md) continue ;;   # 4항 - 보존, 세션의 몫
-      *.wip.md|*.md) ;;        # 3항 - 버린다 (미배정 <해시>.md도 이 갈래)
-      *) continue ;;
-    esac
-    owner_hash="$(basename "$owner_file")"; owner_hash="${owner_hash%%.*}"
-    case "$status" in
-      '??') rm -f -- "$wt/$path" 2>/dev/null && log "NOTE cleanup_stray_wip 버림(미추적) path=$path owner=$owner_hash" ;;
-      *) git -C "$wt" restore --staged --worktree -- "$path" 2>/dev/null \
-           && log "NOTE cleanup_stray_wip 버림 path=$path owner=$owner_hash" \
-           || log "NOTE cleanup_stray_wip 실패 path=$path owner=$owner_hash" ;;
-    esac
-  done
+  # P541-2: 경로 전체와 티켓 전체를 python3 한 번으로 대조한다(경로 x 티켓 grep 포크 폭주 제거).
+  # 판정 규칙·로그 문구는 종전 그대로고, 소유 티켓이 지금 디스패치하는 $THASH 하나뿐이면 버리지 않는다.
+  python3 - "$1" "$TICKET_ROOT/tickets" "$RUNLOG" "${TICKET_NAME:-?}" "${THASH:-}" <<'PYEOF'
+import glob, os, subprocess, sys, time
+wt, tdir, runlog, name, thash = sys.argv[1:6]
+def log(msg):
+    try:
+        with open(runlog, "a", encoding="utf-8", errors="replace") as f:
+            f.write("%s [%s] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), name, msg))
+    except OSError:
+        pass
+def txt(b):
+    return os.fsdecode(b)
+try:
+    r = subprocess.run(["git", "-C", wt, "status", "--porcelain", "-z"], capture_output=True, timeout=120)
+except Exception:
+    sys.exit(0)
+if r.returncode != 0:
+    sys.exit(0)
+items = []  # (status, path bytes)
+parts = r.stdout.split(b"\0")
+i = 0
+while i < len(parts):
+    e = parts[i]; i += 1
+    if len(e) < 4:
+        continue
+    st, path = e[:2].decode("ascii", "replace"), e[3:]
+    if st[0] in "RC":
+        i += 1  # -z는 새 이름 뒤에 옛 이름이 따로 온다 - 새 이름만 본다
+    items.append((st, path))
+if not items:
+    sys.exit(0)
+files = []
+for f in sorted(glob.glob(os.path.join(tdir, "*.md"))):
+    try:
+        with open(f, "rb") as fh:
+            files.append((f, fh.read()))
+    except OSError:
+        pass
+restore = []
+for st, path in items:
+    hits = [f for f, body in files if path in body]
+    if len(hits) != 1:
+        continue
+    owner = os.path.basename(hits[0])
+    if owner.endswith(".done.md") or not owner.endswith(".md"):
+        continue  # 4항 - 보존, 세션의 몫
+    h = owner.split(".")[0]
+    p = txt(path)
+    if h == thash:
+        log("NOTE cleanup_stray_wip 보존(지금 티켓) path=" + p)
+    elif st == "??":
+        try:
+            os.remove(os.path.join(os.fsencode(wt), path))
+            log("NOTE cleanup_stray_wip 버림(미추적) path=%s owner=%s" % (p, h))
+        except OSError:
+            pass
+    else:
+        restore.append((path, p, h))
+def run_restore(batch):
+    return subprocess.run(["git", "-C", wt, "--literal-pathspecs", "restore", "--staged", "--worktree", "--"] + [b[0] for b in batch],
+                          capture_output=True, timeout=300).returncode == 0
+for k in range(0, len(restore), 200):
+    batch = restore[k:k + 200]
+    try:
+        ok = run_restore(batch)
+    except Exception:
+        ok = False
+    if ok:
+        for _, p, h in batch:
+            log("NOTE cleanup_stray_wip 버림 path=%s owner=%s" % (p, h))
+        continue
+    for one in batch:  # 한 묶음이 실패하면 하나씩 다시 해 경로별 결과를 남긴다
+        try:
+            ok = run_restore([one])
+        except Exception:
+            ok = False
+        log("NOTE cleanup_stray_wip %s path=%s owner=%s" % ("버림" if ok else "실패", one[1], one[2]))
+PYEOF
   return 0
 }
 

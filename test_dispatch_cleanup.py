@@ -36,7 +36,7 @@ exit 0
 """
 
 TICKET_OPEN = "---\nticket: {h}\ntitle: t\nkind: work\n---\n\n## Goal\n주인 경로: {path}\n"
-TICKET_WIP = "---\nticket: {h}\ntitle: t\nsession_id: dead\n---\n\n## Goal\n주인 경로: {path}\n"
+TICKET_WIP = "---\nticket: {h}\ntitle: t\nsession_id: dead\npid: " + str(os.getpid()) + "\n---\n\n## Goal\n주인 경로: {path}\n"
 TICKET_DONE = "---\nticket: {h}\ntitle: t\n---\n\n## Goal\n주인 경로: {path}\n"
 
 
@@ -129,7 +129,7 @@ try:
     e7.dirty_tracked("wip_tracked.txt")
     e7.dirty_untracked("wip_untracked.txt")
     # 디스패치될 열린 티켓 하나(무관한 경로) - 없으면 선정 후보가 0이라 DISPATCH 자체가 안 난다
-    e7.owner("aaaa0009", "open", "unrelated.txt")
+    e7.owner("aaaa0001", "open", "unrelated.txt")
     r = e7.tick()
     assert r.returncode == 0, "7: tick 실패\n" + r.stderr
     log7 = e7.runner_log()
@@ -140,15 +140,15 @@ try:
     assert not os.path.exists(os.path.join(e7.repo, "wip_untracked.txt")), "7: 미추적 파일이 안 지워졌다"
     passed += 1
 
-    # ---- 8 - 주인이 미배정(<해시>.md) -> 같은 갈래(버림). 그 자신이 디스패치 대상이다 --------
+    # ---- 8 - 주인이 미배정(<해시>.md)이고 그 자신이 디스패치 대상 -> 보존(P541 결정 4) ------
     e8 = newenv("unassigned")
     e8.owner("bbbb0010", "open", "unassigned_tracked.txt")
     e8.dirty_tracked("unassigned_tracked.txt")
     r = e8.tick()
     assert r.returncode == 0, "8: tick 실패\n" + r.stderr
     log8 = e8.runner_log()
-    assert "cleanup_stray_wip 버림 path=unassigned_tracked.txt owner=bbbb0010" in log8, log8
-    assert "unassigned_tracked.txt" not in e8.status(), "8: 미배정 주인 경로가 안 버려졌다"
+    assert "cleanup_stray_wip 보존(지금 티켓) path=unassigned_tracked.txt" in log8, log8
+    assert "unassigned_tracked.txt" in e8.status(), "8: 지금 티켓의 작업물이 버려졌다"
     passed += 1
 
     # ---- 9 - 주인이 .done -> 안 건드린다. 주인을 못 찾아도 안 건드린다 ----------------------
@@ -186,6 +186,40 @@ try:
     r = e12.tick()
     assert r.returncode == 0, "12: git repo가 아닌데도 tick이 실패했다\n" + r.stderr
     assert "DONE eeee0016" in e12.runner_log(), "12: 정리 실패가 디스패치를 막았다\n" + e12.runner_log()
+    passed += 1
+
+    # ---- 14 - 경로에 공백·괄호가 있어도 같은 판정(버림) -------------------------------------
+    e14 = newenv("special")
+    sp = "src/app/(pofol)/my layout.tsx"
+    e14.owner("ffff0017", "wip", sp)
+    e14.dirty_tracked(sp)
+    e14.owner("ffff0018", "open", "unrelated.txt")
+    r = e14.tick()
+    assert r.returncode == 0, "14: tick 실패\n" + r.stderr
+    assert "cleanup_stray_wip 버림 path=" + sp + " owner=ffff0017" in e14.runner_log(), e14.runner_log()
+    assert "layout.tsx" not in e14.status(), "14: 특수문자 경로가 안 버려졌다: " + e14.status()
+    passed += 1
+
+    # ---- 15 - 변경 경로 70 x 티켓 600이어도 grep 포크가 0이고 git 호출은 상수 개다 -----------
+    e15 = newenv("fork")
+    calls = os.path.join(e15.tmp, "calls.log")
+    # tick.sh가 PATH를 덮어써서 PATH 심은 안 먹는다 - 워커 스크립트에서 bash 함수로 grep을 가로채 센다
+    with open(e15.w1, encoding="utf-8") as f:
+        w = f.read()
+    w = w.replace('. "', 'grep() { echo grep >> "' + calls + '"; command grep "$@"; }\n. "', 1)
+    mkfile(e15.w1, w, 0o755)
+    for n in range(600):
+        e15.owner("%08x" % (0x1000 + n), "done", "filler_%d.txt" % n)
+    for n in range(70):
+        e15.owner("%08x" % (0x9000 + n), "wip", "stray_%d.txt" % n)
+        e15.dirty_untracked("stray_%d.txt" % n)
+    e15.owner("99990000", "open", "unrelated.txt")
+    r = e15.tick()
+    assert r.returncode == 0, "15: tick 실패\n" + r.stderr
+    log15 = e15.runner_log()
+    assert log15.count("cleanup_stray_wip 버림(미추적)") == 70, log15
+    used = open(calls).read().split() if os.path.exists(calls) else []
+    assert len(used) < 10, "15: grep 포크가 경로/티켓 수에 비례한다: {}".format(len(used))
     passed += 1
 
     print("test_dispatch_cleanup: {} passed".format(passed))
