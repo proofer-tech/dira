@@ -9454,7 +9454,7 @@ developer, Sonnet 5.5) 상세다. 넷째 항목을 하는 중인데 머리 줄�
 - [ ] 보드 필터 갈이와 프로토콜 파일 선택에서는 스켈레톤이 뜨지 않고 §0-22 표식만 뜬다.
 - [ ] 늦춘 상태에서 이동을 누르고 응답 전에 뒤로가기를 누르면 스켈레톤이 사라지고 종전 화면이 그대로 보인다.
 - [ ] 보드에 10초를 두는 동안 밖에서 티켓을 하나 만들면 5초 안팎에 행이 반영되고, 그동안 스켈레톤이 0회 뜬다.
-- [ ] `find apps/teams/app -name 'loading.tsx' | wc -l`이 `1`(종전 `market/loading.tsx`)로 그대로고, `grep -c '<Suspense' apps/teams/app/\(app\)/p/\[project\]/*/page.tsx`가 전부 `0`이다.
+- [ ] `find apps/teams/app -name 'loading.tsx' | wc -l`이 `1`(종전 `market/loading.tsx`)로 그대로고, 주석 줄을 뺀 JSX의 `<Suspense`가 화면 `page.tsx`마다 `0`개다 - `for f in apps/teams/app/\(app\)/p/\[project\]/*/page.tsx; do grep -vE '^[[:space:]]*(\*|//|/\*)' "$f" | grep -c '<Suspense'; done`가 전부 `0`을 낸다(보드 머리 주석의 실측 설명에 나오는 `<Suspense>` 2회는 세지 않는다).
 - [ ] 프로젝트 전환 클릭부터 실제 화면 도착까지 걸린 시간을 늦추지 않은 상태로 전후 각 3회 재서 `## 결과`에 적는다(판정 아닌 기록).
 - [ ] `cd apps/teams && pnpm exec tsc --noEmit`과 `pnpm test`가 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
