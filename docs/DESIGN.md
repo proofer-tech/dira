@@ -8992,9 +8992,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P541-1 | 배포 - 결정 1-2(`extraResources` 두 파일 + `tick.sh` 대조 테스트 + `dist` 검사 + 훅 파일 부재 시 생략) | developer | - | 발행 |
-| P541-2 | 엔진 - 결정 3-4(`cleanup_stray_wip` 상수 포크 + 지금 티켓 보존) | developer | - | 발행 |
-| P541-3 | 엔진 - 결정 5(리퍼가 세션 전 단계에 `TICKET_PRE_MAX`까지 양보) | developer | - | 발행 |
+| P541-1 | 배포 - 결정 1-2(`extraResources` 두 파일 + `tick.sh` 대조 테스트 + `dist` 검사 + 훅 파일 부재 시 생략) | developer | - | 발행 `74468c5f` |
+| P541-2 | 엔진 - 결정 3-4(`cleanup_stray_wip` 상수 포크 + 지금 티켓 보존) | developer | - | 발행 `be3af10c` |
+| P541-3 | 엔진 - 결정 5(리퍼가 세션 전 단계에 `TICKET_PRE_MAX`까지 양보) | developer | - | 발행 `4e80962d` |
 
 **세 장이다.** 결함 넷 가운데 1과 2는 같은 함수라 한 장으로 묶었다. 고치는 자리가 `apps/desktop/package.json` - `tick.sh`
 `cleanup_stray_wip` - `tickets.py` `_reap_grace_over`로 갈려서 서로 기다릴 까닭이 없어 `deps`가 없다. QA 0장 - 수용조건이
