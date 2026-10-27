@@ -51,7 +51,7 @@ try:
     # 엔진 사본. tick.sh는 자기 위치에서 tickets.py와 protocols/를 유도한다(tick.sh:19).
     code = os.path.join(tmp, "engine")
     os.makedirs(code)
-    for f in ("tick.sh", "tickets.py", "migrate.py"):
+    for f in ("tick.sh", "tickets.py", "migrate.py", "plan_gate.py"):
         shutil.copy2(os.path.join(HERE, f), os.path.join(code, f))
     shutil.copy2(os.path.join(HERE, "dira_apm.py"), os.path.join(code, "dira_apm.py"))
     shutil.copy2(os.path.join(HERE, "apm-version"), os.path.join(code, "apm-version"))

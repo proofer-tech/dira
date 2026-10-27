@@ -1295,7 +1295,10 @@ while IFS='|' read -r c_path c_hash c_kind c_persona c_prio c_base c_eff c_squad
   # 지금 티켓 경로는 세션 전용 런타임 파일($GATEF)에서 읽고, 티켓이 바뀌면 그 파일만 다시 쓴다.
   # TICKET_PLAN_GATE=0이면 안 붙인다. DIRA_INHERIT_USER_CONFIG=1이어도 붙는다.
   GATEF=""
-  if [ "$ENGINE_NAME" = "claude" ] && [ "$TICKET_PLAN_GATE" != "0" ]; then
+  if [ "$ENGINE_NAME" = "claude" ] && [ "$TICKET_PLAN_GATE" != "0" ] && [ ! -f "$CODE/plan_gate.py" ]; then
+    # P541: 없는 훅 스크립트는 python3가 exit 2로 끝나 모든 도구 호출을 막는다 - 파일이 없으면 훅을 생략한다
+    log "WARN plan_gate.py 없음 - 계획 훅 생략"
+  elif [ "$ENGINE_NAME" = "claude" ] && [ "$TICKET_PLAN_GATE" != "0" ]; then
     GATEF="$LOCAL/run/gate-$SID"
     GATE_SETTINGS=$(python3 -c 'import json,shlex,sys
 cmd="DIRA_PLAN_GATE_FILE=%s DIRA_PLAN_GATE_LOG=%s TICKET_PLAN_GATE_GRACE=%s python3 %s" % tuple(shlex.quote(a) for a in sys.argv[1:5])

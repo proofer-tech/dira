@@ -14,7 +14,7 @@
     "icns": "./make-icns.sh",
     "signcheck": "./sign-preflight.sh",
     "release": "./release.sh",
-    "dist": "./sign-preflight.sh && pnpm build && electron-builder --publish never && { test -e dist/mac-arm64/dira.app/Contents/Resources/server/node_modules/next || { echo '번들에 server/node_modules가 없다 — extraResources의 node_modules 항목을 확인하라' >&2; exit 1; }; } && { test -e dist/mac-arm64/dira.app/Contents/Resources/engine/dispatch.py || { echo '번들에 engine/dispatch.py가 없다 - extraResources의 dispatch.py 항목을 확인하라' >&2; exit 1; }; } && { test -e dist/mac-arm64/dira.app/Contents/Resources/engine/migrate.py || { echo '번들에 engine/migrate.py가 없다 - extraResources의 migrate.py 항목을 확인하라' >&2; exit 1; }; } && { test -e dist/mac-arm64/dira.app/Contents/Resources/engine/migrations/0001_migrations_readme.py || { echo '번들에 engine/migrations가 없다 - extraResources의 migrations 항목을 확인하라' >&2; exit 1; }; } && { test -e dist/mac-arm64/dira.app/Contents/Resources/engine/dira_apm.py && test -e dist/mac-arm64/dira.app/Contents/Resources/engine/apm-version && test -e dist/mac-arm64/dira.app/Contents/Resources/engine/packages/dira-protocols/CORE.md || { echo '번들에 engine/dira_apm.py - apm-version - packages가 없다 - extraResources의 항목을 확인하라' >&2; exit 1; }; } && { test -s dist/mac-arm64/dira.app/Contents/Resources/engine/source-time || { echo '번들에 engine/source-time이 없다 - build 스크립트와 extraResources의 source-time 항목을 확인하라' >&2; exit 1; }; } && ./sign-dmg.sh && du -sh dist/mac-arm64/dira.app dist/*.dmg",
+    "dist": "./sign-preflight.sh && python3 ../../test_bundle_engine.py && pnpm build && electron-builder --publish never && { test -e dist/mac-arm64/dira.app/Contents/Resources/server/node_modules/next || { echo '번들에 server/node_modules가 없다 — extraResources의 node_modules 항목을 확인하라' >&2; exit 1; }; } && { test -e dist/mac-arm64/dira.app/Contents/Resources/engine/dispatch.py || { echo '번들에 engine/dispatch.py가 없다 - extraResources의 dispatch.py 항목을 확인하라' >&2; exit 1; }; } && { test -e dist/mac-arm64/dira.app/Contents/Resources/engine/migrate.py || { echo '번들에 engine/migrate.py가 없다 - extraResources의 migrate.py 항목을 확인하라' >&2; exit 1; }; } && { test -e dist/mac-arm64/dira.app/Contents/Resources/engine/migrations/0001_migrations_readme.py || { echo '번들에 engine/migrations가 없다 - extraResources의 migrations 항목을 확인하라' >&2; exit 1; }; } && { test -e dist/mac-arm64/dira.app/Contents/Resources/engine/dira_apm.py && test -e dist/mac-arm64/dira.app/Contents/Resources/engine/apm-version && test -e dist/mac-arm64/dira.app/Contents/Resources/engine/packages/dira-protocols/CORE.md || { echo '번들에 engine/dira_apm.py - apm-version - packages가 없다 - extraResources의 항목을 확인하라' >&2; exit 1; }; } && { test -s dist/mac-arm64/dira.app/Contents/Resources/engine/source-time || { echo '번들에 engine/source-time이 없다 - build 스크립트와 extraResources의 source-time 항목을 확인하라' >&2; exit 1; }; } && ./sign-dmg.sh && du -sh dist/mac-arm64/dira.app dist/*.dmg",
     "dist:internal": "DIRA_MULTI_TOKEN=1 pnpm run dist"
   },
   "build": {
@@ -111,6 +111,14 @@
       {
         "from": "../../learn.py",
         "to": "engine/learn.py"
+      },
+      {
+        "from": "../../plan_gate.py",
+        "to": "engine/plan_gate.py"
+      },
+      {
+        "from": "../../slim.py",
+        "to": "engine/slim.py"
       },
       {
         "from": "../../remote.py",
