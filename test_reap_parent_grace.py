@@ -58,7 +58,8 @@ try:
 
     # C) 부모 락이 산 pid로 계속 쥐고 있어도, 경과가 상한(POST_GRACE)을 넘으면 종전대로 가져간다
     #    (상한 없는 대기 금지)
-    pc = mk(ws, "cccc3333", ["session_id: nosuchsession-c", "owner: developer / w11-cccc3333",
+    #    (P541 결정 5: pid가 비면 세션 전 단계라 TICKET_PRE_MAX까지 양보하므로, 여기는 pid가 적힌 뒤의 판정이다)
+    pc = mk(ws, "cccc3333", ["session_id: nosuchsession-c", "owner: developer / w11-cccc3333", "pid: " + DEAD_PID,
                              "assigned_at: " + iso(-T.REAP_GRACE_SEC - T.REAP_POST_GRACE_SEC - 5)])
     lockpid(local, "w11", ws, LIVE_PID)
 

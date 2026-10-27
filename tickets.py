@@ -1510,6 +1510,14 @@ def reap(troot, local=None):
         shutil.rmtree(lock, ignore_errors=True)
 
 
+def _pre_max():
+    """tick.sh의 TICKET_PRE_MAX(기본 600초). 깨진 값은 기본값."""
+    try:
+        return int(os.environ.get("TICKET_PRE_MAX", "600"))
+    except ValueError:
+        return 600
+
+
 def _reap_grace_over(troot, local, fm, now):
     """회수 유예(REAP_GRACE_SEC, 사후처리 창)가 끝났으면 True."""
     at = (fm.get("assigned_at") or "").strip()
@@ -1517,9 +1525,14 @@ def _reap_grace_over(troot, local, fm, now):
         elapsed = (now - datetime.fromisoformat(at)).total_seconds()
         if elapsed < REAP_GRACE_SEC:
             return False
-        if elapsed < REAP_GRACE_SEC + REAP_POST_GRACE_SEC and \
-                _worker_lock_live(troot, local, fm.get("owner")):
+        live = _worker_lock_live(troot, local, fm.get("owner"))
+        if elapsed < REAP_GRACE_SEC + REAP_POST_GRACE_SEC and live:
             return False                 # 부모가 사후처리 중 - 상한 안에서 양보(P360-2)
+        # P541 결정 5: pid가 비면 세션 전 단계일 수 있다 - tick.sh가 TICKET_PRE_MAX까지 머문다
+        pid = (fm.get("pid") or "").strip().strip("\"'")
+        if live and not pid.isdigit() and \
+                elapsed < _pre_max() + REAP_POST_GRACE_SEC:
+            return False
     except ValueError:
         pass                             # assigned_at이 깨졌으면 유예 없이 회수 대상
     return True
