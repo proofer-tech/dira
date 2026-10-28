@@ -9073,9 +9073,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P543-1 | 엔진 - `mcp_tools.py` `project_register` `project_rename` `project_reorder` `project_unregister`(결정 1, 2, 5) + `test_mcp_server.py` 테스트 | developer | - | 발행 |
-| P543-2 | 엔진 - `mcp_tools.py` `settings_get` `settings_set` `project_settings_get` `project_slim`(결정 3, 4, 5) + `test_mcp_server.py` 테스트 | developer | - | 발행 |
-| P543-3 | 매뉴얼 - `apps/teams/docs/mcp.md` ko - en 도구 표에 여덟 도구, 다른 에이전트에게 프로젝트 등록과 설정 변경을 맡기는 절 하나 | writer | - | 발행 |
+| P543-1 | 엔진 - `mcp_tools.py` `project_register` `project_rename` `project_reorder` `project_unregister`(결정 1, 2, 5) + `test_mcp_server.py` 테스트 | developer | - | 발행 `64b135a8` |
+| P543-2 | 엔진 - `mcp_tools.py` `settings_get` `settings_set` `project_settings_get` `project_slim`(결정 3, 4, 5) + `test_mcp_server.py` 테스트 | developer | - | 발행 `d659a282` |
+| P543-3 | 매뉴얼 - `apps/teams/docs/mcp.md` ko - en 도구 표에 여덟 도구, 다른 에이전트에게 프로젝트 등록과 설정 변경을 맡기는 절 하나 | writer | - | 발행 `21021d93` |
 
 **세 장이다.** 두 엔진 티켓은 도구 표의 다른 묶음(결정 5)과 다른 함수만 더하므로 서로 기다리지 않는다. 매뉴얼은 위
 결정에 도구 이름과 인자가 다 있어 기다리지 않는다. QA 티켓은 내지 않는다 - 수용조건이 전부 임시 디렉터리 테스트와
