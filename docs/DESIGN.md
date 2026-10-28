@@ -8970,7 +8970,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P542-1 | `home-ui.tsx` `NoticeLine`의 `<details>` 제거와 줄 토글(결정 1-5) + i18n 키 삭제 | developer | - | 발행 예정 |
+| P542-1 | `home-ui.tsx` `NoticeLine`의 `<details>` 제거와 줄 토글(결정 1-5) + i18n 키 삭제 | developer | - | 발행 `45da9145` |
 | P542-2 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P542-1 | 발행 `87913247` |
 
 **두 장이다.**
