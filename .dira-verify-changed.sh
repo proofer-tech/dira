@@ -22,4 +22,36 @@ while IFS= read -r p; do
   esac
 done
 [ ${#paths[@]} -eq 0 ] && exit 0
-( cd "$root/apps/teams" && ./node_modules/.bin/eslint "${paths[@]}" )
+cd "$root/apps/teams" || exit 1
+./node_modules/.bin/eslint "${paths[@]}" || exit 1
+
+# 테스트 - CI가 P539(f8e38484)에서 깨진 원인은 lib/transcript.ts를 바꾸고 새 테스트 파일 하나만
+# 돌린 것이었다. 같은 모듈을 import하는 옛 테스트(transcript.test.ts)가 그대로 깨진 채 push됐다.
+# 바뀐 테스트 파일과, 바뀐 모듈 이름을 import 경로에 쓰는 테스트 파일을 `pnpm test`와 같은
+# 범위(루트 *.test.ts, lib/**)에서 모아 돌린다.
+# ponytail: 이름 grep이라 전이 import는 못 잡는다. 그래도 새면 전체 `pnpm test`로 올린다 - 다만
+# scaffold.test.ts처럼 로컬 사본과 비교하는 테스트가 있어 전체 실행은 머신마다 결과가 다르다.
+tests=()
+for p in "${paths[@]}"; do
+  case "$p" in
+    *.test.ts | *.test.tsx) tests+=("$p"); continue ;;
+  esac
+  base=$(basename "$p"); base=${base%.tsx}; base=${base%.ts}
+  # 정적 `from "..."`와 동적 `import("...")` 둘 다 따옴표 안 경로 끝이 모듈 이름이면 잡는다.
+  while IFS= read -r t; do
+    tests+=("${t#./}")
+  done < <({ find . -maxdepth 1 -name '*.test.ts'; find lib -name '*.test.ts'; } |
+    xargs grep -lE "[\"/]${base}(\\.tsx?)?\"")
+done
+# `pnpm test`가 안 돌리는 곳(components/ 등)은 여기서도 뺀다 - 루트 직하와 lib/**만 남긴다.
+run=()
+for t in $(printf '%s\n' "${tests[@]}" | sort -u); do
+  case "$t" in
+    lib/*) run+=("$t") ;;
+    */*) ;;
+    *) run+=("$t") ;;
+  esac
+done
+[ ${#run[@]} -eq 0 ] && exit 0
+echo "verify-changed: 테스트 ${#run[@]}개 - ${run[*]}" >&2
+DIRA_MULTI_TOKEN=1 node --test "${run[@]}"

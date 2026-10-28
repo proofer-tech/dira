@@ -765,8 +765,8 @@ test("사건 매핑 — 하니스 문구도 목록 없이 접힌다(자리 하�
   const f = path.join(tmp, "prompt-harness.jsonl");
   const prompt = (uuid: string, text: string) =>
     rec({ type: "user", uuid, timestamp: "2026-07-30T13:55:00.000Z", message: { role: "user", content: text } });
+  // `[Image: original ...]`은 접히지 않고 사건에서 빠진다(P539) - transcript-image.test.ts가 본다
   const harnessLines = [
-    "[Image: original image (deduplicated)]",
     "Base directory for this skill: /some/path",
     "[Request interrupted by user]",
   ];
