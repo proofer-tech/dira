@@ -28,6 +28,7 @@
  *  시점을 기다리면 늦는다. 호출부는 아무것도 안 해도 된다: 자리가 이 컴포넌트 안이라 칸 일곱이
  *  같이 닫힌다. */
 import {
+  Fragment,
   type ReactNode,
   useEffect,
   useLayoutEffect,
@@ -50,6 +51,7 @@ import type { FrontmatterCandidates } from "@/lib/markdown-frontmatter-rows";
 import { cn } from "@/lib/utils";
 import {
   blockBreaks,
+  blockGap,
   commitEditable,
   editSurfaceId,
   joinBlocks,
@@ -404,7 +406,11 @@ export function MarkdownEditor({
                   onKeyDown={handleEditableKeyDown}
                 />
               ) : (
-                split.blocks.map((block, i) => (
+                split.blocks.map((block, i) => {
+                  const gap = blockGap(i, block, blockBreaks(i, breaks, split.firstHeadingIndex));
+                  return (
+                  <Fragment key={`${i}:${block}:${editEpoch(`block:${i}`)}`}>
+                  {gap > 0 && <div aria-hidden data-blank-lines={gap} style={{ height: `${gap}lh`, margin: "-0.75rem 0" }} />}
                   <div
                     // 인덱스+내용 키(DESIGN.md §비주얼 §50 §커밋 뒤의 블록은 원문의 렌더 그대로다) —
                     // `key={i}`만 쓰면 커밋으로 그 블록의 `text`가 갈려도 React는 같은 DOM 노드에
@@ -423,7 +429,6 @@ export function MarkdownEditor({
                     // 남아 다음 블러가 그걸 또 읽어 내용을 거듭 담는다. 커밋마다 이 블록만 갈리는
                     // 값을 더해 항상 재마운트시켜 지운다 - 안 고친 블록은 에포크가 그대로라 여전히
                     // 재마운트가 없다(캐럿 보존, 위 주석과 같은 성능 전제 무수정).
-                    key={`${i}:${block}:${editEpoch(`block:${i}`)}`}
                     ref={i === 0 ? firstEditableRef : undefined}
                     data-block-index={i}
                     contentEditable
@@ -441,7 +446,9 @@ export function MarkdownEditor({
                       vault={vault}
                     />
                   </div>
-                ))
+                  </Fragment>
+                  );
+                })
               )}
             </div>
             <input ref={hiddenInputRef} type="hidden" name={name} value={text} />

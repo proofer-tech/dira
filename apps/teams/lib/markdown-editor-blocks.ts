@@ -91,6 +91,14 @@ export function blockBreaks(
   return undefined;
 }
 
+/** 블록 `i` 앞의 원문 빈 줄 수. 블록 슬라이스는 앞 블록 끝 줄의 개행부터 시작하므로
+ *  앞머리 개행 수 - 1이 빈 줄 수다. 첫 블록과 `breaks` 밖 블록은 0(렌더 쪽 `spacer`와 같은 범위). */
+export function blockGap(i: number, block: string, breaks: "all" | undefined): number {
+  if (i === 0 || !breaks) return 0;
+  const lead = /^(?:[\t ]*\r?\n)*/.exec(block)![0].split("\n").length - 1;
+  return Math.max(0, lead - 1);
+}
+
 // ── 편집된 DOM → 마크다운 (고친 블록만 탄다) ──────────────────────────────────
 // `components/markdown-editor.tsx`에서 옮겨왔다(요구 `33b7cb27`) — `blur` 없이 제출되는 경로
 // (`⌘↵`)도 이 되읽기를 불러야 해서 컴포넌트 밖 순수 함수라야 두 자리(blur·제출 가로채기)가

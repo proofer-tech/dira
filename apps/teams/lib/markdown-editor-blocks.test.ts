@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   blockBreaks,
+  blockGap,
   commitEditable,
   domToMarkdown,
   editSurfaceId,
@@ -307,4 +308,10 @@ test("domToMarkdown — data-wikilink 없는 보통 링크는 종전대로 [텍�
     { "data-block-index": "0" },
   );
   assert.equal(domToMarkdown(el(root), split.blocks[0]), split.blocks[0]);
+});
+
+test("blockGap - 블록 앞 빈 줄 수를 돌려준다(첫 블록과 breaks 밖은 0)", () => {
+  const { blocks } = splitBlocks("가\n\n나\n\n\n다\n\n\n\n라");
+  assert.deepEqual(blocks.map((b, i) => blockGap(i, b, "all")), [0, 1, 2, 3]);
+  assert.equal(blockGap(1, blocks[1], undefined), 0);
 });

@@ -43,23 +43,29 @@ function harden(node: Node): void {
   });
 }
 
-/** 이웃한 루트 블록 사이의 원문 빈 줄이 n개(n >= 2)면 빈 줄 n - 1개 높이(`lh`)의 간격 요소를 끼운다.
- *  판정은 문자열이 아니라 블록의 원문 줄 위치(mdast position)다 — 펜스 안의 빈 줄은 한 블록 안이라
- *  틈으로 안 잡힌다. ponytail: 이웃 문단의 기본 마진은 그대로라 간격이 마진 하나만큼 더 크다. */
+/** 원문 빈 줄 k개(k >= 1) 사이의 간격 요소. 높이는 k x 1lh이고, 위아래 마진 -0.75rem이 이웃 문단의
+ *  기본 마진(`my-3` 12px)과 상쇄돼 두 블록 사이가 정확히 k줄이다. 편집기 위지윅 면도 같은 함수를 쓴다.
+ *  ponytail: 마진 12px 가정이라 제목(`mt-6`) 이웃에서는 조금 더 벌어진다. 이웃별 마진 계산은 안 한다. */
+const gapStyle = (k: number) => `height:${k}lh;margin:-0.75rem 0`;
+
+export function gapNode(k: number): Node {
+  return {
+    type: "paragraph",
+    children: [],
+    data: {
+      hName: "div",
+      hProperties: { ariaHidden: "true", "data-blank-lines": String(k), style: gapStyle(k) },
+    },
+  };
+}
+
+/** 이웃한 루트 블록 사이의 원문 빈 줄이 k개(k >= 1)면 k줄 높이(`lh`)의 간격 요소를 끼운다.
+ *  판정은 문자열이 아니라 블록의 원문 줄 위치(mdast position)다 - 펜스 안의 빈 줄은 한 블록 안이라
+ *  틈으로 안 잡힌다. */
 function spacer(prev: Node, next: Node): Node[] {
   if (!prev.position || !next.position) return [];
   const blank = next.position.start.line - prev.position.end.line - 1;
-  if (blank < 2) return [];
-  return [
-    {
-      type: "paragraph",
-      children: [],
-      data: {
-        hName: "div",
-        hProperties: { ariaHidden: "true", "data-blank-lines": String(blank - 1), style: `height:${blank - 1}lh;margin:0` },
-      },
-    },
-  ];
+  return blank < 1 ? [] : [gapNode(blank)];
 }
 
 /** `all`은 트리 전부, `untilHeading`은 루트의 첫 `heading` 직전까지. */
