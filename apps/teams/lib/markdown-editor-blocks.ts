@@ -251,10 +251,22 @@ function blockElementToMarkdown(el: Element, originalLines: string[]): string {
  *  표의 정렬 구분행을 그대로 두려고만 쓴다(위 `tableToMarkdown`). */
 export function domToMarkdown(root: Element, originalBlockText: string): string {
   const originalLines = originalBlockText.replace(/^\n+/, "").split("\n");
-  return Array.from(root.children)
-    .map((c) => blockElementToMarkdown(c, originalLines))
-    .filter((s) => s.length > 0)
-    .join("\n\n");
+  // 빈 `<p>`(안에 `<br>`만 든 것 포함)는 `Enter`를 한 번 더 친 자국이라 줄바꿈 하나로 남긴다.
+  // 앞뒤 끝의 빈 `<p>`는 버린다(블록 사이 구분만 남는다).
+  let out = "";
+  let pendingEmpty = 0;
+  for (const c of Array.from(root.children)) {
+    const md = blockElementToMarkdown(c, originalLines);
+    if (c.tagName === "P" && md.trim() === "") {
+      pendingEmpty++;
+      continue;
+    }
+    if (md.length === 0) continue;
+    if (out) out += "\n\n" + "\n".repeat(pendingEmpty);
+    out += md;
+    pendingEmpty = 0;
+  }
+  return out;
 }
 
 /** 블록이 아직 하나도 없는 빈 칸(③④가 시작하는 자리 — `split.blocks.length === 0`)에서 처음
@@ -281,14 +293,16 @@ export function looseTextOf(root: Element): string {
       return;
     }
     if (el.tagName === "DIV" || el.tagName === "P") {
-      flush();
+      // 줄 머리에서 시작하는 블록은 줄을 또 닫지 않는다(빈 `<div><br></div>`가 빈 줄 둘이 되던 자리).
+      if (current !== "") flush();
       el.childNodes.forEach(walk);
       return;
     }
     el.childNodes.forEach(walk);
   };
   root.childNodes.forEach(walk);
-  flush();
+  if (current !== "") flush();
+  while (lines.length && lines[lines.length - 1] === "") lines.pop(); // 블록 끝의 빈 문단은 버린다
   return lines.join("\n");
 }
 

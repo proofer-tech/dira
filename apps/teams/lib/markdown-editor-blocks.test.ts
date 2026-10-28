@@ -8,6 +8,7 @@ import {
   editSurfaceId,
   EMPTY_SPLIT,
   joinBlocks,
+  looseTextOf,
   replaceBlock,
   resolveSplit,
   splitBlocks,
@@ -314,4 +315,24 @@ test("blockGap - 블록 앞 빈 줄 수를 돌려준다(첫 블록과 breaks 밖
   const { blocks } = splitBlocks("가\n\n나\n\n\n다\n\n\n\n라");
   assert.deepEqual(blocks.map((b, i) => blockGap(i, b, "all")), [0, 1, 2, 3]);
   assert.equal(blockGap(1, blocks[1], undefined), 0);
+});
+
+// 요구 20cf1083 저장 항목 - 위지윅에서 `Enter`를 친 수가 원문 줄바꿈 수로 남는다.
+test("domToMarkdown - 빈 <p>마다 줄바꿈 하나가 더 남는다 (br만 든 빈 <p> 포함)", () => {
+  const p = (t?: string) => new FakeElement("p", t ? [new FakeText(t)] : []);
+  const pBr = () => new FakeElement("p", [new FakeElement("br", [])]);
+  const md = (kids: FakeElement[]) => domToMarkdown(el(new FakeElement("div", kids)), "");
+  assert.equal(md([p("가"), p("나")]), "가\n\n나");
+  assert.equal(md([p("가"), p(), p("나")]), "가\n\n\n나");
+  assert.equal(md([p("가"), pBr(), p("나")]), "가\n\n\n나");
+  assert.equal(md([p("가"), p(), p(), p("나")]), "가\n\n\n\n나");
+  assert.equal(md([p("가"), p()]), "가");
+});
+
+test("looseTextOf - 빈 줄 둘은 줄바꿈 셋이고 블록 끝의 빈 문단은 버려진다", () => {
+  const div = (t?: string) => new FakeElement("div", [t ? new FakeText(t) : new FakeElement("br", [])]);
+  const loose = (kids: (FakeText | FakeElement)[]) => looseTextOf(el(new FakeElement("div", kids)));
+  assert.equal(loose([new FakeText("가"), div(), div(), div("나")]), "가\n\n\n나");
+  assert.equal(loose([new FakeText("가"), div("나")]), "가\n나");
+  assert.equal(loose([new FakeText("가"), div(), div()]), "가");
 });
