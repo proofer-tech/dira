@@ -659,6 +659,156 @@ def t_engine_exec(a):
     return run(argv + args, root, cwd=cwd, timeout=a.get("timeout") or DEFAULT_TIMEOUT)
 
 
+# ---------------------------------------------------------------- 머신 설정과 프로젝트 설정 (P543)
+
+def _local():
+    return os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
+
+
+def _read(name):
+    try:
+        with open(os.path.join(_local(), name), encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        return None
+
+
+def _autonomy_file():
+    """lib/projects.ts readAutonomyFile과 같다: (level, 파일의 autopilot이 JSON true인가)."""
+    raw = _read("autonomy.json")
+    try:
+        o = json.loads(raw)
+    except (TypeError, ValueError):
+        return 4, False
+    o = o if isinstance(o, dict) else {}
+    lv = o.get("level")
+    ok = type(lv) is int and 1 <= lv <= 5
+    return (lv if ok else 4), o.get("autopilot") is True
+
+
+def t_settings_get(a):
+    lang = "en" if _lang_en() else "ko"
+    level, flag = _autonomy_file()
+    mt = (_read("multitoken") or "").strip()
+    sl = _read("session-limit")
+    if sl is None:
+        limit = {"limit": None, "warn": False}
+    elif re.fullmatch(r"[0-9]+", sl.strip()):
+        limit = {"limit": int(sl.strip()), "warn": False}
+    else:
+        limit = {"limit": 0, "warn": True}
+    return {"language": lang, "autonomy": {"level": level, "autopilot": level == 5 and flag},
+            "multiplay": _read("multiplay") is not None,
+            "multitoken": {"1": True, "0": False}.get(mt), "session_limit": limit}
+
+
+def _lang_en():
+    try:
+        return json.loads(_read("language.json")).get("locale") == "en"
+    except (TypeError, ValueError, AttributeError):
+        return False
+
+
+def _atomic(path, text):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = "%s.tmp.%d" % (path, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(text)
+    os.replace(tmp, path)
+
+
+def t_settings_set(a):
+    level, flag = _autonomy_file()
+    new_level, new_flag = level, flag
+    if "language" in a and a["language"] not in ("ko", "en"):
+        raise ToolError("language는 ko 또는 en이어야 합니다")
+    if "autonomy_level" in a:
+        v = a["autonomy_level"]
+        if type(v) is not int or not 1 <= v <= 5:
+            raise ToolError("autonomy_level은 1~5 정수여야 합니다")
+        new_level = v
+    if "autopilot" in a:
+        if not isinstance(a["autopilot"], bool):
+            raise ToolError("autopilot은 true 또는 false여야 합니다")
+        new_flag = a["autopilot"]
+        if new_flag and new_level != 5:
+            raise ToolError("autopilot은 autonomy_level이 5일 때만 켤 수 있습니다")
+    for k in ("multiplay", "multitoken"):
+        if k in a and not isinstance(a[k], bool):
+            raise ToolError("%s는 true 또는 false여야 합니다" % k)
+    if "session_limit" in a:
+        v = a["session_limit"]
+        if v is not None and (type(v) is not int or v < 0):
+            raise ToolError("session_limit은 0 이상의 정수 또는 null이어야 합니다")
+    # 검사 끝 - 아래부터 쓴다
+    L = _local()
+    if "language" in a:
+        _atomic(os.path.join(L, "language.json"), json.dumps({"locale": a["language"]}, indent=2) + "\n")
+    if "autonomy_level" in a or "autopilot" in a:
+        o = {"level": new_level}
+        if new_flag:
+            o["autopilot"] = True
+        _atomic(os.path.join(L, "autonomy.json"), json.dumps(o, indent=2) + "\n")
+    if "multiplay" in a:
+        if a["multiplay"]:
+            _atomic(os.path.join(L, "multiplay"), "")
+        elif os.path.exists(os.path.join(L, "multiplay")):
+            os.remove(os.path.join(L, "multiplay"))
+    if "multitoken" in a:
+        _atomic(os.path.join(L, "multitoken"), "1" if a["multitoken"] else "0")
+    if "session_limit" in a:
+        if a["session_limit"] is None:
+            if os.path.exists(os.path.join(L, "session-limit")):
+                os.remove(os.path.join(L, "session-limit"))
+        else:
+            _atomic(os.path.join(L, "session-limit"), "%d\n" % a["session_limit"])
+    return t_settings_get({})
+
+
+def _queue_dir(a):
+    root = a.get("root") or os.environ.get("TICKET_ROOT")
+    if not root:
+        raise ToolError("root가 필요합니다")
+    return os.path.realpath(os.path.expanduser(root))
+
+
+def _slim_status(root):
+    r = run([sys.executable, os.path.join(ENGINE_DIR, "slim.py"), "status", root], root)
+    try:
+        return json.loads(r["stdout"])
+    except ValueError:
+        return {"rc": r["rc"], "out": r["stdout"].strip()}
+
+
+def t_project_settings_get(a):
+    root = _queue_dir(a)
+    try:
+        with open(os.path.join(root, "integration-branch"), encoding="utf-8") as f:
+            first = f.readline().strip()
+    except FileNotFoundError:
+        first = ""
+    ib = first if re.fullmatch(r"[A-Za-z0-9._/-]+", first) else None
+    workers = sorted(os.path.splitext(os.path.basename(p))[0] for p in glob.glob(os.path.join(root, "workers", "*.sh")))
+    return {"integration_branch": ib, "slim": _slim_status(root), "workers": workers}
+
+
+def t_project_slim(a):
+    root = _queue_dir(a)
+    if not isinstance(a.get("on"), bool):
+        raise ToolError("on은 true 또는 false여야 합니다")
+    _atomic(os.path.join(root, "slim-checkout"), "on\n" if a["on"] else "off\n")
+    r = run([sys.executable, os.path.join(ENGINE_DIR, "slim.py"), "empty" if a["on"] else "fill", root], root)
+    view = _slim_status(root)
+    if r["rc"] != 0:
+        msg = r["stdout"].strip()
+        try:
+            msg = json.loads(r["stdout"]).get("reason") or msg
+        except (ValueError, AttributeError):
+            pass
+        view = dict(view, message=msg or "slim rc %d" % r["rc"])
+    return view
+
+
 # ---------------------------------------------------------------- 도구 표
 
 def _s(desc, props=None, req=()):
@@ -726,6 +876,15 @@ TOOLS = {
     "env_replace": ("환경변수 값 교체", _s("", {"name": STR, "value": STR, "revision": INT},
                                           ["name", "value", "revision"]), t_env_replace),
     "env_delete": ("환경변수 삭제", _s("", {"name": STR, "revision": INT}, ["name", "revision"]), t_env_delete),
+    # P543 설정
+    "settings_get": ("머신 설정 읽기(language-autonomy-multiplay-multitoken-session_limit)", _s("", {}), t_settings_get),
+    "settings_set": ("머신 설정 바꾸기. 준 키만, 하나라도 틀리면 아무것도 안 쓴다. autopilot: true는 autonomy_level 5일 때만. "
+                     "session_limit: null은 상한 해제",
+                     _s("", {"language": STR, "autonomy_level": INT, "autopilot": BOOL, "multiplay": BOOL,
+                             "multitoken": BOOL, "session_limit": {"type": ["integer", "null"]}}), t_settings_set),
+    "project_settings_get": ("프로젝트 설정 읽기 {integration_branch, slim, workers}", _s("", {}), t_project_settings_get),
+    "project_slim": ("슬림 체크아웃 켜고 끄기(slim-checkout + slim.py empty|fill)", _s("", {"on": BOOL}, ["on"]),
+                     t_project_slim),
     "engine_exec": ("허용목록 프로그램 실행(tickets.py-graph.py-learn.py-dira_env.py-workers/<w>.sh-"
                     "push.sh-token-rotate.sh). 셸을 안 거친다. {rc,stdout,stderr}",
                     _s("", {"program": STR, "args": {"type": "array", "items": STR}, "cwd": STR,

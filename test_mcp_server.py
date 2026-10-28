@@ -262,6 +262,39 @@ res, err = call("project_unregister", id="alpha")
 assert not err and [p["id"] for p in res["projects"]] == ["bravo", "charlie"], res
 assert sorted(os.listdir(qa_)) == listing and call("project_unregister", id="alpha")[1]
 
+# 7. P543 설정 도구
+LOCAL = os.path.join(tmp, "local")
+
+
+def lf(n):
+    return os.path.join(LOCAL, n)
+
+
+res, err = call("settings_set", autonomy_level=5, autopilot=True)
+assert not err and res["autonomy"] == {"level": 5, "autopilot": True}, res
+assert json.load(open(lf("autonomy.json"))) == {"level": 5, "autopilot": True}
+assert call("settings_get")[0]["autonomy"]["autopilot"] is True
+res, err = call("settings_set", autonomy_level=3)
+assert not err and res["autonomy"] == {"level": 3, "autopilot": False}, res
+assert json.load(open(lf("autonomy.json"))) == {"level": 3, "autopilot": True}
+assert call("settings_set", autopilot=True)[1], "level 3에서 autopilot은 오류"
+assert call("settings_set", language="fr", multiplay=True)[1]
+assert not os.path.exists(lf("multiplay")), "검사 실패 때 multiplay가 생겼다"
+assert call("settings_set", session_limit=3)[0]["session_limit"] == {"limit": 3, "warn": False}
+assert open(lf("session-limit")).read() == "3\n"
+call("settings_set", session_limit=None)
+assert not os.path.exists(lf("session-limit"))
+
+res, err = call("project_settings_get")
+assert not err and res["integration_branch"] is None, res
+assert not os.path.exists(os.path.join(root, "integration-branch"))
+open(os.path.join(root, "integration-branch"), "w").write("main\n")
+open(os.path.join(root, "workers", "w1.sh"), "a").close()
+res, _ = call("project_settings_get")
+assert res["integration_branch"] == "main" and res["workers"] == ["w1"], res
+call("project_slim", on=True)
+assert open(os.path.join(root, "slim-checkout")).read().split("\n")[0] == "on"
+
 diff = subprocess.run(["git", "diff", "master", "--", "tickets.py"], cwd=HERE, capture_output=True,
                       text=True).stdout
 assert diff == "", "tickets.py가 바뀌었다"
