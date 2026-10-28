@@ -35,6 +35,14 @@ Common operations are named tools.
 | `ontology_objects` `ontology_object` `ontology_search` | Read ontology objects as a list, one at a time, or by search. See [Reading the ontology](#reading-the-ontology) |
 | `ontology_versions` `ontology_version` `ontology_schema` | Read an object's past versions and the ontology schema. See [Reading the ontology](#reading-the-ontology) |
 | `env_list` `env_create` `env_replace` `env_delete` | Manage project environment variables. Values never appear in a response |
+| `project_register` | Registers a queue you already made in the app's project list. Arguments `path` `name` `id`; it runs the same checks as registering on the screen. See [Handing project registration and settings to another agent](#handing-project-registration-and-settings-to-another-agent) |
+| `project_rename` | Renames a registered project. Arguments `id` `name` |
+| `project_reorder` | Reorders the project list. Argument `ids` |
+| `project_unregister` | Removes a project from the list only. Queue files are not deleted |
+| `settings_get` | Reads this computer's settings (language, autonomy, autopilot, multi-account, session limit) |
+| `settings_set` | Changes only the settings of this computer you pass as arguments |
+| `project_settings_get` | Reads one queue's integration branch, `Empty the working tree while idle` state, and worker list |
+| `project_slim` | Turns one queue's `Empty the working tree while idle` on or off |
 
 Anything not in that table goes through `engine_exec`. Give `program` one entry from the allowlist
 below and `args` an array of arguments. It runs without a shell and returns `{rc, stdout, stderr}`.
@@ -132,11 +140,115 @@ ticket goes back on the queue for a worker to pick up. The tool then wakes a wor
 response is `{path, round, body, dispatch}`, with that result in `dispatch`. If waking the worker
 fails, the answer file still stays, and the next worker run picks the ticket up.
 
+### Handing project registration and settings to another agent
+
+The app's project list and settings can be changed over MCP too. The tools write the same files the
+screen writes, in the same format, so whatever an agent changes shows up on the app screen as is. If
+`project_register` and `settings_set` are missing from the tool list, update the app.
+
+You can hand it over like this.
+
+> Using dira MCP, register `~/Projects/shop/.dira` under the name `shop` and move it to the top of the
+> project list. Have that queue empty its working tree while idle, and set this computer's session
+> limit to 4.
+
+#### The project list
+
+The four project tools edit `~/.config/dira/gui-projects.json`. They pick a project by `id`, not by
+queue root; `projects` tells you each project's `id`. The response is the whole project list after
+the change.
+
+`project_register` takes the queue root (`<project>/.dira`) in `path` and the name shown on the
+screen in `name`. Without `id`, one is made from the name: lowercased, with every run of characters
+other than ASCII letters and digits turned into `-`, at most 40 characters. The checks run in the
+same order as on the screen.
+
+1. Is the name non-empty?
+2. Is the path absolute and an existing directory? (A leading `~` expands to your home.)
+3. Does it contain `tickets` or `workers`?
+4. Is neither the same queue nor the same `id` registered already?
+
+If any check fails, the list is not written and the tool ends with an error saying which check
+failed. Once check 3 passes, the tool looks for a `.dira` line in the `.gitignore` of the queue's
+parent directory and adds it on the spot if missing. The screen does the same, so the line stays even
+if check 4 then fails. On success the new entry also comes back separately as `project`. Registering on
+the screen copies the core protocol into the queue right away; registering with this tool leaves that
+copy to the next time you open the app.
+
+The other three are short.
+
+- `project_rename` takes `id` and the new `name`. An empty name or an unknown `id` is an error.
+- `project_reorder` puts the projects in `ids` first, in that order, and appends the rest in their
+  original order. To move one project to the top, pass just its `id`. Unknown ids are ignored.
+- `project_unregister` removes the entry from the list and nothing else. It does not touch a byte of
+  the queue directory or its tickets, so you can register the same queue again later with
+  `project_register`. An unknown `id` is an error.
+
+#### This computer's settings
+
+`settings_get` and `settings_set` read and write the settings files under `~/.config/dira/`. These
+settings apply to the whole computer regardless of queue, so they take no `root`. `settings_set`
+accepts these keys.
+
+| Key | Name on the screen | Value |
+|---|---|---|
+| `language` | `Language` | `ko` or `en` |
+| `autonomy_level` | `Autonomy` | An integer from 1 to 5 |
+| `autopilot` | `Autopilot` | `true` or `false`. `true` is accepted only when autonomy is 5 |
+| `multitoken` | `Allow multi-account` | `true` or `false` |
+| `multiplay` | `Simultaneous multi-account use` | `true` or `false` |
+| `session_limit` | machine-wide session limit | An integer 0 or above. `null` removes the limit |
+
+`settings_set` changes only the keys you pass. It checks every value first, and if any is wrong it
+writes no file at all. Changing only autonomy leaves the autopilot value alone, and changing only
+autopilot leaves the autonomy level alone, the same as the two controls on the screen. So if you
+lower autonomy to 4 with autopilot on, autopilot reads as off, and raising autonomy back to 5 brings it
+back on. To turn on autonomy 5 and autopilot together from 4 or below, pass `autonomy_level` and
+`autopilot` in the same call.
+
+The response is the `settings_get` result after the change. `settings_get` groups autonomy and
+autopilot as `autonomy: {level, autopilot}` and the session limit as `session_limit: {limit, warn}`.
+A `multitoken` of `null` means nobody has set it yet, so the app build's default applies. If the
+limit file can't be read, `warn` is attached.
+
+#### One queue's settings
+
+`project_settings_get` and `project_slim` pick the queue by `root`, like the other tools.
+
+`project_settings_get` returns `integration_branch` (the integration branch), `slim` (the
+working-tree emptying state), and `workers` (the list of worker names). If the queue's
+`integration-branch` file is missing or its first line can't be read as a branch name,
+`integration_branch` is `null`. The screen fills the file in from git in that case; this tool only
+reads and writes nothing.
+
+`project_slim` takes `true` or `false` in `on` and turns
+[Empty the working tree while idle](/docs/screens#empty-the-working-tree-while-idle) on or off. When
+you turn it on and emptying is refused, the setting is still saved as on and the reason comes back in
+the response's `message`, the same as the screen switch. The rest of the response is the
+working-tree emptying state after the change.
+
+#### What MCP does not change
+
+The following are done on the screen only. Each takes more than writing one file, so they are not in
+MCP.
+
+- Creating a new project. Creating the queue directory and git repository and registering cron all
+  run together. Create it on the screen, or register a queue you already made with
+  `project_register`.
+- Creating and deleting workers. Creating the worktree and registering cron run together. Running an
+  existing worker is done by existing tools such as `dispatch`.
+- Changing the integration branch. Renaming it makes the screen also fix the several places where
+  that name is written. Over MCP you can only read it with `project_settings_get`.
+- Tokens and accounts, engine profiles, webhooks, Vercel, selfish mode, keyboard shortcuts, persona colors, and
+  usage statistics. Usage statistics is a setting a person consents to directly, so there is no way
+  for an agent to turn it on or off.
+
 ### Choosing the queue
 
 Every tool takes the queue root (`<project>/.dira`) as `root`. Without it the tool uses the
 `TICKET_ROOT` environment variable, and without that it fails with `root가 필요합니다` (root is
 required). `awaiting_list` is the one exception: without `root` it scans every registered project.
+The four project tools and `settings_get` `settings_set` don't pick a queue, so they take no `root`.
 If you don't know the root, call `projects` first. If you only work one project, set
 `TICKET_ROOT` in the client's config.
 
