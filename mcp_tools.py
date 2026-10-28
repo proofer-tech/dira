@@ -285,6 +285,141 @@ def t_projects(a):
         return {"projects": []}
 
 
+# ---------------------------------------------------------------- 프로젝트 레지스트리 (P543)
+
+def _local():
+    return os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
+
+
+def read_registry():
+    """화면 readProjects와 같다: 새 파일이 없으면 옛 gui-tenants.json(키 tenants). 깨진 JSON은 던진다."""
+    raw = ""
+    for name in ("gui-projects.json", "gui-tenants.json"):
+        try:
+            with open(os.path.join(_local(), name), encoding="utf-8") as f:
+                raw = f.read()
+            break
+        except FileNotFoundError:
+            continue
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except ValueError as e:
+        raise ToolError("레지스트리 JSON이 깨졌습니다: %s" % e)
+    lst = parsed.get("projects", parsed.get("tenants")) if isinstance(parsed, dict) else None
+    if not isinstance(lst, list):
+        raise ToolError("레지스트리 모양이 올바르지 않습니다")
+    return lst
+
+
+def write_registry(projects):
+    """화면 writeProjects와 같은 바이트. 임시 파일 + os.replace."""
+    local = _local()
+    os.makedirs(local, exist_ok=True)
+    dst = os.path.join(local, "gui-projects.json")
+    tmp = "%s.%d.tmp" % (dst, os.getpid())
+    with open(tmp, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"version": 1, "projects": projects}, indent=2, ensure_ascii=False) + "\n")
+    os.replace(tmp, dst)
+
+
+def slugify(name):
+    s = re.sub(r"[^a-z0-9]+", "-", nfc(name).lower()).strip("-")[:40]
+    return s.strip("-")
+
+
+def ensure_gitignore_line(project):
+    f = os.path.join(project, ".gitignore")
+    try:
+        with open(f, encoding="utf-8") as fh:
+            text = fh.read()
+    except OSError:
+        text = None
+    if text is not None and any(re.match(r"/?\.dira/?\Z", ln.strip()) for ln in text.split("\n")):
+        return
+    prefix = (text if text.endswith("\n") else text + "\n") if text else ""
+    try:
+        with open(f, "w", encoding="utf-8") as fh:
+            fh.write(prefix + ".dira\n")
+    except OSError:
+        pass  # 화면과 같다: 이 한 줄이 등록을 막지 않는다
+
+
+def _str(a, k):
+    v = a.get(k)
+    if not isinstance(v, str):
+        raise ToolError("%s가 필요합니다" % k)
+    return v
+
+
+def t_project_register(a):
+    name, given = _str(a, "name"), _str(a, "path").strip()
+    if not name.strip():
+        raise ToolError("이름이 비었습니다")
+    given = os.path.expanduser(given)
+    if not os.path.isabs(given):
+        raise ToolError("절대경로가 아닙니다: %s" % (given or "(빈 값)"))
+    if not os.path.exists(given):
+        raise ToolError("경로가 없습니다: %s" % given)
+    root = os.path.realpath(given)
+    if not os.path.isdir(root):
+        raise ToolError("디렉터리가 아닙니다: " + root)
+    if not any(os.path.exists(os.path.join(root, x)) for x in ("tickets", "workers")):
+        raise ToolError("큐가 아닙니다(tickets/ 나 workers/ 가 없음): " + root)
+    ensure_gitignore_line(os.path.dirname(root))
+    projects = read_registry()
+    dup = next((p for p in projects if p.get("root") == root), None)
+    if dup:
+        raise ToolError("이미 등록된 큐입니다: %s" % dup.get("name"))
+    pid = a.get("id") or slugify(name)
+    if not re.match(r"[a-z0-9-]+\Z", pid) or len(pid) > 40:
+        raise ToolError(("id 형식이 올바르지 않습니다: " + pid) if a.get("id")
+                        else "이름에서 id를 만들 수 없습니다. id를 직접 주세요")
+    if any(p.get("id") == pid for p in projects):
+        raise ToolError("이미 쓰는 id입니다: " + pid)
+    proj = {"id": pid, "name": name.strip(), "root": root}
+    projects.append(proj)
+    write_registry(projects)
+    return {"projects": projects, "project": proj}
+
+
+def t_project_rename(a):
+    pid, name = _str(a, "id"), _str(a, "name")
+    if not name.strip():
+        raise ToolError("이름이 비었습니다")
+    projects = read_registry()
+    p = next((x for x in projects if x.get("id") == pid), None)
+    if not p:
+        raise ToolError("없는 프로젝트 id: " + pid)
+    p["name"] = name.strip()
+    write_registry(projects)
+    return {"projects": projects}
+
+
+def t_project_reorder(a):
+    ids = a.get("ids")
+    if not isinstance(ids, list):
+        raise ToolError("ids가 필요합니다")
+    projects = read_registry()
+    ordered = [p for i in ids for p in projects if p.get("id") == i]
+    ordered = [p for n, p in enumerate(ordered) if p not in ordered[:n]]
+    rest = [p for p in projects if not any(p is o for o in ordered)]
+    projects = ordered + rest
+    write_registry(projects)
+    return {"projects": projects}
+
+
+def t_project_unregister(a):
+    pid = _str(a, "id")
+    projects = read_registry()
+    if not any(x.get("id") == pid for x in projects):
+        raise ToolError("없는 프로젝트 id: " + pid)
+    projects = [x for x in projects if x.get("id") != pid]
+    write_registry(projects)
+    return {"projects": projects}
+
+
 # ---------------------------------------------------------------- 답변 대기 (P516)
 
 HASH8_RE = re.compile(r"[0-9a-f]{8}\Z")
@@ -533,11 +668,24 @@ def _s(desc, props=None, req=()):
 
 
 STR, BOOL, INT = {"type": "string"}, {"type": "boolean"}, {"type": "integer"}
+def _o(props, req=()):
+    return {"type": "object", "properties": props, "required": list(req)}
+
+
 H = {"hash": STR}
 W = {"worker": {"type": "string", "description": "workers/<이름>.sh 의 이름"}}
 
 TOOLS = {
     "projects": ("GUI에 등록된 프로젝트와 큐 루트 목록", {"type": "object", "properties": {}}, t_projects),
+    # P543 프로젝트
+    "project_register": ("이미 있는 큐를 GUI 레지스트리에 등록한다(화면 등록과 같은 검증 순서). 쓴 뒤의 projects와 project",
+                         _o({"path": STR, "name": STR, "id": STR}, ["path", "name"]), t_project_register),
+    "project_rename": ("프로젝트 이름 바꾸기. 쓴 뒤의 projects", _o({"id": STR, "name": STR}, ["id", "name"]),
+                       t_project_rename),
+    "project_reorder": ("ids 순서대로 앞에 놓고 나머지는 원래 순서로 뒤에. 모르는 id는 무시",
+                        _o({"ids": {"type": "array", "items": STR}}, ["ids"]), t_project_reorder),
+    "project_unregister": ("레지스트리에서만 지운다(큐 파일은 안 건드린다)", _o({"id": STR}, ["id"]),
+                           t_project_unregister),
     "awaiting_list": ("답변 대기 티켓(열림 + awaiting + 미충족 dep)과 마지막 질문 절-문항-선택지. "
                       "root가 없으면 GUI 등록 프로젝트 전체", _s("", {}), t_awaiting_list),
     "ticket_answer": ("답변 대기 티켓에 답을 단다(화면 답변 쓰기와 같은 파일). picks=[{number, letters, note?}], "

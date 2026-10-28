@@ -215,6 +215,53 @@ try:
 finally:
     srv.kill()
 
+# 6. 프로젝트 레지스트리 (P543)
+reg = os.path.join(tmp, "local", "gui-projects.json")
+if os.path.exists(reg):
+    os.remove(reg)  # 앞 절이 남긴 항목과 섞이지 않게 처음부터
+
+
+def regbytes():
+    return open(reg, "rb").read() if os.path.exists(reg) else None
+
+
+def mkq(n):
+    d = os.path.join(tmp, n, ".dira")
+    os.makedirs(os.path.join(d, "tickets"))
+    return d
+
+
+qa_, qb_, qc_ = mkq("pa"), mkq("pb"), mkq("pc")
+res, err = call("project_register", path=qa_, name="Alpha")
+assert not err, res
+assert res["project"] == {"id": "alpha", "name": "Alpha", "root": os.path.realpath(qa_)}, res
+assert regbytes() == (json.dumps({"version": 1, "projects": res["projects"]}, indent=2) + "\n").encode()
+assert ".dira" in open(os.path.join(tmp, "pa", ".gitignore")).read().split("\n")
+bare = os.path.join(tmp, "bare")
+os.makedirs(bare)
+before = regbytes()
+for bad in ({"path": "rel/x", "name": "X"}, {"path": os.path.join(tmp, "nope"), "name": "X"},
+            {"path": bare, "name": "X"}, {"path": qa_, "name": "Other"}, {"path": qb_, "name": "Alpha"},
+            {"path": qb_, "name": "  "}):
+    assert call("project_register", **bad)[1], bad
+    assert regbytes() == before, bad
+call("project_register", path=qb_, name="Bravo")
+call("project_register", path=qc_, name="Charlie")
+# personaColors는 손으로 넣는다(화면이 쓰는 키) - rename/reorder 뒤에도 남아야 한다
+data = json.load(open(reg))
+data["projects"][0]["personaColors"] = {"developer": "blue"}
+open(reg, "w").write(json.dumps(data, indent=2) + "\n")
+res, err = call("project_rename", id="alpha", name=" Alpha2 ")
+assert not err and res["projects"][0]["name"] == "Alpha2", res
+assert call("project_rename", id="zzz", name="x")[1] and call("project_rename", id="alpha", name=" ")[1]
+res, _ = call("project_reorder", ids=["bravo", "nope"])
+assert [p["id"] for p in res["projects"]] == ["bravo", "alpha", "charlie"], res
+assert next(p for p in res["projects"] if p["id"] == "alpha")["personaColors"] == {"developer": "blue"}
+listing = sorted(os.listdir(qa_))
+res, err = call("project_unregister", id="alpha")
+assert not err and [p["id"] for p in res["projects"]] == ["bravo", "charlie"], res
+assert sorted(os.listdir(qa_)) == listing and call("project_unregister", id="alpha")[1]
+
 diff = subprocess.run(["git", "diff", "master", "--", "tickets.py"], cwd=HERE, capture_output=True,
                       text=True).stdout
 assert diff == "", "tickets.py가 바뀌었다"
