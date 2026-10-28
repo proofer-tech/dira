@@ -1900,37 +1900,52 @@ function NoticeLine({ notice }: { notice: NonNullable<Turn["notice"]> }) {
   const Icon = isTask ? Terminal : Bell;
   // 큰따옴표로 감싼 명령 부분만 font-mono
   const parts = (body ?? "").split(/("[^"]*")/);
+  const expandable = rest.length > 0 || notice.fields.length === 0;
+  const [open, setOpen] = useState(false);
+  const head = (
+    <>
+      <Icon aria-hidden className="size-3.5 shrink-0" />
+      <span className="shrink-0">{t("home.noticeLabel")}</span>
+      {!isTask && <span className="shrink-0 font-mono">{notice.tag}</span>}
+      {badge && (
+        <Badge
+          variant={status === "failed" || status === "error" ? "destructive" : "secondary"}
+          className={badge.cls}
+        >
+          {badge.text}
+        </Badge>
+      )}
+      {body !== undefined && (
+        <span className={open ? "min-w-0 break-words" : "min-w-0 truncate"} title={body}>
+          {parts.map((p, i) =>
+            p.startsWith('"') && p.length > 1 ? (
+              <span key={i} className="font-mono">
+                {p}
+              </span>
+            ) : (
+              p
+            ),
+          )}
+        </span>
+      )}
+    </>
+  );
   return (
     <div className="flex flex-col gap-1 text-xs text-muted-foreground">
-      <div className="flex min-w-0 items-center gap-2">
-        <Icon aria-hidden className="size-3.5 shrink-0" />
-        <span className="shrink-0">{t("home.noticeLabel")}</span>
-        {!isTask && <span className="shrink-0 font-mono">{notice.tag}</span>}
-        {badge && (
-          <Badge
-            variant={status === "failed" || status === "error" ? "destructive" : "secondary"}
-            className={badge.cls}
-          >
-            {badge.text}
-          </Badge>
-        )}
-        {body !== undefined && (
-          <span className="min-w-0 truncate" title={body}>
-            {parts.map((p, i) =>
-              p.startsWith('"') && p.length > 1 ? (
-                <span key={i} className="font-mono">
-                  {p}
-                </span>
-              ) : (
-                p
-              ),
-            )}
-          </span>
-        )}
-      </div>
-      {(rest.length > 0 || notice.fields.length === 0) && (
-        <details className="pl-5">
-          <summary className="cursor-pointer select-none">{t("home.noticeDetails")}</summary>
+      {expandable ? (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="flex min-w-0 cursor-pointer items-center gap-2 text-left hover:text-foreground"
+        >
+          {head}
+        </button>
+      ) : (
+        <div className="flex min-w-0 items-center gap-2">{head}</div>
+      )}
+      {expandable && open && (
+        <div className="pl-5">
           {notice.fields.length === 0 ? (
             <div className="whitespace-pre-wrap">{notice.raw}</div>
           ) : (
@@ -1943,7 +1958,7 @@ function NoticeLine({ notice }: { notice: NonNullable<Turn["notice"]> }) {
               ))}
             </dl>
           )}
-        </details>
+        </div>
       )}
     </div>
   );
