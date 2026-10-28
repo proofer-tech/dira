@@ -8988,6 +8988,109 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P543. MCP로 프로젝트를 등록-정리하고 머신 설정과 프로젝트 설정을 읽고 바꾼다 - 화면이 쓰는 파일을 같은 형식으로 쓴다 (요구 `f812741a`, 왕복 0회)
+
+사람 요구(2026-10-28): *"dira MCP 에 프로젝트 관리 및 설정용도의 API들 만들어주세요."*
+
+#### 실측 (2026-10-28)
+
+- `mcp_tools.py`의 프로젝트 도구는 `projects` 하나고 읽기 전용이다(`gui-projects.json`의 `projects` 배열). 등록 -
+  이름 바꾸기 - 순서 바꾸기 - 등록 해제는 화면(`app/actions.ts` -> `lib/projects.ts` `addProject` `renameProject`
+  `reorderProjects` `removeProject`)에만 있다. 설정 도구는 `env_*` 넷뿐이다.
+- 레지스트리 쓰기는 `writeProjects` 하나다 - `{"version": 1, "projects": [...]}`를 `JSON.stringify(_, null, 2)` +
+  줄바꿈으로 쓴다. 항목은 `{id, name, root}`에 `personaColors` - `market`이 붙을 수 있다. 파일이 없으면 옛
+  `gui-tenants.json`(키 `tenants`)을 읽는다. 깨진 JSON은 빈 목록으로 삼키지 않고 던진다.
+- `addProject` 검증 순서: 이름 공백 -> `~` 확장 뒤 절대경로 -> `realpath` 성공 -> 디렉터리 -> 안에 `tickets`나
+  `workers`가 있음 -> 부모의 `.gitignore`에 `.dira` 줄을 보장(`scaffold.ts` `ensureGitignoreLine`, 정규식
+  `^\/?\.dira\/?$`) -> 같은 `root` 중복 -> id(주어지지 않으면 `slugify(name)` = NFC - 소문자 - `[^a-z0-9]+`를 `-`로 -
+  앞뒤 `-` 제거 - 40자)가 `^[a-z0-9-]+$`이고 40자 이하 -> 같은 id 중복. 등록 뒤 `mirrorCore`가 코어 프로토콜을
+  큐에 미러링하지만 실패해도 등록은 성공이고 앱 다음 기동이 다시 돈다.
+- 머신 설정 파일은 전부 `$TICKET_LOCAL`(기본 `~/.config/dira`)에 있다.
+  - `language.json` `{"locale": "ko"|"en"}` - 그 밖은 `ko`로 읽는다.
+  - `autonomy.json` `{"level": 1..5, "autopilot": true}` - `autopilot` 키는 켤 때만 쓴다. 정수 1~5가 아니면
+    `4`, 유효 `autopilot`은 `level == 5`이고 파일 값이 JSON `true`일 때만 참이다(`tick.sh` - `tickets.py`와 같다).
+  - `multiplay` - 파일이 있으면 켜짐, 내용은 안 읽는다.
+  - `multitoken` - 내용 `1`/`0`, 그 밖과 없음은 미설정(빌드 기본값을 따른다).
+  - `session-limit` - 음 아닌 정수 한 줄, 파일 없음 = 상한 없음, 못 읽는 값은 `limit 0` + `warn`.
+- 프로젝트 설정 중 엔진 파일 하나로 끝나는 것은 슬림 체크아웃이다 - `<root>/slim-checkout`에 `on`/`off`를 쓰고
+  `slim.py empty|fill <root>`를 부른다(`lib/slim.ts` `setSlim`). `slim.py`는 이미 고정 경로 굽기 목록에 있다.
+  통합 브랜치(`<root>/integration-branch`)는 값을 바꾸면 쓰인 자리 다섯을 TS(`rewriteIntegrationBranch`)가 다시
+  쓰므로 파일 하나 쓰기로 끝나지 않는다.
+- 이 요구로는 엔진(`tickets.py` - `tick.sh` - `graph.py` - `dira_env.py`)에 새 서브커맨드가 생기지 않으므로
+  `test_mcp_parity.py` `COVERS`는 안 바뀐다.
+
+#### 결정
+
+1. **프로젝트 레지스트리 도구 넷.** 모두 `root` 대신 `id`로 프로젝트를 고르고, 응답은 쓴 뒤의 `projects` 배열이다.
+   - `project_register {path, name, id?}` - 위 `addProject` 검증을 같은 순서로 하고, 걸리면 레지스트리를 안
+     쓰고 어느 검사에 걸렸는지 적은 도구 오류로 끝난다. `.gitignore` 보장은 검증 중간 그 자리에서 한다(화면과
+     같다). `mirrorCore`는 하지 않는다 - 앱 다음 기동이 한다. 응답에 `project`(새 항목)를 더 싣는다.
+   - `project_rename {id, name}` - 이름 공백이면 오류, 없는 id면 오류.
+   - `project_reorder {ids}` - 화면과 같다: `ids` 순서대로 놓고 목록에 없던 항목은 원래 순서대로 뒤에 붙인다.
+     모르는 id는 무시한다.
+   - `project_unregister {id}` - 레지스트리에서만 지운다. 큐 파일은 한 바이트도 안 건드린다(제약 7). 없는 id면
+     오류.
+2. **레지스트리 쓰기는 화면과 한 글자도 다르지 않다.** `{"version": 1, "projects": [...]}`를 `indent=2`,
+   `ensure_ascii=False`, 끝 줄바꿈 하나로 쓰고, 임시 파일 + `os.replace`로 바꾼다. 알 수 없는 항목 키
+   (`personaColors` `market` 등)는 그대로 보존한다. 읽기는 `gui-tenants.json` 폴백까지 화면과 같고, 깨진 JSON이면
+   쓰지 않고 오류다. 기존 `projects` 도구는 손대지 않는다.
+3. **머신 설정 도구 둘.**
+   - `settings_get {}` -> `{language, autonomy: {level, autopilot}, multiplay, multitoken, session_limit: {limit,
+     warn}}`. 흡수 판정은 위 실측 그대로다. `multitoken`은 파일 값(`true` / `false` / `null`=미설정)이다 - 빌드
+     기본값은 엔진이 모르므로 싣지 않는다.
+   - `settings_set {language?, autonomy_level?, autopilot?, multiplay?, multitoken?, session_limit?}` - 준 키만
+     바꾼다. **모든 값을 먼저 검사하고 하나라도 틀리면 아무 파일도 안 쓴다.** 검사: `language`는 `ko`/`en`,
+     `autonomy_level`은 정수 1~5, `autopilot: true`는 바꾼 뒤 `level`이 5일 때만(아니면 오류), `session_limit`은
+     음 아닌 정수 또는 `null`(`null` = 파일 삭제). `autonomy_level`만 바꾸면 파일의 `autopilot` 원 값을 보존하고,
+     `autopilot`만 바꾸면 `level`을 보존한다(화면 `setAutonomy` - `setAutopilot`과 같다). 파일 형식은 실측 그대로다
+     (`autonomy.json`은 `indent=2` + 끝 줄바꿈, `autopilot` 키는 켤 때만, `multitoken`은 `1`/`0` 줄바꿈 없음,
+     `session-limit`은 `<n>\n`). 응답은 쓴 뒤의 `settings_get` 결과다.
+4. **프로젝트 설정 도구 둘.** `root`(없으면 `TICKET_ROOT`)로 큐를 고른다.
+   - `project_settings_get {root?}` -> `{integration_branch, slim, workers}`. `integration_branch`는
+     `<root>/integration-branch` 첫 줄이 `^[A-Za-z0-9._/-]+$`이면 그 값, 아니면 `null`이다 - 화면의 종전 경로 이관
+     (`AGENTS.md` - git HEAD에서 구해 파일에 쓰기)은 하지 않는다(읽기가 파일을 쓰면 안 된다). `slim`은
+     `slim.py status <root>`의 JSON, `workers`는 `<root>/workers/*.sh`의 이름(확장자 뺀 것) 정렬 목록이다.
+   - `project_slim {root?, on}` - `<root>/slim-checkout`에 `on\n`/`off\n`를 쓰고 `slim.py empty|fill`을 부른다.
+     `empty`가 거절돼도 켜짐은 저장되고 응답 `message`에 사유를 싣는다(`setSlim`과 같다). 응답은 그 뒤의
+     `slim.py status` JSON + `message`다.
+5. **새 코드는 전부 `mcp_tools.py` 안에 둔다.** 엔진 다른 파일은 안 고친다. 도구 표(`TOOLS`)에는 레지스트리 넷을
+   `# P543 프로젝트` 주석 아래, 설정 넷을 `# P543 설정` 주석 아래 따로 묶어 두 티켓의 편집이 같은 줄을 안 밟게 한다.
+
+주도성 5 판단: 엔진 파일(`mcp_tools.py`) 수정이지만 사람 승인을 기다리지 않는다. 새 서브커맨드도 큐 상태 규칙
+변경도 없고, 화면이 이미 하는 쓰기를 같은 형식으로 한 자리 더 여는 것이다(P516과 같은 판단).
+주도성 5 판단: "프로젝트 관리 및 설정"의 범위를 화면 설정 중 파일 하나 쓰기로 끝나는 것과 레지스트리로 정했다.
+아래 §안 하는 것은 비밀값이거나, 쓰기가 TS 코드 여러 자리에 걸쳐 있어 파이썬으로 복제하면 정본이 둘이 되는 것이다.
+주도성 5 판단: 사용 통계 동의(`analytics`)는 넣지 않았다. 동의는 사람이 직접 하는 것이라 에이전트가 켜고 끄는
+길을 만들지 않는다.
+
+#### 안 하는 것
+
+- 새 프로젝트 만들기(`createProject` - `scaffold`) - 큐 스캐폴딩 - git 저장소 - cron 등록이 TS에 있다. MCP에서는
+  이미 있는 큐를 `project_register`로 등록한다.
+- 워커 만들기-지우기(`workers/actions.ts`) - 워크트리 생성과 cron 등록이 같이 돈다. 워커 명령은 기존 도구가 한다.
+- 통합 브랜치 바꾸기 - 결정 4대로 읽기만 한다.
+- 토큰 - 엔진 프로필 - 웹훅 - Vercel - 이기적 모드 - 키맵 - 페르소나 색 - 사용 통계 동의.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P543-1 | 엔진 - `mcp_tools.py` `project_register` `project_rename` `project_reorder` `project_unregister`(결정 1, 2, 5) + `test_mcp_server.py` 테스트 | developer | - | 발행 |
+| P543-2 | 엔진 - `mcp_tools.py` `settings_get` `settings_set` `project_settings_get` `project_slim`(결정 3, 4, 5) + `test_mcp_server.py` 테스트 | developer | - | 발행 |
+| P543-3 | 매뉴얼 - `apps/teams/docs/mcp.md` ko - en 도구 표에 여덟 도구, 다른 에이전트에게 프로젝트 등록과 설정 변경을 맡기는 절 하나 | writer | - | 발행 |
+
+**세 장이다.** 두 엔진 티켓은 도구 표의 다른 묶음(결정 5)과 다른 함수만 더하므로 서로 기다리지 않는다. 매뉴얼은 위
+결정에 도구 이름과 인자가 다 있어 기다리지 않는다. QA 티켓은 내지 않는다 - 수용조건이 전부 임시 디렉터리 테스트와
+grep으로 판정된다. designer 0장, 화면 변경 없음. 에픽을 안 연다 - 요구 하나의 파생은 `req:`로 묶는다.
+
+#### 수용조건
+
+- [ ] `python3 test_mcp_server.py`가 통과하고, 그 안에 임시 `TICKET_LOCAL`로 다음 경우가 각각 있다: `project_register`가 `tickets/`가 있는 임시 큐를 등록하면 `gui-projects.json`이 `{"version": 1, "projects": [...]}` 형식(`indent=2`, 끝 줄바꿈)으로 그 항목을 담고 부모 `.gitignore`에 `.dira` 줄이 생긴다, 상대경로 - 없는 경로 - `tickets`와 `workers`가 둘 다 없는 디렉터리 - 같은 root - 같은 id 각각이 도구 오류로 끝나고 레지스트리 바이트가 그대로다.
+- [ ] 같은 테스트에서 `personaColors`가 있는 항목이 `project_rename` - `project_reorder` 뒤에도 그 키를 그대로 갖고, `project_reorder {ids: [b]}`가 `[b, a, c]` 순서를 만들며, `project_unregister`가 레지스트리 항목만 지우고 그 큐 디렉터리의 파일 목록이 그대로다.
+- [ ] 같은 테스트에서 `settings_set {autonomy_level: 5, autopilot: true}` 뒤 `autonomy.json`이 `{"level": 5, "autopilot": true}`이고 `settings_get`이 `autopilot: true`를 돌려준다. 이어서 `{autonomy_level: 3}`을 주면 파일의 `autopilot` 원 값이 남고 `settings_get`의 `autopilot`은 `false`다. `{autopilot: true}`(level 3)과 `{language: "fr", multiplay: true}`는 도구 오류이고 두 번째 경우 `multiplay` 파일이 안 생긴다. `{session_limit: null}`은 `session-limit` 파일을 지운다.
+- [ ] 같은 테스트에서 `project_settings_get`이 `integration-branch` 파일 값과 `workers/*.sh` 이름 목록을 돌려주고, 그 파일이 없으면 `integration_branch: null`이며 호출 뒤에도 파일이 안 생긴다. `project_slim {on: true}` 뒤 `slim-checkout` 첫 줄이 `on`이다.
+- [ ] `python3 test_mcp_parity.py`가 통과한다(`COVERS` 무변경).
+- [ ] `git diff --stat master`에 `tickets.py` - `tick.sh` - `graph.py` - `dira_env.py`가 없다.
+- [ ] `grep -c 'project_register\|settings_set\|project_slim' apps/teams/docs/mcp.md apps/teams/en/docs/mcp.md`가 두 파일 모두에서 3 이상이다.
+
 ### P542. 홈 대화의 시스템 알림은 `자세히` 아코디언 없이 알림 줄을 눌러 펼친다 (요구 `cad0e65b`, 왕복 0회)
 
 사람 요구(2026-10-28): *"자세히 아코디언을 제거하고 알림 줄을 누르면 펼쳐지도록 해주세요"*. 첨부는 홈 대화의
