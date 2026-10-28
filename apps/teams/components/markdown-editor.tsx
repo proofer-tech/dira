@@ -410,7 +410,7 @@ export function MarkdownEditor({
                   const gap = blockGap(i, block, blockBreaks(i, breaks, split.firstHeadingIndex));
                   return (
                   <Fragment key={`${i}:${block}:${editEpoch(`block:${i}`)}`}>
-                  {gap > 0 && <div aria-hidden data-blank-lines={gap} style={{ height: `${gap}lh`, margin: "-0.75rem 0" }} />}
+                  {gap > 0 && <div aria-hidden data-blank-lines={gap} className="leading-7" style={{ height: `${gap}lh` }} />}
                   <div
                     // 인덱스+내용 키(DESIGN.md §비주얼 §50 §커밋 뒤의 블록은 원문의 렌더 그대로다) —
                     // `key={i}`만 쓰면 커밋으로 그 블록의 `text`가 갈려도 React는 같은 DOM 노드에
