@@ -12,7 +12,15 @@ import { pendingTarget, type Screen } from "@/lib/urls";
 function HomeSkeleton() {
   return (
     <div className="flex min-h-0 flex-1 gap-6">
-      <Skeleton className="hidden w-64 shrink-0 md:block" />
+      {/* 실제 홈 패널(`home-ui.tsx` `Sidebar`)과 같은 상자다(§P544): `-mt-12`로 헤더 위까지 덮고
+          `z-50`으로 헤더보다 위, 면 `bg-surface`와 경계선 `border-r`도 같다. 좁은 창에서도 실제 패널이
+          보이므로 `hidden`을 걸지 않는다. */}
+      <div className="relative z-50 -mt-12 flex w-64 shrink-0 flex-col gap-3 border-r bg-surface p-4">
+        <Skeleton className="h-8 w-8" />
+        {Array.from({ length: 5 }, (_, i) => (
+          <Skeleton key={i} className="h-8 w-full" />
+        ))}
+      </div>
       <div className="flex min-w-0 flex-1 flex-col gap-4 px-6 py-6">
         <Skeleton className="h-8 w-1/3" />
         <Skeleton className="min-h-0 flex-1" />
