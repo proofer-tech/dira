@@ -78,7 +78,8 @@ export function BrandMark({ href, wip = 0 }: { href: string; wip?: number }) {
   // 없다 — 텍스트도 툴팁도 안 세운다). 루트 셸(`/`)과 나머지 다섯 화면은 이 판정에 안 걸린다.
   // P544 결정 5 — `ShellHeader`와 같은 식이라 대기 중에도 헤더 패딩과 마크가 한 판정을 따른다.
   const target = usePendingTarget();
-  if ((target?.screen ?? screenOf(usePathname())) === "home") return null;
+  const pathname = usePathname();
+  if ((target?.screen ?? screenOf(pathname)) === "home") return null;
   return (
     <Link
       href={href}
