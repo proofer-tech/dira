@@ -9026,7 +9026,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P544-1 | 구현 - 결정 1-4(홈 스켈레톤 왼쪽 상자를 실제 홈 패널 상자로) + 수용조건 자가 확인 | developer | - | 완료 `58fb0f17`, CDP 확인 `87475999`, 결정 2 전제 확인 요청 `b209bbf0` |
-| P544-2 | 구현 - 결정 5(`BrandMark` 홈 판정이 목적지를 본다) + 수용조건 둘째-셋째 항 CDP 자가 확인 | developer | - | 구현 완료(커밋은 ship 뒤 `git log`의 `Ticket: c8b0ee66`), CDP 확인 이어받기 `3c70362b` |
+| P544-2 | 구현 - 결정 5(`BrandMark` 홈 판정이 목적지를 본다) + 수용조건 둘째-셋째 항 CDP 자가 확인 | developer | - | 완료, 발행 `c8b0ee66`, CDP 확인 `3c70362b`(대기 신호를 숨긴 링크로 유지) |
 
 **한 장이다.** 고치는 파일이 `screen-skeletons.tsx` 하나이고 리뷰 가능한 변경 하나다. 수용조건이 스크린샷
 판정이라 developer가 같은 티켓에서 CDP로 확인한다. QA 0장 - P534-3이 스켈레톤 스크린샷을 판정 항목으로 이미
@@ -9035,8 +9035,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 #### 수용조건
 
 - [ ] CDP `Network.emulateNetworkConditions`로 왕복을 2초 이상 늦추고 1440x900 창에서 보드 화면의 헤더 로고를 누르면, 클릭 후 100ms 안에 찍은 스크린샷에서 헤더 높이(y 0-48)의 x 0-256 구간이 흰 빈칸이 아니라 스켈레톤 패널 면으로 덮여 있고, 그 패널의 위 끝이 y 0이다.
-- [ ] 같은 조건에서 클릭 후 100ms 안에 `document.querySelector('header a[aria-label="dira"]')`가 `null`이고, 응답 뒤 도착한 홈에서도 `null`이다(결정 5, `b209bbf0`에서 고침 - 옛 문구는 도착한 홈의 로고 x를 쟀으나 그 로고가 없다).
-- [ ] 같은 조건에서 홈 화면에서 보드로 가는 링크(없으면 `/p/<id>/board`로 가는 클라이언트 이동)를 누르면, 클릭 후 100ms 안의 로고 `getBoundingClientRect().x`와 도착한 보드의 로고 x의 차이가 1px 이하이다.
+- [x] 같은 조건에서 클릭 후 100ms 안에 `document.querySelector('header a[aria-label="dira"]')`가 `null`이고, 응답 뒤 도착한 홈에서도 `null`이다(결정 5, `b209bbf0`에서 고침 - 옛 문구는 도착한 홈의 로고 x를 쟀으나 그 로고가 없다).
+- [x] 같은 조건에서 홈 화면에서 보드로 가는 링크(없으면 `/p/<id>/board`로 가는 클라이언트 이동)를 누르면, 클릭 후 100ms 안의 로고 `getBoundingClientRect().x`와 도착한 보드의 로고 x의 차이가 1px 이하이다.
 - [ ] 같은 조건에서 스켈레톤 왼쪽 패널의 `getBoundingClientRect()`(x - y - width)가 도착한 홈 패널(`home-ui.tsx` `Sidebar`)의 값과 각각 1px 이하로 같다.
 - [ ] 스켈레톤이 떠 있는 동안 `ShellMain` 안 스켈레톤 루트의 `innerText.trim()`이 빈 문자열이다.
 

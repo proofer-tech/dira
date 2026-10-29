@@ -76,10 +76,15 @@ export function ScreenView() {
 export function BrandMark({ href, wip = 0 }: { href: string; wip?: number }) {
   // §비주얼 §74 §남는 규칙 2 — 홈에서 마크가 0개다. 빈자리를 다른 것으로 안 채운다(마크 자체가
   // 없다 — 텍스트도 툴팁도 안 세운다). 루트 셸(`/`)과 나머지 다섯 화면은 이 판정에 안 걸린다.
-  // P544 결정 5 — `ShellHeader`와 같은 식이라 대기 중에도 헤더 패딩과 마크가 한 판정을 따른다.
+  // P544 결정 5 — 홈 판정이 `ShellHeader`와 같은 식이다. 이동 대기 중에는 목적지가 홈인지를 본다.
   const target = usePendingTarget();
   const pathname = usePathname();
-  if ((target?.screen ?? screenOf(pathname)) === "home") return null;
+  if ((target?.screen ?? screenOf(pathname)) === "home") {
+    // 로고를 누른 이동이면 그 `<Link>`가 대기 신호(`useLinkStatus`)를 쥐고 있다. 여기서 `null`을
+    // 돌려주면 링크가 내려가 신호가 꺼지고 로고가 다시 나타난다(CDP 실측 `3c70362b`). 그래서 같은
+    // 자리에 숨긴 링크를 남겨 신호를 유지한다 - `aria-label`이 없어 로고 셀렉터에는 안 잡힌다.
+    return target ? <Link href={href} hidden tabIndex={-1} /> : null;
+  }
   return (
     <Link
       href={href}
