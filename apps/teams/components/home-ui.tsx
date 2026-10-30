@@ -99,6 +99,7 @@ import {
 import {
   createCommandAction,
   deleteCommandAction,
+  draftCommandAction,
   lastCommandRunAction,
   listCommandsAction,
   updateCommandAction,
@@ -3868,8 +3869,53 @@ function CommandDialog({
   const [envNames, setEnvNames] = useState<string[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  // 초안 자동 채우기(만들기 모드만) - 사람이 손댄 칸은 덮어쓰지 않는다. `reqRef`는 이름이 바뀌면 올라가 늦은 응답을 버린다.
+  const touched = useRef({ steps: false, env: false, schedule: false });
+  const reqRef = useRef(0);
+  const [drafting, setDrafting] = useState(false);
+  const [draftFail, setDraftFail] = useState(false);
+  const [draftBy, setDraftBy] = useState<string | null>(null);
+  const generate = (nm: string) => {
+    const id = ++reqRef.current;
+    setDrafting(true);
+    setDraftFail(false);
+    void draftCommandAction(project, nm)
+      .catch(() => ({ ok: false as const }))
+      .then((r) => {
+        if (id !== reqRef.current) return;
+        setDrafting(false);
+        if (!r.ok) {
+          setDraftFail(true);
+          setDraftBy(null);
+          return;
+        }
+        const d = r.draft;
+        const tc = touched.current;
+        if (!tc.steps && d.steps.length > 0) setSteps(d.steps.map((x) => newStep(x.kind, x.body)));
+        if (!tc.env) setEnv(d.env);
+        if (!tc.schedule) {
+          setScheduleOn(Boolean(d.schedule));
+          setWhen(whenState(d.schedule));
+        }
+        setDraftBy(r.model);
+      });
+  };
+  useEffect(() => {
+    if (!open || entry || !name.trim()) return;
+    const timer = setTimeout(() => generate(name.trim()), 800);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- generate는 매 렌더 새 함수지만 name이 바뀔 때만 다시 돈다
+  }, [open, entry, name]);
+
+  useEffect(() => {
+    reqRef.current++;
+    touched.current = { steps: false, env: false, schedule: false };
+  }, [open]);
 
   const reset = () => {
+    setDrafting(false);
+    setDraftFail(false);
+    setDraftBy(null);
     const v = init();
     setName(v.name);
     setSteps(v.steps);
@@ -3895,7 +3941,10 @@ function CommandDialog({
     };
   }, [open, project]);
 
-  const set = (key: keyof WhenState) => (v: string) => setWhen((w) => ({ ...w, [key]: v }));
+  const set = (key: keyof WhenState) => (v: string) => {
+    touched.current.schedule = true;
+    setWhen((w) => ({ ...w, [key]: v }));
+  };
   const whenStr = scheduleOn ? buildWhen(when.kind, when.date, when.time, when.weekday, when.day, when.cron) : undefined;
   // `만들기` 잠금(결정 4) - 이름 + 비지 않은 단계 하나 이상 + 스케줄을 켰으면 `when`이 성립할 때만 열린다.
   const stepsOk = steps.length > 0 && steps.every((s) => s.body.trim() !== "");
@@ -3925,10 +3974,38 @@ function CommandDialog({
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="command-name">{t("home.cmd.nameLabel")}</Label>
-            <Input id="command-name" autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+            <Input
+              id="command-name"
+              autoFocus
+              value={name}
+              onChange={(e) => {
+                reqRef.current++;
+                setDrafting(false);
+                setName(e.target.value);
+              }}
+            />
           </div>
           <div className="space-y-2">
-            <Label>{t("home.cmd.stepsLabel")}</Label>
+            <div className="flex items-center gap-2">
+              <Label>{t("home.cmd.stepsLabel")}</Label>
+              {!entry && (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  className="ml-auto"
+                  disabled={drafting || !name.trim()}
+                  onClick={() => generate(name.trim())}
+                >
+                  {t("home.cmd.draftRetry")}
+                </Button>
+              )}
+            </div>
+            {!entry && drafting && <p className="text-xs text-muted-foreground">{t("home.cmd.drafting")}</p>}
+            {!entry && !drafting && draftFail && <p className="text-xs text-muted-foreground">{t("home.cmd.draftFail")}</p>}
+            {!entry && !drafting && !draftFail && draftBy && (
+              <p className="text-xs text-muted-foreground">{t("home.cmd.draftBy").replace("{model}", draftBy)}</p>
+            )}
             {steps.map((s, i) => (
               <div key={s.key} className="space-y-1 rounded-md border p-2">
                 <div className="flex items-center gap-1">
@@ -3939,7 +4016,10 @@ function CommandDialog({
                       size="xs"
                       variant={s.kind === k ? "secondary" : "ghost"}
                       aria-pressed={s.kind === k}
-                      onClick={() => setSteps((xs) => xs.map((x) => (x.key === s.key ? { ...x, kind: k } : x)))}
+                      onClick={() => {
+                        touched.current.steps = true;
+                        setSteps((xs) => xs.map((x) => (x.key === s.key ? { ...x, kind: k } : x)));
+                      }}
                     >
                       {t(k === "shell" ? "home.cmd.stepShell" : "home.cmd.stepPrompt")}
                     </Button>
@@ -3968,7 +4048,10 @@ function CommandDialog({
                   aria-label={`${t("home.cmd.stepsLabel")} ${i + 1}`}
                   placeholder={t(s.kind === "shell" ? "home.cmd.stepShellPlaceholder" : "home.cmd.stepPromptPlaceholder")}
                   value={s.body}
-                  onChange={(e) => setSteps((xs) => xs.map((x) => (x.key === s.key ? { ...x, body: e.target.value } : x)))}
+                  onChange={(e) => {
+                    touched.current.steps = true;
+                    setSteps((xs) => xs.map((x) => (x.key === s.key ? { ...x, body: e.target.value } : x)));
+                  }}
                 />
               </div>
             ))}
@@ -3990,7 +4073,10 @@ function CommandDialog({
                     className="font-mono"
                     variant={env.includes(n) ? "secondary" : "outline"}
                     aria-pressed={env.includes(n)}
-                    onClick={() => setEnv((xs) => (xs.includes(n) ? xs.filter((x) => x !== n) : [...xs, n]))}
+                    onClick={() => {
+                      touched.current.env = true;
+                      setEnv((xs) => (xs.includes(n) ? xs.filter((x) => x !== n) : [...xs, n]));
+                    }}
                   >
                     {n}
                   </Button>
@@ -4004,7 +4090,10 @@ function CommandDialog({
                 type="checkbox"
                 role="switch"
                 checked={scheduleOn}
-                onChange={(e) => setScheduleOn(e.target.checked)}
+                onChange={(e) => {
+                  touched.current.schedule = true;
+                  setScheduleOn(e.target.checked);
+                }}
               />
               {t("home.cmd.scheduleLabel")}
             </label>
@@ -4012,7 +4101,10 @@ function CommandDialog({
           {scheduleOn && (
             <ScheduleWhenFields
               kind={when.kind}
-              setKind={(k) => setWhen((w) => ({ ...w, kind: k }))}
+              setKind={(k) => {
+                touched.current.schedule = true;
+                setWhen((w) => ({ ...w, kind: k }));
+              }}
               date={when.date}
               setDate={set("date")}
               time={when.time}
