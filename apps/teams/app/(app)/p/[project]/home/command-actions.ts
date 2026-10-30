@@ -10,6 +10,11 @@ import {
 } from "@/lib/commands";
 import { readLastCommandRun } from "@/lib/home-session";
 import { getProject } from "@/lib/projects";
+import { readFile } from "node:fs/promises";
+import { findClaude, readOtherEngineAuth, tokenPath } from "@/lib/auth";
+import { generateDraft, readScripts, spawnRunner, type DraftResult } from "@/lib/command-draft";
+import { callEnvBridgeFull } from "@/lib/project-env";
+import type { EngineId } from "@/lib/workers";
 
 export type CommandResult = { ok: true; commands: CommandEntry[] } | { ok: false; error: string };
 
@@ -44,4 +49,30 @@ export async function deleteCommandAction(projectId: string, id: string): Promis
 /** 몸통이 그리는 마지막 예약 실행(시각, 종료 코드, 로그 끝 200줄). 아직 안 돌았으면 null. */
 export async function lastCommandRunAction(projectId: string, id: string) {
   return readLastCommandRun(projectId, id);
+}
+
+/** 이름 하나로 단계 / 환경변수 / 스케줄 초안을 만든다. 실패는 던지지 않고 `ok: false`로 돌려준다. */
+export async function draftCommandAction(projectId: string, name: string): Promise<DraftResult> {
+  try {
+    const project = await getProject(projectId);
+    if (!project) return { ok: false, reason: "failed", message: `unknown project ${projectId}` };
+    const bins: Partial<Record<EngineId, string>> = {};
+    const claude = findClaude();
+    if (claude) bins.claude = claude;
+    for (const o of await readOtherEngineAuth()) {
+      if (o.cli && (o.credPath || o.engine === "agy")) bins[o.engine] = o.cli;
+    }
+    const tok = (await readFile(tokenPath(), "utf8").catch(() => "")).replace(/[\r\n]/g, "").trim();
+    const envRes = await callEnvBridgeFull(project.root, { op: "list" }).catch(() => null);
+    const envNames = envRes?.ok ? (envRes.data as { items: { name: string }[] }).items.map((i) => i.name) : [];
+    const ctx = { scripts: await readScripts(path.dirname(project.root)), envNames };
+    return await generateDraft(
+      name,
+      ctx,
+      Object.keys(bins) as EngineId[],
+      spawnRunner(bins, tok ? { CLAUDE_CODE_OAUTH_TOKEN: tok } : {}),
+    );
+  } catch (e) {
+    return { ok: false, reason: "failed", message: (e as Error).message };
+  }
 }
