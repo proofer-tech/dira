@@ -29,6 +29,7 @@ import { NAME_RE, expandHome, localDir, resolveWithin, shellPath, shellValue } f
 import type { Ticket } from "./queue.ts";
 import { isEligible, tokensPath, type TokenEntry, type TokensFile } from "./auth.ts";
 import { DEFAULT_LOCALE, t, type Locale } from "./i18n.ts";
+import { EMERGENCY_REFUSAL, emergencyOn } from "./emergency-stop.ts";
 
 export type WorkerStatus = "running" | "idle" | "stopped" | "stale";
 
@@ -2115,8 +2116,13 @@ async function applyCrontab(
   return changed;
 }
 
+/** 비상정지 중(P545 결정 4)이면 거부하는 Promise를 돌려준다. 아니면 undefined. */
+const refuseIfEmergency = (_locale: Locale): Promise<never> | undefined =>
+  emergencyOn() ? Promise.reject(new Error(EMERGENCY_REFUSAL)) : undefined;
+
 /** 이 워커 줄 하나를 crontab에 넣는다(이미 있으면 그 줄을 새로 쓴다). */
 export const registerCron = (workerPath: string, locale: Locale = DEFAULT_LOCALE) =>
+  refuseIfEmergency(locale) ??
   applyCrontab(
     workerPath,
     true,
@@ -3213,6 +3219,7 @@ export async function createWorker(
   effort: string = NO_EFFORT,
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<{ path: string; template: string }> {
+  if (emergencyOn()) throw new Error(EMERGENCY_REFUSAL); // P545 결정 4
   // 템플릿 확인이 먼저다 — workers/가 아예 없는 큐에서 `resolveWithin`의 ENOENT를 먼저 만나면
   // 사용자가 받는 문장이 "경로 없음"이 되어 진짜 이유(템플릿 없음)를 가린다.
   if (!NAME_RE.test(name)) {

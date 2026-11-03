@@ -57,6 +57,13 @@ import {
   type Events,
 } from "@/lib/analytics";
 import { discardGateDirty } from "@/lib/engine";
+import {
+  disableEmergencyStop,
+  emergencyState,
+  enableEmergencyStop,
+  type DisableResult,
+  type EnableResult,
+} from "@/lib/emergency-stop";
 import type { FeedbackMeta } from "@/lib/feedback";
 import { DEFAULT_KEYMAP, comboOf, validateBinding, type KeyLike } from "@/lib/keymap";
 import { readSlim, setSlim, type SlimView } from "@/lib/slim";
@@ -1170,4 +1177,23 @@ export async function saveSelfishSettingsAction(input: SelfishSettingsInput) {
 /** 렌더러 오류를 서버가 대신 보낸다(DESIGN.md §P513 결정 1 - 3). 모양 검사는 `reportRendererError`가 한다. */
 export async function reportRendererErrorAction(input: Parameters<typeof reportRendererError>[0]): Promise<void> {
   await reportRendererError(input);
+}
+
+// ── 비상정지 (P545-1) - 화면은 P545-2가 붙인다. 켜기-끄기는 결과 객체를 그대로 돌려준다. ──
+
+export async function readEmergencyStopAction(): Promise<{ on: boolean; at: string | null }> {
+  const s = emergencyState();
+  return { on: s !== null, at: s?.at ?? null };
+}
+
+export async function enableEmergencyStopAction(): Promise<EnableResult> {
+  const r = await enableEmergencyStop();
+  revalidatePath("/", "layout");
+  return r;
+}
+
+export async function disableEmergencyStopAction(): Promise<DisableResult> {
+  const r = await disableEmergencyStop();
+  revalidatePath("/", "layout");
+  return r;
 }

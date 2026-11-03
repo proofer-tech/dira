@@ -18,6 +18,7 @@ import path from "node:path";
 import { appendFileSync, existsSync } from "node:fs";
 import { isHash } from "./paths.ts";
 import { engineRepo } from "./workers.ts";
+import { emergencyOn } from "./emergency-stop.ts";
 
 /** `dispatch.py` 위치. cronLine이 쓰는 엔진(`engineRepo()`, 설치본은 Application Support/dira/engine)을
  *  먼저 보고, 없으면 `bin/engines/`를 본다. 둘 다 없으면 null이다(호출자가 `KICK-SKIP`을 남긴다).
@@ -37,6 +38,7 @@ function dispatchPy(): string | null {
  *  `hash`가 있으면 경로가 될 수 없는 8 hex여야 한다(신뢰 경계). */
 function launch(root: string, reason: "direct" | "request", hash?: string): boolean {
   try {
+    if (emergencyOn()) return false; // 비상정지 중(P545 결정 4) - 아무것도 띄우지 않는다
     if (hash !== undefined && !isHash(hash)) return false;
     const py = dispatchPy();
     if (!py) {
