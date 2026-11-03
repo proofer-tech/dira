@@ -11,6 +11,8 @@ import { homedir } from "node:os";
 import { readAuth, readOtherEngineAuth } from "@/lib/auth";
 import { type AuthView } from "@/components/settings-dialog";
 import { ProjectRows, type ProjectRow } from "@/components/projects-ui";
+import { EmergencyBanner } from "@/components/emergency-banner";
+import { emergencyState } from "@/lib/emergency-stop";
 import { DesktopFindBar } from "@/components/find-bar";
 import { UpdateToast } from "@/components/update-toast";
 import { isLandingOnly } from "@/lib/flags";
@@ -97,8 +99,12 @@ export default async function Page() {
     };
   }
 
+  // P545 결정 4 - 풀 모드(로컬 앱)에서만 읽는다. 랜딩-only는 fs 읽기 0회가 요건이다.
+  const emergency = fullMode ? emergencyState() : null;
+
   return (
     <>
+      {emergency && <EmergencyBanner at={emergency.at} />}
       <Landing
         version={diraVersion}
         fullMode={fullMode}

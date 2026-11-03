@@ -11,6 +11,8 @@ import { MigrationOverlay } from "@/components/migration-overlay";
 import { RoutePending } from "@/components/route-pending";
 import { ScreenView } from "@/components/project-switcher";
 import { ErrorReporter } from "@/components/error-reporter";
+import { EmergencyBanner } from "@/components/emergency-banner";
+import { emergencyState } from "@/lib/emergency-stop";
 import { readKeymap, readLanguage } from "@/lib/projects";
 import { t } from "@/lib/i18n";
 import "../globals.css";
@@ -46,6 +48,8 @@ export default async function RootLayout({
   const keymap = await readKeymap();
   // §0-16 §장치. 머신 하나짜리 설정이라 키맵과 같은 자리에서 같이 읽는다.
   const locale = await readLanguage();
+  // P545 결정 4 - 켜져 있는 동안 모든 화면 맨 위에 한 줄. 판정은 상태 파일 하나다.
+  const emergency = emergencyState();
   return (
     <html
       lang={locale}
@@ -73,6 +77,7 @@ export default async function RootLayout({
                 `LanguageProvider` 안이어야 `useLocale()`이 실제 로케일을 읽는다 */}
             <LinkInterceptor />
             <KeymapProvider keymap={keymap}>
+              {emergency && <EmergencyBanner at={emergency.at} />}
               {children}
               {/* §데스크톱 앱 N5 찾기 바. **`KeymapProvider` 안**이어야 한다 — `⌘F`는 키맵의
                   값이고 `useHotkey`가 그 컨텍스트를 읽는다(§0-6). 자리가 여기인 이유는

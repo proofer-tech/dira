@@ -41,6 +41,9 @@ import {
   deleteTokenAction,
   readAnalyticsAction,
   readMcpAction,
+  readEmergencyStopAction,
+  enableEmergencyStopAction,
+  disableEmergencyStopAction,
   readAutonomyAction,
   readEngineProfileRowsAction,
   readIntegrationBranchAction,
@@ -131,6 +134,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -176,8 +189,8 @@ type SettingsNode =
  *  (`⌘;`가 icon만 듣는 것과 같은 이유, 위 주석 참조). 전역 상태·URL 파라미터를 새로 만들지
  *  않는다는 §0-4 원칙은 그대로다 — DOM 이벤트 하나로 판을 넘긴다(새 커스텀 컴포넌트 0). */
 const OPEN_WORKERS_NODE_EVENT = "dira:settings-open-workers";
-export function openWorkerSettingsNode() {
-  window.dispatchEvent(new Event(OPEN_WORKERS_NODE_EVENT));
+export function openWorkerSettingsNode(opts?: { advanced?: boolean }) {
+  window.dispatchEvent(new CustomEvent(OPEN_WORKERS_NODE_EVENT, { detail: { advanced: !!opts?.advanced } }));
 }
 
 /** §0-15 §검색 레지스트리 한 줄 — `{트리 경로, 항목 이름, 이동 대상}`. `crumbs`가 빈 문자열이면
@@ -1174,7 +1187,17 @@ function SessionCapField({
  *  마운트될 때뿐이다 — 다른 패널(`WebhookSection` 등)과 같은 결로 `useEffect(() => {...}, [])`
  *  하나가 전부이고, 상시 폴링에 안 붙는다(§4-16 결정 5 §읽는 시점). `closeDialog`는 전체 목록 줄이
  *  프로젝트 워커 화면으로 갈 때 이 다이얼로그를 닫는다. */
-function WorkersSection({ className, closeDialog }: { className?: string; closeDialog: () => void }) {
+function WorkersSection({
+  className,
+  closeDialog,
+  advancedOpen,
+  onAdvancedToggle,
+}: {
+  className?: string;
+  closeDialog: () => void;
+  advancedOpen: boolean;
+  onAdvancedToggle: (open: boolean) => void;
+}) {
   const t = useT();
   const locale = useLocale();
   const [view, setView] = useState<WorkersPanelView | null>(null);
@@ -1274,7 +1297,112 @@ function WorkersSection({ className, closeDialog }: { className?: string; closeD
           )}
         </div>
       </div>
+
+      {/* P545 결정 2 - 검색 색인(`entries`)에 안 넣는다. 접힘이 기본이다. */}
+      <div data-setting="workers.advanced" className="border-t pt-2">
+        <button
+          type="button"
+          aria-expanded={advancedOpen}
+          onClick={() => onAdvancedToggle(!advancedOpen)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          <ChevronDown aria-hidden className={cn("size-3 transition-transform", !advancedOpen && "-rotate-90")} />
+          {t("settings.workers.advanced")}
+        </button>
+        {advancedOpen && <EmergencyStopField />}
+      </div>
     </section>
+  );
+}
+
+/** P545 결정 2-3 - 비상정지 토글. 켜기는 확인 다이얼로그를 거치고, 결과 요약을 그 자리에 둔다. 끄기는 바로 한다. */
+function EmergencyStopField() {
+  const t = useT();
+  const [state, setState] = useState<{ on: boolean; at: string | null } | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [pending, startTransition] = useTransition();
+  const [summary, setSummary] = useState<string[] | null>(null);
+  const [failures, setFailures] = useState<{ item: string; reason: string }[]>([]);
+
+  useEffect(() => {
+    void readEmergencyStopAction().then(setState);
+  }, []);
+
+  const enable = () =>
+    startTransition(async () => {
+      const r = await enableEmergencyStopAction();
+      setSummary([
+        `${t("settings.workers.emergency.removed")} ${r.workersRemoved}`,
+        `${t("settings.workers.emergency.killed")} ${r.sessionsKilled}`,
+        `${t("settings.workers.emergency.backlog")} ${r.backlog.length > 0 ? r.backlog.join(", ") : "0"}`,
+        `${t("settings.workers.emergency.browsers")} ${r.browsersKilled}`,
+      ]);
+      setFailures(r.failures);
+      setState(await readEmergencyStopAction());
+    });
+  const disable = () =>
+    startTransition(async () => {
+      const r = await disableEmergencyStopAction();
+      setSummary([
+        `${t("settings.workers.emergency.restored")} ${r.restored}`,
+        `${t("settings.workers.emergency.kicked")} ${r.kicked}`,
+      ]);
+      setFailures(r.failures);
+      setState(await readEmergencyStopAction());
+    });
+
+  const on = state?.on ?? false;
+  return (
+    <div data-setting="workers.emergency" className="space-y-1 pt-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={on}
+          disabled={pending || state === null}
+          onClick={() => (on ? disable() : setConfirming(true))}
+          className={cn(
+            "relative h-5 w-9 shrink-0 rounded-full border transition-colors disabled:opacity-50",
+            on ? "bg-destructive border-destructive" : "bg-muted",
+          )}
+        >
+          <span
+            className={cn(
+              "absolute top-0.5 left-0.5 size-3.5 rounded-full bg-background transition-transform",
+              on && "translate-x-4",
+            )}
+          />
+        </button>
+        <span className="text-sm">{t("settings.workers.emergency.label")}</span>
+      </div>
+      <p className="text-xs text-muted-foreground">{t("settings.workers.emergency.hint")}</p>
+      {summary && (
+        <ul data-testid="emergency-result" className="space-y-0.5 text-xs">
+          {summary.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+          {failures.map((f) => (
+            <li key={f.item} className="text-destructive">
+              {t("settings.workers.emergency.failed")} {f.item}: {f.reason}
+            </li>
+          ))}
+        </ul>
+      )}
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t("settings.workers.emergency.confirmTitle")}</AlertDialogTitle>
+            <AlertDialogDescription>{t("settings.workers.emergency.confirmBody")}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t("settings.workers.emergency.cancel")}</AlertDialogCancel>
+            <AlertDialogAction variant="destructive" onClick={enable}>
+              {t("settings.workers.emergency.confirm")}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
   );
 }
 
@@ -2292,6 +2420,8 @@ export function SettingsDialog({
   // `key`로 이 컴포넌트를 다시 마운트하므로(`projects-ui.tsx`·`project-switcher.tsx`) 이 초기값이
   // 그때마다 다시 먹는다.
   const [activeNode, setActiveNode] = useState<SettingsNode>(initialNode);
+  // 워커 노드 맨 아래 `고급`(P545 결정 2) - 기본으로 접혀 있고 비상정지 배너 링크만 펼쳐서 연다
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   // 저장 직후엔 서버 프롭이 아직 옛 값이다 — 방금 쓴 것이 이긴다(층 ②·③ 어느 쪽이든)
   const savedAt = setup?.savedAt ?? result.savedAt ?? auth.savedAt;
   // 토큰이 없어도 **claude 워커가 하나도 없으면** 이 컴퓨터는 이 토큰을 안 쓴다 — 안 알려 준다(§0-4)
@@ -2537,11 +2667,13 @@ export function SettingsDialog({
   // 셋(`addOpen` 초기화·`multiToken` 다시 읽기)이고, 마지막에 `activeNode`만 `workers`로 덮는다 —
   // 안 그러면 `onOpenChange`가 이미 `claude`로 되돌려 놓는다.
   useEffect(() => {
-    if (trigger !== "icon") return;
-    const onOpen = () => {
+    // `text`는 홈 헤더(프로젝트 목록)의 유일한 인스턴스다 - 비상정지 배너 링크(P545)가 거기서도 열어야 한다
+    if (trigger !== "icon" && trigger !== "text") return;
+    const onOpen = (e: Event) => {
       setOpen(true);
       setAddOpen(needsAuth);
       setActiveNode("workers");
+      setAdvancedOpen(!!(e as CustomEvent<{ advanced?: boolean }>).detail?.advanced);
       void readMultitokenAction().then(setMultiToken);
     };
     window.addEventListener(OPEN_WORKERS_NODE_EVENT, onOpen);
@@ -2599,6 +2731,7 @@ export function SettingsDialog({
     setOpen(false);
     resetAddAttempt();
     setAddOpen(false);
+    setAdvancedOpen(false);
     setQuery("");
     setMultiToken(null);
     clearHighlight(); // §45 ⑥ 수명 ④ — 다이얼로그가 닫히면 하이라이트도 죽는다
@@ -3090,6 +3223,8 @@ export function SettingsDialog({
             <WorkersSection
               className={cn(activeNode !== "workers" && "md:hidden")}
               closeDialog={() => setOpen(false)}
+              advancedOpen={advancedOpen}
+              onAdvancedToggle={setAdvancedOpen}
             />
             {/* §0-18 §자리 — 가리는 클래스가 다섯과 다르다: `hidden`이라 폭과 무관하게 검색으로
                 고른 뒤에만 뜬다(§검증 11 — 767 이하에서도 세로로 쌓이는 섹션에 안 낀다).
