@@ -2294,7 +2294,7 @@ bg_pending() {
   # P435 결정 4 - 하네스가 붙이는 문구('moved to the background (ID: ')뿐 아니라 세션이
   # `run_in_background`로 직접 띄운 명령의 문구('Command running in background with ID: ')도
   # 같은 밀림으로 센다. 둘 다 "이번 구간에 백그라운드로 넘어간 작업이 있다"는 같은 사실이다.
-  tail -n +"$(( OUTOFFSET + 1 ))" "$OUTF" 2>/dev/null | grep -qF -e 'moved to the background (ID: ' -e 'Command running in background with ID: '
+  tail -n +"$(( OUTOFFSET + 1 ))" "$OUTF" 2>/dev/null | grep -qF -e 'moved to the background (ID: ' -e 'Command running in background with ID: ' -e 'Monitor started (task '
 }
 
 # P435 결정 1 - $1(줄 번호) 뒤에 새로 생긴 줄 중 assistant/user/result 타입이 하나라도
@@ -2618,7 +2618,15 @@ sys.stdout.write(json.dumps({"type":"user","message":{"role":"user","content":sy
       fi
       sleep "$POLL"
     done
-    kill -0 "$CPID" 2>/dev/null || break     # 스스로 끝났다(MAXRUN 강제종료 포함) - 재활용 없이 종료 경로
+    if ! kill -0 "$CPID" 2>/dev/null; then   # 스스로 끝났다(MAXRUN 강제종료 포함) - 재활용 없이 종료 경로
+      # P547 결정 1 - 세션이 result 직후 스스로 끝나면 유예 판정 앞에서 빠져나와 밀림이 기록되지
+      # 않았다. 기다리거나 참견할 상대가 없으니 판정만 하고 BG_GRACE_USED로 reason=bg를 남긴다.
+      if [ "$TICKET_BG_GRACE" != "0" ] && [ "$BG_GRACE_USED" -lt "$TICKET_BG_MAX" ]; then
+        IFS='|' read -r _BGSID BG_SEGOK _ <<< "$(segment_result "$OUTF" "$OUTOFFSET")"
+        bg_pending "$BG_SEGOK" && BG_GRACE_USED=$((BG_GRACE_USED + 1))
+      fi
+      break
+    fi
 
     # 엔진 수정 마흔한 번째 승인 §판정 1 - REUSE 판정 앞에서 밀린 백그라운드 작업을 먼저
     # 본다. 세 조건(이번 구간 ok - 티켓이 아직 .wip - 이번 구간에 밀림 문구)이 다 참이고

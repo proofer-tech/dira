@@ -9025,6 +9025,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
    `bg_pending`을 본다. 참이면 민 수 없으니(세션이 없다) 유예와 재촉은 건너뛰고 `BG_GRACE_USED`만 올려서, `.wip`이
    남았을 때 `FAIL` 줄이 `reason=bg`를 단다. `bg_pending`은 `Monitor started (task `도 밀림 문구로 센다. 가설이
    틀렸으면 로그로 찾은 실제 원인을 고치고 그 원인을 `## 결과`와 이 블록에 적는다. 수용조건은 원인과 무관하게 같다.
+   **원인 확정(P547-1):** 가설이 맞았다. 두 로그 모두 `result` 직후 `task_updated`(killed)와 `background_tasks_changed`(빈 목록)가
+   찍히고 세션 프로세스가 끝난다. 감시 루프의 `kill -0` 실패가 유예 판정보다 먼저라 `BG_GRACE_USED`가 0으로 남았다. 3회차는
+   `Monitor started (task `만 마지막 구간에 있어 문구 목록에도 구멍이 있었다. `test_bg_dead.py`와 `fixtures/bg_dead_*.jsonl`이 고정한다.
 2. **`.wip`을 남기고 끝난 회차는 작업물을 git ref로 보관한다.** `tick.sh`가 `FAIL`(`.wip` 남김) - `TIMEOUT` - `KILLED`
    로 끝나는 경로에서 워크트리의 커밋 안 된 변경(추적 + 미추적, `.dira/` 제외)이 있으면 커밋 객체 하나로 만들어
    `refs/dira/wip/<해시>`에 둔다. 인덱스 - 작업 트리 - stash 목록은 건드리지 않는다(임시 `GIT_INDEX_FILE` +
