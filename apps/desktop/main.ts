@@ -31,6 +31,7 @@ import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-
 import { createMainReporter } from "./error-report.ts";
 import { describeReadyTimeout, readyTimeoutHint, type ReadyTimeoutState } from "./ready-timeout.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
+import { HANG_PROMPT_MS, shouldAskReload } from "./hang-prompt.ts";
 import { mcpCronEdit } from "./mcp-install.ts";
 import { installShellPath } from "./shell-path.ts";
 
@@ -379,11 +380,41 @@ function openWindow(origin: string): BrowserWindow {
     console.log(`[dira] 로드에 실패했습니다 (${code} ${description}) — 되살리기 대상입니다`);
     reviveIfVisible("로드에 실패했습니다");
   });
-  // 고정하는 것 9 §안 하는 것 — 멈춘 렌더러는 안 되살린다. 되살리기를 안 거는 이유는 방아쇠가
-  // 없어서가 아니라, 사람 동의 없이 다시 읽으면 쓰던 입력을 버리기 때문이다. 로그만 남겨서
-  // 죽은 것과 멈춘 것을 다음 세션이 stdout으로 가를 수 있게 한다.
-  win.webContents.on("unresponsive", () => console.log("[dira] 렌더러가 응답하지 않습니다 — 되살리기는 걸지 않습니다"));
-  win.webContents.on("responsive", () => console.log("[dira] 렌더러가 다시 응답합니다"));
+  // 고정하는 것 9 — 멈춘 렌더러는 사람 동의 없이 안 되살린다(쓰던 입력을 버린다). 5초 넘게
+  // 멎은 채로 창이 보이면 대화상자로 묻고, 한 번 멎은 동안에는 하나만 띄운다.
+  let hangSince = 0;
+  let hangAsked = false;
+  let hangTimer: NodeJS.Timeout | null = null;
+  const askReload = async () => {
+    hangTimer = null;
+    if (win.isDestroyed() || !shouldAskReload({ elapsedMs: Date.now() - hangSince, asked: hangAsked, visible: win.isVisible() })) return;
+    hangAsked = true;
+    const { response } = await dialog.showMessageBox(win, {
+      type: "warning",
+      title: "dira가 응답하지 않습니다",
+      message: "dira가 응답하지 않습니다",
+      detail: "다시 읽으면 입력 중이던 내용이 사라질 수 있습니다.",
+      buttons: ["다시 읽기", "기다리기"],
+      defaultId: 1,
+      cancelId: 1,
+    });
+    if (response === 0) {
+      contentDead = true;
+      void reviveIfVisible("렌더러가 응답하지 않습니다");
+    }
+  };
+  win.webContents.on("unresponsive", () => {
+    console.log("[dira] 렌더러가 응답하지 않습니다");
+    hangSince = Date.now();
+    hangAsked = false;
+    if (hangTimer) clearTimeout(hangTimer);
+    hangTimer = setTimeout(() => void askReload(), HANG_PROMPT_MS);
+  });
+  win.webContents.on("responsive", () => {
+    console.log("[dira] 렌더러가 다시 응답합니다");
+    if (hangTimer) clearTimeout(hangTimer);
+    hangTimer = null;
+  });
 
   // 고정하는 것 4 개정 — `origin`(창을 만들 때 받은 값)이 아니라 부를 때마다 지금
   // `readyOrigin`을 `classifyLink`에 넘긴다. 되살리기로 포트가 바뀐 뒤에도 이 창을 그대로
