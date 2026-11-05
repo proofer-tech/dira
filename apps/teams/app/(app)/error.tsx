@@ -14,10 +14,8 @@ import { reportRenderer } from "@/components/error-reporter";
 
 export default function Error({
   error,
-  reset,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
 }) {
   const t = useT();
   useEffect(() => {
@@ -36,7 +34,7 @@ export default function Error({
           </span>
         </AlertDescription>
       </Alert>
-      <Button onClick={reset}>{t("errorBoundary.retry")}</Button>
+      <Button onClick={() => window.location.reload()}>{t("errorBoundary.retry")}</Button>
     </main>
   );
 }

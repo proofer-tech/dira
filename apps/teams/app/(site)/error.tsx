@@ -9,10 +9,8 @@ import { useT } from "@/components/language-provider";
 
 export default function Error({
   error,
-  reset,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
 }) {
   const t = useT();
   useEffect(() => {
@@ -23,7 +21,7 @@ export default function Error({
     <main>
       <h1>{t("siteError.title")}</h1>
       <pre>{error.message || error.digest || t("siteError.noReason")}</pre>
-      <button onClick={reset}>{t("siteError.retry")}</button>
+      <button onClick={() => window.location.reload()}>{t("siteError.retry")}</button>
     </main>
   );
 }

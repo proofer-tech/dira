@@ -10,10 +10,8 @@ import { reportRenderer } from "@/components/error-reporter";
 
 export default function GlobalError({
   error,
-  reset,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
 }) {
   // `LanguageProvider`가 위에 없다 — 루트 레이아웃 자체가 죽은 자리라서다(파일 머리 주석).
   // `useLocale()`의 `createContext` 기본값이 이미 `DEFAULT_LOCALE`이라 `ko`로 떨어진다.
@@ -29,7 +27,7 @@ export default function GlobalError({
         <main>
           <h1>{t("errorBoundary.title")}</h1>
           <pre>{error.message || error.digest || t("errorBoundary.noReason")}</pre>
-          <button onClick={reset}>{t("errorBoundary.retry")}</button>
+          <button onClick={() => window.location.reload()}>{t("errorBoundary.retry")}</button>
         </main>
       </body>
     </html>
