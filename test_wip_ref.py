@@ -156,6 +156,20 @@ try:
     assert "앞 회차의 작업물이 %s에 있습니다. git show로 보고 필요한 것만 가져오세요." % REF in prompt, prompt
     print("3 ok")
 
+    # ---- 3b - B에 같은 경로의 커밋 안 된 변경이 있으면 얹지 않고 B의 변경을 그대로 둔다 -------
+    e5 = Env(); tmps.append(e5.tmp)
+    e5.tick("wa"); e5.reopen()
+    write(os.path.join(e5.b, "tracked.txt"), "b dirty\n")
+    write(os.path.join(e5.b, "untracked.txt"), "b new\n")
+    e5.mode("look")
+    r = e5.tick("wb")
+    assert r.returncode == 0, r.stderr
+    assert "WARN %s 작업물 복원 충돌 ref=%s" % (H, REF) in e5.log(), e5.log()
+    assert open(os.path.join(e5.b, "tracked.txt"), encoding="utf-8").read() == "b dirty\n"
+    assert open(os.path.join(e5.b, "untracked.txt"), encoding="utf-8").read() == "b new\n"
+    sh("git", "rev-parse", "--verify", REF, cwd=e5.b)
+    print("3b ok")
+
     # ---- 4 - cleanup_stray_wip: .done이면 ref 삭제, 버리기 전 보관 ------------------------------
     e4 = Env(); tmps.append(e4.tmp)
     sh("git", "update-ref", "refs/dira/wip/cccc0001", "HEAD", cwd=e4.a)

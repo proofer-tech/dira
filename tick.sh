@@ -2044,19 +2044,24 @@ if git -C "$TICKET_CWD" rev-parse -q --verify "$WIPREF" >/dev/null 2>&1; then
   # 보관본이 건드리는 경로가 이 워크트리에서 이미 더러우면 얹지 않는다(충돌과 같은 처리). 그 밖에서 실패한
   # cherry-pick은 그 경로들만 되돌리면 디스패치 전과 같다 - -n 충돌은 --abort가 안 먹는다.
   _wp=$(git -C "$TICKET_CWD" -c core.quotepath=false diff --name-only "$WIPREF^" "$WIPREF" 2>/dev/null)
-  if [ -z "$(printf '%s\n' "$_wp" | xargs -I{} git -C "$TICKET_CWD" status --porcelain -- {} 2>/dev/null)" ] \
-     && git -C "$TICKET_CWD" cherry-pick --no-commit "$WIPREF" >/dev/null 2>&1; then
+  _wdirty=$(printf '%s\n' "$_wp" | xargs -I{} git -C "$TICKET_CWD" status --porcelain -- {} 2>/dev/null)
+  _wfail=0
+  if [ -z "$_wdirty" ] && ! git -C "$TICKET_CWD" cherry-pick --no-commit "$WIPREF" >/dev/null 2>&1; then _wfail=1; fi
+  if [ -z "$_wdirty" ] && [ "$_wfail" = 0 ]; then
     git -C "$TICKET_CWD" reset -q 2>/dev/null
     git -C "$TICKET_CWD" update-ref -d "$WIPREF" 2>/dev/null
     log "NOTE $THASH 작업물 복원 paths=$_wn"
     _WIPMSG="앞 회차의 커밋 안 된 변경 ${_wn}건을 이 워크트리에 복원했습니다. git status로 확인하고 이어서 하세요."
   else
-    git -C "$TICKET_CWD" cherry-pick --abort >/dev/null 2>&1 || git -C "$TICKET_CWD" cherry-pick --quit >/dev/null 2>&1
-    git -C "$TICKET_CWD" reset -q 2>/dev/null
-    while IFS=$'\t' read -r _st _pp; do
-      [ -n "$_pp" ] || continue
-      if [ "$_st" = "A" ]; then rm -f -- "$TICKET_CWD/$_pp"; else git -C "$TICKET_CWD" checkout -q HEAD -- "$_pp" 2>/dev/null; fi
-    done < <(git -C "$TICKET_CWD" -c core.quotepath=false diff --name-status "$WIPREF^" "$WIPREF" 2>/dev/null)
+    # 되돌리는 것은 이번 cherry-pick이 실제로 건드린 경로뿐이다. 가드로 건너뛴 경우는 B의 변경이므로 손대지 않는다.
+    if [ "$_wfail" = 1 ]; then
+      git -C "$TICKET_CWD" cherry-pick --abort >/dev/null 2>&1 || git -C "$TICKET_CWD" cherry-pick --quit >/dev/null 2>&1
+      git -C "$TICKET_CWD" reset -q 2>/dev/null
+      while IFS=$'\t' read -r _st _pp; do
+        [ -n "$_pp" ] || continue
+        if [ "$_st" = "A" ]; then rm -f -- "$TICKET_CWD/$_pp"; else git -C "$TICKET_CWD" checkout -q HEAD -- "$_pp" 2>/dev/null; fi
+      done < <(git -C "$TICKET_CWD" -c core.quotepath=false diff --name-status "$WIPREF^" "$WIPREF" 2>/dev/null)
+    fi
     log "WARN $THASH 작업물 복원 충돌 ref=$WIPREF"
     _WIPMSG="앞 회차의 작업물이 ${WIPREF}에 있습니다. git show로 보고 필요한 것만 가져오세요."
   fi
