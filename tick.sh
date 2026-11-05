@@ -1165,6 +1165,54 @@ live_other() {                     # 파일이 있고 · 내 것이 아니고 ·
 # 안 건드린다.
 reap_silent() { python3 "$PY" reapclear "$1" "${2:-}"; }
 
+# P547 결정 2 - 워크트리의 커밋 안 된 변경(추적+미추적, .dira/ 제외)을 커밋 객체 하나로 만들어
+# refs/dira/wip/<해시>에 둔다. 임시 GIT_INDEX_FILE + write-tree + commit-tree(부모 HEAD)라 인덱스-작업
+# 트리-stash 목록은 안 건드린다. 인자: 워크트리 해시. 변경이 없거나 실패하면 조용히 넘어간다.
+# ponytail: 같은 ref는 덮어쓴다(마지막 회차가 정본). 보관본이 커지면 gc 대상이라 오래 두면 사라진다.
+export _WIPSAVE_PY='
+import os, subprocess, sys, tempfile, time
+wt, h, runlog, name = sys.argv[1:5]
+def git(*a, env=None):
+    return subprocess.run(["git", "-C", wt] + list(a), capture_output=True, text=True, timeout=300, env=env)
+def log(msg):
+    try:
+        with open(runlog, "a", encoding="utf-8", errors="replace") as f:
+            f.write("%s [%s] %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), name, msg))
+    except OSError:
+        pass
+try:
+    st = git("status", "--porcelain", "-z", "--", ".", ":(exclude).dira")
+    if st.returncode != 0 or not st.stdout.strip("\0"):
+        sys.exit(0)
+    head = git("rev-parse", "-q", "--verify", "HEAD")
+    if head.returncode != 0:
+        sys.exit(0)
+    head = head.stdout.strip()
+    fd, idx = tempfile.mkstemp(prefix="dira-wip-idx-"); os.close(fd); os.unlink(idx)
+    env = dict(os.environ, GIT_INDEX_FILE=idx)
+    try:
+        if git("read-tree", "HEAD", env=env).returncode != 0:
+            sys.exit(0)
+        if git("add", "-A", "--", ".", ":(exclude).dira", env=env).returncode != 0:
+            sys.exit(0)
+        tree = git("write-tree", env=env).stdout.strip()
+    finally:
+        try: os.unlink(idx)
+        except OSError: pass
+    n = len([l for l in git("diff", "--name-only", head, tree).stdout.splitlines() if l])
+    if not tree or n == 0:
+        sys.exit(0)
+    c = git("commit-tree", tree, "-p", head, "-m", "dira wip " + h)
+    if c.returncode != 0:
+        sys.exit(0)
+    ref = "refs/dira/wip/" + h
+    if git("update-ref", ref, c.stdout.strip()).returncode == 0:
+        log("NOTE %s 작업물 보관 ref=%s paths=%d" % (h, ref, n))
+except Exception:
+    pass
+'
+wip_save() { python3 -c "$_WIPSAVE_PY" "$1" "$2" "$RUNLOG" "${TICKET_NAME:-?}" 2>/dev/null; return 0; }
+
 # 엔진 수정 마흔 번째 승인 §판정 2 - 디스패치 직전에 워크트리 3항(주인이 .wip/미배정 ->
 # 버린다)만 대신 집행한다. 4항(보존)-5항(후속 티켓)은 판단이 들어가 세션의 몫으로 남긴다.
 # 순서 계약: 이 함수는 DISPATCH 로그 직후, cd "$TICKET_CWD" 전에 돈다(판정 1의 dirty-<해시>
@@ -1200,8 +1248,6 @@ while i < len(parts):
     if st[0] in "RC":
         i += 1  # -z는 새 이름 뒤에 옛 이름이 따로 온다 - 새 이름만 본다
     items.append((st, path))
-if not items:
-    sys.exit(0)
 files = []
 for f in sorted(glob.glob(os.path.join(tdir, "*.md"))):
     try:
@@ -1209,7 +1255,22 @@ for f in sorted(glob.glob(os.path.join(tdir, "*.md"))):
             files.append((f, fh.read()))
     except OSError:
         pass
+# P547: .done 티켓의 보관 ref는 여기서 지운다.
+try:
+    refs = subprocess.run(["git", "-C", wt, "for-each-ref", "--format=%(refname)", "refs/dira/wip/"],
+                          capture_output=True, text=True, timeout=60).stdout.split()
+except Exception:
+    refs = []
+for ref in refs:
+    rh = ref.rsplit("/", 1)[1]
+    if os.path.exists(os.path.join(tdir, rh + ".done.md")):
+        subprocess.run(["git", "-C", wt, "update-ref", "-d", ref], capture_output=True, timeout=60)
+        log("NOTE %s 작업물 보관 ref 삭제(.done)" % rh)
+if not items:
+    sys.exit(0)
 restore = []
+rmfiles = []
+owners = set()
 for st, path in items:
     hits = [f for f, body in files if path in body]
     if len(hits) != 1:
@@ -1222,13 +1283,21 @@ for st, path in items:
     if h == thash:
         log("NOTE cleanup_stray_wip 보존(지금 티켓) path=" + p)
     elif st == "??":
-        try:
-            os.remove(os.path.join(os.fsencode(wt), path))
-            log("NOTE cleanup_stray_wip 버림(미추적) path=%s owner=%s" % (p, h))
-        except OSError:
-            pass
+        rmfiles.append((path, p, h)); owners.add(h)
     else:
-        restore.append((path, p, h))
+        restore.append((path, p, h)); owners.add(h)
+# P547: 버리기 전에, 소유 티켓이 .wip이고 보관 ref가 아직 없으면 같은 방식으로 보관한다.
+for h in sorted(owners):
+    if subprocess.run(["git", "-C", wt, "rev-parse", "-q", "--verify", "refs/dira/wip/" + h],
+                      capture_output=True, timeout=60).returncode != 0:
+        subprocess.run([sys.executable, "-c", os.environ["_WIPSAVE_PY"], wt, h, runlog, name],
+                       capture_output=True, timeout=600)
+for path, p, h in rmfiles:
+    try:
+        os.remove(os.path.join(os.fsencode(wt), path))
+        log("NOTE cleanup_stray_wip 버림(미추적) path=%s owner=%s" % (p, h))
+    except OSError:
+        pass
 def run_restore(batch):
     return subprocess.run(["git", "-C", wt, "--literal-pathspecs", "restore", "--staged", "--worktree", "--"] + [b[0] for b in batch],
                           capture_output=True, timeout=300).returncode == 0
@@ -1965,6 +2034,41 @@ if [ -n "$_dirty_now" ]; then
   printf '%s\n' "$_dirty_now" > "$_dirty_fp"
 else
   rm -f -- "$_dirty_fp"
+fi
+
+# P547 결정 3 - 같은 해시의 보관 ref가 있으면 커밋 없이 작업 트리에 얹는다. 위 dirty 기록 뒤에 하므로
+# 복원된 경로는 "세션이 안 건드린 더러운 경로"로 안 잡힌다. 프롬프트 끝에 한 줄을 붙이고 argv를 다시 만든다.
+WIPREF="refs/dira/wip/$THASH"
+if git -C "$TICKET_CWD" rev-parse -q --verify "$WIPREF" >/dev/null 2>&1; then
+  _wn=$(git -C "$TICKET_CWD" diff --name-only "$WIPREF^" "$WIPREF" 2>/dev/null | grep -c .)
+  # 보관본이 건드리는 경로가 이 워크트리에서 이미 더러우면 얹지 않는다(충돌과 같은 처리). 그 밖에서 실패한
+  # cherry-pick은 그 경로들만 되돌리면 디스패치 전과 같다 - -n 충돌은 --abort가 안 먹는다.
+  _wp=$(git -C "$TICKET_CWD" diff --name-only "$WIPREF^" "$WIPREF" 2>/dev/null)
+  if [ -z "$(printf '%s\n' "$_wp" | xargs -I{} git -C "$TICKET_CWD" status --porcelain -- {} 2>/dev/null)" ] \
+     && git -C "$TICKET_CWD" cherry-pick --no-commit "$WIPREF" >/dev/null 2>&1; then
+    git -C "$TICKET_CWD" reset -q 2>/dev/null
+    git -C "$TICKET_CWD" update-ref -d "$WIPREF" 2>/dev/null
+    log "NOTE $THASH 작업물 복원 paths=$_wn"
+    _WIPMSG="앞 회차의 커밋 안 된 변경 ${_wn}건을 이 워크트리에 복원했습니다. git status로 확인하고 이어서 하세요."
+  else
+    git -C "$TICKET_CWD" cherry-pick --abort >/dev/null 2>&1 || git -C "$TICKET_CWD" cherry-pick --quit >/dev/null 2>&1
+    git -C "$TICKET_CWD" reset -q 2>/dev/null
+    while IFS=$'\t' read -r _st _pp; do
+      [ -n "$_pp" ] || continue
+      if [ "$_st" = "A" ]; then rm -f -- "$TICKET_CWD/$_pp"; else git -C "$TICKET_CWD" checkout -q HEAD -- "$_pp" 2>/dev/null; fi
+    done < <(git -C "$TICKET_CWD" diff --name-status "$WIPREF^" "$WIPREF" 2>/dev/null)
+    log "WARN $THASH 작업물 복원 충돌 ref=$WIPREF"
+    _WIPMSG="앞 회차의 작업물이 ${WIPREF}에 있습니다. git show로 보고 필요한 것만 가져오세요."
+  fi
+  TAIL="$TAIL
+$_WIPMSG"
+  PROMPT="$PROMPT
+$_WIPMSG"
+  ENGINE=()
+  for arg in "${TICKET_ENGINE[@]}"; do
+    arg="${arg//\{prompt\}/$PROMPT}"
+    ENGINE+=("${arg//\{sid\}/$SID}")
+  done
 fi
 
 # P478 R7: 원격 작업 티켓의 세션에만 작업 토큰을 환경변수로 넣는다. 값은 argv-로그에 안 쓴다.
@@ -2780,6 +2884,7 @@ if [ -n "${FAILED:-}" ]; then
     log "DONE $THASH sid=${REAL:-$SID} (세션은 rc=${RC}로 죽었다)"
     exit 0
   fi
+  wip_save "$TICKET_CWD" "$THASH"    # P547 결정 2 - FAIL-TIMEOUT-KILLED 공통
   if [ "$VERDICT" = "err" ]; then
     # P400-1(§엔진 수정 서른여섯 번째 승인 §판정 1) - 위에서 이미 가른 DEATH_KIND를 그 줄에
     # 같이 적는다. `dead_reason`이 NOTE 상관 추정 없이 이 값을 바로 읽는다. 머리말은 그대로
@@ -2817,6 +2922,7 @@ rm -f "$CDOWN"          # 세션이 끝까지 갔다 = 엔진이 멀쩡하다. �
 # reason=bg를 단다. `dead_reason`이 이 값을 "백그라운드 중단"으로 갈라 `reclaim`을 답변
 # 대기가 아니라 백오프로 보낸다 - 밀림이 없던 세션의 FAIL 줄은 그대로다.
 if [ -f "$TPATH" ] && ! fresh_block_sh "$TPATH"; then
+  wip_save "$TICKET_CWD" "$THASH"    # P547 결정 2
   if [ "${BG_GRACE_USED:-0}" -gt 0 ]; then
     log "FAIL $THASH 세션이 ok로 끝났는데 .wip을 남겼다(신선한 블록 없음) reason=bg sid=${REAL:-$SID}"
   else
