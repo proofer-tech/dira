@@ -31,7 +31,7 @@ import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-
 import { createMainReporter } from "./error-report.ts";
 import { describeReadyTimeout, readyTimeoutHint, type ReadyTimeoutState } from "./ready-timeout.ts";
 import { decideRevive, isExternalDeath } from "./revive.ts";
-import { HANG_PROMPT_MS, shouldAskReload } from "./hang-prompt.ts";
+import { HANG_PROMPT_MS, askedAfterUnresponsive, shouldAskReload, shouldCloseDialogOnResponsive } from "./hang-prompt.ts";
 import { mcpCronEdit } from "./mcp-install.ts";
 import { installShellPath } from "./shell-path.ts";
 
@@ -385,11 +385,15 @@ function openWindow(origin: string): BrowserWindow {
   let hangSince = 0;
   let hangAsked = false;
   let hangTimer: NodeJS.Timeout | null = null;
+  let hangDialog: AbortController | null = null; // 열려 있는 대화상자를 닫는 수단
   const askReload = async () => {
     hangTimer = null;
     if (win.isDestroyed() || !shouldAskReload({ elapsedMs: Date.now() - hangSince, asked: hangAsked, visible: win.isVisible() })) return;
     hangAsked = true;
+    const ctl = new AbortController();
+    hangDialog = ctl;
     const { response } = await dialog.showMessageBox(win, {
+      signal: ctl.signal,
       type: "warning",
       title: "dira가 응답하지 않습니다",
       message: "dira가 응답하지 않습니다",
@@ -397,8 +401,9 @@ function openWindow(origin: string): BrowserWindow {
       buttons: ["다시 읽기", "기다리기"],
       defaultId: 1,
       cancelId: 1,
-    });
-    if (response === 0) {
+    }).catch(() => ({ response: 1 }));
+    if (hangDialog === ctl) hangDialog = null;
+    if (response === 0 && !ctl.signal.aborted) {
       contentDead = true;
       void reviveIfVisible("렌더러가 응답하지 않습니다");
     }
@@ -406,7 +411,7 @@ function openWindow(origin: string): BrowserWindow {
   win.webContents.on("unresponsive", () => {
     console.log("[dira] 렌더러가 응답하지 않습니다");
     hangSince = Date.now();
-    hangAsked = false;
+    hangAsked = askedAfterUnresponsive(hangDialog !== null);
     if (hangTimer) clearTimeout(hangTimer);
     hangTimer = setTimeout(() => void askReload(), HANG_PROMPT_MS);
   });
@@ -414,6 +419,7 @@ function openWindow(origin: string): BrowserWindow {
     console.log("[dira] 렌더러가 다시 응답합니다");
     if (hangTimer) clearTimeout(hangTimer);
     hangTimer = null;
+    if (shouldCloseDialogOnResponsive(hangDialog !== null)) hangDialog!.abort();
   });
 
   // 고정하는 것 4 개정 — `origin`(창을 만들 때 받은 값)이 아니라 부를 때마다 지금

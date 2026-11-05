@@ -7,3 +7,13 @@ export const HANG_PROMPT_MS = 5000;
 export function shouldAskReload(state: { elapsedMs: number; asked: boolean; visible: boolean }): boolean {
   return state.elapsedMs >= HANG_PROMPT_MS && !state.asked && state.visible;
 }
+
+/** `unresponsive`가 다시 오면 asked를 되돌리되, 대화상자가 열려 있으면 그대로 둬서 하나만 뜨게 한다. */
+export function askedAfterUnresponsive(dialogOpen: boolean): boolean {
+  return dialogOpen;
+}
+
+/** `responsive`가 오면 열린 대화상자는 닫고, 되살리기는 하지 않는다. */
+export function shouldCloseDialogOnResponsive(dialogOpen: boolean): boolean {
+  return dialogOpen;
+}
