@@ -2040,10 +2040,10 @@ fi
 # 복원된 경로는 "세션이 안 건드린 더러운 경로"로 안 잡힌다. 프롬프트 끝에 한 줄을 붙이고 argv를 다시 만든다.
 WIPREF="refs/dira/wip/$THASH"
 if git -C "$TICKET_CWD" rev-parse -q --verify "$WIPREF" >/dev/null 2>&1; then
-  _wn=$(git -C "$TICKET_CWD" diff --name-only "$WIPREF^" "$WIPREF" 2>/dev/null | grep -c .)
+  _wn=$(git -C "$TICKET_CWD" -c core.quotepath=false diff --name-only "$WIPREF^" "$WIPREF" 2>/dev/null | grep -c .)
   # 보관본이 건드리는 경로가 이 워크트리에서 이미 더러우면 얹지 않는다(충돌과 같은 처리). 그 밖에서 실패한
   # cherry-pick은 그 경로들만 되돌리면 디스패치 전과 같다 - -n 충돌은 --abort가 안 먹는다.
-  _wp=$(git -C "$TICKET_CWD" diff --name-only "$WIPREF^" "$WIPREF" 2>/dev/null)
+  _wp=$(git -C "$TICKET_CWD" -c core.quotepath=false diff --name-only "$WIPREF^" "$WIPREF" 2>/dev/null)
   if [ -z "$(printf '%s\n' "$_wp" | xargs -I{} git -C "$TICKET_CWD" status --porcelain -- {} 2>/dev/null)" ] \
      && git -C "$TICKET_CWD" cherry-pick --no-commit "$WIPREF" >/dev/null 2>&1; then
     git -C "$TICKET_CWD" reset -q 2>/dev/null
@@ -2056,7 +2056,7 @@ if git -C "$TICKET_CWD" rev-parse -q --verify "$WIPREF" >/dev/null 2>&1; then
     while IFS=$'\t' read -r _st _pp; do
       [ -n "$_pp" ] || continue
       if [ "$_st" = "A" ]; then rm -f -- "$TICKET_CWD/$_pp"; else git -C "$TICKET_CWD" checkout -q HEAD -- "$_pp" 2>/dev/null; fi
-    done < <(git -C "$TICKET_CWD" diff --name-status "$WIPREF^" "$WIPREF" 2>/dev/null)
+    done < <(git -C "$TICKET_CWD" -c core.quotepath=false diff --name-status "$WIPREF^" "$WIPREF" 2>/dev/null)
     log "WARN $THASH 작업물 복원 충돌 ref=$WIPREF"
     _WIPMSG="앞 회차의 작업물이 ${WIPREF}에 있습니다. git show로 보고 필요한 것만 가져오세요."
   fi

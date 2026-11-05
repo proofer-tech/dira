@@ -26,7 +26,8 @@ TICKET_ENGINE=("{engine}" "{{prompt}}")
 ENGINE = """\
 #!/bin/bash
 case "$(cat "{modef}")" in
-  dirty) echo mine > tracked.txt; echo new > untracked.txt ;;
+  dirty) echo mine > tracked.txt; echo new > untracked.txt
+         if [ -f "한글 파일.txt" ]; then echo mine > "한글 파일.txt"; echo new > "새 파일.txt"; fi ;;
   look)  printf '%s' "$1" > "{tmp}/prompt.txt"; git status --porcelain > "{tmp}/status.txt"
          wip=$(ls "{tickets}"/*.wip.md | head -1); mv "$wip" "${{wip%.wip.md}}.done.md" ;;
 esac
@@ -174,6 +175,24 @@ try:
     assert "cleanup_stray_wip 버림 path=tracked.txt owner=dddd0002" in log, log
     assert "dirty" in sh("git", "show", "refs/dira/wip/dddd0002:tracked.txt", cwd=e4.a)
     print("4 ok")
+
+    # ---- 5 - 한글과 공백이 든 경로도 충돌 롤백이 되돌린다(core.quotepath 기본값이 8진수로 따옴표를 붙인다) -----
+    e5 = Env(); tmps.append(e5.tmp)
+    write(os.path.join(e5.a, "한글 파일.txt"), "base\n")
+    sh("git", "add", "-A", cwd=e5.a)
+    sh("git", "commit", "-qm", "kr", cwd=e5.a)
+    sh("git", "merge", "-q", "--ff-only", sh("git", "rev-parse", "HEAD", cwd=e5.a).strip(), cwd=e5.b)
+    e5.tick("wa"); e5.reopen()
+    assert "paths=4" in e5.log(), e5.log()
+    write(os.path.join(e5.b, "tracked.txt"), "other\n")
+    sh("git", "commit", "-qam", "b edit", cwd=e5.b)
+    e5.mode("look")
+    r = e5.tick("wb")
+    assert r.returncode == 0, r.stderr
+    assert "WARN %s 작업물 복원 충돌" % H in e5.log(), e5.log()
+    st = open(os.path.join(e5.tmp, "status.txt"), encoding="utf-8").read()
+    assert st == "", st
+    print("5 ok")
 finally:
     for t in tmps:
         shutil.rmtree(t, ignore_errors=True)
