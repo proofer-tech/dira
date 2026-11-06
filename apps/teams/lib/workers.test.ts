@@ -73,6 +73,7 @@ const {
   engineName,
   holderEngine,
   lastLogByWorker,
+  memoByStat,
   limitWaitUntil,
   lockPath,
   listWorkers,
@@ -3533,4 +3534,30 @@ test("stallLogs - 워커 줄은 최신이 앞, 시각 없는 감시자 줄은 �
   assert.equal(r.byWorker.w1.length, 2);
   assert.deepEqual(r.watchdog, [{ at: r.byWorker.w1[0].at, code: "G8", text: "조각 티켓 파일" }]);
   assert.deepEqual((await stallLogs(path.join(dir, "none"))).watchdog, []);
+});
+
+test("memoByStat - 같은 키는 한 번만 읽고, 덧붙이면 다시 읽고, 동시 호출은 하나를 나눈다 (P550-2)", async () => {
+  const root = makeRoot({ "w1.sh": "#!/bin/bash\n" });
+  const log = path.join(root, "workers", "runner.log");
+  const line = (n: number) => `2026-08-01 00:0${n}:00 [w1] DISPATCH aaaa111${n} kind=work persona=dev sid=x log=x.log prio=3\n`;
+  writeFileSync(log, line(1));
+  let reads = 0;
+  const parse = async (dir: string) => {
+    reads++;
+    await new Promise((r) => setTimeout(r, 20));
+    return (await lastLogByWorker(dir)).dispatchByHash; // 실제 파서 결과를 본다
+  };
+  const f = memoByStat((d) => path.join(d, "runner.log"), parse);
+  const dir = path.join(root, "workers");
+  await f(dir);
+  await f(dir);
+  assert.strictEqual(reads, 1);
+  writeFileSync(log, line(1) + line(2));
+  const after = await f(dir);
+  assert.strictEqual(reads, 2);
+  assert.deepStrictEqual(Object.keys(after).sort(), ["aaaa1111", "aaaa1112"]);
+  writeFileSync(log, line(1) + line(2) + line(3));
+  const [a, b] = await Promise.all([f(dir), f(dir)]);
+  assert.strictEqual(reads, 3);
+  assert.strictEqual(a, b);
 });

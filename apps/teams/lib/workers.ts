@@ -1127,8 +1127,7 @@ export type DispatchRoundLog = {
   endAtMs: number | null;
 };
 
-export const lastLogByWorker = cache(
-  async (
+async function parseRunnerLog(
     workersDir: string,
   ): Promise<{
     byWorker: Record<string, { recent: string[]; result: string | null }>;
@@ -1145,7 +1144,7 @@ export const lastLogByWorker = cache(
     // §2-3 개정 2 — 해시별 **회차 목록**(시간순, `DISPATCH` 줄 전부). 카드 한 장 = 이 배열의
     // 항목 하나이고 index+1이 "회차 k"다.
     dispatchRoundsByHash: Record<string, DispatchRoundLog[]>;
-  }> => {
+  }> {
     const text = await readFile(path.join(workersDir, "runner.log"), "utf8").catch(() => "");
     const byWorker: Record<string, { recent: string[]; result: string | null }> = {};
     const dispatchByHash: Record<string, number> = {};
@@ -1221,8 +1220,30 @@ export const lastLogByWorker = cache(
         .reverse(); // backward로 쌓았으니 시간순으로 되돌린다
     }
     return { byWorker, dispatchByHash, personaRuns, logStart, sidByHash, dispatchesBySid, dispatchRoundsByHash };
-  },
-);
+}
+
+/** 파일의 `(경로, size, mtimeMs)`가 같으면 직전 결과를 돌려주고, 같은 키로 동시에 들어온 호출은 진행 중인
+ *  Promise 하나를 함께 기다린다(P550 결정 3). 경로마다 최근 결과 하나만 든다. 돌려주는 객체는 호출자 사이에
+ *  공유되므로 호출자는 고치지 않는다(지금 호출자는 읽기만 한다).
+ *  ponytail: size와 mtime이 같게 내용만 바뀌는 쓰기는 못 본다. runner.log는 덧붙이기뿐이라 그 경우가 없다. */
+export function memoByStat<T>(fileOf: (arg: string) => string, parse: (arg: string) => Promise<T>) {
+  const last = new Map<string, { key: string; p: Promise<T> }>();
+  return async (arg: string): Promise<T> => {
+    const file = fileOf(arg);
+    const st = await stat(file).catch(() => null);
+    const key = st ? `${st.size}:${st.mtimeMs}` : "none";
+    const hit = last.get(file);
+    if (hit && hit.key === key) return hit.p;
+    const p = parse(arg);
+    last.set(file, { key, p });
+    p.catch(() => {
+      if (last.get(file)?.p === p) last.delete(file); // 실패는 붙잡아 두지 않는다
+    });
+    return p;
+  };
+}
+
+export const lastLogByWorker = cache(memoByStat((dir) => path.join(dir, "runner.log"), parseRunnerLog));
 
 /** 이 해시의 **회차 목록**(§2-3 개정 2 표, 요구 `2aa9bdf0`) — `runner.log`의 `DISPATCH <해시>`
  *  줄 전부를 시간순으로. 카드 UI가 그리는 것이 이 배열이고, index+1이 "회차 k"다. `n`(sid 안
