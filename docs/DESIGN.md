@@ -8988,6 +8988,89 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P549. 앱을 다시 켜도 폰트와 이미지를 다시 받지 않고, 서버가 뜨기 전부터 지난 레이아웃의 스켈레톤이 보인다 - Electron과 PWA의 캐시를 함께 쓴다 (요구 `bf1a3ff0`, 왕복 0회)
+
+사람 요구(2026-11-06): *"반복되는 이미지와 폰트등을 캐싱해서 속도를 올리고 기본 레이아웃들을 저장하여 콘텐츠 렌더링 전
+미리 뿌려둘 수도 있게 하여 스켈레톤으로 완화하고있는 로딩경험에 한스푼 더 얹어주세요. electron , pwa의 장점을 모두
+취해주세요."*
+
+#### 실측 - 2026-11-06, master `275f471a`
+
+- **데스크톱 앱의 오리진이 실행마다 바뀐다.** `apps/desktop/main.ts` `boot()`가 `freePort()`(`listen(0)`)로 받은 포트로
+  `http://127.0.0.1:<포트>`를 연다. Chromium의 HTTP 캐시와 `localStorage`는 오리진별이라 앱을 다시 켤 때마다 폰트
+  (`public/fonts/` WantedSans 분할 92개 + Geist Mono)와 이미지를 처음부터 받고, `markdown-editor.tsx`
+  `personas-ui.tsx`가 `localStorage`에 둔 값도 실행마다 사라진다.
+- **`public/` 자산은 매번 재검증한다.** Next는 `public/`에 `Cache-Control: public, max-age=0`을 단다(`/_next/static/`만
+  `immutable`). `next.config.ts`에 `headers()`가 없다.
+- **PWA 요소가 없다.** 웹 앱 매니페스트와 서비스 워커가 0개다.
+- **창은 서버가 준비된 뒤에야 뜬다.** `boot()`가 `waitForReady`를 기다린 다음 `openWindow`를 부른다. 그동안 화면에는
+  아무것도 없고, 창이 뜬 뒤에도 첫 HTML이 올 때까지 흰 바탕이다(`BrowserWindow`에 `show: false` - `backgroundColor`가
+  없다). P534 스켈레톤은 클라이언트 셸이 마운트된 다음의 이동에만 뜬다.
+
+#### 결정
+
+1. **데스크톱 앱의 오리진을 고정한다.** 처음 받은 포트를 `userData/server-port`에 적고, 다음 실행부터 그 포트를 먼저
+   시도한다. 이미 쓰이고 있으면 종전대로 빈 포트를 받아 파일을 덮는다. 오리진이 같아야 아래 2-3의 캐시와
+   `localStorage`가 실행을 건너 살아남는다. 브라우저용 7331 고정은 그대로다.
+2. **`public/` 자산에 긴 캐시를 단다.** `next.config.ts` `headers()`로 `/fonts/:path*`는
+   `public, max-age=31536000, immutable`, 그 밖의 `public/` 이미지(`/icon.svg` `/og.png` `/shots/:path*`)는
+   `public, max-age=86400, stale-while-revalidate=604800`이다. 폰트 파일을 바꿀 때는 파일 이름을 바꾼다는 규칙을
+   `next.config.ts` 주석에 적는다.
+3. **PWA - 매니페스트와 서비스 워커.** `app/manifest.ts`(이름 dira, 아이콘, `display: standalone`, 테마색)를 굽고,
+   `public/sw.js`를 `(app)` 트리 레이아웃에서만 등록한다(공개 사이트 `(site)`와 랜딩-only에서는 등록하지 않는다).
+   서비스 워커는 의존성 없이 손으로 쓴다(Workbox 금지 - GUI 의존성을 늘리지 않는다).
+   - 캐시 우선: `/_next/static/*` `/fonts/*` `/icon.svg` 같은 정적 자산.
+   - 손대지 않음(네트워크 그대로): `/api/*`, RSC 요청(`RSC` 헤더 또는 `_rsc` 쿼리), `POST`, 서버 액션. 데이터는 절대
+     캐시에서 꺼내지 않는다 - 보드 폴링이 옛 값을 보면 회귀다.
+   - 화면 이동(navigate)은 네트워크 우선이고, 서버가 응답하지 않을 때만(연결 실패) 미리 담아 둔 오프라인 셸
+     (`/offline.html`, 아래 결정 5와 같은 스켈레톤 + "서버를 다시 시작하는 중입니다" 한 줄, 5초마다 다시 시도)을 낸다.
+   - 캐시 이름에 앱 버전을 넣고 `activate`에서 다른 버전 캐시를 지운다.
+4. **레이아웃을 기억한다.** 클라이언트 셸이 화면을 그릴 때마다 레이아웃 기록 하나를 남긴다: 테마(라이트 - 다크),
+   사이드바 폭과 접힘, 지금 화면(`screenOf` 값), 홈 패널 폭처럼 큰 상자의 치수뿐이다. 값(티켓 이름 - 숫자 - 문구)은
+   넣지 않는다(P534 결정 4와 같은 이유). 브라우저에서는 `localStorage` `dira-layout`에, 데스크톱 앱에서는 preload
+   `dira.saveLayout(json)` -> main이 `userData/layout.json`에도 쓴다. 형식은 `{ v: 1, theme, sidebar: { width, collapsed },
+   screen, panes: { ... } }`이고 모르는 키는 무시한다.
+5. **데스크톱 앱은 서버를 기다리지 않고 창부터 연다.** `boot()`가 서버를 띄우는 것과 동시에 창을 `show: false` +
+   `backgroundColor`(저장된 테마의 배경색)로 만들고, 앱 번들의 정적 `boot-shell.html`을 `loadFile`로 그린 뒤
+   `ready-to-show`에 보인다. 이 셸은 `userData/layout.json`(없으면 기본 레이아웃)으로 헤더 - 사이드바 - 본문 스켈레톤을
+   P534 스켈레톤과 같은 모양으로 그린다. 서버가 준비되면 같은 창에서 `loadURL(origin)`한다. 서버가 실패하면 종전
+   실패 화면으로 바꾼다. 셸에는 네트워크 요청이 없다(폰트도 시스템 폰트).
+6. **같은 화면이 PWA 쪽에도 있다.** 결정 3의 `/offline.html`과 결정 5의 `boot-shell.html`은 스켈레톤 마크업을 한
+   자리에서 만든다(`apps/teams/public/boot-shell.html` 정본, 데스크톱 빌드가 그것을 복사한다). 모양을 두 벌로 고치지 않는다.
+
+```autonomy
+주도성 5 판단: "electron, pwa의 장점을 모두"를 Electron은 서버보다 먼저 여는 창과 디스크에 남는 레이아웃, PWA는 서비스 워커의 정적 자산 캐시와 서버가 없을 때의 오프라인 셸로 나눠 읽었다.
+주도성 5 판단: 화면 데이터(HTML 본문, RSC, API)는 서비스 워커가 캐시하지 않는다. 옛 보드를 보여 주는 것은 빠른 것이 아니라 틀린 것이고, P534가 지킨 "폴링이 스켈레톤을 이긴다"와 부딪힌다.
+주도성 5 판단: 오리진 고정(결정 1)을 같이 한다. 이것 없이는 데스크톱 앱에서 HTTP 캐시와 서비스 워커가 실행마다 새로 시작해 요구의 "반복되는" 자산을 다시 받는다.
+주도성 5 판단: 공개 사이트에는 서비스 워커를 등록하지 않는다. 요구가 말한 로딩 경험은 앱 화면이고, Vercel 사이트에 워커를 남기면 배포 뒤 옛 자산이 남을 위험만 생긴다.
+주도성 5 판단: 에픽을 열지 않는다. 요구 하나의 후속이라 결정 20의 하한 아래고 req:로 묶는다.
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P549-1 | 데스크톱 - 결정 1(포트 기억과 재사용) | developer | - | 발행 |
+| P549-2 | GUI - 결정 2(`public/` 캐시 헤더) | developer | - | 발행 |
+| P549-3 | GUI - 결정 3(매니페스트, `sw.js`, `/offline.html`) | developer | - | 발행 |
+| P549-4 | GUI + 데스크톱 - 결정 4(레이아웃 기록, preload `saveLayout`, `userData/layout.json`) | developer | - | 발행 |
+| P549-5 | 데스크톱 - 결정 5-6(`boot-shell.html` 정본, 서버보다 먼저 여는 창) | developer | - | 발행 |
+| P549-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 패키지 앱과 브라우저에서 한 줄씩 판정한다 | qa | P549-1 ~ 5 | 발행 |
+
+**개발 다섯 장을 안 엮는다.** 3과 5는 `boot-shell.html`을 함께 쓰지만 먼저 들어오는 쪽이 정본 파일을 만들고 뒤의 쪽이
+그것을 쓴다. 5는 4의 `layout.json`이 없을 때 기본 레이아웃으로 그리므로 4 없이 착수된다(형식은 결정 4에 있다).
+designer 0장 - 새 모양이 없고 P534 스켈레톤을 흉내 낸다.
+
+#### 수용조건
+
+- [ ] 데스크톱 앱을 두 번 연달아 켜면 두 실행의 창 주소 포트가 같다. 그 포트를 다른 프로세스가 잡고 있으면 다른 포트로 뜨고 `userData/server-port`가 새 값이다.
+- [ ] `curl -sI localhost:<포트>/fonts/WantedSansVariable.split.0.woff2`의 `Cache-Control`이 `public, max-age=31536000, immutable`이고 `/icon.svg`는 `max-age=86400`을 단다.
+- [ ] 앱을 한 번 켰다 끄고 다시 켠 뒤 CDP `Network.responseReceived`를 모으면 `/fonts/` `/_next/static/` 응답이 모두 `fromDiskCache` 또는 `fromServiceWorker`이고 네트워크로 받은 것이 0건이다.
+- [ ] `/manifest.webmanifest`가 200이고, 앱 화면에서 `navigator.serviceWorker.controller`가 null이 아니며, 공개 사이트 `/docs/install`과 랜딩-only `/`에서는 등록된 서비스 워커가 0개다.
+- [ ] 서비스 워커가 켜진 채로 보드에 둔 동안 밖에서 티켓을 만들면 5초 안팎에 행이 반영된다(데이터가 캐시에서 나오지 않는다). `/api/*`와 `_rsc` 요청이 `fromServiceWorker`인 건이 0이다.
+- [ ] 브라우저에서 앱을 연 채 서버를 죽이고 다른 화면으로 이동하면 오프라인 셸이 뜨고, 서버를 다시 띄우면 10초 안에 그 화면으로 돌아간다.
+- [ ] 사이드바를 접고 다크 테마로 둔 채 앱을 끄고 다시 켜면, 서버 준비 전 첫 화면이 다크 바탕에 접힌 사이드바 스켈레톤이다(스크린샷). 흰 화면이 한 프레임도 없다(창 기동부터 1초 간격 스크린샷 또는 화면 녹화).
+- [ ] 앱 실행부터 첫 화면이 보일 때까지, 그리고 실제 보드가 그려질 때까지의 시간을 전후 각 3회 재서 `## 결과`에 적는다(판정 아닌 기록).
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`, `pnpm build`(설정 변경과 `app/**` 추가라 대상), 데스크톱 테스트가 통과하고 `git diff --stat`에 `tick.sh` `tickets.py`가 없다.
+
 ### P548. dira.proofer.tech가 이름과 문서 내용으로 검색된다 - 언어별 URL, 페이지별 설명, 구조화 데이터, lastmod, llms.txt (요구 `b724424c`, 왕복 0회)
 
 사람 요구(2026-11-06): "디라", "dira claude code", "dira 멀티 에이전트"와 매뉴얼의 롱테일 검색어로 공개 사이트가
