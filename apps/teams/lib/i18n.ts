@@ -2793,7 +2793,7 @@ export const ko: Record<string, string> = {
   "landing.hero.eyebrow": "로컬 멀티 에이전트 매니지먼트 시스템",
   "landing.hero.title": "나만의 AI 팀을 만들어보세요",
   "landing.hero.body":
-    "요구사항을 정말 아무렇게나 던져도 찰떡같이 알아듣습니다. 티켓을 나누고 에이전트끼리 협업해 끝내는 과정은 jira처럼 실시간으로 지켜볼 수 있습니다. PC에 나만의 멀티 에이전트 시스템을 아주 쉽게 만들어보세요.",
+    "디라에는 요구사항을 정말 아무렇게나 던져도 됩니다. 찰떡같이 알아듣고 티켓으로 나눈 뒤, 에이전트끼리 협업해 끝내는 과정을 jira처럼 실시간으로 보여 줍니다. 내 PC에서 Claude Code로 움직이는 멀티 에이전트 팀을 쉽게 만들어 보세요.",
   "landing.hero.downloadCta": "macOS 앱 다운로드",
   "landing.hero.shotAlt":
     "dira 보드 화면. 대기·진행중·완료 세 레인에 티켓 카드가 놓여 있고, 그중 한 장이 다음 레인으로 건너갑니다.",
@@ -2997,7 +2997,8 @@ export const ko: Record<string, string> = {
   "siteError.retry": "다시 시도",
   "siteNotFound.body": "이 주소에는 페이지가 없습니다.",
   "siteNotFound.homeLink": "홈으로",
-  "siteMeta.description": "티켓을 큐에 넣으면 cron에 등록된 워커가 claude 세션에 넘깁니다. 파일시스템이 곧 큐인 티켓 디스패처입니다.",
+  "siteMeta.homeTitle": "디라(dira) - Claude Code로 꾸리는 나만의 AI 팀, 멀티 에이전트 앱",
+  "siteMeta.description": "디라는 Claude Code 에이전트 여럿을 PM, 개발자, QA 같은 역할로 묶어 AI 팀을 꾸리는 macOS 앱입니다. 요구를 던지면 티켓으로 나눠 역할마다 맡기고, 에이전트 오케스트레이션이 진행되는 모습을 보드에서 실시간으로 보여 줍니다.",
 };
 
 /** 제품 낱말의 영어 대응 — **여기가 한자리다**(621c7a97). 다음 묶음이 같은 것을 다르게 부르지
@@ -5834,7 +5835,7 @@ export const en: Record<string, string> = {
   "landing.hero.eyebrow": "Local multi-agent management system",
   "landing.hero.title": "Build your own AI team",
   "landing.hero.body":
-    "Throw a request in however you like and it still lands. Watch the whole thing live, the way you would in jira: the tickets being split up, the agents working together to finish them. Your own multi-agent system, on your own machine, and it's easy to set up.",
+    "Throw a request at dira however you like and it still lands. Watch it split the work into tickets and the agents team up to finish them, live, the way you would in jira. Your own multi-agent team of Claude Code agents runs on your own machine, and it's easy to set up.",
   "landing.hero.downloadCta": "Download the macOS app",
   "landing.hero.shotAlt":
     "The dira board. Ticket cards sit in the three lanes Open, In progress and Done, and one of them crosses into the next lane.",
@@ -6042,7 +6043,8 @@ export const en: Record<string, string> = {
   "siteError.retry": "Try again",
   "siteNotFound.body": "There's no page at this address.",
   "siteNotFound.homeLink": "Go home",
-  "siteMeta.description": "Drop a ticket in the queue and a cron-driven worker hands it to a claude session. A ticket dispatcher whose queue is the filesystem.",
+  "siteMeta.homeTitle": "dira - Build a multi-agent AI team from Claude Code",
+  "siteMeta.description": "dira, a macOS app, turns Claude Code agents into an AI team. Give it a request and it splits the work into tickets by role and shows the orchestration live.",
 };
 
 const DICTS: Record<Locale, Record<string, string>> = { ko, en };

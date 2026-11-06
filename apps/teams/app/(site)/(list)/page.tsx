@@ -32,11 +32,12 @@ import { t } from "@/lib/i18n";
 import "../../globals.css";
 
 // `index.md`가 `titleTemplate: false`였던 유일한 장이라 `<title>`에 사이트 이름이 안 붙는다.
-// 문구는 `landing.hero.eyebrow`를 그대로 쓴다(P340-3, 티켓 76b659fd) — 히어로 eyebrow와
-// 같은 문장이라 값을 두 번 안 든다.
+// 문구는 `siteMeta.homeTitle`이다(P548 결정 5) - 종전에는 히어로 eyebrow를 그대로 썼는데(P340-3)
+// 검색어("디라", "AI 팀", "Claude Code")가 안 들어가 화면 문구와 갈랐다. description과 og는
+// `pageMetadata`가 `siteMeta.description`으로 채운다.
 export async function generateMetadata() {
   const locale = await siteLocale();
-  return pageMetadata("/", `dira - ${t(locale, "landing.hero.eyebrow")}`, {
+  return pageMetadata("/", t(locale, "siteMeta.homeTitle"), {
     suffix: false,
     locale,
   });
