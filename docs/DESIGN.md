@@ -8988,6 +8988,87 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P548. dira.proofer.tech가 이름과 문서 내용으로 검색된다 - 언어별 URL, 페이지별 설명, 구조화 데이터, lastmod, llms.txt (요구 `b724424c`, 왕복 0회)
+
+사람 요구(2026-11-06): "디라", "dira claude code", "dira 멀티 에이전트"와 매뉴얼의 롱테일 검색어로 공개 사이트가
+검색되도록 사이트 코드를 고친다. sitemap 제출(Search Console)은 사람이 하고 이 블록 밖이다.
+
+#### 실측 - 2026-11-06, 요구 본문
+
+- 같은 URL이 `Accept-Language`(와 쿠키 `dira-locale`)에 따라 ko/en을 바꿔 낸다(`lib/site-locale.ts`
+  `resolvePublicLocale`). hreflang이 없고 `Vary`에 `Accept-Language`가 없다. 검색엔진은 URL 하나에 언어 하나만
+  색인한다.
+- `/docs/*` 30장의 description이 전부 `siteMeta.description` 하나다(`app/(site)/meta.ts` `pageMetadata`의 `||`).
+- 사이트 어디에도 "디라"가 없다. 홈 title-description은 "티켓 디스패처", "cron" 같은 구현 용어고 "오케스트레이션"은 0회다.
+- JSON-LD가 없다. `sitemap.xml`에 `lastmod`가 없다(`sitemap.ts` 주석의 종전 판단). `/llms.txt`는 404다.
+
+#### 결정
+
+1. **한국어는 지금 주소 그대로, 영어는 `/en` 접두다.** `/` `/docs/<이름>` `/privacy` `/terms`는 늘 한국어를 낸다.
+   영어판은 `/en` `/en/docs/<이름>` `/en/privacy` `/en/terms`다. 이미 알려진 주소가 바뀌지 않아 리다이렉트 표가 필요 없다.
+2. **언어 판정은 URL이 정본이다(랜딩-only).** 페이지가 그리는 언어는 경로로만 정한다. 쿠키와 `Accept-Language`는
+   한국어 주소에 처음 들어온 사람을 영어 주소로 보낼지만 정한다: 쿠키 `dira-locale=en`이거나, 쿠키가 없고
+   `Accept-Language`가 `ko`보다 `en`을 먼저 고르면 같은 경로의 `/en` 판으로 302를 보낸다. 쿠키 `ko`면 보내지 않는다.
+   이 302 응답과 한국어 주소의 200 응답은 `Vary: Accept-Language, Cookie`를 단다. `Accept-Language`가 없는 요청(대부분의
+   크롤러)은 한국어 200을 받는다. 언어 토글은 쿠키를 쓰고 같은 경로의 다른 언어 판으로 이동한다. 풀 모드(로컬 앱)는
+   종전대로 `language.json`만 보고 `/en` 라우트는 그 판정과 무관하게 영어를 그린다.
+3. **모든 공개 페이지가 hreflang 셋을 단다.** `<link rel="alternate" hreflang="ko">`(한국어 주소),
+   `hreflang="en"`(`/en` 주소), `hreflang="x-default"`(한국어 주소)다. canonical은 그 페이지 자기 언어의 주소다.
+   `sitemap.xml`은 두 언어의 URL을 모두 싣고 각 `<url>`에 `xhtml:link rel="alternate"` 셋을 단다.
+4. **docs의 description은 그 문서에서 뽑는다.** 문서 frontmatter에 `description:`이 있으면 그것, 없으면 첫 `# `
+   제목 뒤 첫 문단의 평문(마크다운 기호 제거, 160자에서 자르고 말줄임)이다. 언어별 원고(`en/docs/`)에서 따로 뽑는다.
+   `siteMeta.description`으로 떨어지는 것은 본문이 비었을 때뿐이다.
+5. **홈 문구를 검색어 기준으로 다시 쓴다(writer).** 홈 `<title>`, description, og:title, og:description, 히어로 첫 문단을
+   ko/en 두 벌로 고친다. 한국어판 title 또는 첫 문단에 "디라"가 들어가고, "AI 팀", "멀티 에이전트", "에이전트
+   오케스트레이션", "Claude Code" 중 셋 이상이 title이나 description에 들어간다. 키워드 나열이 아니라 읽히는 문장이다.
+   H1("나만의 AI 팀을 만들어보세요")은 바꾸지 않는다.
+6. **JSON-LD를 넣는다.** 홈(두 언어)에 `SoftwareApplication`(`name: dira`, `alternateName: 디라`,
+   `applicationCategory: DeveloperApplication`, `operatingSystem: macOS`, `offers`, `downloadUrl`, `url`)과
+   `Organization`(`name: 프루퍼 주식회사`, `url: https://proofer.tech`)을 `<script type="application/ld+json">`로 굽는다.
+   `offers`의 가격과 `downloadUrl`은 랜딩이 실제로 보여 주는 값과 같게 한다(랜딩의 다운로드 링크가 가리키는 GitHub
+   릴리스 주소). docs 각 장은 `BreadcrumbList`(홈 -> 매뉴얼 목차 -> 그 장, 목차 자신은 둘)를 단다.
+7. **sitemap에 `lastmod`를 넣는다.** 각 URL의 원고 파일(`docs/<이름>.md`, `en/docs/<이름>.md`, 홈은 `landing.tsx`와
+   `lib/i18n.ts` 중 늦은 쪽)의 마지막 커밋 시각(`git log -1 --format=%cI`)이고, git이 없거나 답이 비면 빌드 시각이다.
+   `sitemap.ts`의 "넣지 않는다" 주석은 이 결정으로 바꾼다.
+8. **`/llms.txt`를 굽는다.** llmstxt.org 형식이다: `# dira`, 한 줄 요약 인용, `## Docs` 아래 docs 각 장을
+   `- [제목](절대 URL): description`으로 나열한다(제목과 description은 결정 4와 같은 함수). 한국어판 기준이고
+   `## English` 절에 `/en` 판 목차 주소 한 줄을 둔다. 정적 라우트로 굽고 `robots.txt`는 바꾸지 않는다.
+
+```autonomy
+주도성 5 판단: 영어만 접두를 받는다. 한국어까지 /ko로 옮기면 이미 공유된 /docs/* 주소 30개에 301 표가 필요하고, 요구의 목표 검색어가 한국어라 지금 주소의 신호를 버릴 이유가 없다.
+주도성 5 판단: x-default는 한국어 주소다. DEFAULT_LOCALE이 ko이고, 헤더 없는 요청이 받는 판이 그것이다.
+주도성 5 판단: 영어 선호 방문자를 302로 보내는 것은 한국어 주소에서만이다. /en 주소는 언제나 영어 200이라 크롤러가 두 판을 모두 따로 받는다.
+주도성 5 판단: description은 사람이 30장 x 2벌을 쓰는 대신 첫 문단에서 뽑고 frontmatter로 덮을 수 있게 한다. 매뉴얼 첫 문단이 그 장의 요약이라 롱테일 검색어가 그대로 들어간다.
+주도성 5 판단: lastmod의 원천은 파일 mtime이 아니라 git이다. Vercel은 체크아웃 시각이 mtime이라 전부 같은 값이 된다.
+주도성 5 판단: 에픽을 열지 않는다. 요구 하나의 후속 다섯 장이라 결정 20의 하한 아래고 req:로 묶는다.
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P548-1 | 결정 1-3: `/en` 라우트, 한국어 주소의 302와 `Vary`, 토글 이동, hreflang 셋, sitemap 두 언어와 alternate | developer | - | 발행 |
+| P548-2 | 결정 4: docs description 추출(frontmatter 우선, 첫 문단 160자) | developer | - | 발행 |
+| P548-3 | 결정 5: 홈 title-description-og-히어로 첫 문단 ko/en 문구 | writer | - | 발행 |
+| P548-4 | 결정 6: 홈 SoftwareApplication + Organization, docs BreadcrumbList JSON-LD | developer | - | 발행 |
+| P548-5 | 결정 7-8: sitemap `lastmod`, `/llms.txt` | developer | - | 발행 |
+| P548-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 랜딩-only 빌드에서 한 줄씩 판정한다 | qa | P548-1 ~ 5 | 발행 |
+
+**개발 넷을 안 엮는다.** 1과 5는 둘 다 `sitemap.ts`를 고치지만 1은 URL 목록과 alternate, 5는 `lastmod` 필드라 rebase가
+푼다. 2와 5는 docs 제목-description을 읽는 함수를 함께 쓰지만 5는 2 없이도 `titleOf`와 `siteMeta.description`으로
+시작하고, 2가 먼저 들어오면 그것을 부른다. 4의 BreadcrumbList URL은 1이 먼저면 `/en` 판도 맞춘다. designer 0장(화면 모양이
+안 바뀐다).
+
+#### 수용조건
+
+- [ ] 랜딩-only 서버에 `curl -sI /`(헤더 없음)와 `-H 'Accept-Language: ko'`는 200이고, `-H 'Accept-Language: en'`은 `Location: /en`인 302다. 세 응답 모두 `Vary`에 `Accept-Language`가 있다.
+- [ ] `/`와 `/en`의 HTML에 `hreflang="ko"`(`https://dira.proofer.tech/`), `hreflang="en"`(`https://dira.proofer.tech/en`), `hreflang="x-default"`(`https://dira.proofer.tech/`)가 모두 있고 canonical이 각자 자기 주소다. `/docs/install`과 `/en/docs/install`도 같은 꼴이다.
+- [ ] 쿠키 `dira-locale=ko`와 `Accept-Language: en`을 함께 보내면 `/`가 302 없이 한국어 200이다. `/en`은 어떤 헤더로도 영어 200이다.
+- [ ] `sitemap.xml`의 `<url>` 수가 종전의 두 배이고, 모든 `<url>`에 `xhtml:link` 셋과 `<lastmod>`가 있다.
+- [ ] `/docs/install`, `/docs/cron`, `/docs/squads`의 `meta name="description"`이 서로 다르고 `/`의 것과도 다르다. `/en/docs/install`의 것은 영어다.
+- [ ] `/` HTML에 "디라"가 있고, `<title>`이나 description에 "AI 팀", "멀티 에이전트", "에이전트 오케스트레이션", "Claude Code" 중 셋 이상이 있다.
+- [ ] `/` HTML에 `application/ld+json`이 있고 그 JSON을 Rich Results Test(코드 입력)에 넣으면 SoftwareApplication 오류가 0이다. `/docs/install`에는 `BreadcrumbList`가 있다.
+- [ ] `curl -s -o /dev/null -w '%{http_code}' /llms.txt`가 200이고 본문에 docs 장 수만큼 `- [` 줄이 있다.
+- [ ] `pnpm exec tsc --noEmit`과 바뀐 파일의 테스트(`meta.test.ts` 포함)가 통과한다.
+
 ### P547. 백그라운드를 기다리다 끝난 회차의 작업물을 다음 회차가 이어받는다 (요구 `32687757`, 왕복 0회)
 
 사람 요구(2026-11-06, proofer 큐 홈 대화): *"세션이 측정을 기다리다 끝나고, 다음 회차가 처음부터 다시 시작하는 문제는
