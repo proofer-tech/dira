@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Metadata } from "next";
@@ -119,4 +120,32 @@ export function pageMetadata(
     // 카드는 안 갈리고 페이지마다 태그 5개가 늘어난다. 지적은 `053779df`로 올렸다.
     twitter: { card: "summary_large_image" },
   };
+}
+
+/** P548 결정 7 - sitemap `lastmod`. 파일 mtime은 Vercel 체크아웃 시각이라 전부 같아지므로 git이 원천이다.
+ *  파일 여럿이면 가장 늦은 커밋 시각이다. git이 없거나 답이 비면(얕은 클론, 미추적 파일) 빌드 시각이다.
+ *  `%cI`는 W3C 날짜시간(`2026-11-06T14:17:57+09:00`)이라 그대로 `<lastmod>`에 들어간다. */
+export type GitLog = (file: string) => string;
+const gitLog: GitLog = (file) =>
+  execFileSync("git", ["log", "-1", "--format=%cI", "--", file], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+
+export function lastmodOf(files: string[], run: GitLog = gitLog, now: Date = new Date()): string {
+  let best: { raw: string; ms: number } | undefined;
+  for (const f of files) {
+    try {
+      const raw = run(f).trim();
+      const ms = new Date(raw).getTime();
+      if (raw && !Number.isNaN(ms) && (!best || ms > best.ms)) best = { raw, ms };
+    } catch {
+      // git 실행 실패 - 이 파일은 시각을 모른다
+    }
+  }
+  return best?.raw ?? now.toISOString();
+}
+
+/** `pageUrls`의 각 URL이 읽는 원고 파일. 홈은 `landing.tsx`와 `lib/i18n.ts` 중 늦은 쪽이다. */
+export function sourceFilesOf(path: string): string[] {
+  if (path === "/") return ["app/(site)/landing.tsx", "lib/i18n.ts"];
+  if (rootNames.some((n) => path === `/${n}`)) return [`${path.slice(1)}.md`];
+  return [`docs/${path === "/docs/" ? "index" : path.slice("/docs/".length)}.md`];
 }

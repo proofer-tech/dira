@@ -107,3 +107,16 @@ test("매뉴얼 30장 x 두 언어 - description이 160자 이하이고 마크�
     assert.ok(seen.size >= docNames.length - 2, `${base}: 서로 같은 description이 많다 (${seen.size})`);
   }
 });
+
+/** P548-5 결정 7 - lastmod는 git 커밋 시각이고, git이 실패하면 빌드 시각이다. */
+test("lastmodOf - 가장 늦은 커밋 시각, git 실패는 빌드 시각", async () => {
+  const { lastmodOf, sourceFilesOf, pageUrls } = await import("./app/(site)/meta.ts");
+  const now = new Date("2030-01-01T00:00:00Z");
+  const times: Record<string, string> = { a: "2026-01-02T03:04:05+09:00", b: "2026-05-06T07:08:09+09:00" };
+  assert.strictEqual(lastmodOf(["a"], (f) => times[f], now), times.a);
+  assert.notStrictEqual(lastmodOf(["a"], (f) => times[f], now), lastmodOf(["b"], (f) => times[f], now));
+  assert.strictEqual(lastmodOf(["a", "b"], (f) => times[f], now), times.b);
+  assert.strictEqual(lastmodOf(["a"], () => { throw new Error("ENOENT git"); }, now), now.toISOString());
+  assert.strictEqual(lastmodOf(["a"], () => "\n", now), now.toISOString());
+  assert.ok(pageUrls.every((u) => sourceFilesOf(u.slice("https://dira.proofer.tech".length)).length > 0));
+});
