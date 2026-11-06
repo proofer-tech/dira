@@ -8988,6 +8988,69 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P550. 자식 서버가 힙 한도로 죽는 일을 줄이고, 죽으면 무엇이 메모리를 썼는지 남긴다 (요구 `54125329`, 왕복 0회)
+
+사람 요구(2026-11-06): *"요즘 이 화면 보는일이 잦아졌습니다. 로그 분석해서 발생하지 않도록 해주세요"*.
+첨부 화면은 P546과 같은 `(app)` error boundary다 - `화면을 표시하지 못했습니다` / `network error` / `다시 시도`.
+P546은 복구 경로를 고쳤고 원인 추적은 범위 밖으로 두었다. 이 절이 원인을 다룬다.
+
+#### 실측 (2026-11-06)
+
+- `~/Library/Logs/DiagnosticReports/dira Helper-*.ips` 6건(11-05 19:19 두 건, 23:18, 11-06 09:21, 13:36, 13:45)이
+  전부 같은 크래시다. 스레드 이름 `next-server (v16.2.12)`, `SIGABRT`, 맨 위 프레임 `node::OOMErrorHandler`.
+  즉 자식 서버가 V8 힙 한도로 죽었다. 한도는 `ELECTRON_RUN_AS_NODE=1 dira -e`로 잰 `heap_size_limit` 4096 MB다
+  (앱 1.2.48, Electron 41.10.6, Node 24.18.0, 머신 16 GB).
+- 죽기까지 걸린 시간이 33초(11-05 19:18:37 -> 19:19:10), 8분 25초(11-06 13:36:38 -> 13:45:03)부터 수 시간까지
+  고르지 않다. 평상시 RSS는 380-440 MB에서 오르내리고 꾸준히 자라지 않는다. 느린 누수보다 요청 몇 개가 한꺼번에
+  큰 메모리를 잡는 모양이다.
+- 크래시 보고서에는 JS 스택이 없다. Node가 OOM 직전에 stderr로 내는 `FATAL ERROR` 줄과 JS 스택은 main의 `stderr`
+  변수에만 남고 `reportMain(child_exit)`로 원격 제보에 실리는데, 이 머신은 그 제보를 로컬에 안 남겨서 사후에 읽을
+  길이 없다. 그래서 어느 요청이 4 GB를 잡았는지는 이번 실측으로 확정하지 못했다.
+- 무거운 경로로 확인된 것이 하나 있다. `lib/workers.ts`의 `lastLogByWorker`는 `runner.log`를 통째로 읽어 전체 이력을
+  파싱한다. dira 큐의 `runner.log`는 07-30부터 회전 없이 38 MB - 43만 줄이다. 이 함수를 그대로 불러 보니 한 번에 약
+  1.2초 동안 이벤트 루프를 잡고 힙을 80-150 MB 쓰며, 넷을 동시에 부르면 30.7초가 걸렸다. `react`의 `cache`는
+  요청 하나 안에서만 재사용되므로 페르소나 화면과 티켓 상세 화면을 열 때마다 이 파싱이 처음부터 다시 돈다.
+- 같은 파일을 읽는 `stallLogs`는 이미 꼬리(`STALL_TAIL`)만 읽어서 대상이 아니다.
+
+#### 결정
+
+1. **자식 서버는 치명 오류 때 진단 보고서를 남긴다.** `startServer`가 서버 스크립트 앞에 Node 옵션
+   `--report-on-fatalerror --report-directory=<~/.config/dira/run/server-reports>`를 붙인다. 디렉터리는 띄우기 전에
+   만들고, 보고서는 최신 10개만 남긴다(띄울 때 오래된 것부터 지운다).
+2. **자식이 밖에서 죽으면 stderr 꼬리를 로컬 파일에 남긴다.** `proc.on("exit")`의 external 갈래에서
+   `~/.config/dira/run/server-exit.log`에 `<ISO 시각> code=<code|signal>` 한 줄과 `childRaw()`의 마지막 64 KB를
+   덧붙인다. 파일이 1 MB를 넘으면 뒤쪽 512 KB만 남긴다. 원격 제보(`reportMain`)는 그대로 둔다.
+3. **`lastLogByWorker`의 파싱 결과를 프로세스 안에서 재사용한다.** 키는 `(runner.log 경로, size, mtimeMs)`다.
+   키가 같으면 다시 읽지 않고 직전 결과를 돌려주고, 같은 키로 동시에 들어온 호출은 진행 중인 Promise 하나를 함께
+   기다린다. 경로마다 최근 결과 하나만 들고 있는다. 반환 모양과 의미(전체 이력)는 바뀌지 않는다.
+4. 엔진 - 큐 파일 - `runner.log` 회전은 안 바뀐다. 고치는 곳은 `apps/desktop/main.ts`와 `apps/teams/lib/workers.ts`다.
+5. 결정 1-2가 남긴 기록으로 다음 OOM의 범인을 확정하는 일은 이 절 밖이다. 기록이 쌓이면 새 요구로 다룬다.
+
+```autonomy
+주도성 5 판단: 크래시 보고서만으로 범인 요청을 확정할 수 없어서, 다음 크래시가 범인을 남기게 하는 기록(결정 1-2)과 실측으로 무겁다고 확인한 경로의 완화(결정 3)를 한 절로 묶었다. 추측으로 다른 경로를 고치지 않았다.
+주도성 5 판단: runner.log를 꼬리만 읽도록 바꾸지 않고 캐시를 택했다. personaRuns - dispatchRoundsByHash가 전체 이력을 쓰므로 꼬리 읽기는 화면의 의미를 바꾼다. 캐시는 의미를 안 바꾸고 반복 파싱과 동시 파싱을 없앤다.
+주도성 5 판단: heap snapshot(--heapsnapshot-near-heap-limit)은 쓰지 않았다. 4 GB 힙을 덤프하면 파일이 수 GB이고 덤프하는 동안 메모리를 더 쓴다. 진단 보고서는 JS 스택과 힙 통계를 수십 KB로 남긴다.
+주도성 5 판단: 오류 제보 원격 저장소를 조회하려 했으나 dira Vercel 프로젝트에 Blob 저장소가 붙어 있지 않고 공개 배포는 DIRA_LANDING_ONLY로 /api/**가 404라, 원격에서 stderr를 찾을 수 없었다.
+```
+
+#### 수용조건
+
+- [ ] 개발 모드에서 자식 서버를 `--max-old-space-size=64` 같은 작은 한도로 띄워 OOM을 일으키면
+  `~/.config/dira/run/server-reports/`에 `report.*.json` 하나가 생기고, 그 JSON의 `javascriptStack`이 비어 있지 않다.
+- [ ] 같은 상황에서 `~/.config/dira/run/server-exit.log` 끝에 `code=` 줄이 생기고 그 아래 `FATAL ERROR` 문자열이 있다.
+- [ ] `server-reports/`에 보고서 11개를 미리 두고 앱을 띄우면 10개가 남는다. `server-exit.log`를 1 MB 넘게 만든 뒤
+  한 번 더 죽이면 파일이 512 KB 근처(512 KB + 마지막 기록 이하)로 줄어 있다.
+- [ ] `lastLogByWorker`를 같은 `runner.log`로 연달아 두 번 부르면 `readFile`이 한 번만 불린다는 단위 테스트가 통과한다.
+  파일에 한 줄을 덧붙이고 부르면 다시 읽고 새 줄이 결과에 들어간다. 동시에 두 번 부르면 `readFile`이 한 번만 불린다.
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`가 통과하고, 고친 파일이 들어간 테스트가 통과한다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P550-1 | 구현 - 결정 1-2. 자식 서버 진단 보고서와 `server-exit.log`(보존 개수 - 크기 상한 포함) | developer | - | 대기 |
+| P550-2 | 구현 - 결정 3. `lastLogByWorker` 결과를 `(경로, size, mtimeMs)` 키로 재사용하고 동시 호출을 합친다 | developer | - | 대기 |
+| P550-3 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P550-1, P550-2 | 대기 |
+
+**세 장이다.** designer - writer 0장 - 화면과 사용자 문서가 안 바뀐다. 에픽을 안 연다.
 ### P549. 앱을 다시 켜도 폰트와 이미지를 다시 받지 않고, 서버가 뜨기 전부터 지난 레이아웃의 스켈레톤이 보인다 - Electron과 PWA의 캐시를 함께 쓴다 (요구 `bf1a3ff0`, 왕복 0회)
 
 사람 요구(2026-11-06): *"반복되는 이미지와 폰트등을 캐싱해서 속도를 올리고 기본 레이아웃들을 저장하여 콘텐츠 렌더링 전
