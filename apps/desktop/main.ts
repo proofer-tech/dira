@@ -36,6 +36,7 @@ import { decideRevive, isExternalDeath } from "./revive.ts";
 import { HANG_PROMPT_MS, askedAfterUnresponsive, shouldAskReload, shouldCloseDialogOnResponsive } from "./hang-prompt.ts";
 import { mcpCronEdit } from "./mcp-install.ts";
 import { installShellPath } from "./shell-path.ts";
+import { readBootLayout } from "./boot-shell.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
  *  (package.json `build.extraResources`). 소스에서 돌 때는 `apps/teams` 옆이다. */
@@ -47,6 +48,11 @@ const SERVER = process.env.DIRA_SERVER_JS
 /** main.ts 옆이다. **패키징 목록(package.json `build.files`)에 같이 실어야 한다** — 빠지면
  *  `.app`에서만 피커 버튼이 조용히 사라진다(브라우저와 구분이 안 된다). */
 const PRELOAD = fileURLToPath(new URL("preload.cjs", import.meta.url));
+/** 서버보다 먼저 그리는 스켈레톤 셸(P549 결정 5). 정본은 `apps/teams/public/boot-shell.html`이고
+ *  패키징은 `build.extraResources`가 `Resources/boot-shell.html`로 복사한다. */
+const BOOT_SHELL = app.isPackaged
+  ? join(process.resourcesPath, "boot-shell.html")
+  : fileURLToPath(new URL("../teams/public/boot-shell.html", import.meta.url));
 const READY_TIMEOUT_MS = 30_000;
 /** 배경 폴링이다 — 보드의 5초(§아키텍처)와 다른 값인 것이 맞다 (§데스크톱 앱 N2). */
 const POLL_MS = 30_000;
@@ -63,6 +69,10 @@ function appendStdoutTail(chunk: string) {
   stdoutTail = (stdoutTail + chunk).split("\n").slice(-STDOUT_TAIL_LINES).join("\n");
 }
 let win: BrowserWindow | null = null;
+/** `boot()`이 서버 준비를 기다리는 동안 참이다. 이때 스켈레톤 창(P549 결정 5)이 이미 보이므로
+ *  `reviveIfVisible`이 자식의 이른 죽음에 끼어들면 `waitForReady`와 되살리기가 서로 서버를 띄운다 -
+ *  기동 실패는 `boot()`이 실패 화면으로 처리한다. */
+let booting = false;
 let tray: Tray | null = null;
 let quitting = false;
 /** **서버가 준비된 뒤에만** 값이 있다 — `second-instance`가 그 전에 올 수 있어서 모듈
@@ -354,13 +364,17 @@ ${hintBlock}
   win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
 
-/** 창은 자기가 띄운 오리진만 연다 (고정하는 것 4). 이 창은 fs를 만지는 서버 바로 앞이다. */
-function openWindow(origin: string): BrowserWindow {
+/** 창은 자기가 띄운 오리진만 연다 (고정하는 것 4). 이 창은 fs를 만지는 서버 바로 앞이다.
+ *  `origin`이 없으면 서버 준비 전이다(P549 결정 5): 저장된 테마 배경으로 숨겨 만들고 스켈레톤 셸을
+ *  그린 뒤 `ready-to-show`에 보인다. 서버가 준비되면 부르는 쪽이 같은 창에 `loadURL(origin)`한다. */
+function openWindow(origin?: string): BrowserWindow {
   contentDead = false; // 새로 여는 창이라 아직 아무것도 안 죽었다
+  const shellLayout = origin ? null : readBootLayout(join(app.getPath("userData"), "layout.json"));
   const win = new BrowserWindow({
     width: 1440,
     height: 900,
     title: "dira",
+    ...(shellLayout ? { show: false, backgroundColor: shellLayout.background } : {}),
     webPreferences: { contextIsolation: true, nodeIntegration: false, preload: PRELOAD },
   });
 
@@ -451,7 +465,10 @@ function openWindow(origin: string): BrowserWindow {
     } else win.hide();
   });
 
-  win.loadURL(origin);
+  if (shellLayout) {
+    win.once("ready-to-show", () => win.show());
+    void win.loadFile(BOOT_SHELL, { query: { l: shellLayout.query } });
+  } else win.loadURL(origin!);
   return win;
 }
 
@@ -1168,7 +1185,7 @@ function installAppMenu() {
  *  `reviving`으로 겹침을 막는다 — 같은 사고로 리스너 둘이 함께 울려도(예: 렌더러 사망과 자식
  *  exit가 한 크래시에서 같이 난다) `showWindow()`를 두 번 안 부른다. */
 async function reviveIfVisible(trigger: string) {
-  if (!win || win.isDestroyed() || !win.isVisible()) return;
+  if (booting || !win || win.isDestroyed() || !win.isVisible()) return;
   if (reviving) return;
   reviving = true;
   try {
@@ -1216,6 +1233,9 @@ async function showWindow() {
 async function boot() {
   installAppMenu(); // 실패 화면만 뜨는 실행에도 메뉴는 있다
   await startEnvBridge().catch((e) => console.error(`[dira] 환경변수 브리지를 못 열었습니다: ${(e as Error).message}`));
+  // P549 결정 5 - 서버를 기다리지 않고 창부터 연다. 셸은 네트워크가 없어 서버 기동과 겹쳐도 된다.
+  booting = true;
+  win = openWindow();
   const port = await freePort();
   const origin = `http://127.0.0.1:${port}`;
   // startServer가 process.env.PATH를 물려주므로 그보다 먼저 끝나야 첫 기동 서버 자식도 dira를 찾는다 (P484)
@@ -1224,13 +1244,17 @@ async function boot() {
   console.log(`[dira] ${SERVER} → ${origin}`);
 
   const timeout = await waitForReady(origin, child);
+  booting = false;
   if (timeout) {
     killServer();
+    if (win && !win.isDestroyed()) win.destroy(); // 스켈레톤 창을 실패 화면으로 바꾼다
+    win = null;
     showFailure(timeout.reason, timeout.hint);
     return;
   }
   readyOrigin = origin; // 여기부터 `second-instance`가 창을 열 수 있다
-  win = openWindow(origin);
+  if (win && !win.isDestroyed()) win.loadURL(origin);
+  else win = openWindow(origin); // 부팅 중 창을 파괴했으면(되살리기 대상 아님) 새로 연다
   createTray();
   void installMcpKeepalive().catch((e) => console.error(`[dira] MCP 감시를 설치하지 못했습니다: ${(e as Error).message}`));
   app.on("activate", () => showWindow()); // 독 아이콘도 `열기`와 같은 자리로 간다

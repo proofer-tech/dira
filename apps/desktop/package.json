@@ -53,6 +53,10 @@
         "to": "lib/error-report.ts"
       },
       {
+        "from": "../teams/public/boot-shell.html",
+        "to": "boot-shell.html"
+      },
+      {
         "from": "mcp-keepalive.sh",
         "to": "mcp-keepalive.sh"
       },
