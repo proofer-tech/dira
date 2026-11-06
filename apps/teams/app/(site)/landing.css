@@ -280,9 +280,6 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    54라 114다(§11 `top-18`과 같은 유도). */
 #projects { scroll-margin-top: 94px; padding-block: 96px; }
 #projects + .hero { border-top: 1px solid var(--border); }
-@media (max-width: 480px) {
-  #projects { scroll-margin-top: 102px; }
-}
 .dira-landing .cta-note { margin: 16px 0 0; font-size: 12.5px; color: var(--faint); font-family: var(--mono); }
 
 /* ⑤ 페이지가 열리는 순간(§모션 §판정표 ⑤). 총 770ms에 끝나고 다시 안 돈다 —
@@ -819,10 +816,32 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 .dira-landing .travel[data-lane="1"] .tk { border-left-color: var(--active); }
 .dira-landing .travel[data-lane="2"] .tk { border-left-color: var(--done); }
 
+/* ── 480 이하 (비주얼 §81, 검수 df980679) ───────────────────────────
+   ① 터치 영역 40px ② sticky는 `.travel` 밴드 하나(46) ③ 칩 한 줄 ④ 글자 하한 12px.
+   481 이상은 이 블록 밖이라 한 줄도 안 바뀐다. */
 @media (max-width: 480px) {
-  /* 390에서 `content` 열이 342라 레인이 114px인데 한 줄 카드는 130.84px이다. 레인을 셋으로
-     두고 카드를 두 줄로 접는다 — 다섯 폭 전부에서 여행이 그대로 남는다. 밴드 높이는 안 갈린다. */
-  .dira-landing .tk { display: block; height: auto; padding: 4px 8px; line-height: 14px; }
-  .dira-landing .tk-name { height: 14px; }
-  .dira-landing .tk-name i { height: 14px; line-height: 14px; transform: translateY(calc(var(--lane, 0) * -14px)); }
+  .dira-landing .brand { min-height: 40px; }
+  .dira-landing header .wrap { gap: 12px; }
+  .dira-landing header nav { gap: 4px; }
+  .dira-landing header .btn { height: 40px; }
+  .dira-landing header nav .btn-manual-lo { display: none; }
+  .dira-landing .appearance { width: 40px; height: 40px; flex: none; }
+  .dira-landing .ann .wrap { height: auto; min-height: 48px; }
+  .dira-landing .ann a { min-height: 40px; }
+  /* 늘어난 높이는 글자 위로 간다 - 레일은 글자 바로 밑에 붙고 눈에 보이는 간격은 그대로다. */
+  .dira-landing .arrows { margin-top: 8px; row-gap: 0; }
+  .dira-landing .arrows a { display: inline-flex; align-items: flex-end; min-height: 40px; }
+  /* 고정 영역은 밴드 하나다(46 = padding 16 + 카드 28 + 룰 2). 헤더는 맨 위에서 회수된다. */
+  .dira-landing header { position: static; }
+  .dira-landing .travel { top: 0; }
+  #projects { scroll-margin-top: 46px; }
+  /* 카드는 레인 칸이 아니라 열 전체 폭 안에서 왼쪽 - 가운데 - 오른쪽으로 간다(한 줄 카드 142 > 레인 104). */
+  .dira-landing .lanes { display: block; container-type: inline-size; }
+  .dira-landing .lanes::before,
+  .dira-landing .lanes::after { display: none; }
+  .dira-landing .tk {
+    width: max-content; white-space: nowrap; font-size: 12px;
+    transform: translateX(calc(var(--lane, 0) * (100cqi - 100%) / 2));
+  }
+  .dira-landing .eyebrow, .dira-landing .sig, .dira-landing .stats-note { font-size: 12px; }
 }

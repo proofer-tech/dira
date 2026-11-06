@@ -437,7 +437,7 @@ export default function Landing({
       {/* ② 640 이하에서 `매뉴얼`을 걷는다 — 이 페이지에서 회수된다(footer §문서 열.
           §비주얼 §46 ③). `btn-manual`은 풀 모드에서만 붙는다 — 랜딩-only 헤더(넷 이하)는
           이 접힘 규칙 밖이다. */}
-      <a className={fullMode ? "btn btn-manual" : "btn"} href="/docs/">{t("landing.nav.manualLink")}</a>
+      <a className={fullMode ? "btn btn-manual" : "btn btn-manual-lo"} href="/docs/">{t("landing.nav.manualLink")}</a>
       {/* 들어오는 링크 둘 중 하나(DESIGN.md §페르소나 마켓 §화면 - 다이얼로그로 연다). 페이지
           이동 대신 `MarketDialog`를 연다(티켓 `71c41084`) — 랜딩-only에서는 마켓 저장소가
           없어 `fullMode`에서만 붙이는 것은 그대로다. */}
