@@ -21,6 +21,8 @@ import { tildePath } from "@/lib/urls";
 import { engineName, workerGroups } from "@/lib/workers";
 import { diraVersion } from "../../../version";
 import Landing from "../landing";
+import { JsonLd } from "../json-ld";
+import { homeJsonLd } from "../jsonld.ts";
 import { pageMetadata } from "../meta";
 import { siteLocale } from "../request-locale";
 import { t } from "@/lib/i18n";
@@ -104,6 +106,7 @@ export default async function Page() {
 
   return (
     <>
+      <JsonLd data={homeJsonLd()} />
       {emergency && <EmergencyBanner at={emergency.at} />}
       <Landing
         version={diraVersion}

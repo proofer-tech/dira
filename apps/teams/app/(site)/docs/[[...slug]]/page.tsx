@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 import { Shell } from "../../doc";
 import { descriptionOf, docNames, docPath, pageMetadata, titleOf } from "../../meta";
+import { JsonLd } from "../../json-ld";
+import { breadcrumbJsonLd } from "../../jsonld.ts";
 import { siteLocale } from "../../request-locale";
 import { pickManuscript } from "@/lib/site-locale";
 import { t, type Locale } from "@/lib/i18n";
@@ -123,7 +125,14 @@ export default async function Page({ params }: Params) {
   const here = docPath(name);
   const at = FLAT.findIndex((i) => i.link === here);
 
+  const labels = {
+    home: t(locale, "home.title"),
+    manual: titleOf(source("index", locale)),
+    page: titleOf(source(name, locale)),
+  };
   return (
+    <>
+    <JsonLd data={breadcrumbJsonLd(name, labels)} />
     <Shell
       source={source(name, locale)}
       path={here}
@@ -133,5 +142,6 @@ export default async function Page({ params }: Params) {
       prev={at > 0 ? localizedItem(locale, FLAT[at - 1]) : undefined}
       next={at >= 0 && FLAT[at + 1] ? localizedItem(locale, FLAT[at + 1]) : undefined}
     />
+    </>
   );
 }
