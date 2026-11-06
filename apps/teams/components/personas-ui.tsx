@@ -855,6 +855,8 @@ export function PersonasPane({
                   {t("persona.badge.noProfile")}
                 </Badge>
               )}
+
+              <MarketBadges record={row.market} />
               {/* 저장 버튼이 오른쪽에 있다 — 다른 줄을 고른 채 잊으면 이게 유일한 표시다(§5) */}
               {e.body !== (e.saved ?? "") && (
                 <Badge variant="outline" className="ml-auto self-center">
@@ -959,6 +961,7 @@ export function PersonasPane({
                 {t("persona.badge.squadNoProfile")}
               </Badge>
             )}
+            <MarketBadges record={squad.market} />
             {dirty && (
               <Badge variant="outline" className="ml-auto self-center">
                 {t("persona.badge.unsaved")}
@@ -1538,12 +1541,43 @@ function UpdateBadge({
   );
 }
 
+/** 왼쪽 목록 줄의 마켓 배지 둘(§P552 결정 1) — 둘 다 아니면 아무것도 안 그린다. */
+function MarketBadges({ record }: { record: MarketRecord }) {
+  const t = useT();
+  return (
+    <>
+      {record.deploy && (
+        <Badge variant="outline" className="self-center" title={t("market.badge.deployedTitle")}>
+          {t("market.badge.deployed")} v{record.deploy.latest}
+        </Badge>
+      )}
+      {record.source && (
+        <Badge
+          variant="outline"
+          className="self-center"
+          title={`${record.source.owner}/${record.source.name} v${record.source.v}`}
+        >
+          {t("market.badge.imported")}
+        </Badge>
+      )}
+    </>
+  );
+}
+
 /** 배포 이력 · 가져간 기록 절(§원본에서 보는 기록). 둘 다 읽기 전용이고 최신이 위다 — 마켓에서
  *  내용을 고치는 자리가 이 앱에 없다(§화면 "마켓에서 내용을 고치지 않는다"와 같은 판단). */
 function MarketHistorySection({ record, nowMs }: { record: MarketRecord; nowMs: number }) {
   const t = useT();
   return (
     <section className="space-y-3 border-t pt-3">
+      {record.source && (
+        <p className="text-xs">
+          <span className="text-muted-foreground">{t("market.history.source")}</span>{" "}
+          <span className="font-mono">
+            {record.source.owner}/{record.source.name} v{record.source.v}
+          </span>
+        </p>
+      )}
       <div className="space-y-1">
         <h3 className="text-sm font-medium">{t("market.history.deployHeading")}</h3>
         {record.deploy === null ? (

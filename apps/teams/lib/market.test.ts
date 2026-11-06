@@ -370,6 +370,7 @@ test("marketRecord — 배포한 적 없으면 deploy가 null(아직 배포 안 
     assert.equal(rec.deploy, null);
     assert.deepEqual(rec.installs, []);
     assert.equal(rec.update, null);
+    assert.equal(rec.source, null);
   } finally {
     process.env.TICKET_LOCAL = prev;
   }
@@ -390,6 +391,20 @@ test("marketRecord — 이 프로젝트가 배포한 적 있으면 그 버전 �
   }
 });
 
+test("marketRecord — 최신을 받아 둔 가져온 이름도 source가 차고 update는 null", async () => {
+  const local = mkdtempSync(path.join(tmpdir(), "fst-market-record-source-"));
+  const prev = process.env.TICKET_LOCAL;
+  process.env.TICKET_LOCAL = local;
+  try {
+    seedPersona("dira", "writer", 3);
+    const rec = await marketRecord("persona", "pofol", "writer", { owner: "dira", name: "writer", v: 3 });
+    assert.equal(rec.update, null);
+    assert.deepEqual(rec.source, { owner: "dira", name: "writer", v: "3.0.0" });
+  } finally {
+    process.env.TICKET_LOCAL = prev;
+  }
+});
+
 test("marketRecord — importEntry가 있고 원본이 더 새 버전이면 update가 찬다", async () => {
   const local = mkdtempSync(path.join(tmpdir(), "fst-market-record-update-"));
   const prev = process.env.TICKET_LOCAL;
@@ -398,6 +413,7 @@ test("marketRecord — importEntry가 있고 원본이 더 새 버전이면 upda
     seedPersona("dira", "writer", 3);
     const rec = await marketRecord("persona", "pofol", "writer", { owner: "dira", name: "writer", v: 1 });
     assert.deepEqual(rec.update, { owner: "dira", name: "writer", installedVersion: "1.0.0", latestVersion: "3.0.0" });
+    assert.deepEqual(rec.source, { owner: "dira", name: "writer", v: "1.0.0" });
   } finally {
     process.env.TICKET_LOCAL = prev;
   }

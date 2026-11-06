@@ -286,6 +286,8 @@ export type MarketRecord = {
   deploy: { latest: string; versions: MarketVersion[] } | null;
   installs: MarketInstall[];
   update: { owner: string; name: string; installedVersion: string; latestVersion: string } | null;
+  /** 마켓에서 가져온 출처(§P552 결정 2). 가져온 이름이면 받은 버전까지 채워지고 아니면 `null`. */
+  source: { owner: string; name: string; v: string } | null;
 };
 
 /** 한 페르소나-스쿼드가 든 마켓 기록 전부를 한 번에 모은다. `owner`는 언제나 이 프로젝트
@@ -299,24 +301,27 @@ export async function marketRecord(
   name: string,
   importEntry?: { owner: string; name: string; v: number | string },
 ): Promise<MarketRecord> {
-  const [own, installs, source] = await Promise.all([
+  const [own, installs, origin] = await Promise.all([
     getMarketItem(kind, projectId, name),
     listInstalls(kind, projectId, name),
     importEntry ? getMarketItem(kind, importEntry.owner, importEntry.name) : Promise.resolve(null),
   ]);
   const update =
-    importEntry && source && needsUpdate(importEntry.v, source.latest)
+    importEntry && origin && needsUpdate(importEntry.v, origin.latest)
       ? {
           owner: importEntry.owner,
           name: importEntry.name,
           installedVersion: toSemver(importEntry.v),
-          latestVersion: source.latest,
+          latestVersion: origin.latest,
         }
       : null;
   return {
     deploy: own ? { latest: own.latest, versions: own.versions } : null,
     installs,
     update,
+    source: importEntry
+      ? { owner: importEntry.owner, name: importEntry.name, v: toSemver(importEntry.v) }
+      : null,
   };
 }
 
