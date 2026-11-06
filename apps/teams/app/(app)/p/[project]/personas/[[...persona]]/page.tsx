@@ -28,7 +28,7 @@ import { hasTeam, overlayPersonas, overlaySquads } from "@/lib/apm";
 import { t } from "@/lib/i18n";
 import { marketRecord, teamImports } from "@/lib/market";
 import { personaActivity } from "@/lib/persona-activity";
-import { listTickets } from "@/lib/queue";
+import { listTickets, ticketsWithMissingSquad } from "@/lib/queue";
 import { decodeHash } from "@/lib/urls";
 import {
   getProject,
@@ -176,7 +176,7 @@ export default async function Personas({
   // `squads/<이름>/`가 없다. 둘째 갈래(멤버 중 프로필 없는 이름)는 위 `missingProfile`이
   // 왼쪽 스쿼드 줄에서 이미 표식으로 든다(dc3a2fa4) — 그릇이 갈릴 뿐 같은 경고다.
   const squadNames = new Set(squads.map((s) => s.name));
-  const ticketsWithMissingSquad = tickets.filter((tk) => tk.squad && !squadNames.has(tk.squad));
+  const missingSquadTickets = ticketsWithMissingSquad(tickets, squadNames);
 
   // 산문 속 해시-P번호 표식(§9) — 이 화면은 카드마다 메모리 전문을 이미 같은 렌더에 들고
   // 있다(위 `rows` 주석) - 그 전문 전부를 한 번에 훑는다. 페르소나 수와 무관하게 왕복 하나다.
@@ -185,7 +185,7 @@ export default async function Personas({
   const refs = await resolveMarkdownRefs(
     project.root,
     id,
-    [...rows.flatMap((r) => r.memories.map((m) => m.text)), ...ticketsWithMissingSquad.map((tk) => tk.title)],
+    [...rows.flatMap((r) => r.memories.map((m) => m.text)), ...missingSquadTickets.map((tk) => tk.title)],
     tickets,
     epics,
   );
@@ -247,7 +247,7 @@ export default async function Personas({
 
       {/* §5-5 §프로필-스쿼드가 없는 것은 경고다 — 같은 Alert 그릇, 새 컴포넌트 0 · 새 문구
           규칙 0(위 `missing` 블록과 같은 조립: WARN 한 줄 안내 + 해시별 목록). */}
-      {ticketsWithMissingSquad.length > 0 && (
+      {missingSquadTickets.length > 0 && (
         <Alert className="max-w-3xl">
           <TriangleAlert aria-hidden className="text-status-stale" />
           <AlertTitle>{t(locale, "persona.squadWarn.title")}</AlertTitle>
@@ -260,7 +260,7 @@ export default async function Personas({
                 {t(locale, "persona.squadWarn.parenPrefix")} {t(locale, "persona.wording.withoutPersona")}
                 {t(locale, "persona.squadWarn.parenSuffix")}
               </p>
-              {ticketsWithMissingSquad.map((tk) => (
+              {missingSquadTickets.map((tk) => (
                 <p key={tk.hash} className="font-mono text-xs break-all">
                   {tk.hash} — squad: {tk.squad} ·{" "}
                   {tk.title ? <TitleRefs title={tk.title} refs={refs} locale={locale} /> : tk.title}

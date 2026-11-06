@@ -516,6 +516,11 @@ export function queueOrder(tickets: Ticket[]): Ticket[] {
 export const isDispatchable = (t: Ticket) =>
   t.state === "open" && !t.assigned && t.unmet.length === 0;
 
+/** 없는 스쿼드를 `squad:`로 가리키는 티켓 중 아직 디스패치될 수 있는 것만 낸다.
+ *  `.done`은 다시 디스패치되지 않으므로 엔진이 WARN을 남길 일이 없다. */
+export const ticketsWithMissingSquad = (tickets: Ticket[], squadNames: Set<string>) =>
+  tickets.filter((tk) => tk.state !== "done" && tk.squad && !squadNames.has(tk.squad));
+
 /** 티켓 5상태. 우선순위는 `tickets.py list`와 같다 — **할당됨이 deps 대기보다 먼저** 나온다.
  *  (`<StatusBadge>`의 Status 부분집합이다. 라벨·색은 그쪽이 정하고 판정은 여기서만 한다.) */
 export type TicketStatus = "open" | "blocked" | "assigned" | "wip" | "done";
