@@ -174,6 +174,7 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
 }
 .dira-landing header .wrap { display: flex; align-items: center; gap: 24px; width: 100%; padding-inline: max(24px, calc((100% - var(--maxw)) / 2)); }
 .dira-landing .brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font-family: var(--mono); font-weight: 600; font-size: 16px; letter-spacing: -0.03em; }
+.dira-landing .brand { white-space: nowrap; flex-shrink: 0; }
 .dira-landing .brand svg { width: 20px; height: 20px; fill: currentColor; }
 .dira-landing header nav { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 
@@ -753,6 +754,19 @@ h1, h2, h3, h4, h5, h6, li, p { overflow-wrap: break-word; }
    Free 카드 것은 안 숨긴다 — 카드가 한 열을 통째로 써서 390에서도 한 줄이다. */
 @media (max-width: 480px) {
   .dira-landing header .star-count { display: none; }
+}
+/* 360 이하에서 헤더가 가로로 넘치던 것(검수 df980679)을 닫는다. 간격과 안쪽 여백만 줄이고
+   481 이상은 이 블록 밖이라 안 바뀐다. 남는 폭이 모자라면 `Star`가 아닌 버튼 글자는 그대로 두고
+   별 버튼의 글자만 걷는다(아이콘과 aria-label은 남는다). */
+@media (max-width: 400px) {
+  .dira-landing header .wrap { gap: 8px; padding-inline: 12px; }
+  .dira-landing header nav { gap: 0; min-width: 0; }
+  .dira-landing header .btn { padding: 0 6px; }
+}
+/* en 320은 위 값으로도 12px 넘는다(`Download the app`이 121px). 별 버튼은 footer에도 같은 링크가 있어
+   이 폭에서만 헤더에서 걷는다. */
+@media (max-width: 340px) {
+  .dira-landing header nav .star { display: none; }
 }
 
 /* ── 여행하는 티켓 ──────────────────────────────── */
