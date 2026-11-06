@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { Shell } from "../../doc";
-import { docNames, docPath, pageMetadata, titleOf } from "../../meta";
+import { descriptionOf, docNames, docPath, pageMetadata, titleOf } from "../../meta";
 import { siteLocale } from "../../request-locale";
 import { pickManuscript } from "@/lib/site-locale";
 import { t, type Locale } from "@/lib/i18n";
@@ -113,7 +113,8 @@ type Params = { params: Promise<{ slug?: string[] }> };
 export async function generateMetadata({ params }: Params) {
   const name = nameOf((await params).slug);
   const locale = await siteLocale();
-  return pageMetadata(docPath(name), titleOf(source(name, locale)), { locale });
+  const md = source(name, locale);
+  return pageMetadata(docPath(name), titleOf(md), { locale, description: descriptionOf(md) });
 }
 
 export default async function Page({ params }: Params) {

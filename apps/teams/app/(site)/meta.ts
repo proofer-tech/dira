@@ -37,6 +37,42 @@ export const pageUrls = ["/", ...rootNames.map((n) => `/${n}`), ...docNames.map(
 export const titleOf = (source: string) =>
   /^# +(.+)$/m.exec(source)?.[1].trim() ?? SITE_TITLE;
 
+const DESC_MAX = 160;
+
+/** 마크다운 한 문단을 평문 한 줄로 만든다: 링크는 글자만, 강조-코드 기호와 줄머리 기호는 걷는다. */
+const plain = (md: string) =>
+  md
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/<[^>]+>/g, "")
+    .replace(/[`*]/g, "")
+    .replace(/(^|\s)_+|_+(?=\s|$)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** P548 결정 4 — 문서의 description. frontmatter `description:`이 있으면 그것, 없으면 첫 `# ` 제목 뒤 첫 평문 문단을
+ *  160자(말줄임 포함)로 자른다. 뽑을 것이 없으면 빈 문자열이라 `pageMetadata`가 `siteMeta.description`으로 떨어뜨린다.
+ *  P548-5의 llms.txt도 이 함수를 쓴다. */
+export function descriptionOf(source: string): string {
+  let body = source;
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/.exec(source);
+  if (fm) {
+    body = source.slice(fm[0].length);
+    const d = /^description:\s*(.+)$/m.exec(fm[1])?.[1].trim().replace(/^(["'])(.*)\1$/, "$2");
+    if (d) return clip(plain(d));
+  }
+  const afterTitle = body.replace(/^(```|~~~)[\s\S]*?^\1.*$/gm, "").replace(/^[\s\S]*?^# +.+$/m, "");
+  for (const block of afterTitle.split(/\n\s*\n/)) {
+    const t = block.trim();
+    if (!t || /^(#|\||:::|<|>|[-*+] |\d+\. |---)/.test(t)) continue;
+    const text = plain(t);
+    if (text) return clip(text);
+  }
+  return "";
+}
+
+const clip = (s: string) => (s.length <= DESC_MAX ? s : `${s.slice(0, DESC_MAX - 1).trimEnd()}…`);
+
 /** §0-24 §SEO — `og:locale`이 상수에서 함수가 된 자리. `<html lang>`과 같은 값을 받는다
  *  (`app/(site)/request-locale.ts`의 `siteLocale()`). `canonical`·`sitemap.xml`·`robots.txt`는
  *  주소가 안 갈리므로 이 표 밖이다. */

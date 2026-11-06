@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   ORIGIN,
+  descriptionOf,
   docNames,
   docPath,
   pageMetadata,
@@ -74,4 +75,35 @@ test("제목은 첫 h1이다 — 32장 전부 1행이 그 헤딩이다", () => {
 test("`docs/index`는 URL이 `/docs/`다", () => {
   assert.equal(docPath("index"), "/docs/");
   assert.equal(docPath("install"), "/docs/install");
+});
+
+test("descriptionOf - frontmatter description이 우선이고 본문이 비면 빈 값(siteMeta로 떨어짐)", () => {
+  assert.equal(descriptionOf("---\ndescription: 직접 쓴 설명\n---\n# 제목\n\n본문 문단입니다."), "직접 쓴 설명");
+  assert.equal(descriptionOf("# 제목\n"), "");
+  assert.equal(descriptionOf("# 제목\n\n## 소제목\n\n```sh\nls\n```\n"), "");
+  const md = pageMetadata("/docs/x", "x", { description: descriptionOf("# 제목\n") });
+  assert.equal(md.description, pageMetadata("/", "x").description); // siteMeta.description
+});
+
+test("descriptionOf - 첫 문단 평문, 기호 제거, 160자 이하", () => {
+  assert.equal(
+    descriptionOf("# 설치\n\n[최신 릴리스](https://x.y)에서 `.dmg`를 받아\n**열고** 끌어다 놓으세요.\n\n## 다음"),
+    "최신 릴리스에서 .dmg를 받아 열고 끌어다 놓으세요.",
+  );
+  const long = descriptionOf(`# t\n\n${"가".repeat(400)}`);
+  assert.equal(long.length, 160);
+  assert.ok(long.endsWith("…"));
+});
+
+test("매뉴얼 30장 x 두 언어 - description이 160자 이하이고 마크다운 기호가 없고, 장마다 다르다", () => {
+  for (const base of ["docs", "en/docs"]) {
+    const seen = new Set<string>();
+    for (const n of docNames) {
+      const d = descriptionOf(readFileSync(`${base}/${n}.md`, "utf8"));
+      assert.ok(d.length > 0 && d.length <= 160, `${base}/${n}: ${d.length}자`);
+      assert.doesNotMatch(d, /\*\*|\[|\]|`|<|\]\(/, `${base}/${n}: 기호가 남았다: ${d}`);
+      seen.add(d);
+    }
+    assert.ok(seen.size >= docNames.length - 2, `${base}: 서로 같은 description이 많다 (${seen.size})`);
+  }
 });
