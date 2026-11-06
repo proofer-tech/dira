@@ -52,7 +52,7 @@ test("페이지마다 canonical·og·twitter 열한 줄", () => {
 
 test("description은 `||`다 — 빈 문자열이면 사이트 기본값이 나간다", () => {
   const fallback = pageMetadata("/x", "T", { description: "" }).description;
-  assert.match(String(fallback), /^티켓을 큐에 넣으면/);
+  assert.match(String(fallback), /^디라는 /);
   assert.equal(pageMetadata("/x", "T").description, fallback, "안 주면 같은 값이 나가야 한다");
   assert.equal(pageMetadata("/x", "T", { description: "자기 것" }).description, "자기 것");
   // og:description도 같은 값이다(앞 산출물 25장이 두 자리에 같은 문장을 실었다).
