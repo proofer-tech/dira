@@ -20,7 +20,7 @@ import { createVercelLink } from "./vercel-link.ts";
 import { createVercelSync } from "./vercel-sync.ts";
 import { publishConnections, unpublishConnections } from "./env-connect.ts";
 import { createEnvStore } from "./env-store.ts";
-import { createServer } from "node:net";
+import { pickPort } from "./server-port.ts";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -117,18 +117,9 @@ async function startEnvBridge() {
   app.on("will-quit", () => unpublishConnections(local));
 }
 
-/** OS가 준 빈 포트. 7331 고정은 브라우저의 계약이고 창은 자기 서버를 알고 있다 (고정하는 것 1). */
+/** 서버 포트. 지난 실행의 포트를 먼저 시도해 오리진을 고정한다 (P549 결정 1). 브라우저용 7331 고정은 별개다. */
 function freePort(): Promise<number> {
-  // ponytail: listen(0) → close → 그 번호를 자식에게 넘긴다. 닫고 넘기는 사이가 이론상 경쟁
-  // 구간이지만 로컬 1회 실행이라 실측 충돌이 없다. 부딪히면 자식 exit를 잡아 재시도.
-  return new Promise((resolve, reject) => {
-    const s = createServer();
-    s.on("error", reject);
-    s.listen(0, "127.0.0.1", () => {
-      const port = (s.address() as { port: number }).port;
-      s.close(() => resolve(port));
-    });
-  });
+  return pickPort(join(app.getPath("userData"), "server-port"));
 }
 
 /** **Finder·Dock에서 띄운 `.app`에는 PATH가 없다.** LaunchServices가 준 환경에 그 값이 아예
