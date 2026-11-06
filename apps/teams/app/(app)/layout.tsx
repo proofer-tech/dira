@@ -15,6 +15,8 @@ import { EmergencyBanner } from "@/components/emergency-banner";
 import { emergencyState } from "@/lib/emergency-stop";
 import { readKeymap, readLanguage } from "@/lib/projects";
 import { t } from "@/lib/i18n";
+import { SwRegister } from "@/components/sw-register";
+import { diraVersion } from "@/version";
 import "../globals.css";
 
 // sans는 `globals.css`의 `@font-face`(원티드산스 · `public/fonts/`)가 든다 — 그래서 Geist
@@ -65,6 +67,7 @@ export default async function RootLayout({
       <body className="flex h-full flex-col">
         {/* 툴팁은 잘린 경로 전문·배지 설명에 쓴다. shadcn tooltip이 Provider를 요구한다 */}
         {/* `screen_view`를 보내는 유일한 자리(§0-11). 화면 8종이 전부 이 아래고 그리는 것이 없다 */}
+        <SwRegister version={diraVersion} />
         <ScreenView />
         <ErrorReporter />
         <TooltipProvider>
