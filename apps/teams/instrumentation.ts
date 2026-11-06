@@ -9,6 +9,7 @@ import { isLandingOnly } from "./lib/flags.ts";
 // Runtime" 경고가 났다(실측 — proxy.ts 11행과 같은 부류의 문제).
 export async function register() {
   if (process.env.NEXT_RUNTIME === "edge") return; // fs 없음 — node 런타임에서만 돈다
+  (await import("./lib/keep-vary.ts")).keepVary(); // Next가 덮어쓰는 Vary를 합친다(865118b4)
   const { registerShutdownHandlers } = await import("./lib/pty.ts");
   // process.on은 이 파일에 직접 두면 edge 번들 검사가 빌드를 깬다(실측) - 핸들러 등록은 동적 import한 쪽에 둔다.
   const { tapProcessOutput, installProcessHandlers } = await import("./lib/error-report-send.ts");
