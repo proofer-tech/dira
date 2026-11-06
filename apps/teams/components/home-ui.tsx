@@ -1105,10 +1105,11 @@ export function HomeUI({
   const chordArmed = useRef(false);
   const [chordOn, setChordOn] = useState(false);
   const fabRun = useRef<(k: number) => void>(() => {});
+  /** §P551 `⌘N` 코드. 아래 표면 전환 리스너보다 먼저 선언해 먼저 등록되고, 소비한 키는
+   *  `stopImmediatePropagation`으로 그쪽에 안 간다(숫자가 `⌘1`-`⌘6`으로 새지 않는다). */
   useEffect(() => {
-    // §P551 `⌘N` 코드. 숫자 키가 아래 표면 전환으로 새지 않게 같은 capture 리스너 안에서 먼저 본다.
     const chord = (type: "down" | "up", e: KeyboardEvent) => {
-      if (e.isComposing) return false;
+      if (e.isComposing) return;
       const r = chordStep(chordArmed.current, {
         type,
         key: e.key,
@@ -1121,14 +1122,21 @@ export function HomeUI({
       }
       if (r.consume) {
         e.preventDefault();
-        e.stopPropagation();
+        e.stopImmediatePropagation();
       }
       if (r.run !== null) fabRun.current(r.run);
-      return r.consume;
     };
-    const onUp = (e: KeyboardEvent) => void chord("up", e);
+    const onDown = (e: KeyboardEvent) => chord("down", e);
+    const onUp = (e: KeyboardEvent) => chord("up", e);
+    window.addEventListener("keydown", onDown, { capture: true });
+    window.addEventListener("keyup", onUp, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onDown, { capture: true });
+      window.removeEventListener("keyup", onUp, { capture: true });
+    };
+  });
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (chord("down", e)) return;
       const i = SURFACE_COMBOS.findIndex((combo) => matchCombo(e, combo));
       if (i === -1) return;
       e.preventDefault();
@@ -1136,11 +1144,7 @@ export function HomeUI({
       changeSurface(SURFACES[i].id);
     };
     window.addEventListener("keydown", onKey, { capture: true });
-    window.addEventListener("keyup", onUp, { capture: true });
-    return () => {
-      window.removeEventListener("keydown", onKey, { capture: true });
-      window.removeEventListener("keyup", onUp, { capture: true });
-    };
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
   });
 
   /** 우측 탭 줄에서 탭 하나를 고른다(§11 결정 1) — **표면을 가로지르는 그 한 줄**의 유일한
