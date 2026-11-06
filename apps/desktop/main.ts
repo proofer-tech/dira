@@ -22,6 +22,7 @@ import { publishConnections, unpublishConnections } from "./env-connect.ts";
 import { createEnvStore } from "./env-store.ts";
 import { pickPort } from "./server-port.ts";
 import { acceptLayout } from "./layout-save.ts";
+import { appendExitLog, prepareReportDir } from "./server-log.ts";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -245,7 +246,10 @@ function startServer(port: number): ChildProcess {
   stdoutTail = ""; // 새 자식이다 — 지난 자식의 꼬리를 물려주지 않는다
   const engine = extractEngine();
   // node 바이너리가 PATH에 있다고 가정하지 않는다 — Electron 자신을 노드로 돌린다.
-  const proc = spawn(nodeBin(), [SERVER], {
+  // P550 결정 1 - 치명 오류(힙 한도 등)가 나면 JS 스택이 든 진단 보고서를 남긴다. 최신 10개만 둔다.
+  const reportDir = join(homedir(), ".config", "dira", "run", "server-reports");
+  try { prepareReportDir(reportDir); } catch (e) { console.error(`[dira] 보고서 디렉터리를 못 만들었습니다: ${(e as Error).message}`); }
+  const proc = spawn(nodeBin(), ["--report-on-fatalerror", `--report-directory=${reportDir}`, SERVER], {
     env: {
       ...process.env,
       PATH: userPath(),
@@ -275,6 +279,8 @@ function startServer(port: number): ChildProcess {
     killedIntentionally = null;
     if (external) {
       console.log(`[dira] 자식 서버가 밖에서 죽었습니다 (code ${code ?? signal ?? "?"}) — 되살리기 대상입니다`);
+      // P550 결정 2 - 원격 제보와 별개로 stderr 꼬리를 로컬에 남긴다(원격 저장소가 없어도 원인이 남는다).
+      try { appendExitLog(join(homedir(), ".config", "dira", "run", "server-exit.log"), String(code ?? signal ?? "?"), childRaw()); } catch (e) { console.error(`[dira] server-exit.log를 못 썼습니다: ${(e as Error).message}`); }
       void reportMain({ kind: "child_exit", message: `자식 서버가 밖에서 죽었습니다 (code ${code ?? signal ?? "?"})`, raw: childRaw() });
       killServer();
       reviveIfVisible("자식 서버가 밖에서 죽었습니다");
