@@ -1227,13 +1227,15 @@ export function HomeUI({
   };
 
   /** §P551 순번 k를 실행한다. 클릭과 같은 길이다 - 1번은 FAB(주 액션이 없으면 다이얼 펼치기, 잠기면 무동작). */
-  fabRun.current = (k) => {
-    const slot = fabSlot(surface, k);
-    if (!slot) return;
-    const a = slot.kind === "dial" ? slot.action : slot.primary;
-    if (a === "session" && newConversationLocked) return;
-    if (a) void runCreate(a);
-  };
+  useEffect(() => {
+    fabRun.current = (k) => {
+      const slot = fabSlot(surface, k);
+      if (!slot) return;
+      const a = slot.kind === "dial" ? slot.action : slot.primary;
+      if (a === "session" && newConversationLocked) return;
+      if (a) void runCreate(a);
+    };
+  });
 
   /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
    *  §13 스크롤러(`message-scroller.tsx`)는 그 `stuck` 판정을 Provider 안 `useRef`로 감춰서
