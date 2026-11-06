@@ -28,3 +28,14 @@ test("next.config env.DIRA_MULTI_TOKEN — 없어도 undefined를 안 흘리고 
     else process.env.DIRA_MULTI_TOKEN = saved;
   }
 });
+
+/** P549 결정 2 - public 자산의 Cache-Control 규칙. 폰트는 immutable 1년, 이미지는 1일+SWR 7일. */
+test("next.config headers - 폰트는 immutable, 이미지는 하루 캐시", async () => {
+  const { default: cfg } = await import("./next.config.ts?headers-1545c901");
+  const rules = await cfg.headers!();
+  const cc = (source: string) => rules.find((r: { source: string }) => r.source === source)?.headers.find((h: { key: string }) => h.key === "Cache-Control")?.value;
+  assert.strictEqual(cc("/fonts/:path*"), "public, max-age=31536000, immutable");
+  for (const s of ["/icon.svg", "/og.png", "/shots/:path*"]) {
+    assert.strictEqual(cc(s), "public, max-age=86400, stale-while-revalidate=604800", s);
+  }
+});

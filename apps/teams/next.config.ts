@@ -70,6 +70,18 @@ const nextConfig: NextConfig = {
   // 자체가 안 생기고 서버 청크에 `process.env.DIRA_MULTI_TOKEN` 표현식이 그대로 남아 런타임
   // 프로세스 env로 매 요청 재평가된다(28f72b69) — 잠금 방향이 정확히 안 굳는다.
   env: { DIRA_MULTI_TOKEN: process.env.DIRA_MULTI_TOKEN === "1" ? "1" : "0" },
+  // P549 결정 2: Next는 `public/` 자산에 `max-age=0`을 달아 폰트 92개를 매번 재검증한다.
+  // 폰트는 내용이 바뀌면 **파일 이름을 바꾼다**(같은 이름으로 덮어쓰면 immutable 때문에 옛 파일이
+  // 1년간 남는다). 이미지는 이름이 고정이라 하루 캐시 + 일주일 stale-while-revalidate로 둔다.
+  async headers() {
+    return [
+      { source: "/fonts/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }] },
+      ...["/icon.svg", "/og.png", "/shots/:path*"].map((source) => ({
+        source,
+        headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }],
+      })),
+    ];
+  },
 };
 
 export default nextConfig;
