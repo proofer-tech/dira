@@ -2860,9 +2860,12 @@ function CreateFab({
 }) {
   const t = useT();
   const [hover, setOpen] = useState(false);
-  useEffect(() => {
-    if (openSignal > 0) setOpen(true);
-  }, [openSignal]);
+  // 렌더 중 상태 보정(effect 안 setState 금지): 신호가 바뀐 그 렌더에서 펼친다
+  const [seenSignal, setSeenSignal] = useState(openSignal);
+  if (seenSignal !== openSignal) {
+    setSeenSignal(openSignal);
+    setOpen(true);
+  }
   useEffect(() => {
     if (!hover) return;
     const esc = (e: KeyboardEvent) => {
