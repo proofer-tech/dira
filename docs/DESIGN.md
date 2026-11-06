@@ -9025,18 +9025,24 @@ P546은 복구 경로를 고쳤고 원인 추적은 범위 밖으로 두었다. 
    기다린다. 경로마다 최근 결과 하나만 들고 있는다. 반환 모양과 의미(전체 이력)는 바뀌지 않는다.
 4. 엔진 - 큐 파일 - `runner.log` 회전은 안 바뀐다. 고치는 곳은 `apps/desktop/main.ts`와 `apps/teams/lib/workers.ts`다.
 5. 결정 1-2가 남긴 기록으로 다음 OOM의 범인을 확정하는 일은 이 절 밖이다. 기록이 쌓이면 새 요구로 다룬다.
+6. **힙 OOM 보고서에는 JS 스택이 없다.** 힙 한도 초과는 GC 안에서 터지므로 보고서의 `javascriptStack`은
+   `{"message": "No stack.", "stack": ["Unavailable."]}`로 남는다(TC `7c2e41a9`, Electron 41 / Node 24에서 이벤트 루프
+   할당과 동기 루프 할당 둘 다, 2026-11-06 Node 26.7.0 재현도 같다). 보고서가 남기는 것은 힙 공간별 사용량
+   (`javascriptHeap.heapSpaces`)과 네이티브 스택이다. OOM 시점의 JS 스택을 확보하는 일은 이 절 밖이다.
 
 ```autonomy
 주도성 5 판단: 크래시 보고서만으로 범인 요청을 확정할 수 없어서, 다음 크래시가 범인을 남기게 하는 기록(결정 1-2)과 실측으로 무겁다고 확인한 경로의 완화(결정 3)를 한 절로 묶었다. 추측으로 다른 경로를 고치지 않았다.
 주도성 5 판단: runner.log를 꼬리만 읽도록 바꾸지 않고 캐시를 택했다. personaRuns - dispatchRoundsByHash가 전체 이력을 쓰므로 꼬리 읽기는 화면의 의미를 바꾼다. 캐시는 의미를 안 바꾸고 반복 파싱과 동시 파싱을 없앤다.
-주도성 5 판단: heap snapshot(--heapsnapshot-near-heap-limit)은 쓰지 않았다. 4 GB 힙을 덤프하면 파일이 수 GB이고 덤프하는 동안 메모리를 더 쓴다. 진단 보고서는 JS 스택과 힙 통계를 수십 KB로 남긴다.
+주도성 5 판단: heap snapshot(--heapsnapshot-near-heap-limit)은 쓰지 않았다. 4 GB 힙을 덤프하면 파일이 수 GB이고 덤프하는 동안 메모리를 더 쓴다. 진단 보고서는 힙 통계와 네이티브 스택을 100 KB 안팎으로 남긴다(JS 스택은 힙 OOM에서 비어 있다 - 결정 6).
 주도성 5 판단: 오류 제보 원격 저장소를 조회하려 했으나 dira Vercel 프로젝트에 Blob 저장소가 붙어 있지 않고 공개 배포는 DIRA_LANDING_ONLY로 /api/**가 404라, 원격에서 stderr를 찾을 수 없었다.
 ```
 
 #### 수용조건
 
 - [ ] 개발 모드에서 자식 서버를 `--max-old-space-size=64` 같은 작은 한도로 띄워 OOM을 일으키면
-  `~/.config/dira/run/server-reports/`에 `report.*.json` 하나가 생기고, 그 JSON의 `javascriptStack`이 비어 있지 않다.
+  `~/.config/dira/run/server-reports/`에 `report.*.json` 하나가 생기고, 그 JSON이 파싱되며 `header.trigger`가
+  `OOMError`이고, `javascriptHeap.heapSpaces`와 `nativeStack`이 둘 다 빈 배열이 아니다. `javascriptStack`의 내용은
+  판정하지 않는다(결정 6).
 - [ ] 같은 상황에서 `~/.config/dira/run/server-exit.log` 끝에 `code=` 줄이 생기고 그 아래 `FATAL ERROR` 문자열이 있다.
 - [ ] `server-reports/`에 보고서 11개를 미리 두고 앱을 띄우면 10개가 남는다. `server-exit.log`를 1 MB 넘게 만든 뒤
   한 번 더 죽이면 파일이 512 KB 근처(512 KB + 마지막 기록 이하)로 줄어 있다.
@@ -9049,6 +9055,7 @@ P546은 복구 경로를 고쳤고 원인 추적은 범위 밖으로 두었다. 
 | P550-1 | 구현 - 결정 1-2. 자식 서버 진단 보고서와 `server-exit.log`(보존 개수 - 크기 상한 포함) | developer | - | 발행 `0583bcfc` |
 | P550-2 | 구현 - 결정 3. `lastLogByWorker` 결과를 `(경로, size, mtimeMs)` 키로 재사용하고 동시 호출을 합친다 | developer | - | 발행 `82b2b723` |
 | P550-3 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P550-1, P550-2 | 발행 `098cfe12` |
+| P550-4 | QA - 고친 수용조건 1만 다시 판정한다(지적 `5d90b3e7`) | qa | - | 발행 예정 |
 
 **세 장이다.** designer - writer 0장 - 화면과 사용자 문서가 안 바뀐다. 에픽을 안 연다.
 ### P549. 앱을 다시 켜도 폰트와 이미지를 다시 받지 않고, 서버가 뜨기 전부터 지난 레이아웃의 스켈레톤이 보인다 - Electron과 PWA의 캐시를 함께 쓴다 (요구 `bf1a3ff0`, 왕복 0회)
