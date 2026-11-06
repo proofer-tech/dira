@@ -9048,12 +9048,12 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P549-1 | 데스크톱 - 결정 1(포트 기억과 재사용) | developer | - | 발행 |
-| P549-2 | GUI - 결정 2(`public/` 캐시 헤더) | developer | - | 발행 |
-| P549-3 | GUI - 결정 3(매니페스트, `sw.js`, `/offline.html`) | developer | - | 발행 |
-| P549-4 | GUI + 데스크톱 - 결정 4(레이아웃 기록, preload `saveLayout`, `userData/layout.json`) | developer | - | 발행 |
-| P549-5 | 데스크톱 - 결정 5-6(`boot-shell.html` 정본, 서버보다 먼저 여는 창) | developer | - | 발행 |
-| P549-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 패키지 앱과 브라우저에서 한 줄씩 판정한다 | qa | P549-1 ~ 5 | 발행 |
+| P549-1 | 데스크톱 - 결정 1(포트 기억과 재사용) | developer | - | 발행 `43ba5121` |
+| P549-2 | GUI - 결정 2(`public/` 캐시 헤더) | developer | - | 발행 `1545c901` |
+| P549-3 | GUI - 결정 3(매니페스트, `sw.js`, `/offline.html`) | developer | - | 발행 `c488ab9a` |
+| P549-4 | GUI + 데스크톱 - 결정 4(레이아웃 기록, preload `saveLayout`, `userData/layout.json`) | developer | - | 발행 `4871acda` |
+| P549-5 | 데스크톱 - 결정 5-6(`boot-shell.html` 정본, 서버보다 먼저 여는 창) | developer | - | 발행 `46dfe8a0` |
+| P549-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 패키지 앱과 브라우저에서 한 줄씩 판정한다 | qa | P549-1 ~ 5 | 발행 `8f274c90` |
 
 **개발 다섯 장을 안 엮는다.** 3과 5는 `boot-shell.html`을 함께 쓰지만 먼저 들어오는 쪽이 정본 파일을 만들고 뒤의 쪽이
 그것을 쓴다. 5는 4의 `layout.json`이 없을 때 기본 레이아웃으로 그리므로 4 없이 착수된다(형식은 결정 4에 있다).
