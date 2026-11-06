@@ -1,3 +1,11 @@
 name: persona-pm
-version: 1.0.0
+version: 1.0.1
 description: dira persona-pm package
+dependencies:
+  apm:
+    - ../skill-brainstorming
+watch
+noslop-write
+noslop-review
+noslop-fix
+find-skills

@@ -1,3 +1,14 @@
 name: persona-developer
-version: 1.0.0
+version: 1.0.1
 description: dira persona-developer package
+dependencies:
+  apm:
+    - ../skill-ponytail
+graphify
+shadcn
+code-review-skill
+seo-audit
+noslop-write
+noslop-review
+noslop-fix
+find-skills

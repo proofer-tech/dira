@@ -1,3 +1,13 @@
 name: persona-writer
-version: 1.0.0
+version: 1.0.1
 description: dira persona-writer package
+dependencies:
+  apm:
+    - ../skill-noslop-write
+noslop-review
+noslop-fix
+find-skills
+write-landing
+marketing-ideas
+marketing-psychology
+seo-audit
