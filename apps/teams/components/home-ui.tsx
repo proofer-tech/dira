@@ -1105,6 +1105,8 @@ export function HomeUI({
   const chordArmed = useRef(false);
   const [chordOn, setChordOn] = useState(false);
   const fabRun = useRef<(k: number) => void>(() => {});
+  /** 주 액션이 없는 표면의 1번 실행(= FAB 클릭)이 `CreateFab`의 다이얼을 펼치게 하는 신호다. */
+  const [fabOpenSignal, setFabOpenSignal] = useState(0);
   /** §P551 `⌘N` 코드. 아래 표면 전환 리스너보다 먼저 선언해 먼저 등록되고, 소비한 키는
    *  `stopImmediatePropagation`으로 그쪽에 안 간다(숫자가 `⌘1`-`⌘6`으로 새지 않는다). */
   useEffect(() => {
@@ -1235,6 +1237,10 @@ export function HomeUI({
     fabRun.current = (k) => {
       const slot = fabSlot(surface, k);
       if (!slot) return;
+      if (slot.kind === "fab" && !slot.primary) {
+        setFabOpenSignal((n) => n + 1);
+        return;
+      }
       const a = slot.kind === "dial" ? slot.action : slot.primary;
       if (a === "session" && newConversationLocked) return;
       if (a) void runCreate(a);
@@ -1871,6 +1877,7 @@ export function HomeUI({
             locked={newConversationLocked}
             composer={input}
             chord={chordOn}
+            openSignal={fabOpenSignal}
             onCreate={(a) => void runCreate(a)}
           />
         </div>
@@ -2839,6 +2846,7 @@ function CreateFab({
   locked,
   composer,
   chord,
+  openSignal,
   onCreate,
 }: {
   surface: Surface;
@@ -2846,10 +2854,23 @@ function CreateFab({
   composer: RefObject<HTMLTextAreaElement | null>;
   /** §P551 `⌘N` 코드 중 - 다이얼을 펼치고 순번 `kbd`를 붙인다 */
   chord: boolean;
+  /** 값이 바뀌면 다이얼을 펼친다(§P551 결정 5 예외). 포커스가 밖에 있어도 `Esc`로 접힌다 */
+  openSignal: number;
   onCreate: (a: CreateAction) => void;
 }) {
   const t = useT();
   const [hover, setOpen] = useState(false);
+  useEffect(() => {
+    if (openSignal > 0) setOpen(true);
+  }, [openSignal]);
+  useEffect(() => {
+    if (!hover) return;
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", esc);
+    return () => window.removeEventListener("keydown", esc);
+  }, [hover]);
   const open = hover || chord;
   const wrap = useRef<HTMLDivElement>(null);
   const escaping = useRef(false);
