@@ -9045,12 +9045,12 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P548-1 | 결정 1-3: `/en` 라우트, 한국어 주소의 302와 `Vary`, 토글 이동, hreflang 셋, sitemap 두 언어와 alternate | developer | - | 발행 |
-| P548-2 | 결정 4: docs description 추출(frontmatter 우선, 첫 문단 160자) | developer | - | 발행 |
-| P548-3 | 결정 5: 홈 title-description-og-히어로 첫 문단 ko/en 문구 | writer | - | 발행 |
-| P548-4 | 결정 6: 홈 SoftwareApplication + Organization, docs BreadcrumbList JSON-LD | developer | - | 발행 |
-| P548-5 | 결정 7-8: sitemap `lastmod`, `/llms.txt` | developer | - | 발행 |
-| P548-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 랜딩-only 빌드에서 한 줄씩 판정한다 | qa | P548-1 ~ 5 | 발행 |
+| P548-1 | 결정 1-3: `/en` 라우트, 한국어 주소의 302와 `Vary`, 토글 이동, hreflang 셋, sitemap 두 언어와 alternate | developer | - | 발행 `66fa0f35` |
+| P548-2 | 결정 4: docs description 추출(frontmatter 우선, 첫 문단 160자) | developer | - | 발행 `ee77b2e4` |
+| P548-3 | 결정 5: 홈 title-description-og-히어로 첫 문단 ko/en 문구 | writer | - | 발행 `adffaac3` |
+| P548-4 | 결정 6: 홈 SoftwareApplication + Organization, docs BreadcrumbList JSON-LD | developer | - | 발행 `94331139` |
+| P548-5 | 결정 7-8: sitemap `lastmod`, `/llms.txt` | developer | - | 발행 `67913293` |
+| P548-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 랜딩-only 빌드에서 한 줄씩 판정한다 | qa | P548-1 ~ 5 | 발행 `3060d0cf` |
 
 **개발 넷을 안 엮는다.** 1과 5는 둘 다 `sitemap.ts`를 고치지만 1은 URL 목록과 alternate, 5는 `lastmod` 필드라 rebase가
 푼다. 2와 5는 docs 제목-description을 읽는 함수를 함께 쓰지만 5는 2 없이도 `titleOf`와 `siteMeta.description`으로
