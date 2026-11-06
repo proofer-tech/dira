@@ -1,18 +1,18 @@
 name: persona-designer
-version: 1.0.1
+version: 1.0.2
 description: dira persona-designer package
 dependencies:
   apm:
     - ../skill-brainstorming
-design-taste-frontend
-hallmark
-ui-animation
-shadcn
-watch
-write-landing
-marketing-ideas
-marketing-psychology
-noslop-write
-noslop-review
-noslop-fix
-find-skills
+    - ../skill-design-taste-frontend
+    - ../skill-hallmark
+    - ../skill-ui-animation
+    - ../skill-shadcn
+    - ../skill-watch
+    - ../skill-write-landing
+    - ../skill-marketing-ideas
+    - ../skill-marketing-psychology
+    - ../skill-noslop-write
+    - ../skill-noslop-review
+    - ../skill-noslop-fix
+    - ../skill-find-skills

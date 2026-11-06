@@ -1,5 +1,5 @@
 name: squad-default
-version: 1.0.2
+version: 1.0.3
 description: dira squad-default package
 dependencies:
   apm:
