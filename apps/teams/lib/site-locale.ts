@@ -17,7 +17,10 @@ import { readLanguage } from "./projects.ts";
 export function acceptLanguageLocale(header: string | null | undefined): Locale | undefined {
   if (!header) return undefined;
   for (const part of header.split(",")) {
-    const tag = part.trim().split(";")[0].slice(0, 2).toLowerCase();
+    const [range, ...params] = part.trim().split(";");
+    // q=0은 "받지 않는다"라서 선택에서 뺀다.
+    if (params.some((x) => /^\s*q\s*=\s*0(\.0*)?\s*$/i.test(x))) continue;
+    const tag = range.slice(0, 2).toLowerCase();
     if (tag === "ko" || tag === "en") return tag;
   }
   return undefined;

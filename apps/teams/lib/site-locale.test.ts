@@ -81,3 +81,10 @@ test("pickManuscript — en/ 미러가 있으면 그것을, 없으면 한국어 
     rmSync(BASE, { recursive: true, force: true });
   }
 });
+
+test("acceptLanguageLocale — q=0인 언어는 선택에서 뺀다", () => {
+  assert.equal(acceptLanguageLocale("en;q=0"), undefined);
+  assert.equal(acceptLanguageLocale("en;q=0, ko"), "ko");
+  assert.equal(acceptLanguageLocale("en;q=0.0,fr"), undefined);
+  assert.equal(acceptLanguageLocale("en;q=0.5"), "en");
+});
