@@ -9029,8 +9029,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P552-1 | 구현 - 결정 1-4. `MarketRecord.source`와 단위 테스트, 목록 줄 배지 둘, 상세의 가져온 원본 줄, ko - en 문구 | developer | - | 발행 |
-| P552-2 | 매뉴얼 - `apps/teams/docs/screens.md` - `apps/teams/en/docs/screens.md`의 스쿼드 화면 절과 마켓 절에 목록 배지 둘이 무엇을 뜻하는지 적는다 | writer | P552-1 | 발행 |
+| P552-1 | 구현 - 결정 1-4. `MarketRecord.source`와 단위 테스트, 목록 줄 배지 둘, 상세의 가져온 원본 줄, ko - en 문구 | developer | - | 발행 `2175df27` |
+| P552-2 | 매뉴얼 - `apps/teams/docs/screens.md` - `apps/teams/en/docs/screens.md`의 스쿼드 화면 절과 마켓 절에 목록 배지 둘이 무엇을 뜻하는지 적는다 | writer | P552-1 | 발행 `bc6b562c` |
 
 #### 수용조건
 
