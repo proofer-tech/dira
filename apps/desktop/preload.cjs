@@ -12,4 +12,6 @@ contextBridge.exposeInMainWorld("dira", {
   pickPath: (mode) => ipcRenderer.invoke("dira:pick-path", mode),
   /** §릴리스 · 자동 업데이트 T7 — 인자는 미리 아는 이름 하나("state"·"notes"·"restart"·"later")다. */
   updateAction: (action) => ipcRenderer.invoke("dira:update-action", action),
+  /** P549 결정 4 - 레이아웃 기록 JSON 문자열 하나. main이 상한과 형식을 검사한다. */
+  saveLayout: (json) => ipcRenderer.invoke("dira:save-layout", json),
 });

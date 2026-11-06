@@ -21,6 +21,7 @@ import { createVercelSync } from "./vercel-sync.ts";
 import { publishConnections, unpublishConnections } from "./env-connect.ts";
 import { createEnvStore } from "./env-store.ts";
 import { pickPort } from "./server-port.ts";
+import { acceptLayout } from "./layout-save.ts";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -632,6 +633,13 @@ ipcMain.handle("dira:pick-path", async (e, mode: unknown) => {
     properties: [mode === "file" ? "openFile" : "openDirectory", "showHiddenFiles"],
   });
   return r.filePaths[0] ?? null;
+});
+
+/** P549 결정 4 - 클라이언트 셸의 레이아웃 기록을 `userData/layout.json`에 남긴다. 상한과 형식을 여기서 다시 검사한다. */
+ipcMain.handle("dira:save-layout", (_e, json: unknown) => {
+  const ok = acceptLayout(json);
+  if (ok === null) return;
+  try { writeFileSync(join(app.getPath("userData"), "layout.json"), ok); } catch (e) { console.error(`[dira] layout.json을 못 썼습니다: ${(e as Error).message}`); }
 });
 
 // ── 릴리스 · 자동 업데이트 (R5·R6·R8·§표면이 창 안으로 들어온다 T1~T7) ──────

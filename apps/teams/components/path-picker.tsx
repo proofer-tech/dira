@@ -23,6 +23,8 @@ declare global {
      *  쓴다. 인자는 미리 아는 이름 하나이고 main이 `switch`로 갈라 모르는 값은 버린다(고정하는 것 4). */
     dira?: {
       pickPath(mode: "file" | "directory"): Promise<string | null>;
+      /** P549 결정 4 - 레이아웃 기록 JSON 하나. main이 크기와 형식을 다시 검사한다. */
+      saveLayout?(json: string): Promise<void>;
       updateAction(
         action: "state",
       ): Promise<{ version: string } | null>;

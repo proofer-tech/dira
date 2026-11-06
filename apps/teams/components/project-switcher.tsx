@@ -8,6 +8,7 @@
  *  필요해서 여기 있다(서버 레이아웃은 pathname을 모른다). */
 import { useEffect, useState, useTransition } from "react";
 import Link from "@/components/link";
+import { LayoutRecorder } from "@/components/layout-recorder";
 import { usePathname, useRouter } from "next/navigation";
 import { useCommandState } from "cmdk";
 import { Check, ChevronDown, ChevronsUpDown, ChevronUp, List, Settings2, TriangleAlert } from "lucide-react";
@@ -714,6 +715,7 @@ export function ShellMain({ children }: { children: React.ReactNode }) {
         home ? "-mt-12 pt-12" : "px-6 py-6",
       )}
     >
+      <LayoutRecorder />
       {/* 종전 화면은 숨길 뿐 언마운트하지 않는다 - 취소되면 그대로 돌아온다(§P534 결정 5). */}
       {target && <ScreenSkeleton screen={target.screen} query={target.query} />}
       <div className={target ? "hidden" : "contents"}>
