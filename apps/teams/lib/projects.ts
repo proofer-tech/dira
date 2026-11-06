@@ -2,6 +2,7 @@
  *
  *  GUI는 큐 하나에 붙어 있는 게 아니라 사용자가 등록한 큐들을 전환하며 본다. 레지스트리는
  *  머신 로컬 JSON 한 파일이고, 큐 위치·접미사·페르소나 디렉터리는 전부 프로젝트에서 받아온다. */
+import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -1191,7 +1192,9 @@ export type Squad = {
 };
 
 export function squadsDir(project: Pick<Project, "root">): string {
-  return path.join(project.root, "squads");
+  // P506-P509: 팀이 있는 큐의 정본은 team/squads, 팀이 없는 옛 큐만 <큐>/squads다.
+  const team = path.join(project.root, "team");
+  return existsSync(path.join(team, "apm.yml")) ? path.join(team, "squads") : path.join(project.root, "squads");
 }
 
 /** 탐색기 뿌리(DESIGN.md §11-2 결정 3) — 프로젝트 루트 고정, 워커별 `TICKET_CWD` 오버라이드와

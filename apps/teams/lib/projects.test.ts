@@ -1283,3 +1283,20 @@ test("빠지는 조건 - 휴지통 - 숨김 기록 + 디렉터리 없음 + 열�
   file("aaaa4444", "x", ".md");
   assert.deepStrictEqual((await readSummary({ root })).personas, ["plain", "x", "y"]);
 });
+
+test("스쿼드 - team이 있는 큐는 team/squads에 만들고 지우며 <큐>/squads는 안 만든다", async () => {
+  const root = newQueue({ "w1.sh": "" });
+  mkdirSync(path.join(root, "team"), { recursive: true });
+  writeFileSync(path.join(root, "team", "apm.yml"), "name: t\n");
+  const dir = squadsDir({ root });
+  assert.strictEqual(dir, path.join(root, "team", "squads"));
+
+  await createSquad(dir, "qa469");
+  assert.strictEqual(existsSync(path.join(root, "team", "squads", "qa469", "members")), true);
+  assert.strictEqual(existsSync(path.join(root, "squads")), false);
+
+  await deleteSquad(dir, "qa469"); // 예전에는 없는 <큐>/squads를 realpath해 ENOENT였다
+  assert.strictEqual(existsSync(path.join(dir, "qa469")), false);
+  assert.deepStrictEqual(await squadNames(dir), []);
+  assert.strictEqual(existsSync(path.join(root, "squads")), false);
+});
