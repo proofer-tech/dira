@@ -123,7 +123,7 @@ import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
-import { fabIconKey, fabPlan, type CreateAction } from "@/lib/home-fab";
+import { chordStep, fabIconKey, fabPlan, fabSlot, type CreateAction } from "@/lib/home-fab";
 import { splitAttachments } from "@/lib/attachment-format";
 import type { RefIndex } from "@/lib/markdown-refs";
 import type { PtyStatus } from "@/lib/pty";
@@ -207,7 +207,7 @@ import type {
   Turn,
   WorkerSession,
 } from "@/lib/home-session";
-import { formatCombo, matchCombo, SURFACE_COMBOS } from "@/lib/keymap";
+import { FAB_COMBO, formatCombo, matchCombo, SURFACE_COMBOS } from "@/lib/keymap";
 import type { Checkout, GitStatus, StatusFile } from "@/lib/source-control";
 import {
   activeTabKey,
@@ -1102,8 +1102,33 @@ export function HomeUI({
    *  **이 파일 안에서만 듣는다** — 다른 화면(보드 등)은 `HomeUI`가 안 뜨므로 리스너 자체가 없다
    *  (결정 1 §듣는 자리는 홈 하나다). `SURFACE_COMBOS`(`lib/keymap.ts`)가 정본이고 `SURFACES`와
    *  인덱스로 짝짓는다 — 값 하나가 둘로 안 갈린다(`validateBinding`도 같은 상수를 본다). */
+  const chordArmed = useRef(false);
+  const [chordOn, setChordOn] = useState(false);
+  const fabRun = useRef<(k: number) => void>(() => {});
   useEffect(() => {
+    // §P551 `⌘N` 코드. 숫자 키가 아래 표면 전환으로 새지 않게 같은 capture 리스너 안에서 먼저 본다.
+    const chord = (type: "down" | "up", e: KeyboardEvent) => {
+      if (e.isComposing) return false;
+      const r = chordStep(chordArmed.current, {
+        type,
+        key: e.key,
+        mod: e.metaKey || e.ctrlKey,
+        repeat: e.repeat,
+      });
+      if (r.armed !== chordArmed.current) {
+        chordArmed.current = r.armed;
+        setChordOn(r.armed);
+      }
+      if (r.consume) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      if (r.run !== null) fabRun.current(r.run);
+      return r.consume;
+    };
+    const onUp = (e: KeyboardEvent) => void chord("up", e);
     const onKey = (e: KeyboardEvent) => {
+      if (chord("down", e)) return;
       const i = SURFACE_COMBOS.findIndex((combo) => matchCombo(e, combo));
       if (i === -1) return;
       e.preventDefault();
@@ -1111,7 +1136,11 @@ export function HomeUI({
       changeSurface(SURFACES[i].id);
     };
     window.addEventListener("keydown", onKey, { capture: true });
-    return () => window.removeEventListener("keydown", onKey, { capture: true });
+    window.addEventListener("keyup", onUp, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", onKey, { capture: true });
+      window.removeEventListener("keyup", onUp, { capture: true });
+    };
   });
 
   /** 우측 탭 줄에서 탭 하나를 고른다(§11 결정 1) — **표면을 가로지르는 그 한 줄**의 유일한
@@ -1195,6 +1224,15 @@ export function HomeUI({
     } else if (a === "schedules") setScheduleOpen(true);
     else if (a === "terminal") await openNewTerminal();
     else await openNewBrowser();
+  };
+
+  /** §P551 순번 k를 실행한다. 클릭과 같은 길이다 - 1번은 FAB(주 액션이 없으면 다이얼 펼치기, 잠기면 무동작). */
+  fabRun.current = (k) => {
+    const slot = fabSlot(surface, k);
+    if (!slot) return;
+    const a = slot.kind === "dial" ? slot.action : slot.primary;
+    if (a === "session" && newConversationLocked) return;
+    if (a) void runCreate(a);
   };
 
   /** 접힌 줄을 열고 닫는다(§비주얼 §24 ⑦ §자동 스크롤). `<Bundle>`이 요구하는 자리지만
@@ -1826,6 +1864,7 @@ export function HomeUI({
             surface={surface}
             locked={newConversationLocked}
             composer={input}
+            chord={chordOn}
             onCreate={(a) => void runCreate(a)}
           />
         </div>
@@ -2793,15 +2832,19 @@ function CreateFab({
   surface,
   locked,
   composer,
+  chord,
   onCreate,
 }: {
   surface: Surface;
   locked: boolean;
   composer: RefObject<HTMLTextAreaElement | null>;
+  /** §P551 `⌘N` 코드 중 - 다이얼을 펼치고 순번 `kbd`를 붙인다 */
+  chord: boolean;
   onCreate: (a: CreateAction) => void;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  const [hover, setOpen] = useState(false);
+  const open = hover || chord;
   const wrap = useRef<HTMLDivElement>(null);
   const escaping = useRef(false);
   const { primary, dial } = fabPlan(surface);
@@ -2868,6 +2911,9 @@ function CreateFab({
             className="pointer-events-none rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow"
           >
             {label}
+            <kbd data-slot="kbd" className="ml-1.5 rounded border px-1 font-mono text-[10px] text-muted-foreground">
+              {chord ? "1" : formatCombo(FAB_COMBO)}
+            </kbd>
           </span>
         )}
         <Button
@@ -2892,13 +2938,18 @@ function CreateFab({
         hidden={!open}
         className="flex flex-col-reverse items-end gap-2 transition-opacity duration-150 motion-reduce:transition-none"
       >
-        {dial.map((a) => {
+        {dial.map((a, idx) => {
           const { labelKey, icon: Icon } = CREATE_META[a];
           const off = a === "session" && locked;
           return (
             <div key={a} className="flex items-center gap-2">
               <span className="rounded bg-popover px-2 py-1 text-xs text-popover-foreground shadow">
                 {t(labelKey)}
+                {chord ? (
+                  <kbd data-slot="kbd" className="ml-1.5 rounded border px-1 font-mono text-[10px] text-muted-foreground">
+                    {idx + 2}
+                  </kbd>
+                ) : null}
               </span>
               <Button
                 role="menuitem"

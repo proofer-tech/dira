@@ -13,6 +13,7 @@ process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 const {
   DEFAULT_KEYMAP,
   SURFACE_COMBOS,
+  FAB_COMBO,
   actionName,
   comboOf,
   formatCombo,
@@ -270,4 +271,14 @@ test("validateBinding — Mod+1~Mod+6은 항상 거절한다(§11-19 홈 표면 
   }
   // formatCombo가 화면 표기를 낸다 — 툴팁이 이 값을 그대로 쓴다(§11-19 결정 3)
   assert.deepStrictEqual(SURFACE_COMBOS.map(formatCombo), ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6"]);
+});
+
+// §P551 결정 7 - `Mod+n`은 홈 FAB의 고정 키다.
+test("validateBinding - Mod+n은 거절한다(§P551 홈 새로 만들기가 쓰는 키)", () => {
+  assert.strictEqual(FAB_COMBO, "Mod+n");
+  const e = validateBinding(BOUND, "board.new", FAB_COMBO)!;
+  assert.match(e.reason, /새로 만들기/);
+  assert.strictEqual(e.conflict, undefined);
+  assert.strictEqual(validateBinding(BOUND, "board.new", FAB_COMBO, "en")!.reason, "This key is used by Create on home.");
+  assert.strictEqual(formatCombo(FAB_COMBO), "⌘N");
 });

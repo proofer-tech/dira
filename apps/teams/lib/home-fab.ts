@@ -18,3 +18,45 @@ export function fabPlan(surface: Surface): { primary: CreateAction | null; dial:
 export function fabIconKey(surface: Surface): CreateAction | "plus" {
   return fabPlan(surface).primary ?? "plus";
 }
+
+/** §P551 결정 1 - 순번 k(1부터)가 부르는 것. 1은 FAB 자체(`primary`, 없으면 다이얼 펼치기),
+ *  2부터 `dial[k-2]`다. 항목이 없으면 `null`이다. */
+export type FabSlot = { kind: "fab"; primary: CreateAction | null } | { kind: "dial"; action: CreateAction };
+
+export function fabSlot(surface: Surface, k: number): FabSlot | null {
+  const { primary, dial } = fabPlan(surface);
+  if (k === 1) return { kind: "fab", primary };
+  const action = Number.isInteger(k) && k >= 2 ? dial[k - 2] : undefined;
+  return action ? { kind: "dial", action } : null;
+}
+
+/** §P551 결정 2-3 - `⌘N` 코드 상태 전이. 상태는 `armed`(⌘을 쥔 채 N을 눌렀다) 하나뿐이다. */
+export type ChordEvent = { type: "down" | "up"; key: string; mod: boolean; repeat: boolean };
+export type ChordResult = {
+  armed: boolean;
+  /** 실행할 순번. `null`이면 실행 없음 */
+  run: number | null;
+  /** 참이면 호출자가 `preventDefault`/`stopPropagation`을 한다. 거짓이면 그 키는 원래대로 처리된다 */
+  consume: boolean;
+};
+
+const isMod = (key: string) => key === "Meta" || key === "Control";
+
+export function chordStep(armed: boolean, e: ChordEvent): ChordResult {
+  const pass = (a: boolean): ChordResult => ({ armed: a, run: null, consume: false });
+  if (!armed) {
+    // 시작은 ⌘을 쥔 N 한 번뿐이다. 반복은 코드를 열지 않는다.
+    if (e.type === "down" && e.mod && e.key.toLowerCase() === "n") {
+      return { armed: !e.repeat, run: null, consume: true };
+    }
+    return pass(false);
+  }
+  if (e.type === "up") {
+    // ⌘을 떼면 숫자 없이 끝난 것이다 -> 1번. 그 밖의 keyup은 코드와 상관없다.
+    return isMod(e.key) ? { armed: false, run: 1, consume: false } : pass(true);
+  }
+  if (e.key.toLowerCase() === "n") return { armed: true, run: null, consume: true };
+  if (/^[0-9]$/.test(e.key) && e.mod) return { armed: false, run: Number(e.key), consume: true };
+  // 조합자만 눌린 것은 다른 키가 아니다. 그 밖의 키는 실행 없이 코드를 끝내고 원래대로 간다.
+  return isMod(e.key) || e.key === "Shift" || e.key === "Alt" ? pass(true) : pass(false);
+}

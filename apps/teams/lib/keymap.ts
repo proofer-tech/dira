@@ -63,6 +63,9 @@ export const DEFAULT_KEYMAP: KeyAction[] = [
  *  깨질 이유는 없지만 굳이 엮을 이유도 없다, 위 머리 주석 §순수 함수). */
 export const SURFACE_COMBOS = ["Mod+1", "Mod+2", "Mod+3", "Mod+4", "Mod+5", "Mod+6"];
 
+/** §P551 결정 7 - 홈에서 FAB의 새로 만들기(`⌘N`, 뒤에 숫자면 다이얼 순번)를 부르는 고정 키. */
+export const FAB_COMBO = "Mod+n";
+
 export type Bindings = Record<ActionId, string>;
 
 export type Keymap = {
@@ -240,6 +243,7 @@ export function validateBinding(
   if (SURFACE_COMBOS.includes(combo)) {
     return { reason: t(locale, "settings.keymap.reject.surface") };
   }
+  if (combo === FAB_COMBO) return { reason: t(locale, "settings.keymap.reject.fab") };
   for (const a of DEFAULT_KEYMAP) {
     if (a.id !== actionId && bindings[a.id] === combo) {
       // 두 로케일이 같은 어순이다 — 이름이 앞에 뜨고 술어가 뒤다(`보내기와 겹칩니다.` ·
