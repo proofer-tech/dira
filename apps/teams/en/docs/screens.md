@@ -1354,6 +1354,26 @@ the `Members` section.
 - `Installs` stacks one line per import: which project took it, which version, and when. Empty
   reads `None yet`.
 
+### Telling what you deployed from what you imported
+
+The left list on the `Squads` screen shows which rows have anything to do with the market. One or
+both of two badges sit after the name.
+
+- `Deployed v1.2.0` means this project has put that name up on the market. The version is the
+  newest one you deployed and matches the top line of `Deploy history` in the right pane. Hover it
+  and it reads `Deployed to the market`.
+- `Imported` means the row is a copy taken from the market. Hover it to see the origin as
+  `<owner>/<name> v<version you took>`. The badge stays even when the origin has not deployed
+  anything newer and no `Update available` badge is showing.
+
+If this project deployed again something it had imported, both badges appear. A row that has never
+touched the market carries neither. The badges are the same with `Group view` on or off, and on
+the member rows under a squad.
+
+Pick an imported item and the right pane shows an `Imported from` line just above the
+`Deploy history` section. It reads `<owner>/<name> v<version you took>`, the same as the `Imported`
+badge's tooltip.
+
 ### A newer version raises a badge on the receiving side
 
 On the `Squads` screen of the project that imported it, a badge like `Update available v1.1.0` sits
