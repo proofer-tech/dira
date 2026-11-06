@@ -11,8 +11,8 @@ import { CopyCommand } from "@/components/copy-command";
 import { PickPath } from "@/components/path-picker";
 import { SettingsDialog, type AuthView } from "@/components/settings-dialog";
 import { LanguageToggle } from "@/components/language-toggle";
-import { useT } from "@/components/language-provider";
-import { wrap } from "@/lib/i18n";
+import { useLocale, useT } from "@/components/language-provider";
+import { localePath, wrap } from "@/lib/i18n";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,6 +69,8 @@ export default function Landing({
   children?: React.ReactNode;
 }) {
   const t = useT();
+  const locale = useLocale();
+  const lp = (p: string) => localePath(locale, p);
   const heroTitle = t("landing.hero.title");
   // 초기값은 빌드 시점의 `apps/desktop/package.json`. 비우면 hydration이 어긋난다.
   const [version, setVersion] = useState(initialVersion);
@@ -429,7 +431,7 @@ export default function Landing({
 
 <header>
   <div className="wrap">
-    <a className="brand" href="/" aria-label="dira">
+    <a className="brand" href={lp("/")} aria-label="dira">
       <svg viewBox="0 0 32 32" fillRule="evenodd" aria-hidden="true"><path d="M2 0H10A2 2 0 0 1 12 2V6H30A2 2 0 0 1 32 8V30A2 2 0 0 1 30 32H2A2 2 0 0 1 0 30V2A2 2 0 0 1 2 0ZM10 10H22A2 2 0 0 1 24 12V14A4 4 0 0 0 24 22V24A2 2 0 0 1 22 26H10A2 2 0 0 1 8 24V22A4 4 0 0 0 8 14V12A2 2 0 0 1 10 10Z"/></svg>
       dira
     </a>
@@ -437,7 +439,7 @@ export default function Landing({
       {/* ② 640 이하에서 `매뉴얼`을 걷는다 — 이 페이지에서 회수된다(footer §문서 열.
           §비주얼 §46 ③). `btn-manual`은 풀 모드에서만 붙는다 — 랜딩-only 헤더(넷 이하)는
           이 접힘 규칙 밖이다. */}
-      <a className={fullMode ? "btn btn-manual" : "btn btn-manual-lo"} href="/docs/">{t("landing.nav.manualLink")}</a>
+      <a className={fullMode ? "btn btn-manual" : "btn btn-manual-lo"} href={lp("/docs/")}>{t("landing.nav.manualLink")}</a>
       {/* 들어오는 링크 둘 중 하나(DESIGN.md §페르소나 마켓 §화면 - 다이얼로그로 연다). 페이지
           이동 대신 `MarketDialog`를 연다(티켓 `71c41084`) — 랜딩-only에서는 마켓 저장소가
           없어 `fullMode`에서만 붙이는 것은 그대로다. */}
@@ -551,7 +553,7 @@ export default function Landing({
     <>
       <div className="cta">
         <a className="btn btn-primary btn-lg" href={dmg}>{t("landing.hero.downloadCta")}</a>
-        <a className="btn btn-lg" href="/docs/install">{t("landing.nav.installGuide")}</a>
+        <a className="btn btn-lg" href={lp("/docs/install")}>{t("landing.nav.installGuide")}</a>
       </div>
       <p className="cta-note">with Claude Code · Codex</p>
     </>
@@ -616,7 +618,7 @@ export default function Landing({
     <a className="zoom" href="/shots/10-archiving.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/10-archiving.png" loading="lazy" alt={t("landing.archiving.shotAlt")} width="1368" height="300"/></a>
     <figcaption>{t("landing.archiving.shotCaption")}</figcaption>
   </figure>
-  <p className="arrows"><a href="/docs/ontology">{t("landing.archiving.arrowLink")}</a></p>
+  <p className="arrows"><a href={lp("/docs/ontology")}>{t("landing.archiving.arrowLink")}</a></p>
 </section>
 
 {/* 「오로지 내 PC에」 — 앞 절이 «기록이 프로젝트 폴더에 남는다»로 끝나서, 그 파일이 어디에도
@@ -639,7 +641,7 @@ export default function Landing({
     <a className="zoom" href="/shots/08-onboarding.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/08-onboarding.png" loading="lazy" alt={t("landing.noAccount.shotAlt")} width="1600" height="700"/></a>
     <figcaption>{t("landing.noAccount.shotCaption")}</figcaption>
   </figure>
-  <p className="arrows"><a href="/docs/analytics">{t("landing.noAccount.arrowLink")}</a></p>
+  <p className="arrows"><a href={lp("/docs/analytics")}>{t("landing.noAccount.arrowLink")}</a></p>
 </section>
 </div>
 
@@ -663,17 +665,17 @@ export default function Landing({
       <figcaption>
         {t("landing.gallery.bargeCaption")}
       </figcaption>
-      <p className="arrows"><a href="/docs/barge-in">{t("landing.gallery.bargeArrowLink")}</a></p>
+      <p className="arrows"><a href={lp("/docs/barge-in")}>{t("landing.gallery.bargeArrowLink")}</a></p>
     </figure>
     <figure>
       <a className="zoom" href="/shots/07-qa-thread.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/07-qa-thread.png" loading="lazy" alt={t("landing.gallery.qaAlt")} width="1440" height="904"/></a>
       <figcaption>{t("landing.gallery.qaCaption")}</figcaption>
-      <p className="arrows"><a href="/docs/requirements#되묻기와-답변-대기">{t("landing.gallery.qaArrowLink")}</a></p>
+      <p className="arrows"><a href={lp("/docs/requirements#되묻기와-답변-대기")}>{t("landing.gallery.qaArrowLink")}</a></p>
     </figure>
     <figure>
       <a className="zoom" href="/shots/04-ticket-running.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/04-ticket-running.png" loading="lazy" alt={t("landing.gallery.runningAlt")} width="1600" height="1254"/></a>
       <figcaption>{t("landing.gallery.runningCaption")}</figcaption>
-      <p className="arrows"><a href="/docs/screens#티켓-상세">{t("landing.gallery.runningArrowLink")}</a></p>
+      <p className="arrows"><a href={lp("/docs/screens#티켓-상세")}>{t("landing.gallery.runningArrowLink")}</a></p>
     </figure>
     {/* 넷째는 12열을 통째로 쓴다. `.gallery`가 3열이라 넷이 한 줄에 못 뜨는데, 열을 넷으로
         줄이는 쪽은 §랜딩 §갤러리가 이미 버린 안이다(1열 1032px에서도 캡처가 0.65로 줄어
@@ -684,7 +686,7 @@ export default function Landing({
     <figure style={{ gridColumn: "1 / -1" }}>
       <a className="zoom" href="/shots/09-ontology.png" target="_blank" rel="noopener" title={t("landing.gallery.openOriginal")}><img className="shot" src="/shots/09-ontology.png" loading="lazy" alt={t("landing.gallery.ontologyAlt")} width="1600" height="912"/></a>
       <figcaption>{t("landing.gallery.ontologyCaption")}</figcaption>
-      <p className="arrows"><a href="/docs/ontology">{t("landing.archiving.arrowLink")}</a></p>
+      <p className="arrows"><a href={lp("/docs/ontology")}>{t("landing.archiving.arrowLink")}</a></p>
     </figure>
   </div>
 </section>
@@ -716,12 +718,12 @@ export default function Landing({
         {t("landing.install.item1Prefix")}{" "}
         <code>{t("persona.engine.label")}</code> {t("landing.install.item1Mid")} <code>claude</code>{t("landing.install.item1Suffix")}</li>
         <li><b>{t("landing.install.item2Bold")}</b> {t("landing.install.item2Prefix")}{" "}
-        <a href="/docs/install#앱-없이-엔진만-쓰기">{t("landing.install.item2LinkText")}</a>{t("landing.install.item2Suffix")}</li>
+        <a href={lp("/docs/install#앱-없이-엔진만-쓰기")}>{t("landing.install.item2LinkText")}</a>{t("landing.install.item2Suffix")}</li>
       </ul>
       <p className="arrows">
-        <a href="/docs/install">{t("landing.install.fullGuideLink")}</a>
-        <a href="/docs/first-ticket">{t("landing.install.firstTicketLink")}</a>
-        <a href="/docs/cron">{t("landing.install.cronOnlyLink")}</a>
+        <a href={lp("/docs/install")}>{t("landing.install.fullGuideLink")}</a>
+        <a href={lp("/docs/first-ticket")}>{t("landing.install.firstTicketLink")}</a>
+        <a href={lp("/docs/cron")}>{t("landing.install.cronOnlyLink")}</a>
       </p>
     </div>
   </div>
@@ -826,14 +828,14 @@ export default function Landing({
               `릴리스`·`엔진`과 나머지 세 열은 그대로다. */}
           {!fullMode && <li><a href={dmg}>{t("landing.footer.downloadLink")}</a></li>}
           <li><a href="https://github.com/proofer-tech/dira/releases">{t("landing.footer.releasesLink")}</a></li>
-          <li><a href="/docs/what-is-dira">{t("landing.footer.engineLink")}</a></li>
+          <li><a href={lp("/docs/what-is-dira")}>{t("landing.footer.engineLink")}</a></li>
         </ul>
       </div>
       <div className="fcol">
         <h4>{t("landing.footer.docsHeading")}</h4>
         <ul>
-          <li><a href="/docs/">{t("landing.nav.manualLink")}</a></li>
-          <li><a href="/docs/install">{t("landing.nav.installGuide")}</a></li>
+          <li><a href={lp("/docs/")}>{t("landing.nav.manualLink")}</a></li>
+          <li><a href={lp("/docs/install")}>{t("landing.nav.installGuide")}</a></li>
           <li><a href="https://github.com/proofer-tech/dira#readme">README</a></li>
           <li><a href="https://github.com/proofer-tech/dira/tree/master/templates">{t("landing.footer.templatesLink")}</a></li>
         </ul>
@@ -849,8 +851,8 @@ export default function Landing({
     </div>
     <div className="fbot">
       <span>{t("landing.footer.copyright")}</span>
-      <a href="/terms">{t("landing.footer.termsLink")}</a>
-      <a href="/privacy">{t("landing.footer.privacyLink")}</a>
+      <a href={lp("/terms")}>{t("landing.footer.termsLink")}</a>
+      <a href={lp("/privacy")}>{t("landing.footer.privacyLink")}</a>
     </div>
   </div>
 </footer>

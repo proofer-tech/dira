@@ -1,5 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { LOCALE_COOKIE } from "@/lib/i18n";
+import { isLandingOnly } from "@/lib/flags";
 import { resolvePublicLocale } from "@/lib/site-locale";
 
 /** 요청 쿠키·헤더를 실제로 꺼내는 자리 하나 — 순수 판정(`resolvePublicLocale`)은
@@ -11,6 +12,11 @@ import { resolvePublicLocale } from "@/lib/site-locale";
  *  `resolvePublicLocale` 쪽의 `cache()`가 중복 계산을 지운다. */
 export async function siteLocale() {
   const [jar, h] = await Promise.all([cookies(), headers()]);
+  // P548 결정 2 - 랜딩-only는 경로가 정본이다. `proxy.ts`가 `/en/**`를 한국어 라우트로 rewrite하며
+  // 이 헤더를 단다(밖에서 온 같은 이름 헤더는 그곳이 지운다). 풀 모드는 `/en`이면 영어, 아니면
+  // 종전대로 `language.json`이다.
+  if (h.get("x-site-locale") === "en") return "en";
+  if (isLandingOnly()) return "ko";
   return resolvePublicLocale(
     jar.get(LOCALE_COOKIE)?.value,
     h.get("accept-language"),

@@ -21,6 +21,19 @@ export const DEFAULT_LOCALE: Locale = "ko";
  *  못 물어서다 — 이 파일은 `node:*`가 없다(위 머리 주석). */
 export const LOCALE_COOKIE = "dira-locale";
 
+/** P548 결정 1 - 한국어는 주소 그대로, 영어는 `/en` 접두다(`/`는 `/en`). 공개 사이트 안의 링크와
+ *  canonical과 토글이 같은 규칙을 쓴다. */
+export function localePath(locale: Locale, path: string): string {
+  if (locale !== "en") return path;
+  return path === "/" ? "/en" : `/en${path}`;
+}
+
+/** `/en` 접두를 걷은 한국어 주소. 접두가 없으면 그대로다. */
+export function stripEn(pathname: string): string {
+  if (pathname === "/en") return "/";
+  return pathname.startsWith("/en/") ? pathname.slice(3) : pathname;
+}
+
 /** 키 이름 규약(30a8f5c3 첫 묶음) — `<화면>.<노드나 영역>.<요소>`. 트리 노드 5개와 같은 이름을
  *  공유하는 문구는 `settings.tree.<node>`로 한 번만 두고 여러 자리가 재사용한다(중복 값 0).
  *  화면·노드를 안 가리는 낱말(저장·저장 중…·추가 등)은 `common.*`.

@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import {
   ORIGIN,
   descriptionOf,
+  enPageUrls,
   docNames,
   docPath,
   pageMetadata,
@@ -119,4 +120,23 @@ test("lastmodOf - 가장 늦은 커밋 시각, git 실패는 빌드 시각", asy
   assert.strictEqual(lastmodOf(["a"], () => { throw new Error("ENOENT git"); }, now), now.toISOString());
   assert.strictEqual(lastmodOf(["a"], () => "\n", now), now.toISOString());
   assert.ok(pageUrls.every((u) => sourceFilesOf(u.slice("https://dira.proofer.tech".length)).length > 0));
+});
+
+test("P548 - 영어판 URL은 /en 접두이고 한국어와 같은 수다", () => {
+  assert.equal(enPageUrls.length, pageUrls.length);
+  assert.equal(enPageUrls[0], `${ORIGIN}/en`);
+  assert.ok(enPageUrls.includes(`${ORIGIN}/en/docs/install`));
+  assert.ok(enPageUrls.includes(`${ORIGIN}/en/privacy`));
+});
+
+test("P548 - canonical은 자기 언어 주소, hreflang ko/en/x-default(=한국어)는 모든 페이지에 있다", () => {
+  for (const [path, en] of [["/", "/en"], ["/docs/install", "/en/docs/install"], ["/docs/", "/en/docs/"]]) {
+    const ko = pageMetadata(path, "t", { locale: "ko" }).alternates!;
+    const e = pageMetadata(path, "t", { locale: "en" }).alternates!;
+    assert.equal(ko.canonical, `${ORIGIN}${path}`);
+    assert.equal(e.canonical, `${ORIGIN}${en}`);
+    for (const a of [ko, e]) {
+      assert.deepEqual(a.languages, { ko: `${ORIGIN}${path}`, en: `${ORIGIN}${en}`, "x-default": `${ORIGIN}${path}` });
+    }
+  }
 });

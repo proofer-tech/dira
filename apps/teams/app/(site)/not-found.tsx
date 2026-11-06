@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { t } from "@/lib/i18n";
+import { localePath, t } from "@/lib/i18n";
 import { siteLocale } from "./request-locale";
 
 // 기본 테마의 `404.html`이 여기로 왔다(§사이트 기반 §갈아 끼우는 것). 그 화면은 정적 HTML에
@@ -16,7 +16,7 @@ export default async function NotFound() {
     <main>
       <h1>404</h1>
       <p>{t(locale, "siteNotFound.body")}</p>
-      <a href="/">{t(locale, "siteNotFound.homeLink")}</a>
+      <a href={localePath(locale, "/")}>{t(locale, "siteNotFound.homeLink")}</a>
     </main>
   );
 }

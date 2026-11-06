@@ -10,7 +10,7 @@ import "./manual.css";
 import { isLandingOnly } from "@/lib/flags";
 import { Behaviors, DarkToggle, MenuToggle, NavToggle, NO_FLASH } from "./shell";
 import { LanguageToggle } from "@/components/language-toggle";
-import { t, type Locale } from "@/lib/i18n";
+import { localePath, t, type Locale } from "@/lib/i18n";
 
 // 마크다운 한 장을 셸에 담아 굽는다. 소비자는 셋이고(매뉴얼 22장 `app/docs/[[...slug]]` ·
 // 루트 산문 2장 `privacy`·`terms`) **한 벌**을 쓴다 — 렌더가 같아야 앵커 `id`·코드 토큰·표가
@@ -218,6 +218,7 @@ export function Shell({
   next?: Item;
 }) {
   const outline = outlineOf(source, editPath);
+  const lp = (p: string) => localePath(locale, p);
 
   return (
     <>
@@ -227,7 +228,7 @@ export function Shell({
       </a>
 
       <header className="nav">
-        <a className="brand" href="/" aria-label="dira">
+        <a className="brand" href={lp("/")} aria-label="dira">
           <svg viewBox="0 0 32 32" fillRule="evenodd" aria-hidden="true">
             <path d="M2 0H10A2 2 0 0 1 12 2V6H30A2 2 0 0 1 32 8V30A2 2 0 0 1 30 32H2A2 2 0 0 1 0 30V2A2 2 0 0 1 2 0ZM10 10H22A2 2 0 0 1 24 12V14A4 4 0 0 0 24 22V24A2 2 0 0 1 22 26H10A2 2 0 0 1 8 24V22A4 4 0 0 0 8 14V12A2 2 0 0 1 10 10Z" />
           </svg>
@@ -236,7 +237,7 @@ export function Shell({
         <nav className="nav-menu">
           {/* 매뉴얼 밖(`/privacy`·`/terms`)에서는 켜지지 않는다 — 기본 테마의 `activeMatch`가
               그 링크의 경로(`/docs/`)라 두 장에서 활성 항목이 0이었다. */}
-          <a className={path.startsWith("/docs") ? "on" : undefined} href="/docs/">
+          <a className={path.startsWith("/docs") ? "on" : undefined} href={lp("/docs/")}>
             {t(locale, "landing.nav.manualLink")}
           </a>
           {/* 매뉴얼 → 기능(§상호 링크). 22장 + privacy + terms가 같은 셸이라 여기 한 곳에
@@ -272,7 +273,7 @@ export function Shell({
                 <section key={g.text}>
                   <h2>{g.text}</h2>
                   {g.items.map((i) => (
-                    <a key={i.link} href={i.link} aria-current={i.link === path ? "page" : undefined}>
+                    <a key={i.link} href={lp(i.link)} aria-current={i.link === path ? "page" : undefined}>
                       {i.text}
                     </a>
                   ))}
@@ -293,13 +294,13 @@ export function Shell({
             {(prev || next) && (
               <nav className="prevnext" aria-label={t(locale, "manualShell.prevNextAriaLabel")}>
                 {prev && (
-                  <a className="prev" href={prev.link}>
+                  <a className="prev" href={lp(prev.link)}>
                     <span className="side">{t(locale, "manualShell.prevLabel")}</span>
                     <span className="title">{prev.text}</span>
                   </a>
                 )}
                 {next && (
-                  <a className="next" href={next.link}>
+                  <a className="next" href={lp(next.link)}>
                     <span className="side">{t(locale, "manualShell.nextLabel")}</span>
                     <span className="title">{next.text}</span>
                   </a>

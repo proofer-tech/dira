@@ -5,7 +5,7 @@ import type { Metadata } from "next";
 // `@/lib/i18n` 별칭이 아니라 상대경로 `.ts`다 — `meta.test.ts`가 `node --test`로 이 파일을
 // 직접 부르는데, 네이티브 TS 로더가 tsconfig `paths` 별칭을 못 읽는다(`lib/projects.ts`가
 // `./i18n.ts`를 쓰는 그 판정과 같다).
-import { DEFAULT_LOCALE, t, type Locale } from "../../lib/i18n.ts";
+import { DEFAULT_LOCALE, localePath, t, type Locale } from "../../lib/i18n.ts";
 
 /** 굽는 라우트 목록과 그 라우트의 메타데이터가 한 자리에 있다 — 사이트맵·canonical·
  *  `generateStaticParams`가 **같은 목록**을 봐야 어긋날 자리가 통째로 없어진다.
@@ -31,6 +31,11 @@ export const docPath = (name: string) => (name === "index" ? "/docs/" : `/docs/$
  *  (마크다운 페이지가 아니고 색인 대상도 아니다). */
 export const pageUrls = ["/", ...rootNames.map((n) => `/${n}`), ...docNames.map(docPath)].map(
   (path) => `${ORIGIN}${path}`,
+);
+
+/** 영어판 절대 URL(P548 결정 1) - `pageUrls`와 같은 순서다. */
+export const enPageUrls = ["/", ...rootNames.map((n) => `/${n}`), ...docNames.map(docPath)].map(
+  (path) => `${ORIGIN}${localePath("en", path)}`,
 );
 
 /** 종전 vitepress `pageData.title` — 첫 `# ` 헤딩의 글자다. 24장 전부 평문이라 걷을 마크다운이
@@ -97,12 +102,17 @@ export function pageMetadata(
     locale?: Locale;
   } = {},
 ): Metadata {
-  const url = `${ORIGIN}${path}`;
+  // P548 결정 3 - canonical은 그 페이지 자기 언어의 주소, hreflang 셋은 모든 페이지가 단다.
+  const ko = `${ORIGIN}${path}`;
+  const url = `${ORIGIN}${localePath(locale, path)}`;
   const desc = description || t(locale, "siteMeta.description");
   return {
     title: suffix ? `${title} | ${SITE_TITLE}` : title,
     description: desc,
-    alternates: { canonical: url },
+    alternates: {
+      canonical: url,
+      languages: { ko, en: `${ORIGIN}${localePath("en", path)}`, "x-default": ko },
+    },
     openGraph: {
       type: "website",
       siteName: SITE_TITLE,
