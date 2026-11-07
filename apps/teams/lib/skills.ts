@@ -18,6 +18,8 @@
  *
  *  경로 방어는 `projects.ts`의 `personaFilePath` 하나다(이름이 신뢰 경계 — §경로 방어). */
 import { execFile } from "node:child_process";
+import { runAuxClaude } from "./aux-claude.ts";
+import { SMALLEST_MODEL } from "./command-draft.ts";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
@@ -615,7 +617,7 @@ export const writePersonaOffSkills = (dir: string, name: string, skills: Skill[]
 
 /** `claude`를 부르는 자리 하나 — `["-p", ...]` -> `{ stdout }`. 실제 구현(아래 `claudeRunner`)과
  *  테스트 주입을 가르는 경계가 이거다. 새 npm 0개, `execFile`은 `unzip` 호출과 같은 벌이다. */
-type ClaudeRunner = (args: string[]) => Promise<{ stdout: string }>;
+type ClaudeRunner = (prompt: string) => Promise<{ stdout: string }>;
 
 const DESCRIBE_TIMEOUT_MS = 60_000;
 
@@ -624,7 +626,7 @@ const DESCRIBE_TIMEOUT_MS = 60_000;
 function claudeRunner(): ClaudeRunner | null {
   const bin = execClaude();
   if (!bin) return null;
-  return (args) => execFileP(bin, args, { timeout: DESCRIBE_TIMEOUT_MS });
+  return async (prompt) => ({ stdout: await runAuxClaude(bin, SMALLEST_MODEL.claude, prompt, { signal: AbortSignal.timeout(DESCRIBE_TIMEOUT_MS) }) });
 }
 
 /** 새로 고른 스킬들의 한국어 한 줄 설명을 **한 번의 호출**로 받는다(§참고 — 하나씩 부르면
@@ -650,7 +652,7 @@ export async function describeSkillsKorean(
     ...skills.map((s, i) => `${i + 1}. ${s.name}: ${s.description}`),
   ].join("\n");
   try {
-    const { stdout } = await runner(["-p", prompt, "--dangerously-skip-permissions"]);
+    const { stdout } = await runner(prompt);
     const parsed: unknown = JSON.parse(stdout.trim());
     if (!Array.isArray(parsed) || parsed.length !== skills.length) return new Map();
     const out = new Map<string, string>();

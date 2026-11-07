@@ -745,9 +745,8 @@ test("describeSkillsKorean — 배열 길이로 짝짓고, 여러 줄 응답을 
     { name: "a", description: "A" },
     { name: "b", description: "B" },
   ];
-  const runner = async (args: string[]) => {
-    assert.equal(args[0], "-p");
-    assert.ok(args[1].includes("a: A") && args[1].includes("b: B")); // 이름+설명만 준다
+  const runner = async (prompt: string) => {
+    assert.ok(prompt.includes("a: A") && prompt.includes("b: B")); // 이름+설명만 준다
     return { stdout: JSON.stringify(["여러 줄로\n  온 설명이다", "한 줄"]) };
   };
   const out = await describeSkillsKorean(skills, runner);

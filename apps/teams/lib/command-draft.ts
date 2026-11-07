@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { childEnv } from "./child-env.ts";
+import { runAuxClaude } from "./aux-claude.ts";
 import { renderCommand, type CommandSpec, type CommandStep } from "./commands.ts";
 import type { EngineId } from "./workers.ts";
 
@@ -155,10 +156,10 @@ export const spawnRunner =
     new Promise((resolve, reject) => {
       const bin = bins[engine];
       if (!bin) return reject(new Error(`no executable for ${engine}`));
-      const viaStdin = engine === "claude" || engine === "codex";
+      if (engine === "claude") return runAuxClaude(bin, model, prompt, { env: extraEnv, signal }).then(resolve, reject);
+      const viaStdin = engine === "codex";
       const args =
-        engine === "claude" ? ["-p", "--model", model, "--no-session-persistence", "--tools", ""]
-        : engine === "codex" ? ["exec", "-m", model, "--skip-git-repo-check", "--ephemeral", "-s", "read-only", "-"]
+        engine === "codex" ? ["exec", "-m", model, "--skip-git-repo-check", "--ephemeral", "-s", "read-only", "-"]
         : engine === "grok" ? ["-p", prompt, "-m", model]
         : ["-p", prompt, "--model", model];
       const p = spawn(bin, args, { env: childEnv(extraEnv), stdio: [viaStdin ? "pipe" : "ignore", "pipe", "ignore"], signal });
