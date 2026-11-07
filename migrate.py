@@ -18,7 +18,7 @@ sys.dont_write_bytecode = True
 
 ENGINE = os.path.dirname(os.path.abspath(__file__))
 LOCAL = os.environ.get("TICKET_LOCAL") or os.path.expanduser("~/.config/dira")
-WAIT_LIMIT_S = int(os.environ.get("DIRA_MIGRATE_WAIT_LIMIT_S", "1200"))
+# 세션 대기 20분 판정은 화면(apps/teams/lib/migration-view.ts)이 하고, 러너 wait_sessions는 상한 없이 기다린다
 POLL_S = float(os.environ.get("DIRA_MIGRATE_POLL_S", "5"))
 REQUIRED = ("ID", "DESC", "DESC_EN", "SCOPE", "REVERSIBLE", "targets", "apply", "verify")
 SHOWN = {"ok": "적용됨", "hold": "보류", "skipped": "건너뜀", "failed": "실패",
