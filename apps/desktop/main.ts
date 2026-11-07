@@ -1267,7 +1267,7 @@ async function boot() {
   // 이쪽은 주기(1시간)도 대상(원격 릴리스 피드)도 다르다. 개발 실행은 아예 안 건다.
   if (app.isPackaged) {
     updateTimer = setInterval(() => {
-      if (existsSync(autoUpdateFlag())) checkForUpdate(false); // 매 tick U2를 다시 본다
+      if (!existsSync(autoUpdateFlag())) checkForUpdate(false); // 매 tick U2를 다시 본다
     }, UPDATE_POLL_MS);
   }
 

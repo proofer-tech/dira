@@ -80,8 +80,8 @@ pnpm dev         # teams 빌드 + 조립 + 앱 실행
 | 사람 맥 | `pnpm release <patch\|minor\|major>` | 로그인 키체인의 인증서 · Apple 환경변수 3개 · `GH_TOKEN` |
 | CI (자동) | **`master`에 커밋이 들어올 때마다** `release.yml`이 `patch`로 돈다. `minor`·`major`는 Actions 탭에서 손으로(`workflow_dispatch`) | 레포 시크릿 5개(아래) |
 
-`pnpm release`(R4, `5ab56e03`·`ab4fe016`)가 선행 확인 → bump·커밋·태그 → push →
-`pnpm dist` → `gh release create`까지 한 방으로 간다. **CI도 같은 스크립트를 부른다** —
+`pnpm release`(R4, `5ab56e03`·`ab4fe016`)가 선행 확인 → bump·커밋·태그 → `pnpm dist`·자산 검사 →
+`git push --atomic` → `gh release create`까지 한 방으로 간다. **CI도 같은 스크립트를 부른다** —
 `release.yml`은 인증서를 임시 키체인에 넣는 것 말고는 하는 일이 없다. 하나라도 비어 있으면
 `release.sh`가 **bump 전에** 멈추고 무엇이 없는지 찍는다.
 
@@ -359,10 +359,11 @@ osascript -l JavaScript -e 'ObjC.import("AppKit");var s=$.NSScreen.mainScreen; \
 | U2 | `자동 업데이트` | 트레이 메뉴 체크 항목(N4 옆). 기본 **켜짐**. 끄면 U1만 남는다 |
 | U3 | 릴리즈 노트 | 다 받은 뒤 뜨는 다이얼로그 본문(R7 — 아래 절) |
 
-**몰래 재시작하지 않는다**(R6). `autoInstallOnAppQuit`만 쓰고 지금 설치·재시작시키는 API는
-`main.ts`에 한 번도 안 나온다(`grep -c quitAndInstall main.ts` → `0`). 이 앱 뒤에는 도는 세션과
-cron 워커가 붙어 있어서, 임의 재시작이 §고정하는 것 3(자식 서버는 앱보다 오래 살지 않는다)을
-사람이 모르는 시점에 발동시킨다. 사람이 ⌘Q를 누르는 시점이 이미 「지금 재시작」 버튼이다.
+**몰래 재시작하지 않는다**(R6). 다 받으면 다이얼로그가 `재시작`과 `나중에` 중 고르게 한다.
+`재시작`은 먼저 `/api/work`로 도는 일이 있는지 확인해서, 있으면 한 번 더 묻는 토스트를 띄우고
+다시 누르면 `quitAndInstall()`한다. `나중에`는 다음 종료 때 `autoInstallOnAppQuit`가 설치한다.
+이 앱 뒤에는 도는 세션과 cron 워커가 붙어 있어서, 임의 재시작이 §고정하는 것 3(자식 서버는
+앱보다 오래 살지 않는다)을 사람이 모르는 시점에 발동시키기 때문에 사람의 선택 없이는 설치하지 않는다.
 
 **U2의 상태는 `~/Library/Application Support/dira/no-auto-update`의 존재 여부다**(R8).
 N4는 OS가 값을 갖지만(`getLoginItemSettings`) 여기엔 그런 자리가 없다. 값이 하나라 JSON을
