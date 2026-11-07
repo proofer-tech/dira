@@ -9057,7 +9057,7 @@ FIFO 배치만 떼어 낸 가짜 엔진 재현이다(응답에 0.4초가 걸리�
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
 | P556-1 | 재현과 측정 - 결정 1-3. `fixtures/` 재현 스크립트, 경우 셋의 결과, 로그 빈도, `#### 재현 결과` 기록 | developer | - | 발행 `c7a9b578` |
-| P556-2 | 실제 claude 확인 - 엔진을 `--input-format stream-json`으로 띄우고 턴 도중에 user 줄 하나를 더 쓰면 그 줄이 지금 턴에 섞이는지(result 1개), 다음 턴으로 미뤄지는지(result 2개) `fixtures/` 스크립트로 확인하고 `#### 실제 엔진 확인`에 적는다. 미뤄지면 PM 앞 feedback | developer | - | 발행 예정 |
+| P556-2 | 실제 claude 확인 - 엔진을 `--input-format stream-json`으로 띄우고 턴 도중에 user 줄 하나를 더 쓰면 그 줄이 지금 턴에 섞이는지(result 1개), 다음 턴으로 미뤄지는지(result 2개) `fixtures/` 스크립트로 확인하고 `#### 실제 엔진 확인`에 적는다. 미뤄지면 PM 앞 feedback | developer | - | 발행 `deb4f5e9` |
 
 #### 수용조건
 
