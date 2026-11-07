@@ -57,23 +57,36 @@ Under the folder you picked, `.dira` gets laid out like this.
 ```
 <project>/.dira/
   tickets/                                    the empty queue
-  protocols/AGENTS.md                         collaboration protocol, branch and spec document substituted in
-  protocols/tickets.md                        how tickets get split
-  protocols/ontology.md                       ontology rules
-  protocols/CORE*.md                          three copies of the core documents. Ticket syntax is in here
-  personas/{pm,developer,qa,designer,archive-manager}/PROFILE.md
-  squads/default/members                      one squad. It holds four personas and pm leads it
+  team/apm.yml                                the team declaration. Pins the dira-protocols and squad-default packages by version
+  team/protocols/AGENTS.md                    collaboration protocol source, branch and spec document substituted in
+  team/protocols/apm.yml                      wraps that AGENTS.md as a local package
+  team/.gitignore                             keeps install output (apm_modules/ and the like) out of git
+  team/apm_modules/                           installed packages. The default squad and its five personas live here
+  protocols/                                  collaboration documents unpacked after install. AGENTS.md, CORE*.md, tickets.md and more
   workers/w1.sh                               one worker, executable bit and all
+  integration-branch                          the integration branch name on one line, the value you typed in the form
+  push.sh                                     the helper workers call to push to the integration branch
+  dispatch-gate.sh                            the gate that checks the integration-branch checkout is clean before a dispatch
   self-heal.sh                                delete the app and the worker retires itself
+  watchdog.sh, watchdog_gates.py, watchdog_alert.py   the dispatch watchdog
+  browse.sh, browser.sh                       the browser shells a worker session uses to open the web
 ```
 
 On top of that come the **crontab entry** (the line that calls `w1.sh` every 30 seconds) and the
-**registry entry** (which keeps this project in the app's list). Inside `<project>` the only
-thing created is `.dira`, and your project source is left alone.
+**registry entry** (which keeps this project in the app's list). Inside `<project>`, only two
+things reach outside `.dira`. A `.dira` line is added to `.gitignore`, and if the folder is not
+a git repository yet, it runs `git init` and makes a first commit holding only that
+`.gitignore`. Your project source files are left alone.
 
-`squads/default/` is a squad tying those four personas under one name. When you issue a ticket,
-this squad is what the assignee field is set to, and a ticket issued that way goes to pm, the
-leader. [Squads](/docs/squads) covers it.
+Personas and the squad come from the squad-default package that `team/apm.yml` pulls in. It ties
+five personas, `pm`, `developer`, `qa`, `designer` and `writer`, into one squad called `default`,
+with pm as the leader. When you issue a ticket, this squad is what the assignee field is set to,
+and a ticket issued that way goes to pm. [Squads](/docs/squads) covers it.
+
+The packages are downloaded when the project is created. If the network is down or the install
+fails, the project is still created and the result screen shows the reason on one line. In that
+case `team/apm_modules/` and `protocols/` hold nothing yet, and the worker tries the install again the
+next time it runs.
 
 There is one worker. That means one ticket runs at a time. If you want two or more at once, make
 more workers. [Workers](/docs/worker) covers it.

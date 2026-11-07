@@ -327,16 +327,32 @@ There is no field to choose. Which working folder you have picked is where it go
 | What you picked | Where `Push` goes |
 |---|---|
 | A worktree | The integration branch on this Mac |
-| The root | `origin` |
+| The root | The upstream set for this branch (the remote branch shown in the upstream select) |
 
 Pushing from a worktree takes the same path the workers take. So that eight of them pushing at
 once do not collide, `push.sh` in the queue puts them in order (see [Workers](/docs/worker)). In
 a project without that file, `This project has no push.sh` sits where the button would be. The
 app does not write one in for you.
 
-`Pull` only pulls when it can attach straight on. It makes no merge commit and no rebase. When
-the state does not allow that, it shows you the reason `git` gave, verbatim, and stops there.
-From there it is a terminal tab and your own hands.
+When you press `Push` on the root, the app first fetches and merges the upstream the same way
+`Pull` does below, then sends to that remote branch. With no upstream you get `NO_UPSTREAM` and
+nothing is sent. If your `git` config would send the push somewhere other than the upstream (a
+different `pushRemote` or push refspec), it shows `PUSH_TARGET_MISMATCH` and stops. The app does
+not guess a destination.
+
+`Pull` fetches the upstream, compares it with your branch, and acts on what it finds.
+
+| State | What `Pull` does |
+|---|---|
+| Same, or only yours is ahead | Changes nothing and succeeds |
+| Yours is only behind | Fast-forwards |
+| Each side has commits the other lacks | Makes one merge commit. The message is `git`'s default |
+
+It never rebases and never rewrites existing commits. If there is something to bring in and the
+working tree has uncommitted changes, it shows `DIRTY_CHECKOUT` and does not start. If the merge
+hits a conflict, it aborts only the merge it just started (`git merge --abort`) and shows
+`MERGE_CONFLICT` with the reason `git` gave. The folder is back where it was before you pressed
+the button. To resolve the conflict and merge, use a terminal tab.
 
 ## Browser
 

@@ -40,12 +40,22 @@ The app is the product. Creating a project, submitting a request, watching ticke
 talking to a running session, adding workers: all of it finishes on screen. You never have to
 open a queue file.
 
-The engine is the layer below, and it runs whether or not the app is there. Two files,
-`tick.sh` and `tickets.py`, and they never reach past bash and the python3 standard library.
-The app does not write its own verdicts into the queue. It delegates them to the engine,
-because that is the only way the screen and cron answer the same question the same way. cron
-is the scheduler already sitting on your Mac: it runs a command for you on a fixed interval.
-Driving dira with cron alone and no screen works too, and
+The engine is the layer below, and it runs whether or not the app is there. `tick.sh`,
+`tickets.py` and `dispatch.py` make the decisions, and shell scripts inside the queue, the worker
+scripts (`workers/<name>.sh`) and `push.sh` among them, carry them out. None of them reaches past
+bash and the python3 standard library.
+
+What the app writes into the queue depends on the kind of change. Changing a ticket's run
+state, meaning assigning it to a worker, unassigning it, or reaping a stalled session, is never
+done by the app itself. It calls the worker script and leaves it to the engine, because that is
+the only way the screen and cron reach the same verdict on the same ticket. Creating a ticket,
+editing a ticket body, recording the answer you picked for a question, and cutting a polling
+wait short or raising its limit are different: the app writes those to the queue files
+directly. Registering or removing a worker in cron is direct too, and the app touches only that
+worker's lines.
+
+cron is the scheduler already sitting on your Mac: it runs a command for you on a fixed
+interval. Driving dira with cron alone and no screen works too, and
 [Running the engine alone](/docs/cron) covers that.
 
 ## What stays on your machine

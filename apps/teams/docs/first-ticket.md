@@ -55,24 +55,34 @@ crontab은 cron이 읽는 예약 목록입니다. 여기에 한 줄이 올라가
 ```
 <프로젝트>/.dira/
   tickets/                                    빈 큐
-  protocols/AGENTS.md                         협업 프로토콜. 브랜치와 스펙 문서가 치환된 상태
-  protocols/tickets.md                        티켓 쪼개는 기준
-  protocols/ontology.md                       온톨로지 규약
-  protocols/CORE*.md                          코어 문서 사본 셋. 티켓 문법이 여기 있다
-  personas/{pm,developer,qa,designer,archive-manager}/PROFILE.md
-  squads/default/members                      스쿼드 하나. 페르소나 넷이 들고 리더는 pm이다
+  team/apm.yml                                이 프로젝트의 팀 선언. dira-protocols와 squad-default 패키지를 버전 고정으로 받는다
+  team/protocols/AGENTS.md                    협업 프로토콜. 브랜치와 스펙 문서가 치환된 원본
+  team/protocols/apm.yml                      위 AGENTS.md를 로컬 패키지로 묶는 선언
+  team/.gitignore                             설치 산출물(apm_modules/ 등)을 git에서 뺀다
+  team/apm_modules/                           설치된 패키지. 스쿼드 default와 페르소나 다섯이 여기 있다
+  protocols/                                  설치 뒤 펼친 협업 문서 사본. AGENTS.md, CORE*.md, tickets.md 등
   workers/w1.sh                               워커 하나. 실행 권한까지 붙어 있다
   integration-branch                          통합 브랜치 이름 한 줄. 폼에 적은 그 값이다
+  push.sh                                     워커가 통합 브랜치로 푸시할 때 부르는 헬퍼
+  dispatch-gate.sh                            디스패치 전에 통합 브랜치를 체크아웃한 트리가 깨끗한지 보는 게이트
   self-heal.sh                                앱을 지우면 워커가 스스로 물러납니다
+  watchdog.sh, watchdog_gates.py, watchdog_alert.py   디스패치 감시자
+  browse.sh, browser.sh                       워커 세션이 웹을 열 때 쓰는 브라우저 셸
 ```
 
 여기에 **crontab 등록**(`w1.sh`를 30초마다 부르는 줄)과 **레지스트리 등록**(앱이 이 프로젝트를
-목록에 유지하게 하는 것)이 더해집니다. `<프로젝트>` 안에 만드는 것은 `.dira` 하나뿐이고
-프로젝트 소스에는 손대지 않습니다.
+목록에 유지하게 하는 것)이 더해집니다. `<프로젝트>` 안에서 `.dira` 밖을 건드리는 일은 둘뿐입니다.
+`.gitignore`에 `.dira` 한 줄을 더하고, 폴더가 아직 git 저장소가 아니면 `git init`을 한 뒤 그
+`.gitignore` 하나만 담은 첫 커밋을 만듭니다. 프로젝트 소스 파일에는 손대지 않습니다.
 
-`squads/default/`는 그 페르소나 넷을 한 이름으로 묶어 둔 스쿼드입니다. 티켓을 발행할 때
-수행자 칸이 이 스쿼드로 골라져 있습니다. 그렇게 발행한 티켓은 리더인 pm에게 갑니다.
-[스쿼드](/docs/squads)에서 다룹니다.
+페르소나와 스쿼드는 `team/apm.yml`이 받는 squad-default 패키지에서 옵니다. 이 패키지가
+`pm`, `developer`, `qa`, `designer`, `writer` 다섯 페르소나를 `default`라는 스쿼드 하나로 묶고,
+리더는 pm입니다. 티켓을 발행할 때 수행자 칸이 이 스쿼드로 골라져 있고, 그렇게 발행한 티켓은
+pm에게 갑니다. [스쿼드](/docs/squads)에서 다룹니다.
+
+패키지는 만들 때 내려받습니다. 네트워크가 끊겼거나 설치가 실패해도 프로젝트는 만들어지고 결과
+화면에 실패 사유가 한 줄 뜹니다. 그때는 `team/apm_modules/`와 `protocols/`에 아직 아무것도 없고, 워커가
+다음에 돌 때 설치를 다시 시도합니다.
 
 워커는 하나입니다. 한 번에 티켓 하나가 돈다는 뜻입니다. 동시에 두 건 이상 돌리고 싶으면
 워커를 더 만들면 됩니다. [워커](/docs/worker)에서 다룹니다.
