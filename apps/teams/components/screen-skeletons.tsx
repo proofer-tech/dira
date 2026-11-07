@@ -7,7 +7,7 @@
 import { usePathname } from "next/navigation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePendingDest } from "@/lib/route-pending";
-import { pendingTarget, type Screen } from "@/lib/urls";
+import { pendingTarget, type SkeletonScreen } from "@/lib/urls";
 
 function HomeSkeleton() {
   return (
@@ -104,13 +104,72 @@ function WorkersSkeleton() {
   );
 }
 
-const SKELETONS: Partial<Record<Screen, (p: { query: URLSearchParams }) => React.ReactNode>> = {
+/** 티켓 상세(§P557) - 실제 화면처럼 제목 줄 - 본문 열 - `xl`에서 22rem 오른쪽 열이다. */
+function TicketSkeleton() {
+  return (
+    <div className="max-w-3xl space-y-6 xl:max-w-7xl">
+      <div className="flex items-center justify-between gap-4">
+        <Skeleton className="h-7 w-1/2" />
+        <Skeleton className="h-8 w-32" />
+      </div>
+      <div className="grid gap-x-8 gap-y-6 xl:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="min-w-0 space-y-6">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-48 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+        <div className="space-y-4">
+          <Skeleton className="h-40 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 에픽(§P557) - 보드와 같은 왼쪽 사이드바(`w-64`, `sidebar=off`면 `w-10`) 옆에 제목과 본문이다. */
+function EpicSkeleton({ query }: { query: URLSearchParams }) {
+  const sidebarOff = query.get("sidebar") === "off";
+  return (
+    <div className="flex min-h-0 gap-6">
+      <div className={`flex shrink-0 flex-col gap-2 ${sidebarOff ? "w-10" : "w-64"}`}>
+        {Array.from({ length: sidebarOff ? 1 : 6 }, (_, i) => (
+          <Skeleton key={i} className="h-8 w-full" />
+        ))}
+      </div>
+      <div className="min-w-0 grow space-y-4">
+        <Skeleton className="h-7 w-1/2" />
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="h-64 w-full max-w-3xl" />
+      </div>
+    </div>
+  );
+}
+
+/** 프로젝트 목록(`/`, §P557) - 제목 줄과 프로젝트 행 몇 개다. */
+function RootSkeleton() {
+  return (
+    <>
+      <Skeleton className="h-8 w-48" />
+      <div className="flex flex-col gap-3">
+        {Array.from({ length: 4 }, (_, i) => (
+          <Skeleton key={i} className="h-16 w-full" />
+        ))}
+      </div>
+    </>
+  );
+}
+
+const SKELETONS: Partial<Record<SkeletonScreen, (p: { query: URLSearchParams }) => React.ReactNode>> = {
   home: HomeSkeleton,
   board: BoardSkeleton,
   personas: SidebarBodySkeleton,
   protocols: SidebarBodySkeleton,
   ontology: SidebarBodySkeleton,
   workers: WorkersSkeleton,
+  ticket: TicketSkeleton,
+  epic: EpicSkeleton,
+  root: RootSkeleton,
 };
 
 /** 누른 이동의 목적지가 등록된 화면이고 지금과 프로젝트나 화면이 다르면 그 목적지, 아니면
@@ -121,7 +180,7 @@ export function usePendingTarget() {
   return target && SKELETONS[target.screen] ? target : null;
 }
 
-export function ScreenSkeleton({ screen, query }: { screen: Screen; query: URLSearchParams }) {
+export function ScreenSkeleton({ screen, query }: { screen: SkeletonScreen; query: URLSearchParams }) {
   const Body = SKELETONS[screen];
   return Body ? <Body query={query} /> : null;
 }

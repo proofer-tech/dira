@@ -1075,7 +1075,12 @@ test("pendingTarget: 프로젝트나 화면이 다르면 목적지, 같은 화�
   assert.deepStrictEqual([v?.get("view"), v?.get("sidebar")], ["table", "off"]);
   assert.strictEqual(pendingTarget("/p/a/board", "/p/a/board?status=open"), null);
   assert.strictEqual(pendingTarget("/p/a/board", "/p/b/board")?.id, "b");
-  assert.strictEqual(pendingTarget("/p/a/board", "/p/a/tickets/abc"), null);
-  assert.strictEqual(pendingTarget("/p/a/board", "/"), null);
+  // §P557 - 티켓 상세 - 에픽 - 프로젝트 목록도 목적지이고, 같은 화면 안(티켓에서 티켓)은 아니다.
+  assert.strictEqual(pendingTarget("/p/a/board", "/p/a/tickets/abc")?.screen, "ticket");
+  assert.strictEqual(pendingTarget("/p/a/tickets/x", "/p/a/tickets/abc"), null);
+  assert.strictEqual(pendingTarget("/p/a/board", "/p/a/epics/P1?sidebar=off")?.screen, "epic");
+  assert.strictEqual(pendingTarget("/p/a/epics/P1", "/p/a/epics/P2"), null);
+  assert.strictEqual(pendingTarget("/p/a/board", "/")?.screen, "root");
+  assert.strictEqual(pendingTarget("/p/a/board", "/p/a/bogus"), null);
   assert.strictEqual(pendingTarget("/p/a/board", null), null);
 });

@@ -547,7 +547,7 @@ export function ProjectSwitcher({
                 value={t("shell.nav.projects")}
                 onSelect={() => {
                   setManagingOpening(true);
-                  router.push("/");
+                  trackedRouter.push("/");
                 }}
               >
                 <List aria-hidden className="size-4" />

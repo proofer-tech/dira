@@ -121,7 +121,8 @@ export function screenOf(pathname: string): Screen | null {
     : null;
 }
 
-/** 스켈레톤이 서는 여섯 화면(DESIGN.md §P534 결정 1). */
+/** 스켈레톤이 서는 화면(DESIGN.md §P534 결정 1, §P557 결정 1). 여섯 화면에 티켓 상세 - 프로젝트
+ *  목록을 더했다. 에픽은 `Screen`에 없어 `SkeletonScreen`이 따로 얹는다(§P557 결정 3). */
 const SKELETON_SCREENS: readonly Screen[] = [
   "home",
   "board",
@@ -129,20 +130,35 @@ const SKELETON_SCREENS: readonly Screen[] = [
   "protocols",
   "ontology",
   "workers",
+  "ticket",
+  "root",
 ];
 
+/** 스켈레톤 판정에만 쓰는 화면 값 - 통계 enum(`Screen`)에 에픽을 더하지 않으려고 따로 둔다. */
+export type SkeletonScreen = Screen | "epic";
+
+function skeletonScreenOf(path: string): SkeletonScreen | null {
+  if (/^\/p\/[^/]+\/epics(\/|$)/.test(path)) return "epic";
+  const s = screenOf(path);
+  return s && SKELETON_SCREENS.includes(s) ? s : null;
+}
+
 /** 누른 이동의 목적지가 **지금과 다른 프로젝트나 화면**이면 그 목적지를 돌려준다(§P534 결정 1 -
- *  2). 같은 화면 안의 이동(필터 - 파일 선택)이나 여섯 화면 밖이면 `null`이다. */
+ *  2). 같은 화면 안의 이동(필터 - 파일 선택 - 티켓에서 티켓 - 에픽에서 에픽)이나 등록된 화면
+ *  밖이면 `null`이다. 프로젝트 목록(`/`)은 프로젝트 id가 없어 `id`가 빈 문자열이다. */
 export function pendingTarget(
   pathname: string,
   dest: string | null,
-): { id: string; screen: Screen; path: string; query: URLSearchParams } | null {
+): { id: string; screen: SkeletonScreen; path: string; query: URLSearchParams } | null {
   if (!dest) return null;
   const path = dest.split(/[?#]/)[0];
-  const screen = screenOf(path);
-  const id = projectIdFromPath(path);
-  if (!id || !screen || !SKELETON_SCREENS.includes(screen)) return null;
-  if (id === projectIdFromPath(pathname) && screen === screenOf(pathname)) return null;
+  const screen = skeletonScreenOf(path);
+  if (!screen) return null;
+  const id = projectIdFromPath(path) ?? "";
+  if (screen !== "root" && !id) return null;
+  if (id === (projectIdFromPath(pathname) ?? "") && screen === skeletonScreenOf(pathname)) {
+    return null;
+  }
   // 목적지 쿼리는 보드 스켈레톤이 view - sidebar를 따르려고 싣는다(§P540 결정 1 - 2).
   const query = new URLSearchParams(dest.split("#")[0].split("?")[1] ?? "");
   return { id, screen, path, query };
