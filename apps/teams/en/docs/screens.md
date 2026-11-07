@@ -811,6 +811,27 @@ into this container. There are eight. The broadest comes first.
   that number is. Each item writes its own count into its own title.
 - The bell is there at zero too. It presses, it opens, and it tells you `No notifications`.
 
+### Lines waiting on an answer show what is being asked
+
+Open `Tickets waiting on an answer` and each ticket gets one line. From the left it reads: the hash,
+the `Awaiting answer` badge, the question title, and the `Write an answer` link. The title tells you
+what you are being asked without opening the ticket.
+
+The title comes from the ticket body. When a session asks a question, the body gains a section like
+`## 질문 1`, and under it numbered items such as `### 1. What do we build first`. The bell takes the
+last question section and shows only the title of its first item.
+
+- If that section holds more items, the rest are counted after the title. With three items it reads
+  `and 2 more`. An item with a sub-number like `### 1-1.` counts as one too.
+- When another question arrives and `## 질문 2` appears, the line switches to the first item of that
+  section. The earlier section's title no longer shows in the bell.
+- A title too long for the line is cut with an ellipsis. Hover over it to see the whole thing.
+
+Some lines have no title. If the body has no `## 질문 n` section, or the section has no item line in
+the form `### <number>. <title>`, the line shows only the hash, the badge and the link. The bell does
+not make up words to fill the gap. For those lines, click the hash and read the question in the
+ticket body.
+
 ### The two that pile up, the six that do not
 
 Only two of the eight become lists. `Workers that die the moment a session opens`, and the return
