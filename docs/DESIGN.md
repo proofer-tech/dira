@@ -9017,8 +9017,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P555-1 | 구현 - 결정 1-3. `AwaitingItem.question`-`more` 추출과 단위 테스트, 종 줄 표시, ko - en 문구 | developer | - | 발행 예정 |
-| P555-2 | 매뉴얼 - `apps/teams/docs/screens.md` - `apps/teams/en/docs/screens.md`의 종(알림) 설명에 질문 제목 줄을 적는다 | writer | P555-1 | 발행 예정 |
+| P555-1 | 구현 - 결정 1-3. `AwaitingItem.question`-`more` 추출과 단위 테스트, 종 줄 표시, ko - en 문구 | developer | - | 발행 `ab9cc7a0` |
+| P555-2 | 매뉴얼 - `apps/teams/docs/screens.md` - `apps/teams/en/docs/screens.md`의 종(알림) 설명에 질문 제목 줄을 적는다 | writer | P555-1 | 발행 `535a011b` |
 
 #### 수용조건
 
@@ -9058,7 +9058,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P554-1 | 구현 - 결정 1-4. 인자 함수와 단위 테스트, 두 호출부 교체, 전후 토큰 측정 | developer | - | 발행 예정 |
+| P554-1 | 구현 - 결정 1-4. 인자 함수와 단위 테스트, 두 호출부 교체, 전후 토큰 측정 | developer | - | 발행 `2d5d5f64` |
 
 #### 수용조건
 
@@ -9108,7 +9108,7 @@ hide는 이 넘김을 보조 호출에만 했고 워커 배정에는 하지 않�
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P553-1 | 구현 - 결정 1-7. `token-rotate.sh` 선제 회전 입구, 사용률 캐시, `verify-token-rotate.sh`에 경우 넷 추가 | developer | - | 발행 예정 |
+| P553-1 | 구현 - 결정 1-7. `token-rotate.sh` 선제 회전 입구, 사용률 캐시, `verify-token-rotate.sh`에 경우 넷 추가 | developer | - | 발행 `9fadb87c` |
 
 #### 수용조건
 
