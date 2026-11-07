@@ -787,7 +787,7 @@ and answers.
 
 One bell at the right of the header answers two things. Why this project is not moving right now,
 and what happened while you were away. The banners that used to pile up above the body have moved
-into this container. There are eight. The broadest comes first.
+into this container. There are nine. The broadest comes first.
 
 1. **The network is down** — with no connection, nothing works even with auth in place.
 2. **Stretches the queue sat stopped: 3** — while the Mac is asleep or off, the queue does not run.
@@ -803,11 +803,16 @@ into this container. There are eight. The broadest comes first.
 6. **Tickets no one will claim** — tickets stuck at `Assigned` and absent from every lane.
 7. **Tickets waiting on an answer** — a person has to write an answer before that project moves
    again.
-8. **Tickets that won't make their due date** — the due date has passed, or it is close and a
+8. **Tickets resting after dying repeatedly** — they died several times at the same step and are
+   resting for now. Each ticket shows how many times it died and when it will be picked up again,
+   and if you wait it starts moving again on its own. If you do not want to wait for the rest to
+   end, go in through `Open ticket` on that line. Press `Send again now` in the `Waiting to retry`
+   section of the ticket detail and the wait ends on the spot.
+9. **Tickets that won't make their due date** — the due date has passed, or it is close and a
    prerequisite is still unresolved.
 
-- The badge is the count of notifications that are on (0 to 8), not the sum of the items. Add eight
-  things with eight different units into one number and nothing on the screen says how many of what
+- The badge is the count of notifications that are on (0 to 9), not the sum of the items. Add nine
+  things with different units into one number and nothing on the screen says how many of what
   that number is. Each item writes its own count into its own title.
 - The bell is there at zero too. It presses, it opens, and it tells you `No notifications`.
 
@@ -832,22 +837,25 @@ the form `### <number>. <title>`, the line shows only the hash, the badge and th
 not make up words to fill the gap. For those lines, click the hash and read the question in the
 ticket body.
 
-### The two that pile up, the six that do not
+### The two that pile up, the seven that do not
 
-Only two of the eight become lists. `Workers that die the moment a session opens`, and the return
+Only two of the nine become lists. `Workers that die the moment a session opens`, and the return
 notification. One line each time a session dies, one line for each stretch the Mac sat stopped. The
-other six leave no line at all.
+other seven leave no line at all.
 
 What splits them is tense. A dead session and a sleeping stretch are past events, so you can count
-how many times they happened. The six are facts true right now. Two missing tokens are still one
+how many times they happened. The seven are facts true right now. Two missing tokens are still one
 "there is none right now". If the tickets waiting on an answer were five yesterday and three today,
 the item is simply `3`. Write yesterday's five down separately and the bell keeps saying it after
 you unassign or answer. Then the bell and the queue say different things.
 
-**So waiting does not give the six a list.** Come back after three days away and those six tell you
-how many there are now, not three days' worth. In exchange, the six go out when you act. Save a
-token, unassign, write an answer, set a new due date, commit the tree that receives the work, and
-they drop off at the next check five seconds later.
+**So waiting does not give the seven a list.** Come back after three days away and those seven tell
+you how many there are now, not three days' worth. In exchange, six of the seven go out when you
+act. Save a token, unassign, write an answer, set a new due date, commit the tree that receives the
+work, and they drop off at the next check five seconds later. The remaining one,
+`Tickets resting after dying repeatedly`, can just be waited out. When the rest is over and a
+worker picks the ticket up again, it drops off on the spot. If you decided not to wait any longer,
+open the ticket and press `Send again now`. Then this item goes out at the next check too.
 
 ### A worker that died overnight is still there in the morning
 
