@@ -21,7 +21,7 @@ import {
   shellValue,
 } from "./paths.ts";
 import { mirrorCore } from "./protocols.ts";
-import { dueAlertOf, isAwaiting, isPolling, listTickets, statusOf, type DueAlert, type Ticket } from "./queue.ts";
+import { dueAlertOf, firstQuestion, isAwaiting, isPolling, listTickets, statusOf, type DueAlert, type Ticket } from "./queue.ts";
 import { ensureGitignoreLine } from "./scaffold.ts";
 import { listWorkers, stallLogs, type Worker } from "./workers.ts";
 import { judgeStall, type Stall } from "./dispatch-stall.ts";
@@ -334,6 +334,8 @@ export type AwaitingItem = {
   stem: string;
   hash: string;
   title: string;
+  question: string | null; // 마지막 `## 질문 n` 절의 첫 문항 제목 (P555)
+  more: number; // 같은 절의 나머지 문항 수
 };
 
 export async function listAwaiting(): Promise<AwaitingItem[]> {
@@ -343,7 +345,18 @@ export async function listAwaiting(): Promise<AwaitingItem[]> {
       const tickets = await listTickets(p.root, await resolveConfig(p));
       return tickets
         .filter(isAwaiting)
-        .map((t) => ({ project: p.id, projectName: p.name, stem: t.stem, hash: t.hash, title: t.title }));
+        .map((t) => {
+          const q = firstQuestion(t.body);
+          return {
+            project: p.id,
+            projectName: p.name,
+            stem: t.stem,
+            hash: t.hash,
+            title: t.title,
+            question: q?.question ?? null,
+            more: q?.more ?? 0,
+          };
+        });
     }),
   );
   return found.flat();
@@ -826,7 +839,7 @@ export type ProjectSummary = {
    *
    *  못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙 그대로 — 판정 자체가 불가능하면
    *  항목이 없는 게 답이고 그 자리에는 `연결 안 됨`이 이미 떠 있다). */
-  awaiting: { hash: string; stem: string; mtime: number }[];
+  awaiting: { hash: string; stem: string; mtime: number; question: string | null; more: number }[];
   /** 마감을 못 지킬 티켓(§1-4 §종 항목 ⑦ — 지난 마감 또는 5시간 안에 남았는데 선행이 안 끝남).
    *  판정은 `dueAlertOf` 하나뿐이고 그 값이 이미 보는 `effectiveDue`·`unmet`도 이 `listTickets`
    *  호출이 준 것이라 **새 fs 읽기 0**이다. 못 읽은 프로젝트는 빈 배열이다(`assigned`의 그 규칙). */
@@ -872,7 +885,10 @@ export async function readSummary(project: Pick<Project, "root">): Promise<Proje
         .map((t) => ({ hash: t.hash, stem: t.stem })),
       awaiting: tickets
         .filter(isAwaiting)
-        .map((t) => ({ hash: t.hash, stem: t.stem, mtime: t.mtime })),
+        .map((t) => {
+          const q = firstQuestion(t.body);
+          return { hash: t.hash, stem: t.stem, mtime: t.mtime, question: q?.question ?? null, more: q?.more ?? 0 };
+        }),
       due: tickets.flatMap((t) => {
         const alert = dueAlertOf(t, now);
         return alert ? [{ hash: t.hash, stem: t.stem, alert }] : [];

@@ -162,7 +162,7 @@ export async function webhookTick(nowMs: number = Date.now(), justRegainedOwners
 // ── 테스트 보내기 — 델타 집합을 안 건드린다 (§0-10 §화면) ────────────────────
 
 /** 답변 대기가 0건인 큐에서도 눌리는 것이 요건이다 — 자리표시 한 벌. */
-const PLACEHOLDER_ITEM: AwaitingItem = { project: "-", projectName: "-", stem: "-", hash: "-", title: "-" };
+const PLACEHOLDER_ITEM: AwaitingItem = { project: "-", projectName: "-", stem: "-", hash: "-", title: "-", question: null, more: 0 };
 
 export type WebhookTestResult = { ok: true } | { ok: false; host: string; reason: string };
 

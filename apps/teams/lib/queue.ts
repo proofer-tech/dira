@@ -558,6 +558,23 @@ export function isAwaiting(t: Ticket): boolean {
   return t.state === "open" && !!a && t.unmet.some((d) => nfc(d) === a);
 }
 
+/** 마지막 `## 질문 n` 절의 첫 문항 제목과 나머지 문항 수(DESIGN.md P555 결정 1-2). 문항은
+ *  `### <번호>. <제목>`(번호는 `1` `1-1` 꼴)이다. 절이 없거나 문항이 없으면 `null`이다 - 지어내지 않는다.
+ *  ponytail: 펜스 코드 블록 안의 제목은 거르지 않는다. 틀리면 줄 하나가 틀릴 뿐이라 그대로 둔다. */
+export function firstQuestion(body: string): { question: string; more: number } | null {
+  let cur: string[] | null = null;
+  let last: string[] | null = null;
+  for (const line of body.split("\n")) {
+    if (/^## 질문 \d+\s*$/.test(line)) cur = last = [];
+    else if (/^## /.test(line)) cur = null;
+    else if (cur) {
+      const m = /^### \d+(?:-\d+)*\.\s+(.+?)\s*$/.exec(line);
+      if (m) cur.push(m[1]);
+    }
+  }
+  return last && last.length ? { question: last[0], more: last.length - 1 } : null;
+}
+
 /** 오토파일럿이 답 없이 진행할 방법을 못 찾아 만든 답변 대기(DESIGN.md §P517 결정 6) —
  *  `isAwaiting`이면서 엔진이 `ask_human`에서 적은 fm `autopilot_failed`가 비어 있지 않을 때다.
  *  표식은 이력이라 지워지지 않지만, 답 파일이 생기면 `isAwaiting`이 꺼져 이 판정도 저절로 꺼진다. */

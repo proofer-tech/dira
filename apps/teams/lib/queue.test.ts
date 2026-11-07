@@ -2465,3 +2465,14 @@ test("replyTo - feedback+req가 큐의 request로 풀릴 때만 답이다 (P525 
   assert.strictEqual(replyTo(tickets, at("f0000003"), DEFAULT), null);
   assert.strictEqual(replyTo(tickets, at("k0000002"), DEFAULT), null);
 });
+
+test("firstQuestion - 첫 문항 제목, 외 n건, 마지막 절, 절 없음 (P555)", async () => {
+  const { firstQuestion } = await import("./queue.ts");
+  const one = "## 결과\n\n## 질문 1\n\n### 1. 무엇부터 세우나\n\n- (a) 엔진만\n";
+  assert.deepStrictEqual(firstQuestion(one), { question: "무엇부터 세우나", more: 0 });
+  const three = "## 질문 1\n\n### 1. 무엇부터 세우나\n- (a) x\n### 1-1. 둘째\n### 2. 셋째\n";
+  assert.deepStrictEqual(firstQuestion(three), { question: "무엇부터 세우나", more: 2 });
+  assert.deepStrictEqual(firstQuestion(three + "\n## 질문 2\n\n### 1. 새 질문\n"), { question: "새 질문", more: 0 });
+  assert.strictEqual(firstQuestion("## 결과\n\n### 1. 이건 질문이 아니다\n"), null);
+  assert.strictEqual(firstQuestion("## 질문 1\n\n산문뿐\n"), null);
+});

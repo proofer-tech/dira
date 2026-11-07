@@ -64,6 +64,8 @@ const item = (project: string, stem: string) => ({
   stem,
   hash: `${project}-${stem}`,
   title: `t-${stem}`,
+  question: null,
+  more: 0,
 });
 
 test("webhookDelta — seen=null(첫 스캔)이면 toSend가 0건이다 · keys는 채워진다", () => {

@@ -470,6 +470,7 @@ export const ko: Record<string, string> = {
   "bell.awaiting.titleSuffix": "건",
   "bell.awaiting.body": "사람이 답을 써야 이 티켓들이 다시 큐에 뜹니다. 고장난 것은 없습니다.",
   "bell.awaiting.answerLink": "답변 쓰기",
+  "bell.awaiting.more": "외 {n}건",
 
   // 종 ⑨(P362-3, §0-10 §결정 기록 §엔진 수정 서른세 번째 승인). 판정이 GUI 밖에 있는 두 번째
   // 항목 — 나열은 엔진이 표식에 적어 둔 죽은 횟수·다시 가져가는 시각 그대로다. `보관`이 없다(②·⑥과
@@ -3510,6 +3511,7 @@ export const en: Record<string, string> = {
   "bell.awaiting.body":
     "These come back to the queue once a person writes an answer. Nothing is broken.",
   "bell.awaiting.answerLink": "Write an answer",
+  "bell.awaiting.more": "and {n} more",
 
   "bell.backoff.titlePrefix": "Tickets resting after repeated deaths:",
   "bell.backoff.titleSuffix": "",

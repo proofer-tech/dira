@@ -462,7 +462,7 @@ function NotificationItems({
   gateAllDebris: boolean;
   failures: { name: string; reason: string; log: string; at: string }[];
   assigned: { hash: string; stem: string }[];
-  awaiting: { hash: string; stem: string; mtime: number }[];
+  awaiting: { hash: string; stem: string; mtime: number; question: string | null; more: number }[];
   worker: string | null;
   backoff: { hash: string; stem: string; until: number; count: number }[];
   due: { hash: string; stem: string; alert: DueAlert }[];
@@ -686,6 +686,16 @@ function NotificationItems({
               {/* 경과일은 `<StatusBadge>`가 이미 그린다(`daysSince(mtime)`) — 여기서 새로
                   계산하지 않는다. 0일이면 라벨이 `답변 대기` 하나고 그 판단도 배지 안에 있다 */}
               <StatusBadge status="awaiting" days={daysSince(a.mtime)} locale={locale} />
+              {/* P555 - 무엇을 묻는지. 제목을 못 찾으면 아무것도 안 붙는다 */}
+              {a.question && (
+                <span
+                  className="min-w-0 truncate text-xs text-muted-foreground"
+                  title={a.question + (a.more > 0 ? ` ${t(locale, "bell.awaiting.more").replace("{n}", String(a.more))}` : "")}
+                >
+                  {a.question}
+                  {a.more > 0 && ` ${t(locale, "bell.awaiting.more").replace("{n}", String(a.more))}`}
+                </span>
+              )}
               {/* **링크지 버튼이 아니다** — 답변 폼은 `textarea` 하나가 아니라 `O_EXCL`로
                   파일을 만드는 폼이고, 448px 팝오버에 두 벌째를 그리면 같은 서버 액션의
                   진입점이 둘이 된다(§0-10 ④). 그래서 그 폼이 이미 있는 자리로 보낸다.
