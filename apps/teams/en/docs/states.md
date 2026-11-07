@@ -1,8 +1,20 @@
 # The states a ticket passes through
 
 The board has three lanes. Open · In progress · Done. Those three pair up exactly with three
-files. That is why there is no handle for dragging a card between them. A lane is not a slot a
-person decides on; it is **a drawing of a filename suffix**.
+files. A lane is not a slot a person decides on; it is **a drawing of a filename suffix**.
+
+You can drag a card onto another lane. Dropping it there does not move it, though. A drop is a
+way in to an engine action. When that action renames the file, the card follows.
+
+- **Drop an open card on In progress** and it starts now. If a worker is idle, that worker is
+  pointed at this ticket. If none is idle, you are asked whether to stop one running session and
+  start. The engine picks which session, and the confirmation shows it. Press `Stop and start`
+  and the stopped ticket goes back to Open to be dispatched again, while the freed worker takes
+  the ticket you dropped. If there is nothing to stop, because no ticket is running or every
+  running one is effective priority 5, nothing starts and you are told why.
+- **Drop an in-progress card on Open** and it is the same as pressing `Unassign` on the ticket
+  detail. If the session is still alive, you are asked first whether to cut it with `Force stop`.
+- Done cards cannot be dragged.
 
 | Board lane | File | What it means |
 |---|---|---|

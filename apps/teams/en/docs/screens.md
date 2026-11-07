@@ -31,9 +31,16 @@ moves nothing. What you were writing should not go away on one `Esc`.
 Three columns divide the screen vertically. One column is a lane, and from the left they are
 **Open · In progress · Done**. One card is one ticket file.
 
-You do not drag cards around. When the suffix on the filename changes, the card moves to the next
-lane by itself (see [The states a ticket passes through](/docs/states)). The engine decides state,
-so there is nowhere for you to put a card.
+A lane is a drawing of the filename suffix. When the suffix changes, the card moves to the next
+lane by itself (see [The states a ticket passes through](/docs/states)). The engine decides state.
+
+Dragging a card onto another lane calls an engine action. Pick up an open card and the
+In progress lane header reads `Drop to start now`. Drop it there and an idle worker is pointed at
+that ticket; with no idle worker, you are asked whether to stop one running session and start.
+Pick up an in-progress card and the Open lane header reads `Drop to unassign`. Dropping it there
+is the same as `Unassign` on the ticket detail. Either way, the card moves only after the engine
+has renamed the file. Each case is spelled out in
+[The states a ticket passes through](/docs/states).
 
 - A blocked ticket sits in the `Open` lane with the rest. The only difference is the orange
   `deps` tag on its card, and the `Blocked` badge beside it. Being blocked is a matter internal
@@ -765,10 +772,13 @@ and answers.
   it in right away, press `Interject now` to the right of that line. **The running answer is cut off
   there.** What arrived so far stays on screen, and a new answer to your message starts at once. If
   the message had already slipped in between tool calls, pressing it sends the same message again.
-- **It mostly reads, but it writes too.** It has five tools: `Read` · `Glob` · `Grep` · `Write` ·
-  `Edit`. Where writing can reach is fixed, inside the queue. Persona profiles, protocols, worker
-  scripts, the ontology, tickets. Everything else is blocked at the path. The worktrees where the
-  workers work, and your project source, are both closed to this agent.
+- **It reads, edits, and runs commands.** It has six tools: `Read` · `Glob` · `Grep` · `Write` ·
+  `Edit` · `Bash`. No MCP tools are attached. The tools carry no path limits, so inside the queue
+  or out makes no difference. The workers' worktrees and your project source included, it can
+  read and change anything your user account on this Mac can open. What it is given instead is an
+  instruction: do not change what a person did not ask for, and ask first when unsure what to
+  change or why. Nothing but that instruction holds it back. When you want something
+  changed, name it plainly.
 - You can submit a request straight from here as well. Ask, in the conversation, to raise it as a
   request and one `kind: request` ticket appears for pm to take. It does not read dissatisfaction
   out of the conversation and file on its own. It writes only on the turn you ask it to.
