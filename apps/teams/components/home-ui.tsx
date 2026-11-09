@@ -529,7 +529,7 @@ export function HomeUI({
     setEchoIsInterject(false);
     // `다시 답하기`는 첨부 없이 부른다(§24 — 그 버튼이 다시 보내는 것은 **옛 질문 한 줄**이고,
     // 그 글에 첨부 경로가 필요했으면 이미 그 안에 적혀 있다).
-    const r = await askHome(project, question, paths, locale);
+    const r = await askHome(project, question, paths, locale, surface);
     setStarting(false);
     if (r) {
       setFail(r);

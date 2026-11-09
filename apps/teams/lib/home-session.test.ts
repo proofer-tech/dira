@@ -287,7 +287,7 @@ test("renderSnapshot — 브라우저 탭 명령 줄은 주인이 home·링크 �
   const readOnly = noTabsSnapshotWith([
     { kind: "browser" as const, id: "11111111", lastViewed: "t", info: { owner: "worker:w1", url: "https://a", title: "A" } },
   ]);
-  assert.ok(!readOnly.includes("browse.sh"));
+  assert.ok(!readOnly.includes("browse.sh 11111111")); // P558: 표면 지도가 browse.sh를 말하므로 탭 줄로 좁힌다
   assert.match(readOnly, /읽기 전용/);
 
   const homeOwned = noTabsSnapshotWith([
@@ -328,7 +328,7 @@ test("snapshotOf — 브라우저 탭의 슬롯이 사라진 상태에서도 CDP
   const t0 = Date.now();
   const baseline = await snapshotOf(project);
   const baselineMs = Date.now() - t0;
-  assert.ok(!baseline.includes("브라우저"));
+  assert.ok(!baseline.includes("- 브라우저 deadbeef")); // P558: 표면 지도에도 `브라우저`가 있어 탭 줄로 좁힌다
 
   await openBrowserTab(project.id, "deadbeef");
   const t1 = Date.now();
@@ -2751,4 +2751,83 @@ test("예약 커맨드 - 10일 전 birthtime에 월요일 9시 스케줄을 붙�
   await runSchedules(now + 30_000); // 파일의 값(0 9 * * 1)이 기록(0 8 * * 1)과 달라 다시 기록하고 돌리지 않는다
   assert.strictEqual((await readHome(project.id)).commandRuns[id]?.armed?.when, "0 9 * * 1");
   assert.strictEqual((await readHome(project.id)).commandRuns[id]?.due, new Date(monday - 7 * 86_400_000).toISOString()); // 안 돌았다
+});
+
+// ── P558 - 왼쪽 표면 지도 · 커맨드 목록 · 새 커맨드 id · 지금 표면 ──────────────────────
+import { createCommand, parseCommand, type CommandEntry } from "./commands.ts";
+import { COMMAND_TEMPLATE, SURFACE_NAMES, parseSurface } from "./home-session.ts";
+
+async function p558Base() {
+  const root = fixture();
+  const project = { name: "테스트큐", root };
+  const config = await resolveConfig(project);
+  const tickets = await listTickets(root, config);
+  const workers = await listWorkers(root, tickets);
+  return { root, base: { project, config, tickets, workers, newTicketHash: "deadbeef" } };
+}
+const cmd = (id: string, name: string, schedule?: string): CommandEntry => ({
+  id,
+  editable: true,
+  spec: { name, steps: [{ kind: "shell", body: "true" }], env: [], ...(schedule ? { schedule } : {}) },
+  extra: "",
+});
+
+test("P558 결정 1 - `## 왼쪽 표면`이 `## 지금 열린 탭` 앞에 있고 화면 이름 여섯과 commands/ 경로가 든다", async () => {
+  const { root, base } = await p558Base();
+  const s = renderSnapshot(base);
+  assert.ok(s.indexOf("## 왼쪽 표면") > 0 && s.indexOf("## 왼쪽 표면") < s.indexOf("## 지금 열린 탭"));
+  for (const n of ["세션", "커맨드", "터미널", "소스 컨트롤", "탐색기", "브라우저"]) assert.ok(s.includes(`- ${n} \``), n);
+  assert.deepEqual(Object.values(SURFACE_NAMES), ["세션", "커맨드", "터미널", "소스 컨트롤", "탐색기", "브라우저"]);
+  assert.ok(s.includes(`${path.join(root, "commands")}/<id>.sh`));
+});
+
+test("P558 결정 2 - 커맨드 3개 - 25개 - 0개 - 못 읽음", async () => {
+  const { base } = await p558Base();
+  const three = renderSnapshot({
+    ...base,
+    commands: [cmd("aaaaaaa1", "하나"), cmd("aaaaaaa2", "둘", "매일 09:00"), { id: "aaaaaaa3", editable: false }],
+  });
+  assert.match(three, /  - aaaaaaa1 - 하나\n/);
+  assert.match(three, /  - aaaaaaa2 - 둘 - 스케줄 매일 09:00\n/);
+  assert.match(three, /  - aaaaaaa3 - \(편집 불가\)\n/);
+  assert.ok(!three.includes("외 "));
+
+  const many = Array.from({ length: 25 }, (_, i) => cmd(i.toString(16).padStart(8, "0"), `c${i}`));
+  const s25 = renderSnapshot({ ...base, commands: many });
+  assert.equal(s25.split("\n").filter((l) => /^ {2}- [0-9a-f]{8} - c\d+$/.test(l)).length, 20);
+  assert.ok(s25.includes("  외 5개"));
+
+  assert.ok(renderSnapshot({ ...base, commands: [] }).includes("  커맨드 없음"));
+  const bad = renderSnapshot({ ...base, commandsError: "EACCES" });
+  assert.ok(bad.includes("커맨드 목록을 못 읽었다: EACCES") && !bad.includes("커맨드 없음"));
+});
+
+test("P558 결정 3 - 새 커맨드 id는 8-hex이고 commands/에 없으며 템플릿을 채우면 parseCommand가 읽는다", async () => {
+  const { root } = await p558Base();
+  const dir = path.join(root, "commands");
+  const existing = await createCommand(dir, { name: "있는 것", steps: [{ kind: "shell", body: "true" }], env: [] });
+  const snap = await snapshotOf({ name: "테스트큐", root });
+  const id = /새 커맨드 id\(.*\): `([^`]+)`/.exec(snap)?.[1];
+  assert.match(id ?? "", /^[0-9a-f]{8}$/);
+  assert.notEqual(id, existing);
+  assert.ok(snap.includes(`${existing} - 있는 것`));
+
+  const prompt = buildPrompt(snap, "커맨드 만들어줘", "");
+  assert.ok(prompt.includes(COMMAND_TEMPLATE));
+  const filled = COMMAND_TEMPLATE.replace("<이름>", "두 앱 올리기").replace("<셸 명령>", "echo hi");
+  const parsed = parseCommand(filled + "\n");
+  assert.notEqual(parsed, null);
+  assert.equal(parsed?.spec.name, "두 앱 올리기");
+  assert.deepEqual(parsed?.spec.steps, [{ kind: "shell", body: "echo hi" }]);
+});
+
+test("P558 결정 4 - 표면을 넘기면 `지금 왼쪽 표면: 커맨드`가 프롬프트에 있고 안 넘기면 없다", async () => {
+  const { root } = await p558Base();
+  const project = { name: "테스트큐", root };
+  const withS = buildPrompt(await snapshotOf(project, "", "schedules"), "q", "");
+  assert.ok(withS.includes("지금 왼쪽 표면: 커맨드"));
+  assert.ok(!buildPrompt(await snapshotOf(project), "q", "").includes("지금 왼쪽 표면"));
+  assert.equal(parseSurface("schedules"), "schedules");
+  assert.equal(parseSurface("../x"), undefined);
+  assert.equal(parseSurface("toString"), undefined);
 });

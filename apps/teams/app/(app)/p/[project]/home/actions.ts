@@ -47,6 +47,7 @@ import {
   sayAsk,
   setFileTabUnsaved,
   startAsk,
+  parseSurface,
   stopAsk,
   switchConversation,
   type Answer,
@@ -96,11 +97,13 @@ export async function askHome(
    *  그 경로는 홈 세션 cwd(`dirname(root)`) 아래라 `Read`가 그대로 연다(§7 · §8 표). */
   attachments: string[] = [],
   locale: Locale = DEFAULT_LOCALE,
+  /** P558 결정 4 - 지금 왼쪽 표면. 클라이언트 값이라 서버가 여섯 중 하나인지 다시 본다. */
+  surface?: string,
 ): Promise<Answer | null> {
   try {
     const project = await required(projectId, locale);
     const attached = await verifyAttachments(project, attachments);
-    return await startAsk(project, withAttachments(question, attached), locale);
+    return await startAsk(project, withAttachments(question, attached), locale, undefined, parseSurface(surface));
   } catch (e) {
     // 여기 오는 건 프로젝트 조회와 첨부 경로 판정이 던진 것뿐이다(§24 표에 항이 없다) — `other`다.
     return { ok: false, reason: "other", output: (e as Error).message, sessionId: "", resumed: false };

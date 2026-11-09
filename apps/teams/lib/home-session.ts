@@ -112,7 +112,8 @@ import { browserPortPath, isValidCdpHash, LINK_SLOT_HASH, portFromDevToolsFile }
 import { listBrowserPoolSlots } from "./browser-pool.ts";
 import { ptyStatuses, terminalTail } from "./pty.ts";
 import { findStream, findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
-import { COMMAND_ID_RE, createCommand, listCommands } from "./commands.ts";
+import { COMMAND_ID_RE, createCommand, listCommands, type CommandEntry } from "./commands.ts";
+import type { Surface } from "./tabs.ts";
 import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, engineRepo, listWorkers, workerOf, type Worker } from "./workers.ts";
 
@@ -718,7 +719,60 @@ export type SnapshotInput = {
   /** 이 턴이 잇는 대화의 session id(§11-16 결정 2 §`chat`행 — 이 턴을 도는 대화 자신이면
    *  `(이 대화)`). 안 주면 아무 chat 탭도 안 걸린다. */
   currentSessionId?: string;
+  /** P558 결정 4 - 홈 화면이 질문과 함께 넘긴 지금 왼쪽 표면. 안 주면 그 줄을 생략한다. */
+  surface?: Surface;
+  /** P558 결정 2 - `commands/`의 지금 목록(`snapshotOf`가 읽는다). 안 주면 `커맨드 없음`이다. */
+  commands?: CommandEntry[];
+  /** P558 결정 2 - 목록을 못 읽은 사유 한 줄(`tabsError`와 같은 규약). 있으면 `commands` 대신 싣는다. */
+  commandsError?: string;
+  /** P558 결정 3 - 이번 턴에 새 커맨드를 만들 때 쓰는 8-hex(`commands/`에 없는 값). 안 주면 그 줄을 생략한다. */
+  newCommandId?: string;
 };
+
+/** P558 결정 1 - 왼쪽 표면 여섯의 화면 이름. 화면의 `home.surface.*` 라벨과 같다. */
+export const SURFACE_NAMES: Record<Surface, string> = {
+  session: "세션",
+  schedules: "커맨드",
+  terminal: "터미널",
+  scm: "소스 컨트롤",
+  explorer: "탐색기",
+  browser: "브라우저",
+};
+
+/** 신뢰 경계: 클라이언트가 준 값이 표면 여섯 중 하나일 때만 `Surface`로 돌려준다. */
+export function parseSurface(v: unknown): Surface | undefined {
+  return typeof v === "string" && Object.hasOwn(SURFACE_NAMES, v) ? (v as Surface) : undefined;
+}
+
+const COMMAND_LIST_MAX = 20;
+
+/** `## 왼쪽 표면` 절(P558 결정 1-2). 고정 문구와 값으로 받은 커맨드 목록뿐이라 순수하다. */
+function renderSurfaceSection(root: string, commands: CommandEntry[], commandsError?: string): string[] {
+  const dir = path.join(root, "commands");
+  const list: string[] = commandsError
+    ? [`  커맨드 목록을 못 읽었다: ${commandsError}`]
+    : commands.length === 0
+      ? ["  커맨드 없음"]
+      : [
+          ...commands.slice(0, COMMAND_LIST_MAX).map((c) =>
+            c.editable
+              ? `  - ${c.id} - ${c.spec.name}${c.spec.schedule ? ` - 스케줄 ${c.spec.schedule}` : ""}`
+              : `  - ${c.id} - (편집 불가)`,
+          ),
+          ...(commands.length > COMMAND_LIST_MAX ? [`  외 ${commands.length - COMMAND_LIST_MAX}개`] : []),
+        ];
+  return [
+    "사람이 화면 이름으로 부르는 것은 아래 표면의 요소다. 이름 - 요소가 사는 곳 - 네가 할 수 있는 것:",
+    "",
+    "- 세션 `⌘1` - 홈 대화 목록(앱 설정의 세션 파일) - 읽기만",
+    `- 커맨드 \`⌘2\` - \`${dir}/<id>.sh\` - 만들기 - 고치기. 지우기는 사람이 그 턴에 시켰을 때만`,
+    ...list,
+    "- 터미널 `⌘3` - 앱이 띄운 pty(우측 터미널 탭) - 열린 탭의 끝 40줄 읽기. 새 터미널은 못 연다: 사람에게 `새 터미널` 버튼을 알린다",
+    "- 소스 컨트롤 `⌘4` - 프로젝트 git과 그 워크트리 - git 명령",
+    "- 탐색기 `⌘5` - 프로젝트 파일 - 파일 읽기 - 쓰기",
+    "- 브라우저 `⌘6` - 브라우저 풀 슬롯 - `## 지금 열린 탭`이 명령을 준 슬롯만 `browse.sh`",
+  ];
+}
 
 /** 스냅샷 문자열. **순수 함수다**(fs를 안 탄다) — `home-session.test.ts`가 이걸 검증한다.
  *
@@ -779,6 +833,10 @@ export function renderSnapshot({
   tabs = [],
   tabsError,
   currentSessionId = "",
+  surface,
+  commands = [],
+  commandsError,
+  newCommandId,
 }: SnapshotInput): string {
   const count = (s: Ticket["state"]) => tickets.filter((t) => t.state === s).length;
   const title = (stem: string) => tickets.find((t) => t.stem === stem)?.title ?? "";
@@ -803,6 +861,7 @@ export function renderSnapshot({
     `- 큐 루트: ${project.root}`,
     `- 작업 디렉터리(= 이 세션의 cwd): ${path.dirname(project.root)}`,
     `- 상태 접미사: 진행중 \`${config.inProgress}\` · 완료 \`${config.done}\` (접미사가 없으면 열린 티켓)`,
+    ...(surface ? [`- 지금 왼쪽 표면: ${SURFACE_NAMES[surface]}`] : []),
     "",
     `## 티켓 ${tickets.length}건`,
     "",
@@ -823,6 +882,10 @@ export function renderSnapshot({
           "`stopped`(락 없음 + cron 미등록) · `stale`(락 있음 + pid 죽음, 회수 대상).",
         ]),
     "",
+    "## 왼쪽 표면",
+    "",
+    ...renderSurfaceSection(project.root, commands, commandsError),
+    "",
     "## 지금 열린 탭",
     "",
     ...renderTabsSection(tabs, currentSessionId, project.root, tabsError),
@@ -833,6 +896,9 @@ export function renderSnapshot({
     `- 새 요구사항 티켓 해시(이번 턴 한 번 · 8-hex · 큐에 없는 값): \`${newTicketHash}\``,
     "  답변에서 이 티켓을 가리킬 때는 해시 8자만 적는다. 화면이 알려진 해시를 티켓 표식으로" +
       " 그린다 - 경로나 파일명은 적지 않는다. 예: `.dira/tickets/547b7b98.md` 대신 `547b7b98`.",
+    ...(newCommandId
+      ? [`- 새 커맨드 id(이번 턴 한 번 · 8-hex · \`commands/\`에 없는 값): \`${newCommandId}\``]
+      : []),
     `- 프로토콜: \`${config.protocols}/\``,
     `- 페르소나: \`${config.personas}/\``,
     `- 제품 스펙(단일 출처): \`${path.join(path.dirname(project.root), "docs/DESIGN.md")}\``,
@@ -935,6 +1001,7 @@ async function resolveTabs(projectId: string): Promise<ResolvedTabs> {
 export async function snapshotOf(
   project: Pick<Project, "name" | "root"> & Partial<Pick<Project, "id">>,
   currentSessionId = "",
+  surface?: Surface,
 ): Promise<string> {
   try {
     const config = await resolveConfig(project);
@@ -945,6 +1012,17 @@ export async function snapshotOf(
     let newTicketHash = randomUUID().slice(0, 8);
     while (stems.has(newTicketHash)) newTicketHash = randomUUID().slice(0, 8);
     const resolved = project.id ? await resolveTabs(project.id) : { tabs: [] };
+    // P558 결정 2-3 - 커맨드 목록은 여기서 읽고 새 id는 그 목록과 안 겹치게 민다.
+    let commands: CommandEntry[] = [];
+    let commandsError: string | undefined;
+    try {
+      commands = await listCommands(path.join(project.root, "commands"));
+    } catch (e) {
+      commandsError = (e as Error).message;
+    }
+    const taken = new Set(commands.map((c) => c.id));
+    let newCommandId = randomUUID().replace(/-/g, "").slice(0, 8);
+    while (taken.has(newCommandId)) newCommandId = randomUUID().replace(/-/g, "").slice(0, 8);
     return renderSnapshot({
       project,
       config,
@@ -954,6 +1032,11 @@ export async function snapshotOf(
       tabs: resolved.tabs,
       tabsError: resolved.error,
       currentSessionId,
+      surface,
+      commands,
+      commandsError,
+      // 목록을 못 읽었으면 충돌을 못 재므로 id를 안 준다(티켓 해시와 같은 선)
+      newCommandId: commandsError ? undefined : newCommandId,
     });
   } catch (e) {
     return [
@@ -1089,6 +1172,30 @@ export async function envBlockOf(root: string): Promise<string> {
   });
 }
 
+/** P558 결정 3 - 커맨드 파일 모양. `renderCommand`가 내는 줄 그대로이고, 단위 테스트가 이 블록을
+ *  채워 `parseCommand`로 읽는다. */
+export const COMMAND_TEMPLATE = [
+  "#!/usr/bin/env bash",
+  "# dira-command: 1",
+  "# name: <이름>",
+  "set -euo pipefail",
+  'cd "$(dirname "$0")/../.."',
+  "# step: shell",
+  "<셸 명령>",
+].join("\n");
+
+const SURFACE_PARAGRAPH = [
+  "**사람이 표면의 화면 이름(커맨드 - 터미널 - 브라우저 등)으로 무엇을 만들거나 고쳐 달라고 하면 그 표면의 요소로 만든다.**",
+  "`## 왼쪽 표면`이 이름마다 요소가 사는 곳을 준다. 커맨드는 셸 스크립트를 따로 만드는 것이 아니라 아래 모양의 파일 하나를",
+  "스냅샷이 준 새 커맨드 id로 `commands/<id>.sh`에 쓰고 `chmod 755`한다(있는 id는 덮지 않는다). 머리 세 줄 - `set -euo pipefail` -",
+  "`cd` 줄 - `# step: shell|prompt` 단계를 그대로 따른다. 환경변수는 이름만 `# env: A,B`로 머리에 적는다(값은 적지 않는다).",
+  "별도 스크립트가 필요하면 만들어도 되지만 커맨드의 단계로 등록해야 표면에 뜬다.",
+  "",
+  "```",
+  COMMAND_TEMPLATE,
+  "```",
+].join("\n");
+
 export function buildPrompt(snapshot: string, question: string, ontologyDir: string, persona = "", envBlock = ""): string {
   const ontologyBlock = ontologyDir
     ? `아래는 이 큐의 온톨로지가 있는 곳입니다.
@@ -1106,6 +1213,8 @@ ${ontologyDir} 안의 _ontology/SCHEMA.md가 지도입니다(객체·관계·액
 
 **경계는 도구가 아니라 이 글이 진다.** 큐 밖이든 안이든, 사람이 시키지 않은 것은 고치지
 않는다. 무엇을 왜 고치는지 확신이 안 서면 고치기 전에 먼저 물어본다.
+
+${SURFACE_PARAGRAPH}
 
 **스냅샷이 명령을 안 준 해시에는 \`browse.sh\`를 부르지 않는다.** \`## 지금 열린 탭\`의
 브라우저 줄 중 명령이 없는 것은 다른 세션이 쥔 슬롯이다(§11-16 결정 4) — 그 슬롯을 건드리면
@@ -1295,6 +1404,8 @@ export async function ask(
    *  이 함수를 그대로 부르는 자리(테스트)가 종전과 같이 돈다. `persona`가 없으면(옛 호출부·
    *  테스트) `HOME_PERSONA`다 — §7-4 결정 1의 기본값이 이 자리에서도 정본이다. */
   turn?: { sessionId: string; resumed: boolean; persona?: string },
+  /** P558 결정 4 - 홈 화면이 질문과 함께 넘긴 지금 왼쪽 표면. */
+  surface?: Surface,
 ): Promise<Answer> {
   // **동기로 판정한다** — `readLanguage()`(fs 읽기)를 아직 안 문다: 실패 ①(spawn)은 이 자리에서
   // 즉시 끝나야 하는 계약이다(`home-session.test.ts` "한 대화에 한 질문" — 폴링 없이 그 자리에서
@@ -1337,7 +1448,7 @@ export async function ask(
   // 검사 없이 그대로 싣는다(남의 앱 데이터 도메인을 질문마다 재면 macOS 권한 창이 뜬다,
   // `51c730de`와 같은 선). 기본값(`<root>/ontology`)은 워커와 같이 존재를 잰다.
   const showOntology = config && !usingDefault(config, "ontology") ? true : await ontologyHasMarkdown(ontology);
-  const snapshot = await snapshotOf(project, sessionId);
+  const snapshot = await snapshotOf(project, sessionId, surface);
   const prompt = buildPrompt(
     snapshot,
     q,
@@ -2087,6 +2198,8 @@ export async function startAsk(
    *  이미 있는 줄의 `persona`를 이긴다). 화면은 `newConversation`으로 먼저 골라 두는 것이
    *  보통 경로이고, 이 인자는 그 걸음 없이 바로 물은 첫 질문의 기본값이다. */
   persona: string = HOME_PERSONA,
+  /** P558 결정 4 - 지금 왼쪽 표면. 신뢰 경계 값이라 호출부가 `parseSurface`를 거친다. */
+  surface?: Surface,
 ): Promise<Answer | null> {
   const q = question.trim();
   if (!q) {
@@ -2133,7 +2246,7 @@ export async function startAsk(
   }
   const entry = { projectId: project.id, result: null as Answer | null, live: newLive() };
   runs.set(turn.sessionId, entry);
-  void ask(project, q, entry.live, turn).then(
+  void ask(project, q, entry.live, turn, surface).then(
     (a) => (entry.result = a),
     // `ask`는 던지지 않게 쓰여 있지만(안이 전부 catch다) 여기서 던지면 unhandled rejection으로
     // 서버가 죽고 화면은 영영 `도는 중`이다. 마지막 관문 하나를 둔다.
