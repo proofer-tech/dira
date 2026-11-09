@@ -18,6 +18,9 @@ up as a tooltip. Press it and the lower half of the panel becomes the command li
 If you have not asked anything yet on this project's home, the first screen is onboarding and the
 left-hand panel is not there. Ask anything once and the panel appears.
 
+You can also leave it to the home chat instead of the dialog. See
+[Asking the home chat](#asking-the-home-chat) below.
+
 1. Press `New command` to the right of the heading on that lower half. The `Create` button at the
    bottom right has the same item. A dialog opens.
 2. Write a `Name`. The list and the terminal tab title show it. It takes one line.
@@ -34,6 +37,30 @@ The row shows up in the list at once. The top line is the name, and the bottom l
 time or `No schedule`. Pick the row and the right-hand pane shows the steps, the environment
 variable names you picked, the schedule and the last scheduled run, with `Run`, `Edit` and
 `Delete command` at the top.
+
+### Asking the home chat
+
+Ask the home chat something like `make a command that shows git status`, and the agent writes the
+command file. **Put the surface name, command, in what you ask.** With every question the home chat
+gets the names of the six left-hand surfaces and where each surface keeps its items. So when you say
+command, it does not write a separate shell script: it writes `.dira/commands/<id>.sh` in the same
+shape as [the file](#the-file). The app hands it a fresh id for that turn, so it does not overwrite
+an existing command.
+
+Changing a command works the same way. The home chat gets the ids and names of up to 20 existing
+commands, so call one by name: `change the first step of the dev command to pnpm install`. It
+deletes a command only when you told it to in that same turn.
+
+When the answer is done, open the `Commands` surface. The new name is in the list, and picking it
+gives you `Run` and `Edit`. If you were already on `Commands`, go to another surface and come back:
+the list is read again only then.
+
+- To schedule it, pick the command in the list and use the `Schedule` switch in `Edit`. The command
+  template the agent gets has no schedule line.
+- Ask for environment variables and it writes only their names on the `# env:` line, never values.
+- If the row carries a `Not editable` badge, the file the agent wrote does not match
+  [the file](#the-file) format. Only `Run` and `Delete command` work on it, so ask the home chat to
+  write it again in the command format.
 
 ## Steps
 
@@ -210,7 +237,6 @@ of the original prompt. Starting the app again does not move them twice.
 
 ## What it cannot do
 
-- You can't make a command by chatting. Saying `do this every day at 9` at home creates no file.
 - Nothing from outside can start one. The app has no listening port, so there is no way to run a
   command from Slack. Webhooks only go out ([Sending Awaiting answer somewhere else](/docs/webhook)).
 - It does not wake workers. It is not a way to schedule ticket dispatch.
