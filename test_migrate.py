@@ -266,6 +266,393 @@ def test_skip_while_waiting_moves_on():
     e.done()
 
 
+# ---- 0002-apm-packages (구 test_migrate_0002.py) ----
+
+FAKE_APM = r'''#!/usr/bin/env python3
+import os, re, shutil, sys
+from pathlib import Path
+if sys.argv[1] == "audit":
+    sys.exit(0)
+site = Path.cwd()
+def yml(d):
+    t = (d / "apm.yml").read_text()
+    n = re.search(r"^name:\s*(\S+)", t, re.M).group(1)
+    deps = re.findall(r"^\s+-\s+(\S+)\s*$", t, re.M)
+    return n, [x for x in deps if x.startswith(".")]
+seen, locks = {}, []
+def walk(d):
+    d = d.resolve()
+    if d in seen:
+        return
+    n, deps = yml(d)
+    seen[d] = n
+    for x in deps:
+        walk(d / x)
+walk(site)
+for d, n in seen.items():
+    if d != site.resolve():
+        dst = site / "apm_modules/_local" / n
+        shutil.rmtree(dst, ignore_errors=True)
+        shutil.copytree(d, dst, ignore=shutil.ignore_patterns("apm_modules"))
+        locks.append("- repo_url: _local/%s\n  name: %s\n  source: local\n  local_path: %s\n" % (n, n, d))
+    sk = d / ".apm/skills"
+    if sk.is_dir():
+        for s in sk.iterdir():
+            tgt = site / ".claude/skills" / s.name
+            shutil.rmtree(tgt, ignore_errors=True)
+            shutil.copytree(s, tgt)
+(site / "apm.lock.yaml").write_text("dependencies:\n" + "".join(locks))
+'''
+
+
+def w(p, text):
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(text)
+
+
+def readu(p):
+    with open(p, encoding="utf-8") as f:
+        return f.read()
+
+
+def git(proj, *a):
+    return subprocess.run(["git", "-C", proj, *a], capture_output=True, text=True,
+                          env=dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+                                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t"))
+
+
+class Proj02:
+    def __init__(self, bad_skill=False):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.proj = os.path.join(self.tmp, "proj")
+        self.root = os.path.join(self.proj, ".dira")
+        self.local = os.path.join(self.tmp, "local")
+        self.skills = os.path.join(self.tmp, "skills")
+        self.mig = os.path.join(self.tmp, "mig")
+        os.makedirs(self.mig)
+        os.symlink(os.path.join(HERE, "migrations", "0002_apm_packages.py"), os.path.join(self.mig, "0002_apm_packages.py"))
+        fake = os.path.join(self.tmp, "apm")
+        w(fake, FAKE_APM)
+        os.chmod(fake, 0o755)
+        w(os.path.join(self.local, "oauth-token"), "tok")
+        w(os.path.join(self.skills, "x/SKILL.md"), "# x\n")
+        w(os.path.join(self.skills, "x/ref/a.md"), "a\n")
+        P = os.path.join(self.root, "personas")
+        w(P + "/dev/PROFILE.md", "# dev\n개발자 프로필\n")
+        w(P + "/dev/skills.md", "## 스킬\n\n- `x` - 로컬 스킬\n- `ghost` - 없는 스킬\n")
+        w(P + "/dev/memory/note.md", "메모\n")
+        w(P + "/dev/engine", "claude\n")
+        w(P + "/writer/PROFILE.md", "# writer\n마켓에서 받은 뒤 고친 프로필\n")
+        w(P + "/writer/skills.md", "- `x` - 같은 스킬\n")
+        w(self.root + "/squads/default/members", "dev\nwriter\n")
+        w(self.root + "/squads/default/rules", "# 규칙\n")
+        w(self.root + "/protocols/AGENTS.md", "# 협업 프로토콜\n프로젝트 고유\n")
+        w(self.root + "/protocols/only-here.md", "이 프로젝트만의 문서\n")
+        w(self.root + "/tickets/.keep", "")
+        pub = os.path.join(HERE, "packages", "dira-protocols")
+        shutil.copytree(pub, os.path.join(self.proj, "packages", "dira-protocols"))
+        shutil.copy(os.path.join(pub, "CORE.md"), self.root + "/protocols/CORE.md")  # 변환 전 큐도 코어가 있는 경우
+        w(self.proj + "/.claude/skills/devskill/SKILL.md", "# devskill\n")
+        w(self.proj + "/.claude/settings.json", "{}\n")
+        w(self.proj + "/.gitignore", ".dira\n")
+        w(self.proj + "/apm.yml", "name: proj\nversion: 1.0.0\ntargets: [claude]\n")
+        git(self.proj, "init", "-q")
+        git(self.proj, "add", "-A")
+        git(self.proj, "commit", "-q", "-m", "init")
+        w(os.path.join(self.local, "gui-projects.json"), json.dumps({"projects": [
+            {"id": "dira", "name": "p", "root": self.root,
+             "market": {"personas": {"writer": {"owner": "dira", "name": "writer", "v": 3}}, "squads": {}}},
+            {"id": "other", "name": "o", "root": os.path.join(self.tmp, "other/.dira")}]}))
+        self.env = dict(os.environ, TICKET_LOCAL=self.local, DIRA_MIGRATIONS_DIR=self.mig, DIRA_APM_BIN=fake,
+                        TICKET_SKILLS_HOME=self.skills, DIRA_MIGRATE_POLL_S="0.2",
+                        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+
+    def migrate(self, *a):
+        return subprocess.run([sys.executable, MIGRATE, *a, "--root", self.root] if a[0] != "revert" else
+                              [sys.executable, MIGRATE, *a, "--root", self.root],
+                              env=self.env, capture_output=True, text=True)
+
+    def tree(self):
+        out = {}
+        for base in (self.proj, ):
+            for dp, dn, fn in os.walk(base):
+                dn[:] = [d for d in dn if d not in (".git", "apm_modules", ".claude", "worktrees") or (d == ".claude" and dp == self.proj)]
+                for f in fn:
+                    p = os.path.join(dp, f)
+                    rel = os.path.relpath(p, self.proj)
+                    if not rel.startswith(".dira/migrations/"):  # 러너 기록과 백업은 적용마다 는다
+                        out[rel] = open(p, "rb").read()
+        return out
+
+    def done(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+
+def test_apply_idempotent_and_layout():
+    t = Proj02()
+    try:
+        mem = os.path.join(t.root, "personas/dev/memory/note.md")
+        os.utime(mem, (1000000000, 1000000000))
+        r = t.migrate("apply")
+        assert r.returncode == 0, r.stdout + r.stderr
+        lst = t.migrate("list").stdout
+        assert "0002-apm-packages" in lst and "적용됨" in lst, lst
+        team = os.path.join(t.proj, "dira-team")
+        assert readu(team + "/personas/dev/PROFILE.md") == "# dev\n개발자 프로필\n"
+        assert readu(team + "/personas/dev/skills.md").endswith("없는 스킬\n")
+        assert "../../skills/x" in readu(team + "/personas/dev/apm.yml") and "ghost" not in readu(team + "/personas/dev/apm.yml")
+        assert readu(team + "/skills/x/.apm/skills/x/ref/a.md") == "a\n"
+        assert readu(team + "/squads/default/rules") == "# 규칙\n"
+        assert readu(team + "/protocols/AGENTS.md") == "# 협업 프로토콜\n프로젝트 고유\n"
+        assert os.path.isfile(team + "/protocols/only-here.md")
+        assert not os.path.exists(team + "/protocols/CORE.md"), "공용과 같은 문서는 로컬에 안 둔다"
+        ty = readu(team + "/apm.yml")
+        assert "../packages/dira-protocols" in ty and "./protocols" in ty and "./personas/dev" in ty and "./squads/default" in ty, ty
+        # 마켓 기록 -> 사본 + 의존성, 레지스트리 키 삭제
+        assert "version: 3.0.0" in readu(team + "/market/persona/dira/writer/apm.yml")
+        assert "./market/persona/dira/writer" in ty and not os.path.exists(team + "/personas/writer")
+        reg = json.load(open(os.path.join(t.local, "gui-projects.json")))
+        assert "market" not in reg["projects"][0], reg
+        assert json.load(open(t.root + "/migrations/backup/0002-apm-packages-market.json"))["personas"]["writer"]["v"] == 3
+        # 개발 환경: 커밋된 .claude/skills 는 .apm/skills 로 옮기고 install 이 같은 자리로 다시 낸다
+        assert readu(t.proj + "/.apm/skills/devskill/SKILL.md") == "# devskill\n"
+        assert readu(t.proj + "/.claude/skills/devskill/SKILL.md") == "# devskill\n"
+        assert readu(t.proj + "/.claude/settings.json") == "{}\n"
+        assert "dira-team/apm_modules/" in readu(t.proj + "/.gitignore")
+        # 정본 하나: 큐의 PROFILE/skills.md/squads 는 지워졌고 materialize 가 코어를 낸다
+        assert not os.path.exists(t.root + "/personas/dev/PROFILE.md") and not os.path.exists(t.root + "/squads")
+        assert "dira_apm materialize" in readu(t.root + "/protocols/CORE.md")
+        # memory/ 와 engine 은 그대로, mtime 불변
+        assert os.path.getmtime(mem) == 1000000000 and readu(mem) == "메모\n"
+        assert readu(t.root + "/personas/dev/engine") == "claude\n"
+        # 커밋 하나
+        log = git(t.proj, "log", "--format=%s").stdout.split("\n")
+        assert log[0] == "dira - APM 전환 (P506)", log
+        assert ".dira" not in git(t.proj, "show", "--stat", "--format=", "HEAD").stdout.replace("dira-team", "")
+        # 멱등: 항목을 다시 돌려도(기록 지우고) 파일이 같고 커밋이 안 늘어난다
+        before, n = t.tree(), len(log)
+        applied = t.root + "/migrations/applied.json"
+        os.remove(applied)
+        r = t.migrate("apply")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert t.tree() == before, "두 번째 적용이 파일을 바꿨다"
+        assert len(git(t.proj, "log", "--format=%s").stdout.split("\n")) == n, "두 번째 적용이 커밋을 냈다"
+        # 다른 프로젝트 id(canary)는 건드리지 않는다는 것은 test_migrate.py 가 본다
+    finally:
+        t.done()
+
+
+def test_dryrun_mismatch_fails_and_restores():
+    t = Proj02()
+    try:
+        # install 뒤 페르소나 하나의 프롬프트를 몰래 바꾸는 가짜 apm: 두 번째 PROFILE 이 다르게 나오게 한다
+        before = t.tree()
+        evil = os.path.join(t.tmp, "evil")
+        w(evil, "#!/bin/sh\n[ \"$1\" = install ] && echo 바뀜 >> \"$PWD/personas/dev/PROFILE.md\" 2>/dev/null\n"
+                "exec %s \"$@\"\n" % t.env["DIRA_APM_BIN"])
+        os.chmod(evil, 0o755)
+        t.env["DIRA_APM_BIN"] = evil
+        r = t.migrate("apply")
+        assert r.returncode != 0 or "실패" in r.stdout + r.stderr, r.stdout + r.stderr
+        applied = json.load(open(t.root + "/migrations/applied.json"))
+        assert applied["0002-apm-packages"]["state"] == "failed", applied
+        assert "dryrun 이 달라졌다: dev" in applied["0002-apm-packages"]["error"], applied
+        assert t.tree().keys() >= before.keys()
+        for k, v in before.items():
+            assert t.tree().get(k) == v, "복원이 안 됐다: " + k
+        assert not os.path.exists(os.path.join(t.proj, "dira-team/apm.yml"))
+        assert len(git(t.proj, "log", "--format=%s").stdout.split("\n")) == 2, "실패했는데 커밋이 났다"
+    finally:
+        t.done()
+
+
+def test_commit_skips_project_hooks():
+    t = Proj02()
+    try:
+        hook = os.path.join(t.proj, ".git", "hooks", "pre-commit")
+        w(hook, "#!/bin/sh\necho 훅이 고침 >> \"$PWD/dira-team/apm.yml\"\ngit add -A dira-team\n")
+        os.chmod(hook, 0o755)
+        assert t.migrate("apply").returncode == 0
+        assert "훅이 고침" not in readu(os.path.join(t.proj, "dira-team/apm.yml"))
+        assert "APM" in git(t.proj, "log", "-1", "--format=%s").stdout
+    finally:
+        t.done()
+
+
+def test_revert_restores_files():
+    t = Proj02()
+    try:
+        before = t.tree()
+        assert t.migrate("apply").returncode == 0
+        r = t.migrate("revert", "--id", "0002-apm-packages")
+        assert r.returncode == 0, r.stdout + r.stderr
+        for k, v in before.items():
+            if k.startswith(".claude/") or k == ".gitignore" and False:
+                continue
+            assert t.tree().get(k) == v, "되돌림이 안 됐다: " + k
+        assert not os.path.exists(os.path.join(t.proj, "dira-team/apm.yml"))
+    finally:
+        t.done()
+
+
+# ---- 0003-team-into-queue (구 test_migrate_0003.py) ----
+
+ID03 = "0003-team-into-queue"
+MSG03 = "dira - 운영 정보를 .dira로 옮긴다 (P509)"
+
+
+class Proj03:
+    def __init__(self, tracked=True, ignore_lines=True):
+        self.tmp = os.path.realpath(tempfile.mkdtemp())
+        self.proj = os.path.join(self.tmp, "proj")
+        self.root = os.path.join(self.proj, ".dira")
+        self.local = os.path.join(self.tmp, "local")
+        self.mig = os.path.join(self.tmp, "mig")
+        os.makedirs(self.mig)
+        for n in ("0003_team_into_queue.py",):
+            os.symlink(os.path.join(HERE, "migrations", n), os.path.join(self.mig, n))
+        fake = os.path.join(self.tmp, "apm")
+        w(fake, FAKE_APM)
+        os.chmod(fake, 0o755)
+        w(os.path.join(self.local, "oauth-token"), "tok")
+        T = self.proj + "/dira-team"
+        w(T + "/apm.yml", "name: dira-team\nversion: 1.0.0\ntargets: [claude]\ndependencies:\n  apm:\n"
+          "    - ../packages/dira-protocols\n    - ./protocols\n    - ./personas/dev\n")
+        w(T + "/personas/dev/apm.yml", "name: persona-dev\nversion: 1.0.0\n")
+        w(T + "/personas/dev/PROFILE.md", "# dev\n개발자 프로필\n")
+        w(T + "/personas/dev/skills.md", "- `x` - 스킬\n")
+        w(T + "/protocols/회고-예산.md", "한글 이름 파일\n")
+        w(T + "/protocols/apm.yml", "name: project-protocols\nversion: 1.0.0\n")
+        w(T + "/protocols/AGENTS.md", "# 협업 프로토콜\n프로젝트 고유\n")
+        w(self.root + "/personas/dev/memory/note.md", "메모\n")
+        w(self.root + "/tickets/.keep", "")
+        shutil.copytree(os.path.join(HERE, "packages", "dira-protocols"), os.path.join(self.proj, "packages", "dira-protocols"))
+        w(self.proj + "/.gitignore", ".dira\n" + ("dira-team/apm_modules/\ndira-team/.claude/\ndira-team/.agents/\n" if ignore_lines else ""))
+        w(self.proj + "/apm.yml", "name: proj\nversion: 1.0.0\ntargets: [claude]\n")
+        git(self.proj, "init", "-q")
+        git(self.proj, "add", "-A", "--", *(["."] if tracked else [".gitignore", "apm.yml", "packages"]))
+        git(self.proj, "commit", "-q", "-m", "init")
+        w(os.path.join(self.local, "gui-projects.json"), json.dumps({"projects": [
+            {"id": "dira", "name": "p", "root": self.root}]}))
+        self.env = dict(os.environ, TICKET_LOCAL=self.local, DIRA_MIGRATIONS_DIR=self.mig, DIRA_APM_BIN=fake,
+                        DIRA_MIGRATE_POLL_S="0.2",
+                        GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+
+        # 옛 배치의 큐도 이미 materialize 돼 있다(기준 프롬프트가 프로토콜을 담도록)
+        subprocess.run([sys.executable, os.path.join(HERE, "dira_apm.py"), "install", self.proj, "--no-frozen"],
+                       env=dict(self.env, TICKET_ROOT=self.root), capture_output=True, check=True)
+        if tracked:  # 실제 프로젝트처럼 lock 도 커밋돼 있다
+            git(self.proj, "add", "-A", "--", "dira-team")
+            git(self.proj, "commit", "-q", "-m", "lock")
+
+    def migrate(self, *a):
+        return subprocess.run([sys.executable, MIGRATE, *a, "--root", self.root], env=self.env, capture_output=True, text=True)
+
+    def subjects(self):
+        return git(self.proj, "log", "--format=%s").stdout.split("\n")[:-1]
+
+    def done(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+
+def test_apply_idempotent_revert():
+    t = Proj03()
+    try:
+        before = {p: readu(os.path.join(t.proj, "dira-team", p)) for p in ("apm.yml", "personas/dev/PROFILE.md", "protocols/AGENTS.md")}
+        assert len(git(t.proj, "ls-files", "dira-team").stdout.split()) == 8
+        r = t.migrate("apply")
+        assert r.returncode == 0, r.stdout + r.stderr
+        applied = json.load(open(t.root + "/migrations/applied.json"))
+        assert applied[ID03]["state"] == "ok", applied
+        team = t.root + "/team"
+        for p in ("personas/dev/PROFILE.md", "protocols/AGENTS.md"):
+            assert readu(team + "/" + p) == before[p]
+        assert "    - ../../packages/dira-protocols\n" in readu(team + "/apm.yml")
+        assert "./personas/dev" in readu(team + "/apm.yml")
+        assert not os.path.exists(t.proj + "/dira-team")
+        assert git(t.proj, "ls-files", "dira-team").stdout == ""
+        assert "dira-team" not in readu(t.proj + "/.gitignore")
+        assert readu(t.root + "/personas/dev/memory/note.md") == "메모\n"
+        assert "고치지 말고 .dira/team/protocols" in readu(t.root + "/protocols/CORE.md")
+        subj = t.subjects()
+        assert subj[0] == MSG03 and len(subj) == 3, subj
+        dirty = [l for l in git(t.proj, "status", "--porcelain").stdout.splitlines() if "apm.lock.yaml" not in l]  # 루트 lock 은 가짜 apm 이 낸다
+        assert not dirty, dirty
+        # revert: 파일과 되돌림 커밋
+        r = t.migrate("revert", "--id", ID03)
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert not os.path.exists(team)
+        for p, v in before.items():
+            assert readu(os.path.join(t.proj, "dira-team", p)) == v, p
+        assert "dira-team/apm_modules/" in readu(t.proj + "/.gitignore")
+        s2 = t.subjects()
+        assert "revert" in s2[0] and len(s2) == 4, s2
+        assert len(git(t.proj, "ls-files", "dira-team").stdout.split()) == 8, git(t.proj, "ls-files", "dira-team").stdout
+        # 다시 적용(revert 가 지운 기록 뒤): 같은 결과
+        assert t.migrate("apply").returncode == 0
+        assert git(t.proj, "ls-files", "dira-team").stdout == "" and os.path.isfile(team + "/apm.yml")
+        subj = t.subjects()
+        # 멱등: 기록을 지우고 다시 돌려도 커밋이 안 는다
+        os.remove(t.root + "/migrations/applied.json")
+        assert t.migrate("apply").returncode == 0
+        assert t.subjects() == subj, "두 번째 적용이 커밋을 냈다"
+        assert readu(team + "/personas/dev/PROFILE.md") == before["personas/dev/PROFILE.md"]
+    finally:
+        t.done()
+
+
+def test_untracked_no_commit():
+    t = Proj03(tracked=False, ignore_lines=False)
+    try:
+        n = len(t.subjects())
+        assert git(t.proj, "ls-files", "dira-team").stdout == ""
+        r = t.migrate("apply")
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert os.path.isfile(t.root + "/team/apm.yml") and not os.path.exists(t.proj + "/dira-team")
+        assert len(t.subjects()) == n, t.subjects()
+    finally:
+        t.done()
+
+
+def test_nothing_to_do():
+    t = Proj03()
+    try:
+        shutil.rmtree(t.proj + "/dira-team")
+        assert t.migrate("apply").returncode == 0
+        assert not os.path.exists(t.root + "/team")
+    finally:
+        t.done()
+
+
+# ---- 0004-refresh-push-sh (구 test_migrate_0004.py) ----
+
+def test_migration_0004_refresh_push_sh():
+    """migrations/0004_refresh_push_sh.py - 옛 사본을 정본으로 굽고, 없는 사본은 만들지 않는다."""
+    import importlib.util
+    import types
+    spec = importlib.util.spec_from_file_location("m4", os.path.join(HERE, "migrations", "0004_refresh_push_sh.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+
+    with tempfile.TemporaryDirectory() as root:
+        ctx = types.SimpleNamespace(root=root, engine=HERE)
+        p = os.path.join(root, "push.sh")
+        m.apply(ctx)
+        assert not os.path.exists(p), "사본이 없는데 만들었다"
+        m.verify(ctx)
+
+        open(os.path.join(root, "integration-branch"), "w").write("main\n")
+        open(p, "w").write("#!/bin/bash\n# 옛 사본\n")
+        m.apply(ctx)
+        body = open(p).read()
+        assert "run_verify_changed_hook" in body and "<통합 브랜치>" not in body and '"main"' in body
+        assert os.stat(p).st_mode & 0o111
+        m.verify(ctx)
+        m.apply(ctx)  # 두 번째는 그대로
+        assert open(p).read() == body
+
+
 if __name__ == "__main__":
     bad = 0
     for name, fn in sorted(globals().items()):
