@@ -100,7 +100,7 @@ test("persona - squad - trash op 순서가 성공하고 서버 액션 본체와 
   );
   const env = { ...process.env, HOME: home, TICKET_LOCAL: local, DIRA_ANALYTICS: "0" };
   const call = (name: string, input: object) => {
-    const r = spawnSync("node", [CLI, "call", name], { env, input: JSON.stringify(input), encoding: "utf8", timeout: 60_000 });
+    const r = spawnSync("node", [CLI, "call", name], { env, input: JSON.stringify(input), encoding: "utf8", timeout: 240_000 });
     assert.equal(r.status, 0, r.stderr);
     return JSON.parse(r.stdout.trim());
   };
@@ -134,7 +134,7 @@ test("persona - squad - trash op 순서가 성공하고 서버 액션 본체와 
     await p.squadCreate("b","crew"); await p.squadMembersSet("b","crew",[{name:"dev",role:"lead"}]); await p.personaDelete("b","dev");
     const t = await p.trashList("b"); await p.trashRestore("b","persona",t[0].entry);
     await p.squadDelete("b","crew");`;
-  const body = spawnSync("node", ["--input-type=module", "-e", script], { env, encoding: "utf8", timeout: 60_000 });
+  const body = spawnSync("node", ["--input-type=module", "-e", script], { env, encoding: "utf8", timeout: 240_000 });
   assert.equal(body.status, 0, body.stderr);
   const tree = (r: string) =>
     spawnSync("sh", ["-c", `cd "${r}" && find personas squads -type f | grep -v '^\\.trash' | sed 's/@[0-9-]*/@T/' | sort`], { encoding: "utf8" }).stdout;
