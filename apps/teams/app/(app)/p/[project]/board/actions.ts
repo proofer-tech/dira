@@ -36,6 +36,7 @@ import {
   ticketAnomalies,
   ticketFilesFixBody,
 } from "@/lib/queue";
+import { ticketFilesFixOp } from "@/lib/ops/worker";
 import { epicTitle } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
 import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
@@ -271,54 +272,9 @@ export async function fixTicketFilesAction(
     const locale = await readLanguage();
     const project = await getProject(projectId);
     if (!project) throw new Error(`${t(locale, "ontology.action.unknownProjectPrefix")} ${projectId}`);
-    const config = await resolveConfig(project);
-
-    const existing = openFixTicket(await listTickets(project.root, config), TICKET_FILES_FIX_MARKER);
-    if (existing) return { ok: true, stem: existing.stem };
-
-    const anomalies = await ticketAnomalies(project.root, config);
-    if (anomalies.length === 0) return { ok: false, message: t(locale, "boardAnomaly.none") };
-
-    // 산출물이라 로케일 무관 한국어 고정이다(§P479).
-    const body = ticketFilesFixBody(
-      new Date().toISOString(),
-      anomalies.map((a) => ({ file: a.file, reason: t("ko", `boardAnomaly.${a.reason}`) })),
-    );
-    const dir = path.join(project.root, "tickets");
-    const stems = new Set((await readdir(dir)).filter((n) => n.endsWith(".md")).map((n) => stemOf(n, config)));
-    for (let i = 0; i < 10; i++) {
-      const h = randomUUID().slice(0, 8);
-      if (stems.has(h)) continue;
-      const fh = await open(path.join(dir, `${h}.md`), "wx").catch((e) => {
-        if ((e as NodeJS.ErrnoException).code === "EEXIST") return null;
-        throw e;
-      });
-      if (!fh) continue;
-      try {
-        await fh.writeFile(
-          [
-            "---",
-            `ticket: ${h}`,
-            `title: 티켓 파일 이상 ${anomalies.length}건 정리`,
-            "kind: work",
-            "persona: pm",
-            `fixes: ${TICKET_FILES_FIX_MARKER}`,
-            "---",
-            "",
-            body,
-            "",
-          ].join("\n"),
-          "utf8",
-        );
-      } finally {
-        await fh.close();
-      }
-      void track("ticket_create", { kind: "work" });
-      await kickIdleWorker(project.root);
-      revalidatePath(`/p/${projectId}/board`);
-      return { ok: true, stem: h };
-    }
-    throw new Error(t(locale, "ontology.action.hashExhausted"));
+    const r = await ticketFilesFixOp(project, locale);
+    if (r.ok) revalidatePath(`/p/${projectId}/board`);
+    return r;
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }

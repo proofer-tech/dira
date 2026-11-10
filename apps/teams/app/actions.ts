@@ -56,7 +56,7 @@ import {
   type EventName,
   type Events,
 } from "@/lib/analytics";
-import { discardGateDirty } from "@/lib/engine";
+import { projectRepairOp } from "@/lib/ops/worker";
 import {
   disableEmergencyStop,
   emergencyState,
@@ -625,10 +625,10 @@ export async function markFailuresReadAction(
  *  것은 게이트고(다음 tick), 성공 문장이 그것을 알려 준다(결정 7). 그래서 `revalidatePath`도 안
  *  부른다 — 5초 폴링이 다음 tick 뒤에 저절로 항목을 내린다. */
 export async function discardGateDirtyAction(id: string): Promise<{ ok: boolean; output: string }> {
-  const root = (await readProjects()).find((t) => t.id === id)?.root;
-  if (!root) return { ok: false, output: `${t(await readLanguage(), "projects.unknownProjectIdPrefix")} ${id}` };
-  const run = await discardGateDirty(root);
-  return { ok: run.ok, output: run.output };
+  const project = (await readProjects()).find((t) => t.id === id);
+  if (!project) return { ok: false, output: `${t(await readLanguage(), "projects.unknownProjectIdPrefix")} ${id}` };
+  const r = await projectRepairOp(project, "gate_dirty", {});
+  return { ok: r.ok, output: String(r.output ?? "") };
 }
 
 /** 알림 ⑥의 `보관`(§0-10 §보관 = 읽음이다). 화면이 그 순간 나열한 사건 전부의 `to`를 한 번에

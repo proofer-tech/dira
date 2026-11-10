@@ -17,8 +17,8 @@ import { revalidatePath } from "next/cache";
 import { saveAttachment } from "@/lib/attachments";
 import { createEpic as writeEpic, type CreateEpicResult } from "@/lib/epics";
 import { getProject } from "@/lib/projects";
+import { sessionHealOp } from "@/lib/ops/worker";
 import { selfHeal, type SelfHealOutcome } from "@/lib/self-heal";
-import { resolveCheckout } from "@/lib/source-control";
 import type { SaveResult } from "@/lib/attachments";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 
@@ -37,13 +37,7 @@ export async function runSelfHeal(
 ): Promise<SelfHealOutcome> {
   const project = await getProject(projectId);
   if (!project) return "noop";
-  let cwd = project.root;
-  if (checkoutId) {
-    const checkout = await resolveCheckout(path.dirname(project.root), checkoutId);
-    if (!checkout) return "noop";
-    cwd = checkout.path;
-  }
-  return selfHeal({ error, surface, cwd, project });
+  return sessionHealOp(project, error, surface, checkoutId);
 }
 
 export async function uploadAttachment(

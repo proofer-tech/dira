@@ -3,6 +3,17 @@
 import { PERSONA_OPS } from "./persona-ops.ts";
 import { createProjectOp } from "./project.ts";
 import {
+  cronRegisterOp,
+  cronUnregisterOp,
+  projectRepairOp,
+  REPAIR_KINDS,
+  workerCreateOp,
+  workerDeleteOp,
+  workerListOp,
+  workerRetryWorktreeOp,
+  workerStopOp,
+} from "./worker.ts";
+import {
   copyContext,
   getContext,
   getOntology,
@@ -163,6 +174,92 @@ export const OPS: Record<string, Op> = {
       return setProjectSettings(
         p.root,
         { integration_branch: a.integration_branch === undefined ? undefined : str(a.integration_branch, "integration_branch"), slim: bool(a.slim, "slim") },
+        await opLocale(),
+      );
+    },
+  },
+  worker_list: {
+    description: "List the workers of a project: name, status (running|stale|idle|stopped) and whether the crontab has its line.",
+    inputSchema: { type: "object", properties: { ...PROJECT_PICK }, additionalProperties: false },
+    async run(a) {
+      return workerListOp((await pickProject(a)).root);
+    },
+  },
+  worker_create: {
+    description:
+      "Create a worker (file, then crontab line, then worktree). Result: {ok, message?, created?: {name, path, template, cron, cronError?, registerCmd, unregisterCmd, worktree}}. A failed crontab write keeps the file.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...PROJECT_PICK,
+        name: { type: "string", description: "worker name, e.g. w2" },
+        engine: { type: "string", description: "claude (default) or codex" },
+        model: { type: "string", description: "model id (optional)" },
+        effort: { type: "string", description: "effort level (optional)" },
+      },
+      required: ["name"],
+      additionalProperties: false,
+    },
+    async run(a) {
+      const root = (await pickProject(a)).root;
+      return workerCreateOp(root, str(a.name, "name"), str(a.engine, "engine", false) || "claude", str(a.model, "model", false), str(a.effort, "effort", false));
+    },
+  },
+  worker_delete: {
+    description: "Remove the worker's crontab line, then delete workers/<name>.sh. Refuses while the worker is running.",
+    inputSchema: { type: "object", properties: { ...PROJECT_PICK, name: { type: "string" } }, required: ["name"], additionalProperties: false },
+    async run(a) {
+      return workerDeleteOp((await pickProject(a)).root, str(a.name, "name"));
+    },
+  },
+  worker_stop: {
+    description: "Stop a worker: remove only its crontab line. Running sessions and locks are untouched.",
+    inputSchema: { type: "object", properties: { ...PROJECT_PICK, name: { type: "string" } }, required: ["name"], additionalProperties: false },
+    async run(a) {
+      return workerStopOp((await pickProject(a)).root, str(a.name, "name"), await opLocale());
+    },
+  },
+  worker_retry_worktree: {
+    description: "Run the remaining worktree preparation steps again for an existing worker.",
+    inputSchema: { type: "object", properties: { ...PROJECT_PICK, name: { type: "string" } }, required: ["name"], additionalProperties: false },
+    async run(a) {
+      return workerRetryWorktreeOp((await pickProject(a)).root, str(a.name, "name"), await opLocale());
+    },
+  },
+  cron_register: {
+    description: "Put the worker's crontab line back (inverse of worker_stop). Result: {ok, message}.",
+    inputSchema: { type: "object", properties: { ...PROJECT_PICK, worker: { type: "string" } }, required: ["worker"], additionalProperties: false },
+    async run(a) {
+      return cronRegisterOp((await pickProject(a)).root, str(a.worker, "worker"), await opLocale());
+    },
+  },
+  cron_unregister: {
+    description: "Remove the worker's crontab line only. No-op when absent. Result: {ok, message}.",
+    inputSchema: { type: "object", properties: { ...PROJECT_PICK, worker: { type: "string" } }, required: ["worker"], additionalProperties: false },
+    async run(a) {
+      return cronUnregisterOp((await pickProject(a)).root, str(a.worker, "worker"), await opLocale());
+    },
+  },
+  project_repair: {
+    description: `Run one of the screen's fix buttons. kind: ${REPAIR_KINDS.join(" | ")}. self_heal, dispatch_gate, exec_bit and common_source need worker; session_heal takes error, surface and optional checkoutId; gate_dirty discards the integration tree's leftovers; ticket_files issues the cleanup ticket. An unknown kind gives ok:false.`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...PROJECT_PICK,
+        kind: { type: "string", enum: REPAIR_KINDS },
+        worker: { type: "string" },
+        error: { type: "string" },
+        surface: { type: "string" },
+        checkoutId: { type: "string" },
+      },
+      required: ["kind"],
+      additionalProperties: false,
+    },
+    async run(a) {
+      return projectRepairOp(
+        await pickProject(a),
+        str(a.kind, "kind"),
+        { worker: str(a.worker, "worker", false), error: str(a.error, "error", false), surface: str(a.surface, "surface", false), checkoutId: str(a.checkoutId, "checkoutId", false) || undefined },
         await opLocale(),
       );
     },

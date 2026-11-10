@@ -7,13 +7,18 @@
  *
  *  검증과 문구는 `lib/`에 있다. 이 파일이 하는 일은 **프로젝트 id → 등록된 root** 해석과
  *  Error를 직렬화 가능한 결과로 바꾸는 것뿐이다(클라이언트로 Error는 못 넘어간다). */
-import { stat } from "node:fs/promises";
-import nodePath from "node:path";
 import { revalidatePath } from "next/cache";
-import { track } from "@/lib/analytics";
 import { runWorker } from "@/lib/engine";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
-import { isName } from "@/lib/paths";
+import {
+  cronRegisterOp,
+  fail,
+  workerCreateOp,
+  workerDeleteOp,
+  workerRetryWorktreeOp,
+  workerStopOp,
+  type WorkerActionResult,
+} from "@/lib/ops/worker";
 import { getProject } from "@/lib/projects";
 import { setOntology } from "@/lib/ops/settings";
 import {
@@ -22,57 +27,19 @@ import {
   applyExecBit,
   applySelfHeal,
   copyContext,
-  createWorker,
-  cronRegisterCmd,
-  cronUnregisterCmd,
-  deleteWorker,
-  ENGINES,
-  prepareWorktree,
-  registerCron,
-  startWorker,
-  stopWorker,
   writeCommonContext,
   writeContext,
-  type EngineId,
   type WorkerContext,
   type WorktreePrep,
 } from "@/lib/workers";
 
-export type WorkerActionResult = {
-  ok: boolean;
-  /** 실패 사유. 중단은 성공했을 때도 무엇을 했는지(또는 no-op이었는지) 여기로 알려 준다 */
-  message?: string;
-  /** 삭제가 **crontab 해제 단계에서** 멈췄다 = 파일은 그대로다. 화면이 해제 명령어를
-   *  이 경우에만 보여준다(파일 삭제 실패에 같은 명령을 권하면 거짓 안내다) */
-  cronFailed?: boolean;
-  /** 생성 성공 시. `cron: false`면 파일은 있고 등록만 실패한 것이다 — 화면이 사유와
-   *  종전의 등록 명령어를 보여주고 사람이 셸에서 마무리한다 */
-  created?: {
-    name: string;
-    path: string;
-    template: string;
-    cron: boolean;
-    cronError?: string;
-    registerCmd: string;
-    unregisterCmd: string;
-    /** 서버가 실제로 실행한 워크트리 3단계의 결과 (§4 생성 4항). 성공이면 화면에
-     *  `CopyCommand`가 없다 — 남은 명령은 실패했을 때만 생긴다 */
-    worktree: WorktreePrep;
-  };
-  /** reap 출력 원문 */
-  output?: string;
-};
+export type { WorkerActionResult };
 
 /** 등록된 프로젝트의 root만 만진다. URL 조각으로 임의 경로를 열지 않는다. */
 async function rootOf(projectId: string, locale: Locale = DEFAULT_LOCALE): Promise<string> {
   const project = await getProject(projectId);
   if (!project) throw new Error(`${t(locale, "resolve.unknownProjectPrefix")} ${projectId}`);
   return project.root;
-}
-
-function fail(e: unknown): WorkerActionResult {
-  const err = e as Error & { cronFailed?: boolean };
-  return { ok: false, message: err.message, cronFailed: err.cronFailed };
 }
 
 export async function createWorkerAction(
@@ -87,41 +54,9 @@ export async function createWorkerAction(
 ): Promise<WorkerActionResult> {
   try {
     const root = await rootOf(projectId, locale);
-    const worker = name.trim();
-    const { path, template } = await createWorker(root, worker, engine as EngineId, model, effort);
-    // **등록이 실패해도 파일 생성을 되돌리지 않는다** — 만든 것을 지우면 사람이 이름을 다시
-    // 정해야 한다. 실패는 `cronError`로 넘기고 화면이 등록 명령어를 그 자리에 보여준다.
-    const cronError = await registerCron(path).then(
-      () => undefined,
-      (e: Error) => e.message,
-    );
-    // 순서는 **파일 → crontab → 트리**다(§4 생성 4항). 트리가 실패해도 파일도 crontab도
-    // 되돌리지 않는다 — 둘 다 트리와 무관하게 유효하고, 등록을 사람 손에 되돌리면
-    // `44f876aa`가 없앤 speed bump가 다른 이름으로 돌아온다.
-    const worktree = await prepareWorktree(root, worker);
-    // §0-11 — 워커 파일이 생겼을 때만. `cron_ok`은 crontab 등록까지 갔는지고(파일만 생기고
-    // 등록이 실패하는 경로가 이 액션의 계약이다) 워커 이름은 안 간다(익명 규칙).
-    // `engine`은 서버가 이미 검증했지만 인자 타입이 `string`이라 표 밖 값은 `other`로 접는다.
-    // **이름을 세지 않는다**(§4-3 개정): 카탈로그에 있으면 그 id 그대로고 없으면 `other`다 —
-    // `=== "claude" || === "codex"`로 적었더니 셋째 엔진이 `기타`로 들어갔다.
-    void track("worker_create", {
-      engine: ENGINES.find((x) => x.id === engine)?.id ?? "other",
-      cron_ok: !cronError,
-    });
-    revalidatePath(`/p/${projectId}`, "layout"); // 목록·전환기의 워커 요약도 같이 바뀐다
-    return {
-      ok: true,
-      created: {
-        name: worker,
-        path,
-        template,
-        cron: !cronError,
-        cronError,
-        registerCmd: cronRegisterCmd({ path }),
-        unregisterCmd: cronUnregisterCmd({ path }),
-        worktree,
-      },
-    };
+    const r = await workerCreateOp(root, name, engine, model, effort);
+    revalidatePath(`/p/${projectId}`, "layout"); // 목록 - 전환기의 워커 요약도 같이 바뀐다
+    return r;
   } catch (e) {
     return fail(e);
   }
@@ -137,11 +72,7 @@ export async function retryWorktreeAction(
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<{ ok: boolean; message?: string; worktree?: WorktreePrep }> {
   try {
-    const root = await rootOf(projectId, locale);
-    if (!isName(name) || !(await stat(nodePath.join(root, "workers", `${name}.sh`)).then(() => true, () => false))) {
-      return { ok: false, message: `${t(locale, "workers.create.invalidNamePrefix")} ${name}` };
-    }
-    return { ok: true, worktree: await prepareWorktree(root, name, locale) };
+    return await workerRetryWorktreeOp(await rootOf(projectId, locale), name, locale);
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
@@ -154,12 +85,10 @@ export async function stopWorkerAction(
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    const removed = await stopWorker(await rootOf(projectId, locale), name);
+    const root = await rootOf(projectId, locale);
+    const r = await workerStopOp(root, name, locale);
     revalidatePath(`/p/${projectId}`, "layout");
-    return {
-      ok: true,
-      message: removed ? t(locale, "workers.stop.removedMessage") : t(locale, "workers.stop.noopMessage"),
-    };
+    return r;
   } catch (e) {
     return fail(e);
   }
@@ -174,12 +103,10 @@ export async function registerWorkerAction(
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    const added = await startWorker(await rootOf(projectId, locale), name);
+    const root = await rootOf(projectId, locale);
+    const r = await cronRegisterOp(root, name, locale);
     revalidatePath(`/p/${projectId}`, "layout");
-    return {
-      ok: true,
-      message: added ? t(locale, "workers.register.addedMessage") : t(locale, "workers.register.noopMessage"),
-    };
+    return r;
   } catch (e) {
     return fail(e);
   }
@@ -191,9 +118,10 @@ export async function deleteWorkerAction(
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    await deleteWorker(await rootOf(projectId, locale), name);
+    const root = await rootOf(projectId, locale);
+    const r = await workerDeleteOp(root, name);
     revalidatePath(`/p/${projectId}`, "layout");
-    return { ok: true };
+    return r;
   } catch (e) {
     return fail(e);
   }

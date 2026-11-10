@@ -40,7 +40,7 @@ function sandbox() {
     assert.equal(lines.length, 1, `표준 출력은 한 줄이다: ${r.stdout}`);
     return JSON.parse(lines[0]);
   };
-  return { local, repo, run };
+  return { local, repo, run, tab };
 }
 
 test("list - project_create가 들어 있다", () => {
@@ -142,4 +142,37 @@ test("persona - squad - trash op 순서가 성공하고 서버 액션 본체와 
   const reg = JSON.parse(readFileSync(path.join(local, "gui-projects.json"), "utf8"));
   const colors = (id: string) => JSON.stringify((Array.isArray(reg) ? reg : reg.projects).find((x: { id: string }) => x.id === id)?.personaColors ?? null);
   assert.equal(colors("a"), colors("b"));
+});
+
+test("워커 op - w2 만들기 - 목록 - cron 빼기 - 지우기, 모르는 repair kind는 ok:false", () => {
+  const { repo, run, tab } = sandbox();
+  const made = run(["call", "project_create"], JSON.stringify({ path: repo, name: "t", branch: "dev" }));
+  const root = made.result.created.root;
+  const w2 = path.join(root, "workers", "w2.sh");
+  const lines = () => readFileSync(tab, "utf8").split("\n").filter((l) => l.includes(w2) && !l.startsWith("#"));
+
+  const c = run(["call", "worker_create"], JSON.stringify({ root, name: "w2" }));
+  assert.equal(c.ok, true, JSON.stringify(c));
+  assert.equal(c.result.ok, true, JSON.stringify(c.result));
+  assert.equal(c.result.created.name, "w2");
+  assert.equal(c.result.created.cron, true);
+  assert.ok(existsSync(w2));
+  assert.equal(lines().length, 2, readFileSync(tab, "utf8"));
+
+  const list = run(["call", "worker_list"], JSON.stringify({ root }));
+  const row = list.result.find((w: { name: string }) => w.name === "w2");
+  assert.equal(row.cron, true);
+
+  const u = run(["call", "cron_unregister"], JSON.stringify({ root, worker: "w2" }));
+  assert.equal(u.result.ok, true, JSON.stringify(u));
+  assert.equal(lines().length, 0);
+  assert.equal(run(["call", "worker_list"], JSON.stringify({ root })).result.find((w: { name: string }) => w.name === "w2").cron, false);
+
+  const d = run(["call", "worker_delete"], JSON.stringify({ root, name: "w2" }));
+  assert.equal(d.result.ok, true, JSON.stringify(d));
+  assert.equal(existsSync(w2), false);
+
+  const bad = run(["call", "project_repair"], JSON.stringify({ root, kind: "no_such_kind" }));
+  assert.equal(bad.ok, true);
+  assert.equal(bad.result.ok, false);
 });

@@ -45,6 +45,11 @@ const COVERED: Record<string, string> = {
   answerRequirement: "mcp:ticket_answer",
   sendInterject: "mcp:interject",
   unassignTicket: "mcp:unassign",
+  createWorkerAction: "worker_create", deleteWorkerAction: "worker_delete", stopWorkerAction: "worker_stop",
+  retryWorktreeAction: "worker_retry_worktree", registerWorkerAction: "cron_register",
+  readWorkersPanelAction: "worker_list", applySelfHealAction: "project_repair", applyDispatchGateAction: "project_repair",
+  applyExecBitAction: "project_repair", applyCommonSourceAction: "project_repair", runSelfHeal: "project_repair",
+  discardGateDirtyAction: "project_repair", fixTicketFilesAction: "project_repair",
   // P559-6
   createPersonaAction: "persona_create", savePersonaAction: "persona_save", deletePersonaAction: "persona_delete",
   hidePersonaAction: "persona_hide", unhidePersonaAction: "persona_unhide", copySharedToLocalAction: "persona_copy_shared_to_local",
@@ -99,11 +104,6 @@ const EXCLUDED: Record<string, string> = {
 
 /** 아직 안 옮긴 채움 행 -> 담당 행. P559-4~8이 옮기며 `COVERED`로 보내고 여기서 뺀다. */
 const PENDING: Record<string, string> = {
-  // P559-5
-  createWorkerAction: "P559-5", deleteWorkerAction: "P559-5", stopWorkerAction: "P559-5", retryWorktreeAction: "P559-5",
-  registerWorkerAction: "P559-5", readWorkersPanelAction: "P559-5", applySelfHealAction: "P559-5",
-  applyDispatchGateAction: "P559-5", applyExecBitAction: "P559-5", applyCommonSourceAction: "P559-5",
-  runSelfHeal: "P559-5", discardGateDirtyAction: "P559-5", fixTicketFilesAction: "P559-5",
   // P559-7
   saveProtocolAction: "P559-7", createProtocolAction: "P559-7", deleteProtocolAction: "P559-7",
   renameProtocolAction: "P559-7", createEpic: "P559-7", saveEpicReadmeAction: "P559-7", deleteEpicMemoryAction: "P559-7",
