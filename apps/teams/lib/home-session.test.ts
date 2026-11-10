@@ -2831,3 +2831,28 @@ test("P558 결정 4 - 표면을 넘기면 `지금 왼쪽 표면: 커맨드`가 �
   assert.equal(parseSurface("../x"), undefined);
   assert.equal(parseSurface("toString"), undefined);
 });
+
+// P561 - 도는 턴이 집어 간 참견은 user 레코드가 없다. 큐 줄(enqueue)이 질문 말풍선으로 선다.
+const queuedEv = (key: string, kind: "interject" | "prompt" | "text" | "tool_use", body: string) =>
+  ({ key, kind, body, summary: "", label: "", sidechain: false }) as unknown as Parameters<typeof toTurns>[0][number];
+
+test("toTurns - 턴 안에서 흡수된 참견은 질문 말풍선 하나로 선다 (P561)", () => {
+  const turns = toTurns([
+    queuedEv("a", "prompt", "긴 작업"),
+    queuedEv("b", "tool_use", "Read"),
+    queuedEv("c", "interject", "참견합니다"), // enqueue만 있고 user 레코드는 끝내 없다
+    queuedEv("d", "text", "답"),
+  ]);
+  assert.deepStrictEqual(turns.map((t) => [t.role, t.text]), [["question", "긴 작업"], ["line", "Read"], ["question", "참견합니다"], ["answer", "답"]]);
+});
+
+test("toTurns - 다음 턴으로 들어간 참견은 enqueue와 user 레코드가 한 벌이다, 폴링 배치를 이어 붙여도 같다 (P561)", async () => {
+  const { dedupeQueued } = await import("./urls.ts");
+  const first = toTurns([queuedEv("a", "prompt", "긴 작업"), queuedEv("c", "interject", "참견합니다"), queuedEv("d", "text", "답")]);
+  const second = toTurns([queuedEv("e", "prompt", "참견합니다"), queuedEv("f", "text", "참견 답")]);
+  assert.deepStrictEqual(second.map((t) => t.role), ["question", "answer"]); // 배치 하나만 보면 판정 못 한다
+  const merged = dedupeQueued([...first, ...second]);
+  assert.deepStrictEqual(merged.map((t) => [t.role, t.text]), [["question", "긴 작업"], ["question", "참견합니다"], ["answer", "답"], ["answer", "참견 답"]]);
+  // 한 배치 안에서도 같다
+  assert.strictEqual(toTurns([queuedEv("c", "interject", "x"), queuedEv("e", "prompt", "x")]).length, 1);
+});

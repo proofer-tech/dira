@@ -232,6 +232,7 @@ import {
   nextScheduleDue,
   scheduleRows,
   visibleChatRows,
+  dedupeQueued,
 } from "@/lib/urls";
 import { cn } from "@/lib/utils";
 
@@ -635,7 +636,7 @@ export function HomeUI({
         );
         // `reset` = 세션이 갈렸다(서버가 0부터 다시 읽었다). 이어붙이면 옛 대화가 두 벌이 된다.
         setTurns((prev) => {
-          const next = r.reset ? r.turns : r.turns.length ? [...prev, ...r.turns] : prev;
+          const next = r.reset ? r.turns : r.turns.length ? dedupeQueued([...prev, ...r.turns]) : prev;
           // **중지 표식을 서버 응답에서도 받는다.** 트랜스크립트의 `[Request interrupted by user]`가
           // `toTurns`에서 같은 칸을 채우지만(새로고침이 남는 근거), 그 줄이 이 폴링보다 늦게
           // 쓰이는 창이 있다 — 그때 화면이 `중지됨`을 통째로 놓친다. 두 근거가 같은 칸을 채운다.
@@ -645,7 +646,8 @@ export function HomeUI({
         // 것이 곧 그 질문(과 어쩌면 답까지)이 정본에 실렸다는 뜻이다. 갈아 끼우는 대상은 **이
         // 왕복 전에 보낸 질문뿐**이다: 잠금의 단위가 대화 하나라 같은 대화에 두 번째 질문이
         // 겹쳐 뜰 일이 없다(§24 실패 ④).
-        if (r.turns.length > 0) {
+        // P561: 도구 줄만 와도 걷던 것을 **질문 줄이 왔을 때만** 걷는다(참견은 질문으로 선다).
+        if (r.turns.some((x) => x.role === "question")) {
           setEcho(null);
           pendingEcho = null;
         }

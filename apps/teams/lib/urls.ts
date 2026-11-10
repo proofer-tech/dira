@@ -1222,3 +1222,23 @@ export function nextScheduleDue(
   }
   return null;
 }
+
+/** P561: 참견이 다음 턴으로 들어가면 `enqueue`(queued 질문)와 뒤의 `user` 레코드(질문)가 같은 글로 두 벌이
+ *  된다. 뒤의 것을 버린다. 폴링 배치를 이어 붙인 뒤에도 같은 판정이 되도록 클라이언트도 이걸 부른다.
+ *  // ponytail: 판정은 글이 같은가다. 흡수된 참견과 같은 글을 나중에 새 질문으로 또 보내면 그것이 버려진다.
+ *  //           사람이 같은 글을 되풀이하는 드문 경우라 두고, 아프면 타임스탬프를 Turn에 싣는다. */
+export function dedupeQueued<T extends { role: string; text: string; queued?: true }>(turns: T[]): T[] {
+  const out: T[] = [];
+  const pending = new Set<string>();
+  for (const t of turns) {
+    if (t.role === "question") {
+      if (t.queued) {
+        pending.add(t.text);
+      } else if (pending.delete(t.text)) {
+        continue;
+      }
+    }
+    out.push(t);
+  }
+  return out;
+}

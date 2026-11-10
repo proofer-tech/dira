@@ -114,7 +114,7 @@ import { ptyStatuses, terminalTail } from "./pty.ts";
 import { findStream, findTranscript, lastEvent, sessionIdOf, tailEvents, type StreamEvent } from "./transcript.ts";
 import { COMMAND_ID_RE, createCommand, listCommands, type CommandEntry } from "./commands.ts";
 import type { Surface } from "./tabs.ts";
-import { judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
+import { dedupeQueued, judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, engineRepo, listWorkers, workerOf, type Worker } from "./workers.ts";
 
 /** 세션에 존재하는 도구 전부. **쉼표 한 토큰**이다(머리 주석의 variadic 함정). §7-5(요구
@@ -2008,6 +2008,8 @@ export type Turn = {
   event?: StreamEvent;
   /** `role === "notice"`일 때만 있다 — 하니스가 보낸 봉투(§P523 결정 2). `text`는 `raw`와 같다. */
   notice?: Notice;
+  /** 큐(`queue-operation enqueue`)에서 온 질문이다(P561). 도는 턴이 집어 가면 `user` 레코드가 없다. */
+  queued?: true;
 };
 
 export type Notice = { tag: string; fields: { name: string; value: string }[]; raw: string };
@@ -2064,6 +2066,10 @@ const INTERRUPTED = "[Request interrupted by user]";
  *  블록 — `recordToEvents`가 그 kind에 label·summary를 안 채운다)를 위한 안전망으로 `body` 앞
  *  40자를 쓴다 — 빈 접힌 줄을 만들지 않는다. */
 export function toTurns(events: StreamEvent[]): Turn[] {
+  return dedupeQueued(rawTurns(events));
+}
+
+function rawTurns(events: StreamEvent[]): Turn[] {
   const turns: Turn[] = [];
   // 중지 표식은 **가장 가까운 답**의 것이다(`line`을 건너뛴다 — 도구가 도는 중에도 표식이 그
   // 답을 찾는다). `question`에 닿으면 글자가 한 자도 안 왔다는 뜻이라 옮겨 적을 자리가 없다
@@ -2092,6 +2098,13 @@ export function toTurns(events: StreamEvent[]): Turn[] {
       }
       turns.push({ key: e.key, role: e.kind === "prompt" ? "question" : "answer", text });
       continue;
+    }
+    if (!e.sidechain && e.kind === "interject" && !e.label && e.body.trim()) {
+      const text = questionOf(e.body);
+      if (text) {
+        turns.push({ key: e.key, role: "question", text, queued: true });
+        continue;
+      }
     }
     turns.push({
       key: e.key,
