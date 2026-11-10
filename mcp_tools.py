@@ -892,14 +892,107 @@ TOOLS = {
 }
 
 
+# ---------------------------------------------------------------- 실행기 전달 (P559-3)
+# ponytail: 목록 호출마다 실행기를 새로 띄운다(node 기동 비용). 느려지면 ops.json mtime 기준 캐시.
+
+LIST_TIMEOUT, CALL_TIMEOUT = 20, 300
+
+
+def _ops_cfg():
+    """(cfg, 사유). 파일이 없거나 깨졌으면 cfg는 None."""
+    path = os.path.join(_local(), "ops.json")
+    if not os.path.exists(path):
+        return None, "ops.json이 없다. dira 앱을 한 번 켜면 생긴다"
+    try:
+        cfg = json.load(open(path))
+        argv = cfg["argv"]
+        if not (isinstance(argv, list) and argv and all(isinstance(x, str) for x in argv)):
+            raise ValueError("argv 형식")
+        if not isinstance(cfg.get("env", {}), dict):
+            raise ValueError("env 형식")
+        return cfg, None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+        return None, "ops.json을 읽지 못했다: %s" % e
+
+
+def _ops_run(cfg, args, stdin, timeout):
+    env = dict(os.environ, **{str(k): str(v) for k, v in (cfg.get("env") or {}).items()})
+    try:
+        p = subprocess.run(cfg["argv"] + args, input=stdin, capture_output=True, text=True, env=env,
+                           timeout=timeout)
+    except subprocess.TimeoutExpired:
+        raise ToolError("실행기가 %d초 안에 끝나지 않았다" % timeout)
+    except OSError as e:
+        raise ToolError("실행기를 못 띄웠다: %s" % e)
+    if p.returncode != 0:
+        raise ToolError("실행기가 비정상 종료했다(rc %d): %s" % (p.returncode, (p.stderr or "").strip()[-500:]))
+    try:
+        out = json.loads(p.stdout.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        raise ToolError("실행기 출력을 읽지 못했다")
+    if not isinstance(out, dict) or "ok" not in out:
+        raise ToolError("실행기 출력 형식이 다르다")
+    return out
+
+
+def _ops_tools():
+    cfg, _ = _ops_cfg()
+    if not cfg:
+        return {}
+    try:
+        out = _ops_run(cfg, ["list"], None, LIST_TIMEOUT)
+    except ToolError as e:
+        sys.stderr.write("ops: %s\n" % e)
+        return {}
+    if out.get("ok") is not True or not isinstance(out.get("result"), list):
+        sys.stderr.write("ops: list 실패\n")
+        return {}
+    res = {}
+    for t in out["result"]:
+        n = t.get("name") if isinstance(t, dict) else None
+        if not isinstance(n, str):
+            continue
+        if n in TOOLS:
+            sys.stderr.write("ops: 파이썬 도구와 이름이 겹쳐 건너뜀: %s\n" % n)
+            continue
+        res[n] = t
+    return res
+
+
+def t_ops_status(a):
+    cfg, err = _ops_cfg()
+    if not cfg:
+        return {"available": False, "argv": None, "error": err}
+    try:
+        out = _ops_run(cfg, ["list"], None, LIST_TIMEOUT)
+        if out.get("ok") is not True:
+            raise ToolError(out.get("error") or "list 실패")
+        return {"available": True, "argv": cfg["argv"], "error": None}
+    except ToolError as e:
+        return {"available": False, "argv": cfg["argv"], "error": str(e)}
+
+
+TOOLS["ops_status"] = ("실행기(ops.json) 상태 {available, argv, error}. 없으면 dira 앱을 한 번 켠다",
+                       {"type": "object", "properties": {}}, t_ops_status)
+
+
 def list_tools():
-    return [{"name": n, "description": d, "inputSchema": s} for n, (d, s, _) in TOOLS.items()]
+    py = [{"name": n, "description": d, "inputSchema": s} for n, (d, s, _) in TOOLS.items()]
+    return py + [{"name": n, "description": t.get("description", ""),
+                  "inputSchema": t.get("inputSchema") or {"type": "object", "properties": {}}}
+                 for n, t in _ops_tools().items()]
 
 
 def call_tool(name, args):
-    if name not in TOOLS:
-        raise ToolError("모르는 도구: %s" % name)
-    return TOOLS[name][2](args or {})
+    if name in TOOLS:
+        return TOOLS[name][2](args or {})
+    cfg, _ = _ops_cfg()
+    if cfg:
+        out = _ops_run(cfg, ["call", str(name)], json.dumps(args or {}), CALL_TIMEOUT)
+        if out.get("ok") is True:
+            return out.get("result")
+        raise ToolError(str(out.get("error") or "실행기 오류"))
+    raise ToolError("모르는 도구: %s" % name)
 
 
 # 엔진 서브커맨드 -> 그것에 닿는 도구. test_mcp_parity.py가 소스에서 긁은 이름과 이 표를 맞춘다.

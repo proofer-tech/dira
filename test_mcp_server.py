@@ -295,6 +295,56 @@ assert res["integration_branch"] == "main" and res["workers"] == ["w1"], res
 call("project_slim", on=True)
 assert open(os.path.join(root, "slim-checkout")).read().split("\n")[0] == "on"
 
+# 8. P559-3 실행기 전달: 가짜 실행기(파이썬 스크립트)
+base = len(rpc([INIT, LIST])[1]["result"]["tools"])
+assert base == 36, base  # 35 + ops_status
+st, _ = call("ops_status")
+assert st["available"] is False and "앱" in st["error"], st
+assert call("nope_tool")[1]
+
+FAKE = os.path.join(tmp, "fake_ops.py")
+open(FAKE, "w").write("""import json, os, sys
+mode = os.environ.get("FAKE_MODE", "ok")
+if mode == "die":
+    sys.stderr.write("boom"); sys.exit(3)
+if mode == "hang":
+    import time; time.sleep(60)
+if sys.argv[1] == "list":
+    print(json.dumps({"ok": True, "result": [
+        {"name": "fake_echo", "description": "d", "inputSchema": {"type": "object", "properties": {}}},
+        {"name": "projects", "description": "겹침", "inputSchema": {"type": "object"}}]}))
+elif sys.argv[2] == "fake_echo":
+    a = json.loads(sys.stdin.read())
+    print(json.dumps({"ok": True, "result": {"got": a, "env": os.environ.get("FAKE_X")}}))
+else:
+    print(json.dumps({"ok": False, "error": "이런 op 없음 " + sys.argv[2]}))
+""")
+
+
+def write_ops(**extra):
+    json.dump({"version": 1, "argv": [sys.executable, FAKE], "env": {"FAKE_X": "hello", **extra}},
+              open(os.path.join(LOCAL, "ops.json"), "w"))
+
+
+os.makedirs(LOCAL, exist_ok=True)
+write_ops()
+tools = rpc([INIT, LIST])[1]["result"]["tools"]
+tn = [t["name"] for t in tools]
+assert tn.count("fake_echo") == 1 and tn.count("projects") == 1 and len(tn) == base + 1, tn
+res, err = call("fake_echo", k=1)
+assert not err and res["got"]["k"] == 1 and res["env"] == "hello", res
+res, err = call("fake_nope")
+assert err and "이런 op 없음 fake_nope" in str(res), res
+assert call("ops_status")[0]["available"] is True
+
+write_ops(FAKE_MODE="die")
+assert len(rpc([INIT, LIST])[1]["result"]["tools"]) == base
+assert call("ops_status")[0]["available"] is False
+write_ops(FAKE_MODE="hang")
+import time
+mcp_src = open(os.path.join(HERE, "mcp_tools.py")).read()
+assert "LIST_TIMEOUT, CALL_TIMEOUT = 20, 300" in mcp_src
+
 diff = subprocess.run(["git", "diff", "master", "--", "tickets.py"], cwd=HERE, capture_output=True,
                       text=True).stdout
 assert diff == "", "tickets.py가 바뀌었다"
