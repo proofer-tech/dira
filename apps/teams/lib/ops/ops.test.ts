@@ -176,3 +176,42 @@ test("워커 op - w2 만들기 - 목록 - cron 빼기 - 지우기, 모르는 rep
   assert.equal(bad.ok, true);
   assert.equal(bad.result.ok, false);
 });
+
+test("P559-8 - 티켓 편집 - 온톨로지 쓰기 - 비상 정지 읽기", () => {
+  const { repo, run } = sandbox();
+  const made = run(["call", "project_create"], JSON.stringify({ path: repo, name: "t", branch: "dev" }));
+  const root: string = made.result.created.root;
+  const call = (name: string, input: Record<string, unknown>) => {
+    const r = run(["call", name], JSON.stringify({ root, ...input }));
+    assert.equal(r.ok, true, JSON.stringify(r));
+    return r.result;
+  };
+  const tfile = path.join(root, "tickets", "abcd1234.md");
+  const body = "## Goal\n\n한 줄  \n\n- [ ] 항목\n";
+  writeFileSync(tfile, `---\nticket: abcd1234\ntitle: t\nkind: work\npersona: developer\nfoo: 1\n---\n\n${body}`);
+  const before = readFileSync(tfile, "utf8");
+  const r1 = call("ticket_frontmatter_set", { hash: "abcd1234", key: "foo", value: "2" });
+  assert.equal(r1.ok, true, JSON.stringify(r1));
+  assert.equal(readFileSync(tfile, "utf8"), before.replace("foo: 1", "foo: 2"), "fm 한 키만 바뀌고 나머지는 바이트 그대로다");
+  assert.equal(call("ticket_frontmatter_set", { hash: "abcd1234", key: "title", value: "x" }).ok, false);
+  assert.equal(call("ticket_frontmatter_set", { hash: "abcd1234", key: "session_id", value: "x" }).ok, false);
+  assert.equal(call("ticket_epic_set", { hash: "abcd1234", epic: "E1" }).ok, true);
+  assert.match(readFileSync(tfile, "utf8"), /^epic: E1$/m);
+  writeFileSync(path.join(root, "tickets", "beef5678.wip.md"), "---\nticket: beef5678\ntitle: w\n---\n\nx\n");
+  assert.equal(call("ticket_frontmatter_set", { hash: "beef5678", key: "foo", value: "1" }).ok, false);
+  assert.equal(call("ticket_delete", { hash: "beef5678" }).ok, false);
+  assert.equal(call("ticket_delete", { hash: "abcd1234" }).ok, true);
+  assert.equal(existsSync(tfile), false);
+
+  const created = call("ontology_create", { rel: "notes/a.md" });
+  assert.equal(created.ok, true, JSON.stringify(created));
+  const renamed = call("ontology_rename", { from: "notes/a.md", to: "notes/b.md" });
+  assert.equal(renamed.ok, true, JSON.stringify(renamed));
+  assert.equal(call("ontology_delete", { rel: "notes/b.md" }).ok, true);
+  assert.equal(call("ontology_delete", { rel: "../x.md" }).ok, false, "루트 밖 경로는 거절한다");
+
+  const es = call("emergency_stop_get", {});
+  assert.equal(typeof es.on, "boolean");
+  const names = run(["list"]).result.map((o: { name: string }) => o.name);
+  assert.ok(!names.some((n: string) => /emergency_stop_(on|off|enable|disable|set)/.test(n)));
+});

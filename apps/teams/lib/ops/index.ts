@@ -1,6 +1,7 @@
 /** op 표(P559 결정 2). 이름이 곧 MCP 도구 이름이다. 무리마다 파일을 나누고 여기서 모은다 -
  *  뒤 티켓(P559-4~8)이 서로 다른 파일에 행을 더한다. `next/*` import 금지. */
 import { PERSONA_OPS } from "./persona-ops.ts";
+import { TICKET_OPS } from "./ticket-ops.ts";
 import { createProjectOp } from "./project.ts";
 import {
   cronRegisterOp,
@@ -60,6 +61,7 @@ const PICK = { ...PROJECT_PICK };
 
 export const OPS: Record<string, Op> = {
   ...PERSONA_OPS,
+  ...TICKET_OPS,
   project_create: {
     description:
       "Create a new dira queue in a git repository (scaffold, w1 cron, registry entry, persona colors, default skills). Result: {error?, exists?, created?}. Created files are never rolled back.",

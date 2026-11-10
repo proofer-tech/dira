@@ -18,6 +18,19 @@ import { track } from "@/lib/analytics";
 import { verifyAttachments, withAttachments } from "@/lib/attachments";
 import { writeEpic } from "@/lib/epic";
 import { listEpics, refreshKnownRefs, resolveMarkdownRefs } from "@/lib/epics";
+import {
+  deleteTicketOp,
+  dispatchPollingNowOp,
+  extendPollingOp,
+  followupOp,
+  retryBackoffOp,
+  saveFrontmatterOp,
+  saveTicketOp,
+  setEpicOp,
+  ticketCtx,
+  type EditResult,
+  type TicketCtx,
+} from "@/lib/ops/ticket";
 import { findTicket, unassign, type UnassignRun } from "@/lib/engine";
 import { retryBackoffNow } from "@/lib/backoff-control";
 import { followup, type FollowupResult } from "@/lib/followup";
@@ -50,6 +63,21 @@ import {
 import { getProject, readLanguage, resolveConfig } from "@/lib/projects";
 
 export type SaveState = { ok?: boolean; error?: string };
+
+async function ctxOf(projectId: string): Promise<TicketCtx> {
+  const locale = await readLanguage();
+  const project = await getProject(projectId);
+  if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
+  return ticketCtx(project, locale);
+}
+
+/** op 결과를 화면 상태로 바꾸고 상세와 보드를 다시 그리게 한다. */
+function afterEdit(projectId: string, r: EditResult): SaveState {
+  if (!r.ok) return { error: r.error };
+  revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
+  revalidatePath(`/p/${projectId}/board`);
+  return { ok: true };
+}
 
 type Target = {
   root: string;
@@ -270,16 +298,9 @@ export async function sendFollowup(
   attachments: string[] = [],
 ): Promise<FollowupResult> {
   try {
-    const locale = await readLanguage();
-    const project = await getProject(projectId);
-    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
-    const config = await resolveConfig(project);
-    const attached = await verifyAttachments(project, attachments, locale);
-    const r = await followup(project.root, config, stem, withAttachments(text, attached), locale);
-    if (r.ok) {
-      revalidatePath(`/p/${projectId}/board`);
-      await kickIdleWorker(project.root); // §4-5 — 이어받기는 **새 열린 티켓 한 장**이다
-    }
+    const c = await ctxOf(projectId);
+    const r = await followupOp(c, stem, text, attachments);
+    if (r.ok) revalidatePath(`/p/${projectId}/board`);
     return r;
   } catch (e) {
     // 여기 오는 건 프로젝트 조회·설정 해석이 던진 것뿐이다 — 모드 어긋남이 아니므로 `other`다.
@@ -310,60 +331,15 @@ export async function saveTicket(_prev: SaveState, form: FormData): Promise<Save
   const projectId = String(form.get("project") ?? "");
   const hash = String(form.get("hash") ?? "");
   try {
-    const locale = await readLanguage();
-    const t2 = await target(projectId, hash);
-    if (t2.state !== "open") return { error: lockedReason(t2.state, locale) };
-
-    const title = fmValue(locale, t(locale, "ticketDetail.titleFieldName"), String(form.get("title") ?? ""));
-    if (!title) return { error: t(locale, "ticketDetail.titleRequired") };
-    const kind = fmValue(locale, "kind", String(form.get("kind") ?? ""));
-    // §5-5 §할당 입구 둘 — select 값은 `persona:<이름>`/`squad:<이름>` 접두사고, 서버가 쓰는 키는
-    // 정확히 하나다. 스쿼드를 고르면 `squad:`를 쓰고 `persona:` 줄을 지운다(반대도 같다) —
-    // 아래 `writeTicket`의 `undefined`가 그 줄을 통째로 지운다.
-    let assignment: { persona: string; squad: string };
-    try {
-      assignment = parseAssignment(String(form.get("persona") ?? ""));
-    } catch (e) {
-      return { error: (e as Error).message };
-    }
-
-    // select라 항상 1~5가 오지만, 요청은 손으로도 만들 수 있다 — 범위 밖·정수 아님은 조용히
-    // 기본값으로 내린다(§1-3 §값을 넣는 자리 셋. `priority_of`가 어차피 3으로 읽는 값이라
-    // 신뢰 경계 위반이 아니다).
-    const priorityNum = Number(form.get("priority"));
-    const priority = String(
-      Number.isInteger(priorityNum) && priorityNum >= PRIORITY_MIN && priorityNum <= PRIORITY_MAX
-        ? priorityNum
-        : PRIORITY_DEFAULT,
-    );
-
-    // `datetime-local`이 오프셋 없는 ISO 8601을 낸다 — 그대로 한 줄이다(§1-4 §값. 새 파서를
-    // 안 만든다, 못 읽는 값은 엔진이 WARN + 마감 없음으로 관대하게 받는다). 비우면 **줄 자체를
-    // 지운다**(writeTicket의 undefined) — 빈 값으로 두면 duedateOf가 WARN을 낸다.
-    const duedateRaw = String(form.get("duedate") ?? "").trim();
-
-    // textarea는 CRLF로 온다(HTML 폼 규격). 그대로 쓰면 파일 전체 줄끝이 갈린다.
-    // 구분 빈 줄·끝 개행은 붙이지 않는다 — `writeTicket`이 되씌운다(§2 §원문의 양끝).
-    const body = String(form.get("body") ?? "").replace(/\r\n/g, "\n");
-
-    await writeTicket(
-      t2.path,
-      {
-        title,
-        kind,
-        persona: assignment.squad ? undefined : assignment.persona,
-        squad: assignment.squad || undefined,
-        priority,
-        duedate: duedateRaw || undefined,
-      },
-      body,
-    );
-    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t2.stem)}`);
-    revalidatePath(`/p/${projectId}/board`); // 보드의 title·kind·persona 컬럼
-    // §4-5 — 편집으로 persona가 붙거나 deps 한 줄이 빠지면 그 순간 디스패치 가능해진다.
-    // "정말 가능해졌나"는 판정하지 않는다(그러면 §큐 판정이 두 벌이다) — 그냥 tick 한 번이다.
-    await kickIdleWorker(t2.root);
-    return { ok: true };
+    const r = await saveTicketOp(await ctxOf(projectId), hash, {
+      title: String(form.get("title") ?? ""),
+      kind: String(form.get("kind") ?? ""),
+      persona: String(form.get("persona") ?? ""),
+      priority: form.get("priority"),
+      duedate: String(form.get("duedate") ?? ""),
+      body: String(form.get("body") ?? ""),
+    });
+    return afterEdit(projectId, r);
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -380,20 +356,10 @@ export async function saveTicketFrontmatter(_prev: SaveState, form: FormData): P
   const hash = String(form.get("hash") ?? "");
   const head = String(form.get("head") ?? "");
   try {
-    const t = await target(projectId, hash);
-    if (t.state !== "open") return { error: lockedReason(t.state, await readLanguage()) };
-
-    const text = await readFile(t.path, "utf8");
-    const { fm, lines, end } = readFm(text);
+    const c = await ctxOf(projectId);
     const rows = parseFrontmatterHead(head).rows;
-    const updates = ticketFrontmatterUpdates(fm, rows);
-    const body = stripBodyEnds(lines.slice(end + 1)).join("\n");
-    await writeTicket(t.path, updates, body);
-
-    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(t.stem)}`);
-    revalidatePath(`/p/${projectId}/board`);
-    await kickIdleWorker(t.root);
-    return { ok: true };
+    const r = await saveFrontmatterOp(c, hash, (fm) => ticketFrontmatterUpdates(fm, rows, c.locale));
+    return afterEdit(projectId, r);
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -418,11 +384,7 @@ export async function setTicketEpic(
   epic: string,
 ): Promise<EpicDropResult> {
   try {
-    const locale = await readLanguage();
-    const project = await getProject(projectId);
-    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
-    const config = await resolveConfig(project);
-    const r = await writeEpic(project.root, config, hash, epic);
+    const r = await setEpicOp(await ctxOf(projectId), hash, epic);
     if (!r.ok) return r;
     revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
     revalidatePath(`/p/${projectId}/board`);
@@ -474,16 +436,8 @@ export async function unassignTicket(
  *  그 티켓이 바로 물린다. */
 export async function dispatchPollingNowAction(projectId: string, hash: string): Promise<SaveState> {
   try {
-    const locale = await readLanguage();
-    const project = await getProject(projectId);
-    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
-    const config = await resolveConfig(project);
-    const r = await dispatchPollingNow(project.root, config, hash, locale);
-    if (!r.ok) return { error: r.error };
-    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
-    revalidatePath(`/p/${projectId}/board`);
-    await kickIdleWorker(project.root);
-    return { ok: true };
+    const c = await ctxOf(projectId);
+    return afterEdit(projectId, await dispatchPollingNowOp(c, hash));
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -493,15 +447,8 @@ export async function dispatchPollingNowAction(projectId: string, hash: string):
  *  것이라 `kickIdleWorker`는 안 부른다(디스패치할 것이 없다). */
 export async function extendPollingUntilAction(projectId: string, hash: string, until: string): Promise<SaveState> {
   try {
-    const locale = await readLanguage();
-    const project = await getProject(projectId);
-    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
-    const config = await resolveConfig(project);
-    const r = await extendPollingUntil(project.root, config, hash, until, new Date(), locale);
-    if (!r.ok) return { error: r.error };
-    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
-    revalidatePath(`/p/${projectId}/board`);
-    return { ok: true };
+    const c = await ctxOf(projectId);
+    return afterEdit(projectId, await extendPollingOp(c, hash, until));
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -515,16 +462,8 @@ export async function extendPollingUntilAction(projectId: string, hash: string, 
  *  조작 한 번만 하고 결과를 그대로 돌려준다. */
 export async function retryBackoffNowAction(projectId: string, hash: string): Promise<SaveState> {
   try {
-    const locale = await readLanguage();
-    const project = await getProject(projectId);
-    if (!project) throw new Error(`${t(locale, "ticketDetail.unknownProjectPrefix")} ${projectId}`);
-    const config = await resolveConfig(project);
-    const r = await retryBackoffNow(project.root, config, hash, locale);
-    if (!r.ok) return { error: r.error };
-    revalidatePath(`/p/${projectId}/tickets/${encodeURIComponent(r.stem)}`);
-    revalidatePath(`/p/${projectId}/board`);
-    await kickIdleWorker(project.root);
-    return { ok: true };
+    const c = await ctxOf(projectId);
+    return afterEdit(projectId, await retryBackoffOp(c, hash));
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -643,13 +582,9 @@ export type DeleteResult = { ok: boolean; message?: string };
  *  `432f9c40`). 완료를 정리해야 하면 터미널에서 지운다 — 화면이 대신 눌러주지 않는다. */
 export async function deleteTicket(projectId: string, hash: string): Promise<DeleteResult> {
   try {
-    const t = await target(projectId, hash);
-    if (t.state !== "open") {
-      return { ok: false, message: deleteLockedMessage(await readLanguage(), t.state) };
-    }
-    await unlink(t.path);
-    revalidatePath(`/p/${projectId}/board`);
-    return { ok: true };
+    const r = await deleteTicketOp(await ctxOf(projectId), hash);
+    if (r.ok) revalidatePath(`/p/${projectId}/board`);
+    return r;
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }

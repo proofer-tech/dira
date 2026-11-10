@@ -63,6 +63,23 @@ const COVERED: Record<string, string> = {
   importPersonaAction: "market_import", importSquadAction: "market_import", previewMarketUpdateAction: "market_update_preview",
   deployPersonaAction: "market_deploy_persona", missingSquadMembersAction: "market_missing_members",
   deploySquadAction: "market_deploy_squad",
+  saveTicket: "ticket_save",
+  saveTicketFrontmatter: "ticket_frontmatter_set",
+  setTicketEpic: "ticket_epic_set",
+  deleteTicket: "ticket_delete",
+  sendFollowup: "ticket_followup",
+  dispatchPollingNowAction: "polling_dispatch_now",
+  extendPollingUntilAction: "polling_extend",
+  retryBackoffNowAction: "backoff_retry_now",
+  createOntologyAction: "ontology_create",
+  deleteOntologyAction: "ontology_delete",
+  renameOntologyAction: "ontology_rename",
+  fixOntologySchemaAction: "ontology_fix_schema",
+  publishOntologyMigrationAction: "ontology_publish_migration",
+  publishOntologyImportAction: "ontology_publish_import",
+  submitOntologySurveyAction: "ontology_survey_submit",
+  loadOntologyMetricsAction: "ontology_metrics",
+  readEmergencyStopAction: "emergency_stop_get",
 };
 
 /** 안 채우는 것(스펙 §안 하는 것). 값은 사유다. */
@@ -109,13 +126,6 @@ const PENDING: Record<string, string> = {
   renameProtocolAction: "P559-7", createEpic: "P559-7", saveEpicReadmeAction: "P559-7", deleteEpicMemoryAction: "P559-7",
   listCommandsAction: "P559-7", createCommandAction: "P559-7", updateCommandAction: "P559-7",
   deleteCommandAction: "P559-7", lastCommandRunAction: "P559-7", createSchedule: "P559-7", deleteSchedule: "P559-7",
-  // P559-8
-  saveTicket: "P559-8", saveTicketFrontmatter: "P559-8", setTicketEpic: "P559-8", deleteTicket: "P559-8",
-  sendFollowup: "P559-8", dispatchPollingNowAction: "P559-8", extendPollingUntilAction: "P559-8",
-  retryBackoffNowAction: "P559-8", createOntologyAction: "P559-8", deleteOntologyAction: "P559-8",
-  renameOntologyAction: "P559-8", fixOntologySchemaAction: "P559-8", publishOntologyMigrationAction: "P559-8",
-  publishOntologyImportAction: "P559-8", submitOntologySurveyAction: "P559-8", loadOntologyMetricsAction: "P559-8",
-  readEmergencyStopAction: "P559-8",
 };
 
 function actionFiles(dir: string): string[] {
