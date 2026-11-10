@@ -9061,12 +9061,12 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 담당 | deps | 상태 |
 |---|---|---|---|---|
-| P560-1 | `testkit.py` 하네스 + 러너, `conftest.py` 삭제, (가) 6장을 하네스 `dryrun`으로 옮겨 통과 | developer | - | 대기 |
-| P560-2 | (나)(다) 13장 단독 실행 판정 - 테스트 원인은 고치고 엔진 회귀는 티켓으로 넘긴다 | developer | - | 대기 |
-| P560-3 | `test_prompt.py` 7 -> 1 | developer | P560-1 | 대기 |
-| P560-4 | `test_reap.py` 5 -> 1, `test_migrate.py` 4 -> 1 | developer | P560-1 | 대기 |
-| P560-5 | `test_fixed_engine.py` 4 -> 1, `test_push_ship.py` - `test_unassign.py` 4 -> 2 | developer | P560-1 | 대기 |
-| P560-6 | `ci.yml`을 러너로 바꾸고 제외 목록을 적는다 | developer | P560-2, P560-3, P560-4, P560-5 | 대기 |
+| P560-1 | `testkit.py` 하네스 + 러너, `conftest.py` 삭제, (가) 6장을 하네스 `dryrun`으로 옮겨 통과 | developer | - | 발행 `b1c7fc8f` |
+| P560-2 | (나)(다) 13장 단독 실행 판정 - 테스트 원인은 고치고 엔진 회귀는 티켓으로 넘긴다 | developer | - | 발행 `9f367f6d` |
+| P560-3 | `test_prompt.py` 7 -> 1 | developer | P560-1 | 발행 `2de81625` |
+| P560-4 | `test_reap.py` 5 -> 1, `test_migrate.py` 4 -> 1 | developer | P560-1 | 발행 `8a07b8fe` |
+| P560-5 | `test_fixed_engine.py` 4 -> 1, `test_push_ship.py` - `test_unassign.py` 4 -> 2 | developer | P560-1 | 발행 `8a8f45c5` |
+| P560-6 | `ci.yml`을 러너로 바꾸고 제외 목록을 적는다 | developer | P560-2, P560-3, P560-4, P560-5 | 발행 `2f6c368c` |
 
 #### 수용조건
 
