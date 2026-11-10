@@ -93,7 +93,6 @@ import {
   setMultiplayEnabled,
   isMultiTokenAllowed,
   setMultitoken,
-  validateOntologyInput,
   type Project,
   type ProjectConfig,
 } from "@/lib/projects";
@@ -122,6 +121,7 @@ import {
   statusOf,
   type Ticket,
 } from "@/lib/queue";
+import { setIntegrationBranch } from "@/lib/ops/settings";
 import { createProjectOp, type CreateResult } from "@/lib/ops/project";
 import {
   cronRegisterCmd,
@@ -129,8 +129,6 @@ import {
   markAlertsRead,
   readIntegrationBranch,
   registerCron,
-  writeIntegrationBranch,
-  writeOntology,
 } from "@/lib/workers";
 import { tildePath } from "@/lib/urls";
 import {
@@ -899,8 +897,7 @@ export async function saveIntegrationBranchAction(
   try {
     const project = await getProject(id);
     if (!project) throw new Error(`${t(locale, "resolve.unknownProjectPrefix")} ${id}`);
-    const branch = value.trim();
-    const changed = await writeIntegrationBranch(project.root, branch, locale);
+    const { branch, changed } = await setIntegrationBranch(project.root, value, locale);
     revalidatePath(`/p/${id}`, "layout");
     return { ok: true, branch, changed };
   } catch (e) {

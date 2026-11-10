@@ -14,6 +14,11 @@ const ENGINE_MCP = path.join(APP, "..", "..", "..", "mcp_tools.py");
 /** 액션 -> op 이름, 또는 `mcp:<파이썬 도구>`. */
 const COVERED: Record<string, string> = {
   createProject: "project_create",
+  saveIntegrationBranchAction: "project_settings_set",
+  saveOntologyAction: "project_ontology_set",
+  saveContextAction: "project_context_set",
+  saveCommonContextAction: "project_context_set",
+  copyContextAction: "project_context_copy",
   // 이미 파이썬 MCP 도구가 있다
   registerProject: "mcp:project_register",
   renameProjectAction: "mcp:project_rename",
@@ -81,9 +86,6 @@ const EXCLUDED: Record<string, string> = {
 
 /** 아직 안 옮긴 채움 행 -> 담당 행. P559-4~8이 옮기며 `COVERED`로 보내고 여기서 뺀다. */
 const PENDING: Record<string, string> = {
-  // P559-4
-  saveIntegrationBranchAction: "P559-4", saveOntologyAction: "P559-4", saveContextAction: "P559-4",
-  saveCommonContextAction: "P559-4", copyContextAction: "P559-4",
   // P559-5
   createWorkerAction: "P559-5", deleteWorkerAction: "P559-5", stopWorkerAction: "P559-5", retryWorktreeAction: "P559-5",
   registerWorkerAction: "P559-5", readWorkersPanelAction: "P559-5", applySelfHealAction: "P559-5",

@@ -14,7 +14,8 @@ import { track } from "@/lib/analytics";
 import { runWorker } from "@/lib/engine";
 import { DEFAULT_LOCALE, t, type Locale } from "@/lib/i18n";
 import { isName } from "@/lib/paths";
-import { getProject, validateOntologyInput } from "@/lib/projects";
+import { getProject } from "@/lib/projects";
+import { setOntology } from "@/lib/ops/settings";
 import {
   applyCommonSource,
   applyDispatchGate,
@@ -32,7 +33,6 @@ import {
   stopWorker,
   writeCommonContext,
   writeContext,
-  writeOntology,
   type EngineId,
   type WorkerContext,
   type WorktreePrep,
@@ -330,10 +330,7 @@ export async function saveOntologyAction(
   locale: Locale = DEFAULT_LOCALE,
 ): Promise<WorkerActionResult> {
   try {
-    const root = await rootOf(projectId, locale);
-    const trimmed = value.trim();
-    const resolved = trimmed ? await validateOntologyInput(root, trimmed, locale) : null;
-    await writeOntology(root, resolved);
+    await setOntology(await rootOf(projectId, locale), value, locale);
     revalidatePath(`/p/${projectId}`, "layout");
     return { ok: true };
   } catch (e) {
