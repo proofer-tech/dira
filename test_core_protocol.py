@@ -12,6 +12,8 @@ import shutil
 import tempfile
 import subprocess
 
+import testkit
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 WORKER = """\
@@ -32,10 +34,9 @@ def write(path, body):
 
 
 def dryrun(worker, local):
-    r = subprocess.run([worker, "dryrun"], capture_output=True, text=True,
-                       env=dict(os.environ, TICKET_LOCAL=local), timeout=60)
-    assert r.returncode == 0, "dryrun rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
-    return r.stdout + r.stderr
+    out = testkit.dryrun(worker, local)
+    assert out, "dryrun 출력이 비었다"
+    return out
 
 
 def warns(root):

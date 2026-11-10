@@ -17,6 +17,8 @@ import shutil
 import tempfile
 import subprocess
 
+import testkit
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 TICK = os.path.join(HERE, "tick.sh")
 
@@ -57,13 +59,9 @@ def write(path, body):
 
 
 def dryrun(worker, local, ontology=None):
-    env = dict(os.environ, TICKET_LOCAL=local, HOME=tmp)  # 엔진 사본 동기화가 진짜 ~/.config 를 두고 다른 tick 과 경합한다
-    env.pop("TICKET_ONTOLOGY", None)  # 이 세션 자신의 재정의 값을 물려받지 않는다(test_graph.py와 같은 격리)
-    if ontology is not None:
-        env["TICKET_ONTOLOGY"] = ontology
-    r = subprocess.run([worker, "dryrun"], capture_output=True, text=True, env=env, timeout=60)
-    assert r.returncode == 0, "dryrun rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
-    return r.stdout + r.stderr
+    out = testkit.dryrun(worker, local, home=tmp, ontology=ontology)
+    assert out, "dryrun 출력이 비었다"
+    return out
 
 
 def warns(root):

@@ -20,6 +20,8 @@ import shutil
 import tempfile
 import subprocess
 
+import testkit
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 TICK = os.path.join(HERE, "tick.sh")
 
@@ -60,10 +62,9 @@ def write(path, body):
 
 
 def dryrun(worker, local):
-    r = subprocess.run([worker, "dryrun"], capture_output=True, text=True,
-                       env=dict(os.environ, TICKET_LOCAL=local, HOME=tmp), timeout=60)  # 엔진 사본 동기화가 진짜 ~/.config 를 두고 다른 tick 과 경합한다
-    assert r.returncode == 0, "dryrun rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
-    return r.stdout + r.stderr
+    out = testkit.dryrun(worker, local, home=tmp)
+    assert out, "dryrun 출력이 비었다"
+    return out
 
 
 def warns(root):

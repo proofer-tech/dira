@@ -16,6 +16,8 @@ import shutil
 import tempfile
 import subprocess
 
+import testkit
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 TICK = os.path.join(HERE, "tick.sh")
 
@@ -56,10 +58,9 @@ def write(path, body):
 
 
 def dryrun(worker, local):
-    r = subprocess.run([worker, "dryrun"], capture_output=True, text=True,
-                       env=dict(os.environ, TICKET_LOCAL=local, HOME=os.path.dirname(local)), timeout=60)  # 실제 ~/.config/dira/bin 굽기와 다른 워커의 tmp 청소가 부딪히지 않게 HOME을 격리한다
-    assert r.returncode == 0, "dryrun rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
-    return r.stdout  # stderr 는 안 섞는다: 동시 tick 이 서로의 *.tmp.<pid> 를 지우는 경합 traceback 이 비결정적으로 끼기 때문이다
+    out = testkit.dryrun(worker, local, home=os.path.dirname(local), stderr=False)
+    assert out, "dryrun 출력이 비었다"
+    return out
 
 
 tmp = os.path.realpath(tempfile.mkdtemp())
