@@ -17,6 +17,10 @@ export async function register() {
   installProcessHandlers();
   registerShutdownHandlers(); // §11-1 §개정 — SIGTERM·SIGINT·정상 exit에서 열린 pty를 전부 죽인다
   if (isLandingOnly()) return; // 공개 배포는 등록된 프로젝트가 없다 — 레지스트리 읽기 0회
+  // P559: MCP가 화면 없이 부를 실행기 위치를 적는다(개발 서버 갈래). 실패해도 기동은 막지 않는다.
+  const { writeOpsJson } = await import("./lib/ops/location.ts");
+  // 번들 안의 import.meta.url은 소스 경로가 아니다 - 개발 서버의 cwd가 apps/teams다.
+  await writeOpsJson([process.execPath, `${process.cwd()}/lib/ops/cli.ts`]).catch(() => {});
   // P505: 미적용 마이그레이션이 있으면 러너를 분리 프로세스로 띄운다(기다리지 않는다 - 차단은 게이트, 화면은 오버레이).
   // mirrorCore보다 먼저다.
   const { ensureRunner } = await import("./lib/migrations.ts");

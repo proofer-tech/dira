@@ -122,7 +122,7 @@ import {
   statusOf,
   type Ticket,
 } from "@/lib/queue";
-import { preflight, scaffold } from "@/lib/scaffold";
+import { createProjectOp, type CreateResult } from "@/lib/ops/project";
 import {
   cronRegisterCmd,
   listWorkers,
@@ -348,43 +348,10 @@ export async function registerProject(
 
 // ── 새 프로젝트 생성 (DESIGN.md §0-3) ──────────────────────────────────────
 
-export type CreateState = RegisterState & {
-  /** `.dira`가 이미 있어서 **아무것도 만들지 않았다**(답변 4(b)). `queue`면 등록으로 보낸다. */
-  exists?: { queue: boolean; root: string; message: string };
-  /** 만든 것 — 해석 결과 표 위에 얹는 세 줄. `cron: false`면 파일은 다 있고 등록만 실패한 것이다. */
-  created?: {
-    root: string;
-    repo: string;
-    written: number;
-    skipped: string[];
-    cron: boolean;
-    cronError?: string;
-    registerCmd: string;
-    /** 온톨로지 자리 칸을 채웠는데 거절됐다(§0-3 §온톨로지 자리를 만들 때 정한다). `cronError`와
-     *  같은 규약 — 만들기는 되돌리지 않고, 사유와 함께 온톨로지 화면에서 다시 정하라고 안내한다. */
-    ontologyError?: string;
-    /** 받는 트리의 `receive.denyCurrentBranch`가 이미 다른 값이라 안 건드렸다(결정 6) — 값을
-     *  그대로 보여준다. 실패는 여기 안 뜬다(`.gitignore`와 같은 처분 — 조용히 넘어간다). */
-    denyCurrentBranchNote?: string;
-    /** 저장소 생성이 실패한 사유 한 줄(P493) - 만들기는 막지 않는다. */
-    gitRepoError?: string;
-    /** `dira_apm.py install` 실패 사유 한 줄(P506-4) - 만들기는 막지 않는다. */
-    apmError?: string;
-    /** 새 프로젝트가 스킬 다섯을 받아서 태어난 결과(§새 프로젝트가 스킬을 갖고 태어난다, 결정 9)
-     *  — 깐 수 · 이미 있어 건너뛴 수 · 실패한 수. 등록 경로(`registerProject`)는 이 자리 자체가
-     *  없다(스킬을 하나도 안 깐다, 결정 1). */
-    skills: { installed: number; skipped: number; failed: number };
-  };
-};
+export type CreateState = RegisterState & Pick<CreateResult, "exists" | "created">;
 
-/** 없는 큐를 만든다: `preflight` → `scaffold` → `registerCron(w1.sh)` → `addProject`.
- *  스캐폴딩에서 멈추지 않고 crontab 등록까지 가는 것이 이 기능이다 — 등록 단위는 `cronLine`의
- *  **두 줄**(`* * * * *` + `* * * * * sleep 30;`)이라 만든 직후 30초 뒤에 디스패치가
- *  시작된다(§0-3 답변 1(c)).
- *
- *  **어느 단계에서 실패해도 만든 파일을 되돌리지 않는다**(§0-3). 그 경로에 사람의 파일이 있을 수
- *  있고, `wx`로 덮지 않는 것이 이 기능의 유일한 방어다. crontab 등록 실패는 성공 보고를 막지
- *  않는다(§4 워커 생성과 같은 규약) — 사유와 등록 명령을 결과에 담고 사람이 셸에서 마무리한다. */
+/** 없는 큐를 만든다. 본체는 `lib/ops/project.ts`(MCP 실행기와 공유, P559-1)이고 여기는 화면용 껍데기다:
+ *  `done` 보기와 `revalidatePath`만 더한다. */
 export async function createProject(
   name: string,
   projectDir: string,
@@ -393,123 +360,14 @@ export async function createProject(
   ontology?: string,
   id?: string,
 ): Promise<CreateState> {
-  let created: CreateState["created"] | undefined;
   const locale = await readLanguage();
-  // 한국어 갈래는 화면 언어가 정한다(P483) — 만들기 폼에 체크 칸이 없다.
-  const korean = locale === "ko";
+  const { project, ...state } = await createProjectOp({ path: projectDir, name, branch, specDoc, ontology, id }, locale);
+  if (!project) return state;
   try {
-    if (!branch.trim()) {
-      // 비면 push 절차가 자리표시자로 남아 세션이 추측한다(§0-3 자리표시자 표).
-      return { error: { code: "branch", message: t(locale, "project.branchRequired") } };
-    }
-    const pre = await preflight(projectDir, locale);
-    if (!pre.ok) return { exists: { queue: pre.queue, root: pre.root, message: pre.message } };
-
-    const made = await scaffold(
-      projectDir,
-      {
-        branch: branch.trim(),
-        specDoc: specDoc.trim() || undefined,
-      },
-      locale,
-    );
-
-    // 온톨로지 자리 (§0-3 §온톨로지 자리를 만들 때 정한다) — scaffold 다음, registerCron 앞.
-    // 비면 아무것도 안 쓴다(0바이트). 거절돼도 만들기를 안 되돌린다 — cronError와 같은 규약으로
-    // 사유만 결과에 담는다. 검증도 쓰기도 저장 액션(workers/actions.ts)이 이미 쓰는 그 함수다.
-    let ontologyError: string | undefined;
-    const ontologyInput = ontology?.trim();
-    if (ontologyInput) {
-      try {
-        const resolved = await validateOntologyInput(made.root, ontologyInput, locale);
-        await writeOntology(made.root, resolved);
-      } catch (e) {
-        ontologyError = (e as Error).message;
-      }
-    }
-
-    const workerPath = path.join(made.root, "workers", "w1.sh");
-    const cronError = await registerCron(workerPath).then(
-      () => undefined,
-      (e: Error) => e.message,
-    );
-    created = {
-      root: made.root,
-      repo: made.repo,
-      written: made.written.length,
-      skipped: made.skipped,
-      cron: !cronError,
-      cronError,
-      ontologyError,
-      denyCurrentBranchNote: made.denyCurrentBranchNote,
-      gitRepoError: made.gitRepoError,
-      apmError: made.apmError,
-      registerCmd: cronRegisterCmd({ path: workerPath }),
-      skills: { installed: 0, skipped: 0, failed: 0 },
-    };
-
-    const project = await addProject(name, made.root, id?.trim() || undefined, locale);
-    // 스캐폴딩만 되고 등록이 실패하면 여기 안 온다 — 프로젝트가 하나 는 것이 이 이벤트다(§0-11).
-    void track("project_add", { method: "create" });
-
-    // 새 프로젝트는 페르소나 색을 갖고 태어난다(§새 프로젝트의 페르소나가 색을 갖고 태어난다,
-    // 결정 5) — 실패해도 생성 자체는 막지 않는다. `.gitignore` 한 줄과 같은 처분이다.
-    try {
-      const names = await personaNames(path.join(made.root, "personas"));
-      const colors = assignPersonaColors(names);
-      for (const [persona, color] of Object.entries(colors)) {
-        await setPersonaColor(project.id, persona, color, locale);
-      }
-    } catch {
-      // 색 없이 태어난 프로젝트는 종전 모습 그대로다 — 사람이 눌러서 고르면 된다.
-    }
-
-    // 새 프로젝트는 스킬을 받아서 태어난다(§새 프로젝트가 스킬을 갖고 태어난다, 결정 8-9 +
-    // §새 프로젝트가 한국어 갈래를 고르면 noslop 셋을 같이 받는다, 결정 3-4, P483) — 실패해도 생성
-    // 자체는 막지 않는다. `.gitignore` 한 줄과 같은 처분이다. 동시에 받는다(결정 8) — 직렬이면
-    // 최악이 §5-1 타임아웃 곱하기 행 수다.
-    try {
-      // 한국어 갈래가 꺼졌으면 린터를 물을 이유가 없다 — 켜졌을 때만 한 번 확인한다(§결정 3-4).
-      const linterOk = korean ? await hasNoslopLinter() : false;
-      const targets = DEFAULT_SKILLS.filter((s) => !s.requiresKorean || (korean && linterOk));
-      const results = await Promise.allSettled(
-        targets.map(async (s) => installSkill(await fetchSkillFromAddress(s.address, locale), undefined, locale)),
-      );
-      const conflictMessage = t("ko", "persona.skill.installNameConflict");
-      let installedN = 0;
-      let skippedN = 0;
-      let failedN = 0;
-      for (const r of results) {
-        if (r.status === "fulfilled") installedN++;
-        // 이름이 이미 있어 나는 mkdir EEXIST(installSkill의 SkillInstallError)는 실패가 아니라
-        // 건너뜀이다(답 2-1(a)) — 사람이 쓰던 것이 이긴다.
-        else if (r.reason instanceof SkillInstallError && r.reason.message === conflictMessage) skippedN++;
-        else failedN++;
-      }
-      created.skills = { installed: installedN, skipped: skippedN, failed: failedN };
-      const installed = await listInstalledSkills();
-      const skillPersonas = await personaNames(path.join(made.root, "personas"));
-      for (const persona of skillPersonas) {
-        await writePersonaSkills(
-          path.join(made.root, "personas"),
-          persona,
-          defaultSkillsFor(persona, installed, korean),
-        );
-      }
-    } catch {
-      // 스킬 없이 태어난 프로젝트는 종전 모습 그대로다 — `skills.md`가 0장일 뿐이다.
-    }
-
     revalidatePath("/", "layout");
-    return { created, done: await viewOf(project, locale) };
+    return { ...state, done: await viewOf(project, locale) };
   } catch (e) {
-    const state: CreateState = { ...fail(e), created };
-    // 파일은 이미 놓였는데 레지스트리 등록만 실패한 경우(이름 없음·id 중복 …). 만든 것을 지우지
-    // 않으므로 다음 행동은 "다시 만들기"가 아니라 "그 경로를 등록하기"다.
-    if (created && state.error) {
-      state.error.message += ` ${t(locale, "project.createdRegisterFailedPrefix")} ${created.root}${t(locale, "project.createdRegisterFailedSuffix")}`;
-    }
-    return state;
+    return { ...fail(e), created: state.created };
   }
 }
 
