@@ -41,6 +41,11 @@ MCP를 지원하는 클라이언트(Claude Code, Claude Desktop, Cursor 등)에�
 | `settings_set` | 이 컴퓨터의 설정 중 인자로 준 것만 바꿉니다 |
 | `project_settings_get` | 큐 하나의 통합 브랜치, `쉬는 동안 작업 트리 비우기` 상태, 워커 목록을 읽습니다 |
 | `project_slim` | 큐 하나의 `쉬는 동안 작업 트리 비우기`를 켜거나 끕니다 |
+| `ops_status` | 실행기 도구가 붙어 있는지 알려 줍니다. 아래 [화면 없이 프로젝트를 만들고 설정하기](#화면-없이-프로젝트를-만들고-설정하기) |
+
+프로젝트 만들기, 워커 추가, 페르소나 편집처럼 원래 화면에서만 하던 일은 실행기 도구로 따로 붙습니다.
+`project_create`부터 `ticket_save`까지 이름이 많아서 위 표 대신
+[실행기 도구 목록](#실행기-도구-목록)에 무리별로 모았습니다.
 
 이 표에 없는 작업은 `engine_exec`로 합니다. `program`에 아래 허용목록 중 하나를, `args`에 인자
 배열을 줍니다. 셸을 거치지 않고 실행하며 결과는 `{rc, stdout, stderr}`로 돌아옵니다. 시간
@@ -206,24 +211,138 @@ MCP를 지원하는 클라이언트(Claude Code, Claude Desktop, Cursor 등)에�
 거절되어도 켜짐은 저장되고, 거절 사유는 응답의 `message`에 실립니다. 화면 스위치와 같습니다. 응답의
 나머지는 바꾼 뒤의 작업 트리 비우기 상태입니다.
 
-#### MCP로 바꾸지 않는 것
+새 프로젝트 만들기, 워커 만들기와 지우기, 통합 브랜치 바꾸기는 이 절의 도구가 아니라 실행기 도구가
+합니다. 다음 절을 보세요.
 
-아래는 화면에서만 합니다. 파일 하나만 쓰면 끝나는 일이 아니라서 MCP에 넣지 않았습니다.
+### 화면 없이 프로젝트를 만들고 설정하기
 
-- 새 프로젝트 만들기. 큐 디렉터리와 git 저장소를 만들고 cron에 등록하는 일이 함께 돕니다. 화면에서
-  만들거나, 이미 만든 큐를 `project_register`로 등록하세요.
-- 워커 만들기와 지우기. 워크트리를 만들고 cron에 등록하는 일이 함께 돕니다. 이미 있는 워커를 돌리는
-  일은 `dispatch` 같은 기존 도구가 합니다.
-- 통합 브랜치 바꾸기. 이름을 바꾸면 그 이름이 쓰인 자리 여럿을 화면이 함께 고칩니다. MCP에서는
-  `project_settings_get`으로 읽기만 합니다.
-- 토큰과 계정, 엔진 프로필, 웹훅, Vercel, 이기적 모드, 키설정, 페르소나 색, 사용 통계. 사용 통계는
-  사람이 직접 동의하는 설정이라 에이전트가 켜고 끄는 길을 두지 않았습니다.
+dira 화면을 켜지 않고도 다른 에이전트가 MCP만으로 새 프로젝트를 만들고 워커까지 세울 수 있습니다. 이
+일을 하는 도구를 실행기 도구라고 부릅니다. 실행기 도구는 화면의 버튼이 부르는 함수를 그대로 부르므로,
+같은 입력이면 화면에서 만든 프로젝트와 같은 파일이 생깁니다.
+
+에이전트에게는 이렇게 맡기면 됩니다.
+
+> dira MCP로 `~/Projects/shop`에 프로젝트를 만들어 줘. 이름은 `shop`, 통합 브랜치는 `dev`야. 온톨로지
+> 위치는 `~/Drive/shop-ontology`로 하고, 모든 워커가 `docs/DESIGN.md`를 참조 자료로 읽게 해 줘.
+> 워커는 하나 더 만들어서 두 개로 맞춰 줘.
+
+#### 먼저 앱을 한 번 켭니다
+
+실행기 도구는 앱을 한 번 켠 뒤에 붙습니다. 앱이 뜰 때 실행기의 위치를 `~/.config/dira/ops.json`에
+적어 두고, MCP 서버는 이 파일을 보고 실행기를 부릅니다. 파일이 한 번 생기면 그 뒤로는 앱을 닫아도
+실행기 도구가 동작합니다. 화면 서버를 거치지 않고 실행기가 혼자 돌기 때문입니다.
+
+붙어 있는지는 `ops_status`로 확인합니다. 인자는 없습니다.
+
+| 키 | 뜻 |
+|---|---|
+| `available` | `true`면 실행기 도구를 쓸 수 있습니다 |
+| `argv` | MCP 서버가 실행기를 띄우는 명령입니다 |
+| `error` | `available`이 `false`인 사유입니다. 파일이 없으면 앱을 한 번 켜면 생긴다는 문장이 옵니다 |
+
+`available`이 `false`면 dira 앱을 한 번 켰다가 닫으세요. 그래도 도구 목록에 `project_create`가 보이지
+않으면 클라이언트에서 dira MCP 서버를 다시 연결합니다. MCP 서버는 클라이언트가 도구 목록을 받을 때
+실행기에 목록을 물어 붙이므로, 이미 받아 둔 목록에는 새 도구가 없습니다. `available`이 `false`여도
+`queue_list`나 `ticket_create` 같은 위 표의 도구는 그대로 동작합니다.
+
+실행기 도구가 실패하면 실행기가 돌려준 오류 문장이 도구 오류로 그대로 옵니다. 호출 하나의 시간
+상한은 300초입니다. `project_create`는 스킬을 내려받으므로 네트워크 상태에 따라 오래 걸릴 수 있습니다.
+
+#### 프로젝트를 세우는 순서
+
+순서는 `project_create` -> `project_ontology_set` -> `project_context_set` -> `worker_create`입니다.
+`project_create` 다음부터는 프로젝트를 `id`(레지스트리 id)나 `root`(큐 루트) 중 하나로 고릅니다.
+
+**1. `project_create`로 만듭니다.** 화면의 새 프로젝트 폼과 같은 일을 합니다. `.dira`를 만들고, 워커
+`w1`을 crontab에 올리고, 앱의 프로젝트 목록에 등록하고, 기본 스킬을 깝니다.
+
+| 인자 | 화면 칸 | 넣는 것 |
+|---|---|---|
+| `path` | `프로젝트 폴더` | `.dira`의 부모 폴더입니다. 없으면 만듭니다 |
+| `name` | `이름` | 화면에 보일 이름입니다 |
+| `branch` | `통합 브랜치` | 세션이 결과를 올릴 브랜치입니다. 비우면 오류입니다 |
+| `ontology` | `온톨로지 위치` | 선택입니다. 온톨로지 폴더 경로입니다 |
+| `specDoc` | `스펙 문서` | 선택입니다. `docs/DESIGN.md` 같은 스펙 파일 경로입니다 |
+| `id` | `URL 조각` | 선택입니다. 빼면 이름으로 만듭니다 |
+
+결과에는 `error` `exists` `created` 중 하나가 실립니다.
+
+- `error`는 입력이 틀렸다는 뜻이고 아무것도 만들지 않았습니다.
+- `exists`는 그 폴더에 `.dira`가 이미 있다는 뜻이고, 이때도 아무것도 만들지 않았습니다. `queue`가
+  `true`면 이미 쓸 수 있는 큐이므로 `project_register`로 등록하세요.
+- `created`에는 만든 큐 루트 `root`가 실립니다. 다음 호출부터 이 값을 `root`로 씁니다. `cron`이
+  `false`면 파일은 다 만들었고 crontab 등록만 실패한 것입니다. 사유는 `cronError`에 있고, 손으로
+  등록하는 명령은 `registerCmd`에 있습니다. `ontologyError`가 있으면 온톨로지 위치만 정해지지 않은
+  것이니 다음 단계에서 다시 정합니다.
+
+**2. `project_ontology_set`으로 온톨로지 위치를 정합니다.** 인자는 `path` 하나이고 빈 문자열을 주면
+위치를 지웁니다. 화면에서 온톨로지 위치를 저장할 때와 같은 검사를 거칩니다. 1단계에서 `ontology`를 주었고
+`ontologyError`가 없었다면 이미 정해져 있으니, `project_ontology_get`으로 `value`만 확인하고 넘어가도
+됩니다.
+
+**3. `project_context_set`으로 참조 자료를 정합니다.** 참조 자료는 세션 프롬프트 끝에 붙는 파일
+목록입니다. `items`에 `[{path, desc}]`를 줍니다. `worker`를 빼면 모든 워커가 함께 읽는 공통 목록
+(`context.sh`)을 쓰고, `worker`에 `w1` 같은 이름을 주면 그 워커 파일의 `TICKET_CONTEXT`를 씁니다.
+준 `items`가 그 목록 전체를 대신하므로, 있던 항목을 남기려면 `project_context_get`으로 읽어서 함께
+줍니다. 한 워커의 목록을 다른 워커로 옮겨 적을 때는 `project_context_copy`에 `from`과 `to`를 줍니다.
+
+**4. `worker_create`로 워커를 늘립니다.** `name`에 `w2` 같은 이름을 줍니다. `engine` `model`
+`effort`는 선택이고, 빼면 화면처럼 `claude`와 `모델 지정 안 함`입니다. 워커 파일을 쓰고 crontab에
+올리고 워크트리를 만듭니다. `project_settings_get`의 `workers`에 새 이름이 보이면 끝난 것입니다.
+
+만든 뒤에 바꾸는 도구도 있습니다.
+
+- `project_settings_set`은 `integration_branch`와 `slim` 중 준 키만 바꿉니다. 통합 브랜치를 바꾸면
+  그 이름이 쓰인 큐 안의 자리들을 화면처럼 함께 고칩니다.
+- `worker_stop`과 `cron_unregister`는 워커의 crontab 줄만 빼고, `cron_register`는 그 줄을 다시
+  넣습니다. 워커 파일과 워크트리는 그대로 남습니다.
+- `worker_delete`는 워커를 지웁니다. 세션이 도는 중인 워커는 지우지 않고 오류로 끝납니다.
+
+#### 실행기 도구 목록
+
+이름은 화면의 무리별로 묶었습니다. `*`로 끝나는 이름은 그 접두사로 시작하는 도구 여럿을 뜻하며,
+정확한 이름과 인자는 `tools/list`에 나옵니다.
+
+| 무리 | 도구 |
+|---|---|
+| 프로젝트 만들기 | `project_create` |
+| 프로젝트 설정 | `project_settings_set` |
+| 온톨로지 위치와 참조 자료 | `project_ontology_get` `project_ontology_set` `project_context_get` `project_context_set` `project_context_copy` |
+| 워커 | `worker_list` `worker_create` `worker_delete` `worker_stop` `worker_retry_worktree` `cron_register` `cron_unregister` |
+| 워커 고치기 버튼 | `project_repair` - 고칠 것을 `kind`로 고릅니다 |
+| 페르소나 | `persona_*` |
+| 스쿼드 | `squad_*` |
+| 휴지통 | `trash_*` |
+| 스킬 | `skill_list` `skill_install` - 주소로 까는 것만 됩니다 |
+| 마켓 | `market_*` |
+| 프로토콜 | `protocol_*` |
+| 에픽 | `epic_*` |
+| 커맨드와 일정 | `command_*` `schedule_*` |
+| 티켓 편집 | `ticket_save` `ticket_frontmatter_set` `ticket_epic_set` `ticket_delete` `ticket_followup` `polling_dispatch_now` `polling_extend` `backoff_retry_now` |
+| 온톨로지 쓰기 | `ontology_save` `ontology_create` `ontology_delete` `ontology_rename` `ontology_fix_schema` `ontology_publish_migration` `ontology_publish_import` `ontology_survey_submit` `ontology_metrics` |
+| 비상 정지 | `emergency_stop_get` - 읽기만 합니다 |
+
+#### MCP로 안 되는 것
+
+아래는 화면에서만 합니다.
+
+- 비상 정지를 켜고 끄기. 사람이 세션을 멈추려고 거는 안전장치라서 에이전트가 풀 수 없게 두었습니다.
+  지금 켜져 있는지는 `emergency_stop_get`으로 읽습니다.
+- 자격 증명. 토큰과 계정, 엔진 프로필, 로그인 설정, Vercel, 웹훅이 여기에 듭니다. 비밀값이라
+  MCP 응답에 오가지 않게 했습니다.
+- 사용 통계 동의. 사람이 직접 동의하는 설정이라 에이전트가 켜고 끄는 길을 두지 않았습니다.
+- 화면 상호작용. 홈 대화, 터미널, 소스 컨트롤, 탐색기, 브라우저 탭, 이기적 모드, 키설정이 여기에
+  듭니다. 이 기능들은 화면의 상태를 다루므로 MCP로 열어도 에이전트가 할 수 있는 일이 늘지
+  않습니다. 에이전트는 셸과 git과 파일을 직접 쓰면 됩니다.
+- 파일 올리기. 스킬을 파일로 올려 까는 것과 티켓 첨부는 받지 않습니다. 스킬은 `skill_install`에
+  주소를 줍니다.
 
 ### 어느 큐인지 정하기
 
 모든 도구는 `root` 인자로 큐 루트(`<프로젝트>/.dira`)를 받습니다. 빠뜨리면 환경변수
 `TICKET_ROOT`를 쓰고 그것도 없으면 `root가 필요합니다`로 끝납니다. `awaiting_list` 하나만 예외로, `root`를 빼면 등록된 프로젝트 전부를 훑습니다. 프로젝트 도구 넷과
-`settings_get` `settings_set`은 큐를 고르지 않으므로 `root`를 받지 않습니다. 큐 루트를 모르면 `projects`부터
+`settings_get` `settings_set`은 큐를 고르지 않으므로 `root`를 받지 않습니다. 실행기 도구는 `root` 대신
+레지스트리 `id`를 받기도 하고, 앱에 등록되지 않은 큐는 다루지 않습니다. 큐 루트를 모르면 `projects`부터
 부르세요. 한 프로젝트만 다룰 거라면 클라이언트 설정에 `TICKET_ROOT`를 넣어 두는 편이 편합니다.
 
 ### MCP가 하지 않는 것

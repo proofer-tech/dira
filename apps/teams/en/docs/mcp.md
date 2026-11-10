@@ -43,6 +43,11 @@ Common operations are named tools.
 | `settings_set` | Changes only the settings of this computer you pass as arguments |
 | `project_settings_get` | Reads one queue's integration branch, `Empty the working tree while idle` state, and worker list |
 | `project_slim` | Turns one queue's `Empty the working tree while idle` on or off |
+| `ops_status` | Tells you whether the executor tools are attached. See [Creating and configuring a project without the screen](#creating-and-configuring-a-project-without-the-screen) |
+
+Work that used to be screen-only, such as creating a project, adding a worker, or editing a persona,
+attaches separately as executor tools. There are too many names for the table above, from
+`project_create` to `ticket_save`, so they are grouped in [Executor tool list](#executor-tool-list).
 
 Anything not in that table goes through `engine_exec`. Give `program` one entry from the allowlist
 below and `args` an array of arguments. It runs without a shell and returns `{rc, stdout, stderr}`.
@@ -227,21 +232,140 @@ you turn it on and emptying is refused, the setting is still saved as on and the
 the response's `message`, the same as the screen switch. The rest of the response is the
 working-tree emptying state after the change.
 
-#### What MCP does not change
+Creating a new project, creating and deleting workers, and changing the integration branch are done
+by the executor tools, not by the tools in this section. See the next section.
 
-The following are done on the screen only. Each takes more than writing one file, so they are not in
-MCP.
+### Creating and configuring a project without the screen
 
-- Creating a new project. Creating the queue directory and git repository and registering cron all
-  run together. Create it on the screen, or register a queue you already made with
-  `project_register`.
-- Creating and deleting workers. Creating the worktree and registering cron run together. Running an
-  existing worker is done by existing tools such as `dispatch`.
-- Changing the integration branch. Renaming it makes the screen also fix the several places where
-  that name is written. Over MCP you can only read it with `project_settings_get`.
-- Tokens and accounts, engine profiles, webhooks, Vercel, selfish mode, keyboard shortcuts, persona colors, and
-  usage statistics. Usage statistics is a setting a person consents to directly, so there is no way
-  for an agent to turn it on or off.
+Without opening the dira screen, another agent can create a new project and set up its workers over
+MCP alone. The tools that do this are called executor tools. They call the same functions the
+screen's buttons call, so the same input produces the same files as a project made on the screen.
+
+Hand it to an agent like this:
+
+> Use dira MCP to create a project in `~/Projects/shop`. Name it `shop`, integration branch `dev`.
+> Set the ontology location to `~/Drive/shop-ontology`, and have every worker read `docs/DESIGN.md`
+> as reference material. Add one more worker so there are two.
+
+#### Open the app once first
+
+The executor tools attach after you have opened the app once. On launch the app writes where the
+executor lives to `~/.config/dira/ops.json`, and the MCP server reads that file to call the executor.
+Once the file exists, the executor tools keep working after you close the app, because the executor
+runs on its own without the screen server.
+
+Check with `ops_status`. It takes no arguments.
+
+| Key | Meaning |
+|---|---|
+| `available` | `true` means the executor tools are usable |
+| `argv` | The command the MCP server uses to start the executor |
+| `error` | Why `available` is `false`. If the file is missing, it says the file appears once you open the app |
+
+If `available` is `false`, open the dira app once and close it. If the tool list still has no
+`project_create`, reconnect the dira MCP server in your client. The MCP server asks the executor for
+its tools when the client fetches the tool list, so a list fetched earlier won't have them. Even
+while `available` is `false`, the tools in the table above, such as `queue_list` and
+`ticket_create`, work as usual.
+
+When an executor tool fails, the error message from the executor comes back as the tool error,
+unchanged. Each call has a 300-second limit. `project_create` downloads skills, so it can take a
+while depending on the network.
+
+#### The order for setting up a project
+
+The order is `project_create` -> `project_ontology_set` -> `project_context_set` -> `worker_create`.
+After `project_create`, pick the project by either `id` (the registry id) or `root` (the queue root).
+
+**1. Create it with `project_create`.** This does what the screen's new project form does. It creates
+`.dira`, puts worker `w1` in crontab, registers the project in the app's project list, and installs
+the default skills.
+
+| Argument | Screen field | What goes in |
+|---|---|---|
+| `path` | `Project folder` | The parent folder of `.dira`. Created if missing |
+| `name` | `Name` | The name shown on the screen |
+| `branch` | `Integration branch` | The branch sessions push their results to. Empty is an error |
+| `ontology` | `Ontology location` | Optional. Path to the ontology folder |
+| `specDoc` | `Spec document` | Optional. Path to a spec file such as `docs/DESIGN.md` |
+| `id` | `URL slug` | Optional. Made from the name if omitted |
+
+The result carries one of `error`, `exists`, or `created`.
+
+- `error` means the input was wrong. Nothing was created.
+- `exists` means the folder already has a `.dira`. Nothing was created here either. If `queue` is
+  `true`, it is already a usable queue, so register it with `project_register`.
+- `created` carries the new queue root in `root`. Use it as `root` in the calls that follow. If
+  `cron` is `false`, every file was made and only the crontab registration failed. The reason is in
+  `cronError`, and the command to register by hand is in `registerCmd`. If `ontologyError` is
+  present, only the ontology location was not set; set it again in the next step.
+
+**2. Set the ontology location with `project_ontology_set`.** It takes one argument, `path`; an
+empty string clears the location. It runs the same checks as saving the ontology location on the
+screen. If you passed `ontology` in step 1 and got no `ontologyError`, it is already set, and
+checking `value` with `project_ontology_get` is enough.
+
+**3. Set reference material with `project_context_set`.** Reference material is the list of files
+appended to the end of the session prompt. Pass `items` as `[{path, desc}]`. Without `worker` it
+writes the shared list every worker reads (`context.sh`); with a worker name such as `w1` in
+`worker`, it writes that worker file's `TICKET_CONTEXT`. The `items` you pass replace the whole list,
+so to keep existing entries, read them with `project_context_get` and pass them along. To copy one
+worker's list to another, give `project_context_copy` a `from` and a `to`.
+
+**4. Add workers with `worker_create`.** Pass a name such as `w2` in `name`. `engine`, `model`, and
+`effort` are optional and default, as on the screen, to `claude` and `No model`. It writes the worker
+file, puts it in crontab, and creates the worktree. Once the new name shows up in
+`project_settings_get`'s `workers`, it is done.
+
+There are tools for changes after creation too.
+
+- `project_settings_set` changes only the keys you pass, out of `integration_branch` and `slim`.
+  Changing the integration branch also rewrites the places in the queue that use that name, as the
+  screen does.
+- `worker_stop` and `cron_unregister` remove only the worker's crontab line, and `cron_register` puts
+  it back. The worker file and worktree stay.
+- `worker_delete` deletes a worker. A worker with a running session is not deleted; the call fails
+  with an error.
+
+#### Executor tool list
+
+The names are grouped the way the screen groups them. A name ending in `*` stands for several tools
+starting with that prefix; `tools/list` has the exact names and arguments.
+
+| Group | Tools |
+|---|---|
+| Creating a project | `project_create` |
+| Project settings | `project_settings_set` |
+| Ontology location and reference material | `project_ontology_get` `project_ontology_set` `project_context_get` `project_context_set` `project_context_copy` |
+| Workers | `worker_list` `worker_create` `worker_delete` `worker_stop` `worker_retry_worktree` `cron_register` `cron_unregister` |
+| Worker fix buttons | `project_repair` - pick what to fix with `kind` |
+| Personas | `persona_*` |
+| Squads | `squad_*` |
+| Trash | `trash_*` |
+| Skills | `skill_list` `skill_install` - install by address only |
+| Market | `market_*` |
+| Protocols | `protocol_*` |
+| Epics | `epic_*` |
+| Commands and schedules | `command_*` `schedule_*` |
+| Ticket editing | `ticket_save` `ticket_frontmatter_set` `ticket_epic_set` `ticket_delete` `ticket_followup` `polling_dispatch_now` `polling_extend` `backoff_retry_now` |
+| Ontology writes | `ontology_save` `ontology_create` `ontology_delete` `ontology_rename` `ontology_fix_schema` `ontology_publish_migration` `ontology_publish_import` `ontology_survey_submit` `ontology_metrics` |
+| Emergency stop | `emergency_stop_get` - read only |
+
+#### What MCP can't do
+
+These stay on the screen.
+
+- Turning emergency stop on or off. It is the safety switch a person throws to stop sessions, so an
+  agent can't release it. Read whether it is on with `emergency_stop_get`.
+- Credentials: tokens and accounts, engine profiles, login setup, Vercel, and webhooks. These are
+  secrets, so they never pass through MCP responses.
+- Usage statistics consent. A person consents to it directly, so there is no way for an agent to
+  turn it on or off.
+- Screen interaction: the home conversation, terminal, source control, explorer, browser tabs,
+  selfish mode, and keyboard shortcuts. These handle screen state, so opening them over MCP would not
+  let an agent do anything more. An agent uses the shell, git, and files directly.
+- File uploads. Installing a skill from an uploaded file and ticket attachments are not accepted.
+  Give `skill_install` an address instead.
 
 ### Choosing the queue
 
@@ -249,6 +373,8 @@ Every tool takes the queue root (`<project>/.dira`) as `root`. Without it the to
 `TICKET_ROOT` environment variable, and without that it fails with `root가 필요합니다` (root is
 required). `awaiting_list` is the one exception: without `root` it scans every registered project.
 The four project tools and `settings_get` `settings_set` don't pick a queue, so they take no `root`.
+Executor tools also accept a registry `id` instead of `root`, and they don't handle queues that are
+not registered in the app.
 If you don't know the root, call `projects` first. If you only work one project, set
 `TICKET_ROOT` in the client's config.
 
