@@ -18,7 +18,7 @@ agy-gui 잡 걷기 자체검증(docs/design/요구-절.md §다른 사용자도 
    `launchctl print`가 실패하는 픽스처에서는 WARN 없이 tick이 그대로 디스패치를 끝낸다.
 
 tick.sh는 자기 PATH를 `$HOME/.local/bin`부터 다시 세우므로(파일 상단) `$HOME`을 픽스처로
-돌려 가짜 `launchctl`을 심는다(test_unassign_pid_recover.py와 같은 수법). 진짜 launchctl -
+돌려 가짜 `launchctl`을 심는다(test_unassign.py case_pid_recover와 같은 수법). 진짜 launchctl -
 진짜 agy는 안 건드린다. 전부 임시 큐 - 도그푸딩 없음. 실패하면 assert로 죽는다.
 """
 __import__("os").environ.setdefault("DIRA_MIGRATIONS_DIR", __import__("tempfile").mkdtemp())  # 마이그레이션 게이트(P505)가 임시 루트를 막지 않게 빈 항목 폴더로
