@@ -8988,6 +8988,169 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P559. GUI 없이 MCP만으로 새 프로젝트를 만들고 설정까지 끝낸다 - 화면의 서버 액션 본체를 TS 실행기 하나로 MCP와 공유한다 (요구 `daaca1ae`, 왕복 0회)
+
+사람 요구(2026-11-10): *"GUI 없이 MCP 만으로 새 프로젝트를 만들고 설정할 수 있어야 합니다. 아래 목록 말고도 GUI 에서만
+되고 MCP 로는 안 되는 빈 곳이 있으면 찾아서 같이 채워 주세요."* 요청 목록은 `project_create` - `project_ontology_set` -
+`project_context_set` - `project_settings_set` - 워커 추가와 제거, 크론 등록과 해제다. 원칙은 *"사람이 화면에서 할 수 있는
+일을 에이전트도 MCP 로 할 수 있어야 한다"*이다.
+
+#### 실측 - 2026-11-10, master `d306b818`
+
+- **사고 경위.** 클라우드 세션이 NOCELL 홈페이지 저장소를 dira 프로젝트로 만들려고 했으나, MCP에는 이미 있는 큐를
+  등록하는 `project_register`(P543)만 있었다. 생성은 화면 서버 액션 `createProject`(`app/actions.ts`)만 하고, 순서는
+  preflight - scaffold - 온톨로지 쓰기 - w1 크론 등록 - `addProject` - 페르소나 색 - 스킬 설치다. GUI(7331)가 꺼져 있어
+  에이전트가 멈췄고 사람이 화면을 켜서 직접 만들었다.
+- **MCP는 파이썬, 화면은 TS다.** `mcp_tools.py`(엔진, 표준 라이브러리만)가 도구 35개를 갖는다. 화면 쪽은
+  `app/**/actions.ts`와 `home/command-actions.ts`에 서버 액션 약 200개가 있다. P543은 파일 하나 쓰기로 끝나는 설정만
+  파이썬에 복제했고, 쓰기가 TS 여러 자리에 걸친 것(생성 - 워커 - 통합 브랜치 - 페르소나 색)은 §안 하는 것으로 뺐다.
+  파이썬으로 더 복제하면 정본이 둘이 된다.
+- **TS를 화면 없이 돌릴 길이 이미 있다.** `lib/*.ts`는 `./x.ts` 상대 import만 쓰고 `pnpm test`가 `node --test`로 그대로
+  돌린다(타입 제거 실행). 설치본도 선례가 있다: `apps/desktop/main.ts`가 `Resources/lib/error-report.ts`를 Electron
+  내장 node(Electron 41, node 24)로 import한다. 서버는 `ELECTRON_RUN_AS_NODE=1`로 같은 바이너리에서 돈다.
+- `lib/workers.ts`는 `react`의 `cache`를 import한다. 설치본에서 `react`는 `Resources/server/node_modules`에만 있다.
+- 서버 액션은 대부분 프로젝트를 레지스트리 `id`로 받고(`rootOf(projectId)`), 끝에 `revalidatePath`를 부른다.
+
+#### GUI에서만 되는 것 - 대조표
+
+서버 액션을 무리로 묶었다. `MCP 있음`은 이미 같은 일을 하는 파이썬 도구가 있다는 뜻이다. `채움`은 이번에 실행기 op로
+더하는 것이고 오른쪽 열이 담당 행이다. `안 함`은 사유와 함께 §안 하는 것에 있다.
+
+| 무리 | 서버 액션 | 판정 | 행 |
+|---|---|---|---|
+| 프로젝트 레지스트리 | `registerProject` `renameProjectAction` `moveProjectAction` `unregisterProjectAction` `resolveProjectAction` | MCP 있음(`project_register` 등, `projects`) | - |
+| 프로젝트 생성 | `createProject` | 채움 `project_create` | P559-1 |
+| 머신 설정 | `setLanguageAction` `readAutonomyAction` `setAutonomyAction` `setAutopilotAction` `readMultiplayAction` `setMultiplayAction` `readMultitokenAction` `setMultitokenAction` `sessionCapOf` `saveSessionLimitAction` | MCP 있음(`settings_get` `settings_set`) | - |
+| 프로젝트 설정 | `readSlimAction` `setSlimAction` `readIntegrationBranchAction` | MCP 있음(`project_settings_get` `project_slim`) | - |
+| 프로젝트 설정 | `saveIntegrationBranchAction` | 채움 `project_settings_set` | P559-4 |
+| 온톨로지 자리 - 컨텍스트 | 워커 `saveOntologyAction` `saveContextAction` `saveCommonContextAction` `copyContextAction` | 채움 `project_ontology_get` `project_ontology_set` `project_context_get` `project_context_set` `project_context_copy` | P559-4 |
+| 환경변수 | `listEnvAction` `changeEnvAction` | MCP 있음(`env_*`) | - |
+| 워커 | `createWorkerAction` `deleteWorkerAction` `stopWorkerAction` `retryWorktreeAction` `registerWorkerAction` `readWorkersPanelAction` + lib `unregisterCron` | 채움 `worker_list` `worker_create` `worker_delete` `worker_stop` `worker_retry_worktree` `cron_register` `cron_unregister` | P559-5 |
+| 워커 고치기 버튼 | `applySelfHealAction` `applyDispatchGateAction` `applyExecBitAction` `applyCommonSourceAction` `runSelfHeal` `discardGateDirtyAction` `fixTicketFilesAction` | 채움 `project_repair {kind}` | P559-5 |
+| 워커 명령 | `reapWorkerAction` | MCP 있음(`reap`) | - |
+| 페르소나 | `createPersonaAction` `savePersonaAction` `deletePersonaAction` `hidePersonaAction` `unhidePersonaAction` `copySharedToLocalAction` `setPersonaColorAction` `savePersonaSkillsAction` `savePersonaLimitAction` `savePersonaEngineAction` `deletePersonaMemoryAction` | 채움 `persona_*` | P559-6 |
+| 스쿼드 | `createSquadAction` `saveSquadMembersAction` `saveSquadRulesAction` `deleteSquadAction` `createSquadDesignTicketAction` `issueSquadReviewTicketAction` | 채움 `squad_*` | P559-6 |
+| 휴지통 | `listTrashAction` `restoreTrashAction` `purgeTrashAction` | 채움 `trash_*` | P559-6 |
+| 스킬 | `installSkillAction`(주소 설치) | 채움 `skill_list` `skill_install` | P559-6 |
+| 마켓 | `loadMarketPaneData` `getMarketItemDetailAction` `importPersonaAction` `importSquadAction` `previewMarketUpdateAction` | 채움 `market_*` | P559-6 |
+| 프로토콜 | `saveProtocolAction` `createProtocolAction` `deleteProtocolAction` `renameProtocolAction` | 채움 `protocol_*` | P559-7 |
+| 에픽 | `createEpic` `saveEpicReadmeAction` `deleteEpicMemoryAction` | 채움 `epic_*` | P559-7 |
+| 커맨드 - 일정 | `listCommandsAction` `createCommandAction` `updateCommandAction` `deleteCommandAction` `lastCommandRunAction` `createSchedule` `deleteSchedule` | 채움 `command_*` `schedule_*` | P559-7 |
+| 티켓 | `createTicket` `answerRequirement` `sendInterject` `unassignTicket` | MCP 있음(`ticket_create` `ticket_answer` `interject` `unassign`) | - |
+| 티켓 편집 | `saveTicket` `saveTicketFrontmatter` `setTicketEpic` `deleteTicket` `sendFollowup` `dispatchPollingNowAction` `extendPollingUntilAction` `retryBackoffNowAction` | 채움 `ticket_save` `ticket_frontmatter_set` `ticket_epic_set` `ticket_delete` `ticket_followup` `polling_dispatch_now` `polling_extend` `backoff_retry_now` | P559-8 |
+| 온톨로지 쓰기 | `saveOntologyAction` `createOntologyAction` `deleteOntologyAction` `renameOntologyAction` `fixOntologySchemaAction` `publishOntologyMigrationAction` `publishOntologyImportAction` `submitOntologySurveyAction` `loadOntologyMetricsAction` | 채움 `ontology_save` `ontology_create` `ontology_delete` `ontology_rename` `ontology_fix_schema` `ontology_publish_migration` `ontology_publish_import` `ontology_survey_submit` `ontology_metrics` | P559-8 |
+| 비상 정지 | `readEmergencyStopAction` | 채움 `emergency_stop_get` | P559-8 |
+| 비상 정지 | `enableEmergencyStopAction` `disableEmergencyStopAction` | 안 함 | - |
+| 자격 증명 | 토큰 6개, 엔진 프로필 6개, `startSetupAction` `pollSetupAction` `sendSetupCodeAction` `stopSetupAction`, `vercel*` 6개, 웹훅 셋 | 안 함 | - |
+| 동의 | `readAnalyticsAction` `setAnalyticsAction` `trackEvent` | 안 함 | - |
+| 화면 상호작용 | 홈 대화 - 터미널 - 소스 컨트롤 - 탐색기 - 브라우저 탭 - 링크(`home/actions.ts` 전부), `draftCommandAction`, `open*FileAction` 류, `uploadAttachment`, `tailSession`, `dropTicketToWip`, 키맵 둘, `markFailuresReadAction` `markResumeReadAction`, `toggleFavoriteAction`, 이기적 모드 일곱, `reportRendererErrorAction` `feedbackMetaAction` `readMcpAction` | 안 함 | - |
+
+요청자가 예로 든 "브라우저 설정"은 저장 액션이 없다. 브라우저 풀(`lib/browser-pool.ts`)은 세션이 빌리고 화면은 읽기만
+한다. 스킬 "제거"도 화면에 없다. 화면은 페르소나별 켜고 끄기(`savePersonaSkillsAction`)만 하므로 `persona_skills_set`이 같은
+일을 한다.
+
+#### 결정
+
+1. **정본은 TS 하나다.** 채움 행의 서버 액션 본체를 `lib/ops/` 아래 함수로 옮기고, 서버 액션은 그 함수를 부른 뒤
+   `revalidatePath`만 더하는 껍데기가 된다. 옮긴 함수는 `next/*`를 import하지 않는다. 화면 결과와 MCP 결과는 같은 함수의
+   반환값이므로 갈리지 않는다.
+2. **op 표 하나.** `lib/ops/index.ts`의 `OPS`가 `{name: {description, inputSchema, run}}` 표다. 이름이 곧 MCP 도구
+   이름이다. 입력은 JSON 객체 하나다. 프로젝트를 고르는 op는 `id`(레지스트리 id) 또는 `root`(큐 루트, 레지스트리에서
+   같은 `root` 항목을 찾는다) 중 하나를 받고, 둘 다 없으면 `TICKET_ROOT` 환경변수로 `root`를 삼는다. 등록되지 않은 큐는
+   오류다(화면도 못 다룬다). 언어는 `language.json`을 읽는다(`readLanguage`와 같다).
+3. **실행기 `lib/ops/cli.ts`.** 하위 명령 둘이다.
+   - `list` -> 표준 출력 한 줄 `{"ok": true, "result": [{name, description, inputSchema}, ...]}`.
+   - `call <name>` -> 표준 입력의 JSON을 인자로 그 op를 돌리고 한 줄 `{"ok": true, "result": <반환값>}`을 쓴다. 던지면
+     `{"ok": false, "error": "<message>"}`다. 둘 다 종료 코드 0이고, 0이 아니면 실행기 자체가 죽은 것이다. 모르는 이름은
+     `ok: false`다.
+4. **실행기 위치 파일 `$TICKET_LOCAL/ops.json`**(`TICKET_LOCAL` 기본 `~/.config/dira`). 형식은
+   `{"version": 1, "argv": [<실행 파일>, <cli.ts 절대경로>], "env": {...}}`이고 임시 파일 + rename으로 쓴다.
+   - 개발 서버: `instrumentation.ts`가 기동할 때 `argv = [process.execPath, <저장소>/apps/teams/lib/ops/cli.ts]`,
+     `env = {}`로 쓴다.
+   - 설치본: `apps/desktop/main.ts`가 기동할 때 `argv = [process.execPath(Electron), <Resources>/server/lib/ops/cli.ts]`,
+     `env = {"ELECTRON_RUN_AS_NODE": "1"}`로 쓴다. `extraResources`가 `apps/teams/lib`(테스트 제외)를 `server/lib`로
+     옮긴다 - 그 자리에서 위로 올라가면 `server/node_modules`의 `react`가 잡힌다.
+   - 나중에 기동한 쪽이 덮는다. 앱을 한 번이라도 켰으면 그 뒤로는 화면이 꺼져 있어도 MCP가 실행기를 부른다.
+5. **MCP는 전달만 한다.** `mcp_tools.py`가 `tools/list` 때 `ops.json`이 있으면 `argv + ["list"]`를 env를 더해 돌리고
+   (타임아웃 20초), 받은 도구 중 파이썬 `TOOLS`에 없는 이름만 목록에 붙인다(이름이 겹치면 파이썬 쪽이 이기고 표준 오류에
+   한 줄 남긴다). 그 이름의 호출은 `argv + ["call", name]`에 인자 JSON을 stdin으로 준다(타임아웃 300초 - 생성의 스킬
+   설치가 네트워크를 탄다). `ok: false`는 도구 오류이고 `error`를 그대로 싣는다. 파이썬 도구 `ops_status {}`를 하나 더
+   한다: `{available, argv, error}` - 파일이 없으면 `available: false`와 "dira 앱을 한 번 켜면 생긴다"는 문장이다. 셸을
+   거치지 않는다. 엔진 서브커맨드가 늘지 않으므로 `COVERS`는 안 바뀐다.
+6. **`project_create {path, name, branch, ontology?, specDoc?, id?}`의 결과는 `createProject`의 `CreateState` 그대로다**
+   (`error` / `exists` / `created` - `created`는 `root repo written skipped cron cronError ontologyError
+   denyCurrentBranchNote gitRepoError apmError registerCmd skills`). 화면 폼과 인자 이름만 다르다.
+7. **요청 목록 1-5의 이름과 입력.**
+   - `project_ontology_get {id|root}` -> `{value}` / `project_ontology_set {id|root, path}` - 워커 `saveOntologyAction`과
+     같다(`validateOntologyInput` + `writeOntology`). 빈 `path`는 지우기다.
+   - `project_context_get {id|root}` -> 워커별 항목과 공통 항목(경로 - 설명 - 존재 여부) / `project_context_set {id|root,
+     worker?, items: [{path, desc}]}` - `worker`가 있으면 그 워커 `.sh`의 `TICKET_CONTEXT` 블록(`saveContextAction`),
+     없으면 공통 `context.sh`(`saveCommonContextAction`) / `project_context_copy` - `copyContextAction`과 같은 인자.
+   - `project_settings_set {id|root, integration_branch?, slim?}` - 준 키만 바꾼다. `integration_branch`는
+     `saveIntegrationBranchAction`과 같은 함수(쓰인 자리 다섯을 다시 쓴다), `slim`은 `setSlim`이다. 결과는
+     `{integration_branch: {branch, changed}?, slim?}`. 워커 수는 아래 워커 op가 바꾼다.
+   - `worker_create {id|root, name, engine?, model?, effort?}` - `createWorkerAction`과 같은 순서(파일 - crontab - 트리)와
+     결과. `worker_delete` `worker_stop` `worker_retry_worktree`도 같은 이름의 액션과 같다. `cron_register {id|root, worker}`
+     는 `registerCron`, `cron_unregister`는 `unregisterCron`이다.
+8. **나머지 op 이름**은 위 대조표 `채움` 열이고, 입력은 그 서버 액션의 인자를 이름 붙인 객체로 바꾼 것이다. `FormData`를
+   받는 액션은 같은 이름의 문자열 필드로 받는다. 파일 업로드(`installSkillAction`의 업로드 갈래, 첨부)는 받지 않는다 -
+   `skill_install`은 `address`만이다.
+9. **대조 테스트가 빈 곳을 막는다.** `lib/ops/parity.test.ts`가 `app/**/actions.ts` - `app/**/*-actions.ts`의
+   `export async function` 이름을 긁어, 각 이름이 `COVERED`(op 이름 또는 `mcp:<파이썬 도구>`) - `EXCLUDED`(사유 문장) -
+   `PENDING` 셋 중 정확히 하나에 있는지 본다. 셋 다 없는 새 액션이 생기면 실패한다. P559-1이 이 표를 만들면서 아직 안
+   옮긴 채움 행을 `PENDING`에 넣고, P559-4~8이 자기 행을 옮기며 `PENDING`에서 뺀다. 끝나면 `PENDING`은 비어 있다.
+10. **엔진 수정은 `mcp_tools.py` 하나다.** `tickets.py` `tick.sh` `graph.py` `dira_env.py`는 안 고친다.
+
+주도성 5 판단: 엔진 파일(`mcp_tools.py`)을 고치지만 사람 승인을 기다리지 않는다. 새 서브커맨드도 큐 상태 규칙 변경도
+없고, 화면이 이미 하는 쓰기를 같은 함수로 한 자리 더 여는 것이다(P543 - P516과 같은 판단).
+주도성 5 판단: 파이썬 복제 대신 TS 실행기를 골랐다. 요청이 "같은 함수를 공유해야 결과가 갈리지 않는다"고 했고, 생성 -
+워커 - 페르소나 색은 TS 여러 파일에 걸쳐 있어 복제하면 정본이 둘이 된다. 대가는 "앱을 한 번은 켜야 한다"는 것이고,
+`ops_status`가 그 상태를 알린다.
+주도성 5 판단: 비상 정지 켜고 끄기, 자격 증명, 사용 통계 동의는 채우지 않았다. 셋 다 사람이 직접 하는 안전장치나 비밀값이라
+"화면에서 할 수 있으면 MCP로도"의 예외로 둔다(P543의 동의 판단과 같다). 비상 정지는 읽기만 연다.
+주도성 5 판단: 홈 대화 - 터미널 - 소스 컨트롤 - 탐색기 - 브라우저 탭은 채우지 않았다. 에이전트는 셸 - git - 파일을 직접
+쓰고, 이 액션들은 화면 탭 상태를 다루는 것이라 MCP로 열어도 할 수 있는 일이 늘지 않는다.
+주도성 5 판단: 에픽을 연다. 발행이 열 장이고 실행기 계약(op 표 - `ops.json` - 대조 테스트)을 여러 세션이 나눠 지키므로
+에픽 메모리를 둘 자리가 필요하다.
+
+#### 안 하는 것
+
+- 비상 정지 켜고 끄기, 토큰 - 엔진 프로필 - 로그인 설정 - Vercel - 웹훅, 사용 통계 동의(위 판단).
+- 화면 상호작용 무리 전부(대조표 마지막 행).
+- 스킬 업로드 설치와 티켓 첨부 업로드(결정 8).
+- 기존 파이썬 도구를 TS로 옮기기. 이미 있는 도구는 그대로 둔다.
+- 화면이 꺼진 상태에서 앱을 켜 주기. 실행기는 화면 서버 없이 돈다.
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P559-1 | `lib/ops/` 표 - 실행기 `cli.ts` - 대조 테스트(결정 1-3, 9), `createProject` 본체를 op `project_create`로 옮김(결정 6), 개발 서버의 `ops.json` 쓰기(결정 4) | developer | - | 발행 `d1d17e56` |
+| P559-2 | 설치본 - `extraResources`로 `lib`를 `server/lib`에 동봉, `main.ts`의 `ops.json` 쓰기, `dist` 검사 줄(결정 4) | developer | P559-1 | 발행 `d56a15b2` |
+| P559-3 | 엔진 - `mcp_tools.py` 동적 목록 - 전달 - `ops_status`(결정 5, 10) + `test_mcp_server.py` 가짜 실행기 테스트 | developer | - | 발행 `33f2006f` |
+| P559-4 | op - 온톨로지 자리 - 컨텍스트 - `project_settings_set`(결정 7 앞 셋) | developer | P559-1 | 발행 `6aa80c1e` |
+| P559-5 | op - 워커 - 크론 - `project_repair`(결정 7 넷째, 대조표 워커 두 행) | developer | P559-1 | 발행 `31f037ec` |
+| P559-6 | op - 페르소나 - 스쿼드 - 휴지통 - 스킬 - 마켓 | developer | P559-1 | 발행 `83ec169c` |
+| P559-7 | op - 프로토콜 - 에픽 - 커맨드 - 일정 | developer | P559-1 | 발행 `7d03eb00` |
+| P559-8 | op - 티켓 편집 - 폴링 - 온톨로지 쓰기 - 비상 정지 읽기 | developer | P559-1 | 발행 `3948525d` |
+| P559-9 | 매뉴얼 - `apps/teams/docs/mcp.md` ko - en: 실행기 도구가 앱 기동 뒤 붙는다는 것, `ops_status`, MCP만으로 프로젝트를 만들고 설정하는 절 | writer | - | 발행 `7d1d45f7` |
+| P559-10 | QA - 이 절 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P559-2, P559-3, P559-4, P559-5, P559-6, P559-7, P559-8 | 발행 `138eee69` |
+
+**열 장이다.** P559-1이 op 표와 실행기를 정해야 P559-2와 P559-4~8이 그 표에 행을 더한다. P559-3은 결정 3-5의 계약만으로
+가짜 실행기를 세워 시험하므로 기다리지 않는다. P559-4~8은 서로 다른 액션 파일과 표의 다른 행만 고치므로 서로 기다리지
+않는다(`OPS` 표는 무리마다 파일을 나눠 `index.ts`가 모은다). 매뉴얼은 위 결정에 이름이 다 있어 기다리지 않는다.
+
+#### 수용조건
+
+- [ ] GUI(7331)가 꺼진 상태에서 MCP `tools/list`에 `project_create` `project_ontology_set` `project_context_set` `project_settings_set` `worker_create` `worker_delete` `cron_register` `cron_unregister` `ops_status`가 있다.
+- [ ] GUI가 꺼진 상태에서 MCP `project_create {path: <빈 임시 git 저장소>, name, branch: "dev", ontology: <폴더>}`를 부르면 결과가 `created`를 담고, `projects`에 그 프로젝트가 생기며, `<큐>/integration-branch`가 `dev`이고, `workers/w1.sh`가 crontab에 있고, `TICKET_ONTOLOGY`가 그 폴더다. 같은 인자로 화면에서 만든 큐와 `find <큐> -type f | sort` 목록이 같다(해시 - 시각이 든 파일 이름 제외).
+- [ ] 이어서 MCP `project_context_set {root, items: [{path, desc}]}`와 `{root, worker: "w1", items}`를 부르면 `context.sh`와 `workers/w1.sh`의 `TICKET_CONTEXT` 블록에 그 항목이 들어가고, 화면 워커 다이얼로그가 같은 항목을 보인다.
+- [ ] MCP `project_settings_set {root, integration_branch: "main"}` 뒤 `project_settings_get`의 `integration_branch`가 `main`이다. `worker_create {root, name: "w2"}` 뒤 `project_settings_get`의 `workers`에 `w2`가 있고 crontab에 `w2.sh` 줄이 있다. `cron_unregister` 뒤 그 줄이 없고, `worker_delete` 뒤 `workers`에서 빠진다.
+- [ ] `ops.json`이 없을 때 `ops_status`가 `available: false`를 돌려주고, 파이썬 도구는 전부 그대로 동작한다.
+- [ ] `cd apps/teams && node --test lib/ops/parity.test.ts`가 통과하고 그 파일의 `PENDING`이 빈 배열이다.
+- [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `python3 test_mcp_server.py` `python3 test_mcp_parity.py`가 통과한다.
+- [ ] 설치본(`pnpm dist` 산출 `.app`)을 한 번 켰다 끈 뒤 `~/.config/dira/ops.json`의 `argv[1]`이 `.app` 안의 `server/lib/ops/cli.ts`이고, `env ELECTRON_RUN_AS_NODE=1 <argv[0]> <argv[1]> list`가 `ok: true`를 낸다.
+- [ ] `git diff --stat master`에 `tickets.py` - `tick.sh` - `graph.py` - `dira_env.py`가 없다.
+- [ ] `grep -c 'project_create\|ops_status' apps/teams/docs/mcp.md apps/teams/en/docs/mcp.md`가 두 파일 모두에서 2 이상이다.
+
 ### P558. 홈 에이전트가 왼쪽 표면 여섯이 무엇이고 그 요소가 어디에 저장되는지 알며, 사람이 화면 이름으로 부르면 그 표면에 만든다 (요구 `0fea96c0`, 왕복 0회)
 
 사람 요구(2026-11-10, 타이니어스 홈 대화에서 옮김): *"홈 사이드바 탭과 떠있는 탭들에 있는 요소들을 인식해서 활용할 수 있게
