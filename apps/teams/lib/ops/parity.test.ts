@@ -19,6 +19,12 @@ const COVERED: Record<string, string> = {
   saveContextAction: "project_context_set",
   saveCommonContextAction: "project_context_set",
   copyContextAction: "project_context_copy",
+  // P559-7
+  saveProtocolAction: "protocol_save", createProtocolAction: "protocol_create", deleteProtocolAction: "protocol_delete",
+  renameProtocolAction: "protocol_rename", createEpic: "epic_create", saveEpicReadmeAction: "epic_readme_save",
+  deleteEpicMemoryAction: "epic_memory_delete", listCommandsAction: "command_list", createCommandAction: "command_create",
+  updateCommandAction: "command_update", deleteCommandAction: "command_delete", lastCommandRunAction: "command_last_run",
+  createSchedule: "schedule_create", deleteSchedule: "schedule_delete",
   // 이미 파이썬 MCP 도구가 있다
   registerProject: "mcp:project_register",
   renameProjectAction: "mcp:project_rename",
@@ -121,11 +127,6 @@ const EXCLUDED: Record<string, string> = {
 
 /** 아직 안 옮긴 채움 행 -> 담당 행. P559-4~8이 옮기며 `COVERED`로 보내고 여기서 뺀다. */
 const PENDING: Record<string, string> = {
-  // P559-7
-  saveProtocolAction: "P559-7", createProtocolAction: "P559-7", deleteProtocolAction: "P559-7",
-  renameProtocolAction: "P559-7", createEpic: "P559-7", saveEpicReadmeAction: "P559-7", deleteEpicMemoryAction: "P559-7",
-  listCommandsAction: "P559-7", createCommandAction: "P559-7", updateCommandAction: "P559-7",
-  deleteCommandAction: "P559-7", lastCommandRunAction: "P559-7", createSchedule: "P559-7", deleteSchedule: "P559-7",
 };
 
 function actionFiles(dir: string): string[] {

@@ -2,6 +2,7 @@
  *  뒤 티켓(P559-4~8)이 서로 다른 파일에 행을 더한다. `next/*` import 금지. */
 import { PERSONA_OPS } from "./persona-ops.ts";
 import { TICKET_OPS } from "./ticket-ops.ts";
+import { fileOps } from "./files.ts";
 import { createProjectOp } from "./project.ts";
 import {
   cronRegisterOp,
@@ -267,3 +268,5 @@ export const OPS: Record<string, Op> = {
     },
   },
 };
+
+Object.assign(OPS, fileOps(pickProject, opLocale));

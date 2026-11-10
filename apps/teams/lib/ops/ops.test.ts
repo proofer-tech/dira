@@ -3,7 +3,7 @@
  *  crontab은 PATH 앞에 가짜 `crontab`을 둬서 막는다(진짜 사용자 crontab은 안 건드린다). */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -214,4 +214,47 @@ test("P559-8 - 티켓 편집 - 온톨로지 쓰기 - 비상 정지 읽기", () =
   assert.equal(typeof es.on, "boolean");
   const names = run(["list"]).result.map((o: { name: string }) => o.name);
   assert.ok(!names.some((n: string) => /emergency_stop_(on|off|enable|disable|set)/.test(n)));
+});
+
+test("command - epic - protocol op가 임시 큐의 파일을 만들고 바꾸고 지운다(P559-7)", () => {
+  const { repo, run } = sandbox();
+  const made = run(["call", "project_create"], JSON.stringify({ path: repo, name: "t", branch: "dev" }));
+  assert.ok(made.result.created, JSON.stringify(made));
+  const root = made.result.created.root;
+  const call = (name: string, input: object) => run(["call", name], JSON.stringify({ root, ...input }));
+  const ok = (r: { ok: boolean; error?: string; result?: unknown }) => {
+    assert.equal(r.ok, true, JSON.stringify(r));
+    return r.result as never;
+  };
+
+  // 커맨드
+  const spec = { name: "n1", steps: [{ kind: "shell", body: "echo hi" }], env: [] };
+  const { id } = ok(call("command_create", { spec })) as { id: string };
+  assert.match(id, /^[0-9a-f]{8}$/);
+  const file = path.join(root, "commands", `${id}.sh`);
+  assert.equal(statSync(file).mode & 0o777, 0o755);
+  const listed = ok(call("command_list", {})) as { id: string }[];
+  assert.ok(listed.some((c) => c.id === id));
+  ok(call("command_update", { command_id: id, spec: { ...spec, name: "n2" } }));
+  assert.match(readFileSync(file, "utf8"), /n2/);
+  assert.equal(call("command_update", { command_id: "../x", spec }).ok, false);
+  ok(call("command_delete", { command_id: id }));
+  assert.equal(existsSync(file), false);
+
+  // 에픽
+  ok(call("epic_create", { key: "P900", title: "제목" }));
+  assert.equal(readFileSync(path.join(root, "epics", "P900", "README.md"), "utf8"), "제목\n");
+  assert.equal(call("epic_create", { key: "P900", title: "again" }).ok, false);
+  ok(call("epic_readme_save", { epic: "P900", title: "새 제목", body: "본문" }));
+  assert.equal(readFileSync(path.join(root, "epics", "P900", "README.md"), "utf8"), "새 제목\n\n본문\n");
+  assert.equal(call("epic_create", { key: "../../evil", title: "x" }).ok, false);
+
+  // 프로토콜
+  ok(call("protocol_create", { rel: "sub/GUIDE.md" }));
+  ok(call("protocol_rename", { from: "sub/GUIDE.md", to: "sub/G2.md" }));
+  ok(call("protocol_delete", { rel: "sub/G2.md" }));
+  assert.equal(call("protocol_delete", { rel: "../../etc/passwd" }).ok, false);
+
+  // 일정: 잘못된 when은 거절한다
+  assert.equal(call("schedule_create", { when: "garbage", prompt: "p" }).ok, false);
 });
