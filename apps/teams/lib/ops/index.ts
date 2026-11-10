@@ -30,7 +30,7 @@ export type Op = {
 };
 
 export { PROJECT_PICK, opLocale, pickProject } from "./pick.ts";
-import { opLocale } from "./pick.ts";
+import { PROJECT_PICK, opLocale, pickProject } from "./pick.ts";
 
 const str = (v: unknown, key: string, required = true): string => {
   if (v === undefined || v === null || v === "") {
