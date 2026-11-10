@@ -2,7 +2,7 @@
 """P461-skill-plugindir 자체검증: skills.md에 적힌 스킬이 실제로 Skill 도구로 불리는가
 (d6a0fea9, TC 430a41e7).
 
-`test_skills.py`는 `tick.sh dryrun`의 프롬프트 텍스트(스킬 블록이 "보이는가")만 본다 -
+`test_prompt.py`(옛 test_skills)는 `tick.sh dryrun`의 프롬프트 텍스트(스킬 블록이 "보이는가")만 본다 -
 `--setting-sources project,local`이 ~/.claude/skills를 끊은 뒤로 그 텍스트는 있어도 Skill
 도구 호출이 "Unknown skill"로 죽는 결함을 못 잡는다. 이 테스트는 실제 Skill 도구 호출 성공
 여부 대신(진짜 claude를 부르지 않는다 - DESIGN.md §제약 1, 도그푸딩 금지) `tick.sh`가 claude
