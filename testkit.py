@@ -17,6 +17,12 @@ TICK = os.path.join(HERE, "tick.sh")
 LEAK = ("TICKET_ONTOLOGY", "TICKET_DONE", "TICKET_INPROGRESS", "DIRA_ENGINE")
 
 
+# CI(CI=true)에서만 건너뛰는 파일: {파일 이름: 사유 한 줄}. 조용히 빠지는 파일이 없도록 끝 표에 이름과 사유가 찍힌다.
+# 지금은 비어 있다: CI가 macOS 러너(ci.yml)이고 launchctl - crontab - pty 의존 테스트가 가짜 스텁이나 macOS 도구로 돈다.
+# ponytail: 러너가 ubuntu로 바뀌거나 CI에서만 깨지는 파일이 나오면 여기에 이름과 사유를 적는다.
+CI_SKIP = {}
+
+
 def clean_env(env=None):
     e = dict(os.environ if env is None else env)
     for k in LEAK:
@@ -105,6 +111,10 @@ def main(argv):
             files.append(a)
     if not files:
         files = sorted(os.path.basename(p) for p in glob.glob(os.path.join(HERE, "test_*.py")))
+    skipped = {}
+    if os.environ.get("CI") == "true":
+        skipped = {f: why for f, why in CI_SKIP.items() if f in {os.path.basename(x) for x in files}}
+        files = [f for f in files if os.path.basename(f) not in skipped]
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, jobs)) as ex:
         res = list(ex.map(lambda f: _run(f if os.path.isabs(f) else os.path.join(HERE, f), timeout), files))
     bad = 0
@@ -115,6 +125,8 @@ def main(argv):
     print("{:>4} {:>7}  {}".format("rc", "초", "파일"))
     for path, rc, sec, _ in res:
         print("{:>4} {:>7.1f}  {}".format(rc, sec, os.path.basename(path)))
+    for f, why in sorted(skipped.items()):
+        print("건너뜀(CI) {}: {}".format(f, why))
     print("실패 {} / {}".format(bad, len(res)))
     return 1 if bad else 0
 

@@ -24,12 +24,8 @@ jobs:
       - run: apm install
       - run: apm audit --ci
 
-      # 엔진 — 의존성 0. ubuntu-latest의 python3를 그대로 쓴다.
-      - run: python3 test_generic.py
-      - run: python3 test_reap_manual.py
-      - run: python3 test_claim_race.py
-      - run: python3 test_feed_stall.py
-      - run: python3 test_inbox.py
+      # 엔진 — 의존성 0. test_*.py 전량을 러너가 돈다. CI에서만 건너뛰는 파일은 testkit.py의 CI_SKIP에 사유와 함께 있다.
+      - run: python3 testkit.py
 
       # 루트에 package.json도 워크스페이스도 없다. apps/teams·apps/desktop은
       # 각자 pnpm-lock.yaml을 가진 독립 프로젝트라 설치도 각각이다.
