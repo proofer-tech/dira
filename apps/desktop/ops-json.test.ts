@@ -18,3 +18,9 @@ test("ops.json - 설치본 형식(version 1, Electron argv, ELECTRON_RUN_AS_NODE
   writePackagedOps(t, "/B", "/R"); // 덮어쓴다
   assert.strictEqual(JSON.parse(readFileSync(f, "utf8")).argv[0], "/B");
 });
+
+test("ops.json - 엔진 경로를 주면 env.DIRA_ENGINE으로 싣는다", () => {
+  const t = mkdtempSync(path.join(tmpdir(), "ops-"));
+  const f = writePackagedOps(t, "/A", "/R", "/U/engine");
+  assert.deepStrictEqual(JSON.parse(readFileSync(f, "utf8")).env, { ELECTRON_RUN_AS_NODE: "1", DIRA_ENGINE: "/U/engine" });
+});

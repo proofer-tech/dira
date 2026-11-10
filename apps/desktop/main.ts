@@ -1236,7 +1236,7 @@ async function boot() {
   // P559 결정 4 - 설치본이 MCP 실행기 위치를 알린다. 개발 모드는 개발 서버가 쓴다.
   if (app.isPackaged) {
     try {
-      writePackagedOps(process.env.TICKET_LOCAL || join(homedir(), ".config", "dira"), process.execPath, process.resourcesPath);
+      writePackagedOps(process.env.TICKET_LOCAL || join(homedir(), ".config", "dira"), process.execPath, process.resourcesPath, extractEngine());
     } catch (e) {
       console.error(`[dira] ops.json을 못 썼습니다: ${(e as Error).message}`);
     }

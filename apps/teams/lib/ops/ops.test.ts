@@ -33,8 +33,8 @@ function sandbox() {
   const nofetch = path.join(base, "nofetch.mjs");
   writeFileSync(nofetch, 'globalThis.fetch = () => Promise.reject(new Error("offline (test)"));\n');
   const env = { ...process.env, NODE_OPTIONS: `--import ${nofetch}`, HOME: home, TICKET_LOCAL: local, PATH: `${bin}:${process.env.PATH}`, DIRA_ANALYTICS: "0" };
-  const run = (args: string[], input = "") => {
-    const r = spawnSync("node", [CLI, ...args], { env, input, encoding: "utf8", timeout: 120_000 });
+  const run = (args: string[], input = "", extra: { cwd?: string; env?: Record<string, string> } = {}) => {
+    const r = spawnSync("node", [CLI, ...args], { env: { ...env, ...extra.env }, cwd: extra.cwd, input, encoding: "utf8", timeout: 120_000 });
     assert.equal(r.status, 0, `종료 코드 0이어야 한다: ${r.stderr}`);
     const lines = r.stdout.trim().split("\n");
     assert.equal(lines.length, 1, `표준 출력은 한 줄이다: ${r.stdout}`);
@@ -60,6 +60,17 @@ test("모르는 op와 던지는 op는 ok:false + 종료 코드 0", () => {
   assert.equal(thrown.ok, false);
   assert.match(thrown.error, /path is required/);
   assert.equal(run(["call", "project_create"], "not json").ok, false);
+});
+
+test("project_create - cwd가 엔진 레포 밖이어도 ops.json이 싣는 DIRA_ENGINE이 있으면 created (2ff87eff)", () => {
+  const { repo, run } = sandbox();
+  const input = JSON.stringify({ path: repo, name: "t", branch: "dev" });
+  const engine = path.resolve(path.dirname(CLI), "..", "..", "..", "..");
+  const lost = run(["call", "project_create"], input, { cwd: "/" });
+  assert.equal(lost.ok, true);
+  assert.ok(lost.result.error, "env 없이 cwd가 /면 엔진을 못 찾는다");
+  const r = run(["call", "project_create"], input, { cwd: "/", env: { DIRA_ENGINE: engine } });
+  assert.ok(r.result.created, JSON.stringify(r));
 });
 
 test("project_create - 임시 저장소에 큐를 만들고 gui-projects.json에 항목이 생긴다", () => {
