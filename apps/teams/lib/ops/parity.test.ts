@@ -45,6 +45,19 @@ const COVERED: Record<string, string> = {
   answerRequirement: "mcp:ticket_answer",
   sendInterject: "mcp:interject",
   unassignTicket: "mcp:unassign",
+  // P559-6
+  createPersonaAction: "persona_create", savePersonaAction: "persona_save", deletePersonaAction: "persona_delete",
+  hidePersonaAction: "persona_hide", unhidePersonaAction: "persona_unhide", copySharedToLocalAction: "persona_copy_shared_to_local",
+  setPersonaColorAction: "persona_color_set", savePersonaSkillsAction: "persona_skills_set",
+  savePersonaLimitAction: "persona_limit_set", savePersonaEngineAction: "persona_engine_set",
+  deletePersonaMemoryAction: "persona_memory_delete", createSquadAction: "squad_create",
+  saveSquadMembersAction: "squad_members_set", saveSquadRulesAction: "squad_rules_set", deleteSquadAction: "squad_delete",
+  createSquadDesignTicketAction: "squad_design_ticket", issueSquadReviewTicketAction: "squad_review_ticket",
+  listTrashAction: "trash_list", restoreTrashAction: "trash_restore", purgeTrashAction: "trash_purge",
+  installSkillAction: "skill_install", loadMarketPaneData: "market_list", getMarketItemDetailAction: "market_item",
+  importPersonaAction: "market_import", importSquadAction: "market_import", previewMarketUpdateAction: "market_update_preview",
+  deployPersonaAction: "market_deploy_persona", missingSquadMembersAction: "market_missing_members",
+  deploySquadAction: "market_deploy_squad",
 };
 
 /** 안 채우는 것(스펙 §안 하는 것). 값은 사유다. */
@@ -91,17 +104,6 @@ const PENDING: Record<string, string> = {
   registerWorkerAction: "P559-5", readWorkersPanelAction: "P559-5", applySelfHealAction: "P559-5",
   applyDispatchGateAction: "P559-5", applyExecBitAction: "P559-5", applyCommonSourceAction: "P559-5",
   runSelfHeal: "P559-5", discardGateDirtyAction: "P559-5", fixTicketFilesAction: "P559-5",
-  // P559-6
-  createPersonaAction: "P559-6", savePersonaAction: "P559-6", deletePersonaAction: "P559-6", hidePersonaAction: "P559-6",
-  unhidePersonaAction: "P559-6", copySharedToLocalAction: "P559-6", setPersonaColorAction: "P559-6",
-  savePersonaSkillsAction: "P559-6", savePersonaLimitAction: "P559-6", savePersonaEngineAction: "P559-6",
-  deletePersonaMemoryAction: "P559-6", createSquadAction: "P559-6", saveSquadMembersAction: "P559-6",
-  saveSquadRulesAction: "P559-6", deleteSquadAction: "P559-6", createSquadDesignTicketAction: "P559-6",
-  issueSquadReviewTicketAction: "P559-6", listTrashAction: "P559-6", restoreTrashAction: "P559-6",
-  purgeTrashAction: "P559-6", installSkillAction: "P559-6", loadMarketPaneData: "P559-6",
-  getMarketItemDetailAction: "P559-6", importPersonaAction: "P559-6", importSquadAction: "P559-6",
-  previewMarketUpdateAction: "P559-6", deployPersonaAction: "P559-6", missingSquadMembersAction: "P559-6",
-  deploySquadAction: "P559-6",
   // P559-7
   saveProtocolAction: "P559-7", createProtocolAction: "P559-7", deleteProtocolAction: "P559-7",
   renameProtocolAction: "P559-7", createEpic: "P559-7", saveEpicReadmeAction: "P559-7", deleteEpicMemoryAction: "P559-7",
