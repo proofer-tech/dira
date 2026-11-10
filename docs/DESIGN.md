@@ -8988,6 +8988,94 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P560. 엔진 `test_*.py` 79장을 정리한다 - 깨진 19장을 고치고, 같은 계열을 합치고, 공용 하네스와 러너를 더한다 (요구 `79b74b25`, 왕복 0회)
+
+사람 요구(2026-11-10): *"test_*.py 가 왜 이렇게 많아. 진짜 필요한 건지 점검해서 없앨 건 없애고 합칠 건 합치고 추가할 건
+추가하는 정리 작업을 해 주세요."*
+
+#### 실측 - 2026-11-10, master `e1f2a096`, 이 머신
+
+- **79장 - 16,220줄 - `assert` 2,335개.** 레포 루트에 평면으로 있다. 대상 모듈이 사라진 죽은 파일은 0장이다(모든 파일이
+  `tick.sh` - `tickets.py` - `push.sh` - 엔진 `*.py` 중 지금 있는 것을 부른다). 장수가 많은 이유는 엔진 수정 승인 한 번마다
+  `test_<주제>.py` 한 장을 새로 낸 관례 때문이고, 같은 대상을 보는 작은 파일이 계열로 몰려 있다(reap 10장, migrate 5장,
+  프롬프트 주입 7장, 고정 엔진 4장).
+- **헬퍼가 파일마다 복제되어 있다.** 최상위 비테스트 함수 `mk`가 29장에 19가지 변형으로, `mkfile`이 21장에 같은 본문으로,
+  `mkworker` 9장, `dryrun` 8장, `wait_for` 7장에 있다. 각 파일이 임시 큐를 스스로 만든다.
+- **`conftest.py`는 효과가 없다.** 워커 세션의 환경변수(`TICKET_ONTOLOGY` - `TICKET_DONE` - `TICKET_INPROGRESS`)를 지우는
+  pytest 훅인데, AGENTS.md §검증 범위가 pytest를 금지하고 `python3 <파일>`로 돌리게 하므로 한 번도 실행되지 않는다. 워커
+  세션 안에서 돌리면 그 환경변수가 테스트로 새어 들어간다.
+- **CI(`.github/workflows/ci.yml`)는 5장만 돌린다** - `test_generic` - `test_reap_manual` - `test_claim_race` -
+  `test_feed_stall` - `test_inbox`. 나머지 74장이 깨져도 아무도 모른다.
+- **환경변수를 지우고 돌린 결과(4-5장씩 병렬): 통과 60장, 실패 19장.** 실패는 성질로 셋이다.
+  - (가) **기준선 비교가 깨졌다 - 6장.** `test_core_protocol` - `test_autonomy` - `test_language` - `test_memory` -
+    `test_ontology` - `test_skills`는 `w.sh dryrun` 출력을 기준선과 바이트 단위로 비교한다. P536 이후 엔진 줄의
+    `DIRA_PLAN_GATE_FILE=.../gate-<UUID>`가 회차마다 달라 비교가 항상 실패한다. `env -i`로 돌려도 같다.
+  - (나) **시간 상한에 걸렸다 - 9장.** `test_bg_grace` - `test_feed_stall` - `test_polling` - `test_inbox` - `test_reuse`는
+    15-60초 단언에서, `test_cooldown` - `test_limit` - `test_migrate_0002` - `test_remote`는 500초 `timeout`에서 죽었다. 병렬 부하 탓인지 회귀인지는 단독
+    실행으로 가린다.
+  - (다) **원인 미상 - 4장.** `test_duedate` - `test_persona_engine` - `test_migrate_gate` - `test_targeted_dispatch`.
+
+#### 결정
+
+1. **없애는 것은 파일이지 단언이 아니다.** §제약 1의 *"통과만 시키려고 기존 단언을 지우는 변경은 블록"*이 그대로다. 합칠
+   때 단언은 문장 그대로 옮기고, 판정은 합치기 전후 `grep -c assert`의 합이 같거나 커지는 것이다. 대상 모듈이 사라진 파일은
+   0장이므로 통째로 지우는 테스트 파일은 없다. 지우는 것은 `conftest.py` 한 장이다(역할은 결정 2의 하네스가 맡는다).
+2. **공용 하네스 `testkit.py`를 더한다.** 이름이 `test_`로 시작하지 않아 `test_*.py` 목록에 안 잡힌다. 표준 라이브러리만
+   쓴다. 담는 것은 복제된 헬퍼(`mk` - `mkfile` - `mkworker` - `dryrun` - `wait_for`)와 환경변수 정리(모듈을 import하는
+   순간 `TICKET_*` - `DIRA_ENGINE`을 지운다)다. `dryrun`은 `gate-<UUID>`를 고정 문자열로 바꿔 돌려준다. 파일마다 다른 변형이
+   필요한 자리는 인자로 열고, 하나로 안 모이는 변형은 그 파일에 남긴다.
+3. **러너를 더한다 - `python3 testkit.py [파일...]`.** 인자가 없으면 `test_*.py` 전량이다. 파일마다 환경변수를 지운
+   자식 프로세스로 돌리고, 파일별 `timeout`(기본 600초)과 병렬 수(`-j`, 기본 4)를 받고, 끝에 `rc 소요 파일` 표와 실패 수를
+   찍고 실패가 있으면 rc=1이다. AGENTS.md §검증 범위의 "고친 파일이 든 것만"은 그대로이고, 러너는 그 목록을 받아 돌리는
+   도구다.
+4. **합치는 계열은 다섯이다.** 파일 이름이 §제약 1에 박힌 셋(`test_claim_race` - `test_generic` - `test_reap_manual`)은
+   안 건드린다. 느린 계열(계획 상자 참견 넷, 쿨다운)은 합치면 한 장이 수백 초가 되어 "고친 파일이 든 것만" 고르는 이득이
+   사라지므로 안 합친다.
+
+| 합친 뒤 | 합치는 것 | 장수 |
+|---|---|---|
+| `test_prompt.py` | `test_core_protocol` `test_language` `test_autonomy` `test_memory` `test_skills` `test_ontology` `test_cache_control` | 7 -> 1 |
+| `test_reap.py` | `test_reap_done_awaiting` `test_reap_limit_attempts` `test_reap_orphan_ps_timeout` `test_reap_pid_lock` `test_reap_pre_stage` | 5 -> 1 |
+| `test_migrate.py` | 기존 `test_migrate` + `test_migrate_0002` `test_migrate_0003` `test_migrate_0004` | 4 -> 1 |
+| `test_fixed_engine.py` | `test_fixed_engine_agy` `test_fixed_engine_codex` `test_source_time` `test_bundle_engine` | 4 -> 1 |
+| `test_push_ship.py` - `test_unassign.py` | `test_push_ship_dirty_gate` -> `test_push_ship`, `test_unassign_force` + `test_unassign_pid_recover` | 4 -> 2 |
+
+   합친 뒤 `test_*.py`는 79장에서 61장이 된다. 다른 문서가 옛 파일 이름을 부르는 자리(`docs/DESIGN.md`의 결정 기록은
+   이력이므로 제외)는 같은 티켓에서 새 이름으로 고친다 - `grep -rn '<옛 이름>' .github apps/teams packages templates`.
+5. **깨진 19장은 합치기와 따로 고친다.** (가)는 결정 2의 `dryrun`으로 고쳐지므로 하네스 티켓이 함께 닫는다. (나)(다)는 단독
+   실행으로 회귀인지 부하인지를 가리고, 테스트 쪽 원인(시간 상한 - 고정 경로)은 테스트를 고친다. 엔진 회귀이면 단언을 고치지
+   않고 엔진을 고치는 티켓을 따로 낸다.
+6. **CI는 러너로 바꾼다.** `ci.yml`의 다섯 줄을 `python3 testkit.py`로 바꾸되, ubuntu에서 돌 수 없는 파일(macOS 전용
+   `ps` - `launchctl` - Electron 경로)은 러너의 제외 목록으로 이름을 적어 뺀다. 조용히 빠지는 파일이 없도록 제외 목록과
+   사유가 `testkit.py` 안에 있다.
+
+#### 안 하는 것
+
+- 느린 테스트를 빠르게 만드는 일. `test_cooldown` 183초 같은 값은 이 요구가 묻지 않았다.
+- `tests/` 디렉터리로 옮기는 일. `grep -l '<고친 파일>' test_*.py` 관례와 `tick.sh`가 레포 루트를 `HERE`로 쓰는 자리가 많아
+  비용만 크다.
+- pytest 도입. 의존성 0(§제약 1)이 그대로다.
+- 엔진 동작 변경. 결정 5에서 엔진 회귀가 나오면 그때 별개 티켓이다.
+
+#### 행
+
+| ID | 무엇 | 담당 | deps | 상태 |
+|---|---|---|---|---|
+| P560-1 | `testkit.py` 하네스 + 러너, `conftest.py` 삭제, (가) 6장을 하네스 `dryrun`으로 옮겨 통과 | developer | - | 대기 |
+| P560-2 | (나)(다) 13장 단독 실행 판정 - 테스트 원인은 고치고 엔진 회귀는 티켓으로 넘긴다 | developer | - | 대기 |
+| P560-3 | `test_prompt.py` 7 -> 1 | developer | P560-1 | 대기 |
+| P560-4 | `test_reap.py` 5 -> 1, `test_migrate.py` 4 -> 1 | developer | P560-1 | 대기 |
+| P560-5 | `test_fixed_engine.py` 4 -> 1, `test_push_ship.py` - `test_unassign.py` 4 -> 2 | developer | P560-1 | 대기 |
+| P560-6 | `ci.yml`을 러너로 바꾸고 제외 목록을 적는다 | developer | P560-2, P560-3, P560-4, P560-5 | 대기 |
+
+#### 수용조건
+
+- [ ] `python3 testkit.py` 를 워커 세션 안에서 돌리면 rc=0이고, 끝 표에 61장이 전부 `0`으로 찍힌다.
+- [ ] `ls test_*.py | wc -l` 이 61이고, `conftest.py`가 없다.
+- [ ] 합치기 전 master의 `grep -c assert test_*.py` 합(2,335)보다 합친 뒤의 합이 작지 않다.
+- [ ] `grep -lE '^def (mk|mkfile|mkworker|dryrun|wait_for)\(' test_*.py` 의 장수가 29보다 작다.
+- [ ] GitHub CI가 `python3 testkit.py`로 돌고, 제외된 파일은 `testkit.py` 안에 이름과 사유로 적혀 있다.
+
 ### P559. GUI 없이 MCP만으로 새 프로젝트를 만들고 설정까지 끝낸다 - 화면의 서버 액션 본체를 TS 실행기 하나로 MCP와 공유한다 (요구 `daaca1ae`, 왕복 0회)
 
 사람 요구(2026-11-10): *"GUI 없이 MCP 만으로 새 프로젝트를 만들고 설정할 수 있어야 합니다. 아래 목록 말고도 GUI 에서만
