@@ -37,6 +37,7 @@ import { HANG_PROMPT_MS, askedAfterUnresponsive, shouldAskReload, shouldCloseDia
 import { mcpCronEdit } from "./mcp-install.ts";
 import { installShellPath } from "./shell-path.ts";
 import { readBootLayout } from "./boot-shell.ts";
+import { writePackagedOps } from "./ops-json.ts";
 
 /** 패키징하면 standalone 산출물이 통째로 `Contents/Resources/server/`에 들어간다
  *  (package.json `build.extraResources`). 소스에서 돌 때는 `apps/teams` 옆이다. */
@@ -1232,6 +1233,14 @@ async function showWindow() {
 
 async function boot() {
   installAppMenu(); // 실패 화면만 뜨는 실행에도 메뉴는 있다
+  // P559 결정 4 - 설치본이 MCP 실행기 위치를 알린다. 개발 모드는 개발 서버가 쓴다.
+  if (app.isPackaged) {
+    try {
+      writePackagedOps(process.env.TICKET_LOCAL || join(homedir(), ".config", "dira"), process.execPath, process.resourcesPath);
+    } catch (e) {
+      console.error(`[dira] ops.json을 못 썼습니다: ${(e as Error).message}`);
+    }
+  }
   await startEnvBridge().catch((e) => console.error(`[dira] 환경변수 브리지를 못 열었습니다: ${(e as Error).message}`));
   // P549 결정 5 - 서버를 기다리지 않고 창부터 연다. 셸은 네트워크가 없어 서버 기동과 겹쳐도 된다.
   booting = true;
