@@ -3,7 +3,7 @@
  *  PATH의 가짜 python3가 받는다. */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { chmodSync, symlinkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -88,4 +88,12 @@ test("project_settings_set - integration_branch 파일과 changed, slim은 on", 
   assert.equal(s.ok, true, JSON.stringify(s));
   assert.equal(read("slim-checkout").trim(), "on");
   assert.equal(call("project_settings_set", { root, integration_branch: "bad branch" }).ok, false);
+});
+
+test("root가 등록 항목의 심볼릭 링크 별칭이어도 그 프로젝트를 찾는다", () => {
+  const { root, onto, call } = sandbox();
+  const alias = path.join(path.dirname(path.dirname(root)), "alias");
+  symlinkSync(path.dirname(root), alias);
+  const r = call("project_ontology_set", { root: path.join(alias, ".dira"), path: onto });
+  assert.equal(r.ok, true, JSON.stringify(r));
 });
