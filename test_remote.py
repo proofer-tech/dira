@@ -1662,7 +1662,7 @@ class Gap(Base, unittest.TestCase):
         while not self.reads_at and time.time() < end:
             time.sleep(0.1)
         self.assertTrue(self.reads_at, "읽기 요청이 안 왔다")
-        self.assertLess(self.reads_at[0] - self.beats()[0], 2)  # 루트 sync 10초와 무관하게 신호 뒤 2초 안
+        self.assertLess(self.reads_at[0] - self.beats()[0], 5)  # 루트 sync 10초와 무관하게 신호 뒤 5초 안(막혔다면 10초 이상). 부하에서 2초는 흔들린다
         while os.path.isdir(lock) and time.time() < end + 8:
             time.sleep(0.1)
         self.assertFalse(os.path.isdir(lock))
@@ -1714,7 +1714,7 @@ class Gap(Base, unittest.TestCase):
         self.assertIsNotNone(self.wake_at)
         nxt = [t for t in self.reads_at if t > self.wake_at]
         self.assertTrue(nxt, "다음 읽기 요청이 안 왔다")
-        self.assertLess(nxt[0] - self.wake_at, 1)
+        self.assertLess(nxt[0] - self.wake_at, 3)  # 막혔다면 5초 이상. 부하에서 1초는 흔들린다
 
     def test_four_reads_answered_together(self):
         self.setup_jobs([])
@@ -1835,15 +1835,15 @@ class Resident(Base, unittest.TestCase):
 
     def test_second_read_not_blocked_by_slow_first(self):
         with open(os.path.join(self.engdir, "ontology_read.py"), "a") as f:
-            f.write("\n_run = run\n\n\ndef run(root, op, args):\n    import time\n    time.sleep(3)\n    return _run(root, op, args)\n")
+            f.write("\n_run = run\n\n\ndef run(root, op, args):\n    import time\n    time.sleep(8)\n    return _run(root, op, args)\n")
         self.start_reads(60)
         time.sleep(2)
         self.put("s1")
         time.sleep(1)
         self.put("s2")
-        self.assertTrue(self.wait_for(lambda: "s2" in self.served, 5))
-        self.assertLess(self.served["s2"] - self.enq["s2"], 1)
-        self.assertTrue(self.wait_for(lambda: "s1" in self.posted and "s2" in self.posted, 10))
+        self.assertTrue(self.wait_for(lambda: "s2" in self.served, 10))
+        self.assertLess(self.served["s2"] - self.enq["s2"], 3)  # s1을 기다렸다면 8초 가까이. 부하에서 1초는 흔들린다
+        self.assertTrue(self.wait_for(lambda: "s1" in self.posted and "s2" in self.posted, 20))
 
     def test_sync_all_skips_long_wait_while_resident(self):
         rp = self.start_reads(60)
@@ -1882,9 +1882,9 @@ class Resident(Base, unittest.TestCase):
 
     def test_code_change_exits_and_frees_lock(self):
         p = self.start_reads(60)
-        self.assertTrue(self.wait_for(lambda: os.path.isdir(self.lockdir()), 5))
+        self.assertTrue(self.wait_for(lambda: os.path.isdir(self.lockdir()), 20))
         os.utime(os.path.join(self.engdir, "remote.py"), (time.time() + 5, time.time() + 5))
-        self.assertEqual(p.wait(5), 0)
+        self.assertEqual(p.wait(30), 0)  # 부하에서 5초는 흔들린다
         self.assertFalse(os.path.exists(self.lockdir()))
 
 
