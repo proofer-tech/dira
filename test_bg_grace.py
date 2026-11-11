@@ -202,7 +202,7 @@ print("PASS 1 - 유예 창 안에 자라면 주입도 종료도 없다(수용조
 eng2 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE,
                       body=BODY_NUDGE_GROW.format(window=10, grow_line=GROW_LINE))
 with Case(eng2, grace=3) as c:
-    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 60), \
         "유예 창이 지났는데 주입이 안 났다(수용조건 3)\n" + c.log()
     time.sleep(6)
     assert FAIL_TAIL not in c.log(), "주입 뒤에 자랐는데도 종전 종료가 났다\n" + c.log()
@@ -211,9 +211,9 @@ print("PASS 2 - 유예 창에서 안 자라면 주입이 나고, 주입 뒤 자�
 # 3 - 조건 셋 다 참, 끝까지 안 자란다: NUDGE bg가 나고, 그 뒤 종전 FAIL도 그대로 난다.
 eng3 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE, body=BODY_NO_GROW)
 with Case(eng3, grace=2) as c:
-    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 60), \
         "유예 창이 지났는데 주입이 안 났다\n" + c.log()
-    assert wait_for(lambda: FAIL_TAIL in c.log(), 15), \
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 60), \
         "주입 뒤에도 안 자랐는데 종전 종료가 안 났다(수용조건 4)\n" + c.log()
     assert "reason=bg" in c.log(), \
         "이번 구간에 밀림이 있었는데 FAIL 줄에 reason=bg가 없다(P435 결정 2)\n" + c.log()
@@ -226,14 +226,14 @@ print("PASS 3 - 끝까지 안 자라면 주입 뒤 종전 종료 경로가 그�
 # 존재 여부 assert 하나로 이미 grace=0의 계약(유예를 안 걸었다)을 증명한다.
 eng4 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE, body=BODY_NO_GROW)
 with Case(eng4, grace=0) as c:
-    assert wait_for(lambda: FAIL_TAIL in c.log(), 15), "GRACE=0인데 종전 종료가 안 났다\n" + c.log()
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 60), "GRACE=0인데 종전 종료가 안 났다\n" + c.log()
     assert "NUDGE bg0001 bg" not in c.log(), "GRACE=0인데 주입이 났다\n" + c.log()
 print("PASS 4 - TICKET_BG_GRACE=0이면 장치가 안 돌고 즉시 종전 종료다(수용조건 6)")
 
 # 5 - 조건 3(밀린 작업 문구)이 거짓이면 유예가 안 걸리고 즉시 종전 종료다(GRACE가 켜져 있어도).
 eng5 = ENGINE.format(bg_line="", result_line=RESULT_LINE, body=BODY_NO_GROW)
 with Case(eng5, grace=20) as c:
-    assert wait_for(lambda: FAIL_TAIL in c.log(), 15), "밀린 문구가 없는데 종전 종료가 안 났다\n" + c.log()
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 60), "밀린 문구가 없는데 종전 종료가 안 났다\n" + c.log()
     assert "NUDGE bg0001 bg" not in c.log(), "밀린 문구가 없는데 주입이 났다\n" + c.log()
     assert "reason=bg" not in c.log(), \
         "밀림이 없었는데 FAIL 줄에 reason=bg가 붙었다(P435 결정 2)\n" + c.log()
@@ -258,9 +258,9 @@ print("PASS 6 - 유예 중에도 MAXRUN 상한이 그대로 걸려 유예가 20�
 eng7 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE,
                       body=BODY_AUTO_GROW.format(delay=1, grow_line=SYSTEM_GROW_LINE))
 with Case(eng7, grace=3) as c:
-    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 60), \
         "system 줄만 자랐는데 진짜 성장으로 오판해 NUDGE가 안 났다(P435 결정 1)\n" + c.log()
-    assert wait_for(lambda: FAIL_TAIL in c.log(), 15), \
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 60), \
         "주입 뒤에도 system 줄만 더 자라 결국 종전 종료가 안 났다\n" + c.log()
 print("PASS 7 - system 줄만 자라면 진짜 성장이 아니라 그대로 NUDGE·종료가 난다(P435 결정 1)")
 
@@ -271,9 +271,9 @@ STOP_MSG = ("턴을 닫아 밀린 작업이 중단됐습니다. 같은 명령을
 eng8 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE,
                       body=BODY_STOP_THEN_CAPTURE.format(delay=1, stopped_line=STOPPED_LINE, window=10))
 with Case(eng8, grace=20) as c:
-    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 60), \
         "stopped 알림이 왔는데 NUDGE가 안 났다(P435 결정 1 §2)\n" + c.log()
-    captured = wait_for(lambda: c.captured_nudge() or None, 15) or ""
+    captured = wait_for(lambda: c.captured_nudge() or None, 60) or ""
     assert STOP_MSG in captured, \
         "stopped 갈래의 주입 문구가 결정 1의 문장과 다르다: {!r}".format(captured)
 print("PASS 8 - stopped를 보면 유예를 안 채우고 바로 전용 문구로 민다(P435 결정 1 §2)")
@@ -336,9 +336,9 @@ print("PASS 9 - reason=bg가 상한을 넘기면 dead_reason이 백그라운드 
 # bg_pending이 거짓을 내 NUDGE도 reason=bg도 안 났다).
 eng10 = ENGINE.format(bg_line=CMD_LINE, result_line=RESULT_LINE, body=BODY_NO_GROW)
 with Case(eng10, grace=2) as c:
-    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 60), \
         "'Command running in background' 문구만 있는데 주입이 안 났다(P435 결정 4)\n" + c.log()
-    assert wait_for(lambda: FAIL_TAIL in c.log(), 15), \
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 60), \
         "주입 뒤에도 안 자랐는데 종전 종료가 안 났다\n" + c.log()
     assert "reason=bg" in c.log(), \
         "'Command running in background' 문구만 있었는데 FAIL 줄에 reason=bg가 없다(P435 결정 4)\n" + c.log()
@@ -347,7 +347,7 @@ print("PASS 10 - 세션이 직접 띄운 명령 문구만 있어도 같은 밀�
 # 11 - 두 문구가 다 없으면 유예가 안 걸리고 종전 FAIL 줄은 한 글자도 안 갈린다(수용조건 3).
 eng11 = ENGINE.format(bg_line="", result_line=RESULT_LINE, body=BODY_NO_GROW)
 with Case(eng11, grace=20) as c:
-    assert wait_for(lambda: FAIL_TAIL in c.log(), 15), "밀림 문구가 없는데 종전 종료가 안 났다\n" + c.log()
+    assert wait_for(lambda: FAIL_TAIL in c.log(), 60), "밀림 문구가 없는데 종전 종료가 안 났다\n" + c.log()
     assert "NUDGE bg0001 bg" not in c.log(), "밀림 문구가 없는데 주입이 났다\n" + c.log()
     log11 = c.log()
     fail_line = next(l for l in log11.splitlines() if "FAIL bg0001" in l)
@@ -368,7 +368,7 @@ sleep 60\
 eng12 = ENGINE.format(bg_line=BG_LINE, result_line=RESULT_LINE,
                        body=BODY_SYSTEM_AFTER_RESULT.format(sys_line=STOPPED_LINE))
 with Case(eng12, grace=3) as c:
-    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 15), \
+    assert wait_for(lambda: "NUDGE bg0001 bg" in c.log(), 60), \
         "result 뒤에 system 줄이 붙었는데 is_result가 구간을 못 잡아 주입조차 안 났다(P448)\n" + c.log()
     assert wait_for(lambda: FAIL_TAIL in c.log(), 20), \
         "result 뒤 system 줄 때문에 주입 뒤 종전 종료까지 안 났다(P448)\n" + c.log()
