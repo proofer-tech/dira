@@ -9043,8 +9043,8 @@ Claude Desktop 에서 Vercel API 나 Claude for Chrome으로 해왔었으니깐�
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P562-1 | 엔진-GUI 안내 문장 - `tick.sh` `ROW_KO`/`ROW_EN`, `home-session.ts` `AUTOPILOT_ROW_KO`/`_EN`에 결정 1 문장, `test_prompt.py` 단언 | developer | - | 발행 |
-| P562-2 | 프로토콜 - `packages/dira-protocols/외부-계정.md` 신설(결정 2), `tickets.md`에 오토파일럿 멈춤 출구 금지 절(결정 3) | developer | - | 발행 |
+| P562-1 | 엔진-GUI 안내 문장 - `tick.sh` `ROW_KO`/`ROW_EN`, `home-session.ts` `AUTOPILOT_ROW_KO`/`_EN`에 결정 1 문장, `test_prompt.py` 단언 `9367b822` | developer | - | 발행 |
+| P562-2 | 프로토콜 - `packages/dira-protocols/외부-계정.md` 신설(결정 2), `tickets.md`에 오토파일럿 멈춤 출구 금지 절(결정 3) `d6c1bf24` | developer | - | 발행 |
 
 **두 장이고 서로 안 엮는다.** 1의 문장이 2의 파일명을 가리키지만 파일이 없어도 문장은 쓸 수 있다.
 
