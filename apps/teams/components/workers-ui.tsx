@@ -33,8 +33,8 @@ import {
   saveContextAction,
   stopWorkerAction,
   type ContextResult,
-  type WorkerActionResult,
 } from "@/app/(app)/p/[project]/workers/actions";
+import type { WorkerActionResult } from "@/lib/ops/worker";
 import { CopyCommand } from "@/components/copy-command";
 import { PickPath } from "@/components/path-picker";
 import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";

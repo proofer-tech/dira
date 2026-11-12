@@ -134,8 +134,6 @@ export async function submitOntologySurveyAction(
  *  쓴다(§5-3 §생성·§형식이 vault 레퍼런스로 간다 §①②). 파일마다 `createFile`(O_EXCL) 다음
  *  `saveFile`이다 — 순서를 지키는 이유는 `createFile`이 중간 디렉터리를 만들어 주기 때문이다. */
 
-export type { FixTicketResult, PublishTicketResult };
-
 /** 위반 카드의 `문제해결`(§P230). 판정과 쓰기는 `lib/ops/ontology.ts`다. */
 export async function fixOntologySchemaAction(projectId: string): Promise<FixTicketResult> {
   try {

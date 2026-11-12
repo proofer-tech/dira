@@ -33,8 +33,6 @@ import {
   type WorktreePrep,
 } from "@/lib/workers";
 
-export type { WorkerActionResult };
-
 /** 등록된 프로젝트의 root만 만진다. URL 조각으로 임의 경로를 열지 않는다. */
 async function rootOf(projectId: string, locale: Locale = DEFAULT_LOCALE): Promise<string> {
   const project = await getProject(projectId);
