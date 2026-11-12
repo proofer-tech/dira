@@ -1632,7 +1632,12 @@ if [ "$AUTOPILOT" = 1 ] && [ "$LEVEL" = 5 ]; then
 자격 증명, 다른 계정·도구·경로, 우회 구현, 범위 조정까지 성공할 방법을 스스로 고안해 하나씩 시도하세요.
 시도할 방법이 물리적으로 하나도 남지 않았을 때만 옛 통로(\`kind: request\`는 \`## 질문 n\` + \`awaiting:\`, 그
 밖은 \`## 블록\`)를 쓰고, 같은 편집에서 fm에 \`autopilot_failed: <ISO 8601 시각>\`을 더하고 그 절 첫 줄에
-시도한 방법을 나열하세요. 그 밖은 주도성 5와 같습니다 -- 규약을 넘은 판단은 각 줄을 \`주도성 5 판단:\`으로
+시도한 방법을 나열하세요. 이미 로그인된 CLI - CLI가 저장한 토큰으로 부르는 API - \`.dira/browse.sh\` 브라우저로 할 수 있는 일은 권한
+안입니다. 외부 계정에 저장소 - 토큰 - 환경변수 - 연결을 새로 만드는 일도 여기에 들어가며, \"남의 계정이라
+범위 밖\"은 멈출 사유가 아닙니다. 하지 않는 것은 둘입니다: 결제 수단 입력이나 요금제 상향, 이미 있는 데이터의
+삭제나 덮어쓰기. 새로 만든 것은 무엇을 어디에 만들었는지와 되돌리는 명령을 \`## 결과\`에 적습니다. 길을 찾는
+순서는 \`.dira/protocols/외부-계정.md\`에 있습니다.
+그 밖은 주도성 5와 같습니다 -- 규약을 넘은 판단은 각 줄을 \`주도성 5 판단:\`으로
 시작해 정보 문자열 \`autonomy\`인 펜스 한 벌에 모으세요."
   ROW_EN="Autopilot is on. Do not create a waiting-for-answer ticket -- write no \`## 질문 n\`, no \`awaiting:\`,
 and no \`## 블록\`. Even when something only the human holds (password, login, payment method, 2FA code)
@@ -1640,7 +1645,13 @@ seems necessary, devise and try ways to succeed one by one: credentials already 
 accounts, tools, or paths, workaround implementations, scope adjustment. Only when no method physically
 remains, use the old channel (\`## 질문 n\` + \`awaiting:\` for \`kind: request\`, otherwise \`## 블록\`), add
 \`autopilot_failed: <ISO 8601 time>\` to the fm in the same edit, and list the methods tried on the first
-line of that section. Otherwise the same as level 5 -- record any judgment that crosses protocol as a
+line of that section. Whatever you can do with an already logged-in CLI, an API called with a token that CLI stored, or the
+\`.dira/browse.sh\` browser is within your authority. Creating a repository, token, environment variable, or
+connection on an external account counts, and \"it is someone else's account, so out of scope\" is not a reason to
+stop. Two things you do not do: enter a payment method or raise a plan tier, and delete or overwrite existing data.
+For anything newly created, write what you created, where, and the command to undo it in \`## 결과\`. The order for
+finding a path is in \`.dira/protocols/외부-계정.md\`.
+Otherwise the same as level 5 -- record any judgment that crosses protocol as a
 line starting with \`주도성 5 판단:\`, gathered into one fence with info string \`autonomy\`."
 fi
 case "$LOCALE" in

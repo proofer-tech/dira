@@ -429,6 +429,8 @@ TICKET_ENGINE=("{tmp}/claude" "{{prompt}}")
             got = dryrun(w, local)
             assert got.count("주도성 안내: 5/5 (오토파일럿).") == (1 if on else 0), "오토파일럿 줄 횟수가 다르다 {}".format(body)
             assert ("오토파일럿이 켜져 있습니다. 답변 대기를 만들지 않습니다" in got) == on, body
+            assert got.count("이미 로그인된 CLI") == (1 if on else 0), "권한 범위 문장 횟수가 다르다 {}".format(body)
+            assert got.count("외부-계정.md") == (1 if on else 0), "외부-계정.md 횟수가 다르다 {}".format(body)
             if not on:
                 write(autof, json.dumps({"level": body["level"]}))
                 assert got == dryrun(w, local), "꺼진 판정인데 안내가 달라졌다 {}".format(body)
