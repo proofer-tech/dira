@@ -116,6 +116,7 @@ import { COMMAND_ID_RE, createCommand, listCommands, type CommandEntry } from ".
 import type { Surface } from "./tabs.ts";
 import { dedupeQueued, judgeSchedule, isValidWhen, nextScheduleDue } from "./urls.ts";
 import { engineCell, engineRepo, listWorkers, workerOf, type Worker } from "./workers.ts";
+import { wakeSlim } from "./slim.ts";
 
 /** 세션에 존재하는 도구 전부. **쉼표 한 토큰**이다(머리 주석의 variadic 함정). §7-5(요구
  *  `ea5e6f4d`)가 `Bash`의 쓰기 제한(옛 `BASH_ALLOWED`)을 걷어냈지만 이 상수 자체는 그대로다 —
@@ -1437,6 +1438,7 @@ export async function ask(
   }
 
   const { sessionId, resumed, persona } = turn ?? (await beginTurn(project.id, q));
+  await wakeSlim(project.root).catch(() => {}); // 비운 체크아웃이면 cwd(repo)를 먼저 채운다(P519)
   // 페르소나 디렉터리·온톨로지 둘 다 워커 스크립트가 옮길 수 있다(`TICKET_PERSONAS`·
   // `TICKET_ONTOLOGY`) — 기본값을 여기 다시 쓰지 않고 `resolveConfig`가 해석한 값을 그대로
   // 쓴다(고정 함수를 안 둔다 — DESIGN.md §5-3). 못 읽으면 페르소나 없이, 온톨로지는 기본 자리

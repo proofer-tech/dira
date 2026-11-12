@@ -55,6 +55,7 @@ const {
   dispatchGateState,
   SELF_HEAL_FILE,
   SELF_HEAL_SH,
+  SELF_HEAL_SLIM,
   selfHealSourceLine,
   WATCHDOG_FILE,
   WATCHDOG_SH,
@@ -1743,6 +1744,8 @@ function selfHealBed(names: string[], engine: boolean) {
   );
 
   return {
+    root,
+    repo,
     wpath,
     lines: (n: string) => cronLine({ path: wpath(n) }),
     setTab: (text: string) => writeFileSync(tab, text),
@@ -1798,6 +1801,37 @@ test("§4-4 ② 엔진이 있으면 `.sh`가 없는 dira 줄만 빠진다 (남�
   assert.strictEqual(bed2.run("w1"), "ALIVE\n");
   assert.strictEqual(bed2.wrote(), false);
   assert.strictEqual(bed2.keymapLeft(), true);
+});
+
+test("§4-4 슬림이 엔진 레포를 비웠으면 cron 줄을 남기고, 열린 티켓이 있을 때만 다시 채워 잇는다", () => {
+  const bed = selfHealBed(["w1"], true);
+  const git = (...a: string[]) => execFileSync("git", ["-C", bed.repo, ...a], { encoding: "utf8" });
+  git("init", "-q");
+  git("-c", "user.email=t@t", "-c", "user.name=t", "add", "tick.sh");
+  git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "e");
+  git("sparse-checkout", "set", "--no-cone", "/.dira-slim-empty"); // slim.py empty가 하는 일
+  const tick = path.join(bed.repo, "tick.sh");
+  assert.strictEqual(existsSync(tick), false);
+  bed.setTab([...OTHERS, bed.lines("w1"), ""].join("\n"));
+
+  // 열린 티켓이 없다 - 이번 tick만 쉰다. 줄을 안 빼고(crontab을 안 쓴다) 레포도 비운 채다.
+  mkdirSync(path.join(bed.root, "tickets"));
+  writeFileSync(path.join(bed.root, "tickets", "aaaa0001.done.md"), "");
+  assert.strictEqual(bed.run("w1"), "");
+  assert.strictEqual(bed.wrote(), false);
+  assert.strictEqual(existsSync(tick), false);
+
+  // 사람이 요청을 올렸다 - 레포를 다시 채우고 tick.sh로 넘어간다.
+  writeFileSync(path.join(bed.root, "tickets", "bbbb0002.md"), "");
+  assert.strictEqual(bed.run("w1"), "ALIVE\n");
+  assert.strictEqual(bed.wrote(), false);
+  assert.strictEqual(existsSync(tick), true);
+  assert.strictEqual(existsSync(path.join(bed.root, "slim-checkout.active")), true);
+});
+
+test("§4-4 슬림 블록은 마이그레이션 0005가 끼우는 바이트와 같다", () => {
+  const py = readFileSync(path.join(import.meta.dirname, "..", "..", "..", "migrations", "0005_self_heal_slim.py"), "utf8");
+  assert.ok(py.includes(SELF_HEAL_SLIM), "migrations/0005_self_heal_slim.py의 BLOCK이 SELF_HEAL_SLIM과 다르다");
 });
 
 test("§4-4 ③ 마지막 dira 줄이 빠지면 키맵만 지운다", () => {

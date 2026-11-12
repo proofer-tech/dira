@@ -55,3 +55,12 @@ export async function setSlim(queueRoot: string, on: boolean, run: SlimRun = run
 
 export const slimOn = async (queueRoot: string) =>
   (await readFile(slimFile(queueRoot), "utf8").catch(() => "")).split("\n")[0].trim() === "on";
+
+/** 사람이 이 큐에 말을 걸었다(홈 대화) - 슬림이 켜져 있으면 비운 체크아웃을 다시 채운다. 세션이 repo를
+ *  cwd로 읽기 때문이다(tick.sh가 claim 뒤 `slim.py fill`을 부르는 것과 같은 판정). 채운 시각을
+ *  `slim-checkout.active`에 남겨 `slim.py auto`가 대화 도중 다시 비우지 않게 한다. 실패는 대화를 막지 않는다. */
+export async function wakeSlim(queueRoot: string, run: SlimRun = runSlim): Promise<void> {
+  if (!(await slimOn(queueRoot))) return;
+  await run("fill", queueRoot);
+  await writeFile(path.join(queueRoot, "slim-checkout.active"), "").catch(() => {});
+}

@@ -2273,6 +2273,24 @@ export function selfHealSourceLine(root: string, repo: string): string {
  *  `[ -f ... ] &&` 접두는 있어도 없어도 매치한다 — 감싼 줄도 안 감싼 옛 줄도 같은 판정을 받는다. */
 const selfHealSourceRe = /^[ \t]*(?:\[ -f [^\n]*?\] && )?(?:\.|source)[ \t]+[^\n]*self-heal\.sh/m;
 
+/** 슬림 체크아웃(P519)이 엔진이 든 레포를 비운 경우를 ①(엔진 삭제)에서 떼어 내는 블록.
+ *  마이그레이션 `0005_self_heal_slim.py`가 기존 큐 사본에 같은 바이트를 끼운다 - 고치면 둘 다 고친다. */
+export const SELF_HEAL_SLIM = `# 슬림 체크아웃(P519)이 엔진이 든 레포를 비운 것이면 지운 것이 아니다 - cron 줄을 남긴다.
+# 사람이 올린 열린 티켓이 있으면 레포를 다시 채워 이 tick을 잇고, 없으면 이번 tick만 쉰다.
+# 채운 시각을 slim-checkout.active에 남겨 tick.sh의 slim.py auto가 곧바로 다시 비우지 않게 한다.
+# ponytail: 열린 티켓 = 접미사 없는 tickets/*.md다. 답변 대기 티켓도 채움을 부른다(채운 채로 두는 쪽으로 틀린다).
+if [ "$_dira_gone" = 1 ]; then
+  _dira_repo=$(dirname "$_dira_engine")
+  if [ "$(git -C "$_dira_repo" sparse-checkout list 2>/dev/null)" = "/.dira-slim-empty" ]; then
+    _dira_gone=0
+    _dira_q=$(dirname "$(dirname "$0")")
+    if ls "$_dira_q/tickets" 2>/dev/null | grep '\\.md$' | grep -qv '\\.\\(wip\\|done\\)\\.md$'; then
+      git -C "$_dira_repo" sparse-checkout disable >/dev/null 2>&1 && touch "$_dira_q/slim-checkout.active"
+    fi
+    [ -f "$_dira_engine" ] || exit 0
+  fi
+fi`;
+
 /** `<루트>/self-heal.sh`의 전문. GUI가 만들고 관리한다(선례: `context.sh`·`dispatch-gate.sh`).
  *  **엔진이 아니다** — `tick.sh`·`tickets.py`는 이 기능으로 한 줄도 안 바뀐다(불변식 1).
  *
@@ -2297,6 +2315,7 @@ _dira_engine=\${1:-}
 # 인자가 비었으면(줄이 잘못 심겼다) 엔진이 있는지 **알 수 없다.** 그때 ①을 돌리면 살아 있는
 # 워커가 자기 줄을 지운다 — 애매하면 안 뺀다. ②는 인자와 무관하므로 그대로 돈다.
 if [ -n "$_dira_engine" ] && [ ! -f "$_dira_engine" ]; then _dira_gone=1; else _dira_gone=0; fi
+${SELF_HEAL_SLIM}
 _dira_tab=$(crontab -l 2>/dev/null) || _dira_tab=
 
 if [ -n "$_dira_tab" ]; then

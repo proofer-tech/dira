@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { readSlim, setSlim, slimOn, type SlimRun } from "./slim.ts";
+import { readSlim, setSlim, slimOn, wakeSlim, type SlimRun } from "./slim.ts";
 
 const q = () => mkdtempSync(path.join(tmpdir(), "slim-"));
 const status = { enabled: true, eligible: true, state: "empty", last_active: "2026-10-24T00:00:00+09:00", reason: null };
@@ -46,4 +46,19 @@ test("empty가 rc 2로 거절하면 켜짐은 남고 사유가 message에 실린
   const v = await setSlim(root, true, f.run);
   assert.equal(await slimOn(root), true);
   assert.equal(v.message, "사람 작업이 있습니다");
+});
+
+test("wakeSlim은 켜진 큐만 채우고 active를 남긴다", async () => {
+  const off = q();
+  const f1 = fake();
+  await wakeSlim(off, f1.run);
+  assert.deepEqual(f1.calls, []);
+
+  const on = q();
+  const f2 = fake();
+  await setSlim(on, true, f2.run);
+  f2.calls.length = 0;
+  await wakeSlim(on, f2.run);
+  assert.deepEqual(f2.calls, [`fill ${on}`]);
+  assert.equal(readFileSync(path.join(on, "slim-checkout.active"), "utf8"), "");
 });
