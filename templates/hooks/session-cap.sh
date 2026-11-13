@@ -163,12 +163,15 @@ ORPHANEOF
       # 틈에 둘이 지우고 다시 잡으면 겹치므로, 락 안에서 스테일을 한 번 더 판정한다.
       # 회수 락 자신도 상한 시간이 지나면 걷는다(회수자가 죽은 경우).
       _sc_rl="$_sc_lock.reclaim"
-      _sc_age=$(( $(date +%s) - $(stat -f %m "$_sc_rl" 2>/dev/null || echo 0) ))
+      # stat이 실패하면(그 순간 없으면) 나이 0이다. 0 epoch로 두면 stat 직후 남이 만든 새 락이
+      # "아주 오래된 락"으로 읽혀 지워지고, 둘이 같이 회수 구간에 들어가 둘 다 디스패치한다
+      # (2026-11-12 CI test_session_cap_lock 죽은 pid 갈래 2건).
+      _sc_age=$(( $(date +%s) - $(stat -f %m "$_sc_rl" 2>/dev/null || date +%s) ))
       [ -d "$_sc_rl" ] && [ "$_sc_age" -ge "$_sc_lock_max" ] && rm -rf "$_sc_rl" 2>/dev/null
       if mkdir "$_sc_rl" 2>/dev/null; then
         _sc_pid=
         read -r _sc_pid < "$_sc_lock/pid" 2>/dev/null
-        _sc_age=$(( $(date +%s) - $(stat -f %m "$_sc_lock" 2>/dev/null || echo 0) ))
+        _sc_age=$(( $(date +%s) - $(stat -f %m "$_sc_lock" 2>/dev/null || date +%s) ))
         _sc_stale=
         if [ ! -d "$_sc_lock" ]; then
           _sc_stale=1   # 그새 풀렸다

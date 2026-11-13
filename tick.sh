@@ -63,8 +63,19 @@ if [ "$#" -eq 0 ]; then
     if [ -n "$_EP" ] && [ "$_EP" -gt 0 ] && kill -0 "$_EP" 2>/dev/null; then
       ENTRYLOCK=""; exit 0
     fi
+    # 스테일 회수는 .reclaim을 쥔 하나만 한다. 판정과 rm 사이에 남이 회수해 새로 잡은 잠금을
+    # 그냥 지우면 둘 다 들어간다(test_entry_lock 4d, 부하 200에서 3회 중 1회 2건). 그래서 안에서
+    # pid를 다시 읽어 판정한 그 잠금일 때만 지운다. 회수자가 안에서 죽었으면 10초 뒤 걷는다.
+    _ER="$ENTRYLOCK.reclaim"
+    [ $(( $(date +%s) - $(stat -f %m "$_ER" 2>/dev/null || date +%s) )) -ge 10 ] && rmdir "$_ER" 2>/dev/null
+    mkdir "$_ER" 2>/dev/null || { ENTRYLOCK=""; exit 0; }
+    _EP2=""; { read -r _EP2 < "$ENTRYLOCK/pid"; } 2>/dev/null
+    case "$_EP2" in ''|*[!0-9]*) _EP2="" ;; esac
+    if [ -d "$ENTRYLOCK" ] && [ "$_EP2" != "$_EP" ]; then rmdir "$_ER"; ENTRYLOCK=""; exit 0; fi
     rm -rf "$ENTRYLOCK"
-    mkdir "$ENTRYLOCK" 2>/dev/null || { ENTRYLOCK=""; exit 0; }
+    mkdir "$ENTRYLOCK" 2>/dev/null || { rmdir "$_ER"; ENTRYLOCK=""; exit 0; }
+    printf %s "$$" > "$ENTRYLOCK/pid"   # 회수 락을 놓기 전에 써야 다음 회수자가 내 잠금을 산 것으로 읽는다
+    rmdir "$_ER"
   fi
   printf %s "$$" > "$ENTRYLOCK/pid"
   trap '[ -n "$ENTRYLOCK" ] && rm -rf "$ENTRYLOCK"' EXIT

@@ -49,6 +49,15 @@ def at(h, m, ampm, now):
     return int(t.timestamp())
 
 
+def armed_ok(got, h, m, ampm, before, after):
+    """tick.sh는 max(복귀 시각, 지금+W)로 창을 건다. 복귀 시각이 W초 안이면 지금+W다.
+    CI가 그 시각 직전 5분에 돌면 이 갈래로 떨어진다(2026-11-12 23:55 UTC 12:00 AM 실패)."""
+    want = at(h, m, ampm, before)
+    lo = max(want, int(before.timestamp()) + W) - 1
+    hi = max(want, int(after.timestamp()) + W) + 1
+    return lo <= int(got[0]) <= hi
+
+
 tmp = os.path.realpath(tempfile.mkdtemp())
 try:
     root = os.path.join(tmp, "dira")
@@ -97,7 +106,7 @@ try:
     tick("codex")
     want = at(3, 48, "AM", now)
     got = cd("codex")
-    assert abs(int(got[0]) - want) <= 1 or int(got[0]) == at(3, 48, "AM", datetime.now()), got
+    assert armed_ok(got, 3, 48, "AM", now, datetime.now()), got
     assert got[2] == "1", got
     assert "복귀 %s" % got[0] in log(), log()
     # 3:48 AM이 지금보다 앞이면(이미 지난 시각) 다음 날 - 24시간 안이다.
@@ -111,7 +120,7 @@ try:
         now = datetime.now()
         tick("codex")
         got = cd("codex")
-        assert abs(int(got[0]) - at(h, m, ap, now)) <= 1, (h, m, ap, got)
+        assert armed_ok(got, h, m, ap, now, datetime.now()), (h, m, ap, got)
         assert got[2] == "1", got
 
     # --- ③ 시각 없는 한도 메시지: 300초 · known 0 ---
