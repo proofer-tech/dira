@@ -13,6 +13,7 @@
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -64,6 +65,15 @@ def _read_lines(path):
         return []
 
 
+def _porcelain_name(s):
+    """git status --porcelain 경로 칸에서 실제 파일 이름만 낸다: 이름 바꿈이면 새 이름, 따옴표는 벗긴다."""
+    if " -> " in s:
+        s = s.rsplit(" -> ", 1)[1]
+    if len(s) >= 2 and s[0] == s[-1] == '"':
+        s = re.sub(r"\\(.)", r"\1", s[1:-1])
+    return s
+
+
 def _g1(root):
     body = _read_lines(os.path.join(root, "workers", ".gate-dirty"))
     tree = body[0].split(" ", 1)[1].strip() if body and " " in body[0] else "(받는 트리)"
@@ -72,7 +82,7 @@ def _g1(root):
         if not l:
             continue
         status, _, verdict = l.partition("\t")
-        files.append((status[3:].strip() or status.strip(), verdict))
+        files.append((_porcelain_name(status[3:].strip() or status.strip()), verdict))
     return _tilde(tree), files
 
 
@@ -111,15 +121,21 @@ def describe(root, code, who, text):
     if code == "G1":
         tree, files = _g1(root)
         n = len(files)
-        title = f"워커가 결과를 올리지 못하고 있습니다: {tree}에 커밋 안 된 파일 {n}개"
+        if n:
+            title = f"워커가 결과를 올리지 못하고 있습니다: {tree}에 커밋 안 된 파일 {n}개"
+        else:
+            title = "워커가 결과를 올리지 못하고 있습니다: 커밋 안 된 파일 목록을 읽지 못했습니다"
         what = (f"워커는 작업 결과를 {tree}에 합친 뒤 올립니다. 지금 그 폴더에 커밋하지 않은 변경이 있어서 "
                 "워커가 결과를 올리지 못하고 멈춰 있습니다.")
         target = "\n".join(f"{tree}/{f} ({'사람이 편집 중으로 보임' if v == '사람편집' else '작업 잔해로 보임'})"
                            for f, v in files) or tree
         why = retried or ("누군가 편집하던 파일로 보여서 지우지 않았습니다. 지우면 그 작업이 사라집니다."
                           if any(v != "잔해" for _, v in files) else "받는 트리의 변경을 자동으로 되돌리지 못했습니다.")
-        first = files[0][0] if files else "<파일>"
-        todo = (f"편집하던 작업이면 커밋하세요. 필요 없는 변경이면 `git -C {tree} restore {first}`처럼 되돌리세요. "
+        if files:
+            undo = f"`git -C {tree} restore {shlex.quote(files[0][0])}`처럼 되돌리세요. "
+        else:
+            undo = f"`git -C {tree} status`로 어떤 파일인지 확인한 뒤 되돌리세요. "
+        todo = (f"편집하던 작업이면 커밋하세요. 필요 없는 변경이면 {undo}"
                 "둘 중 하나를 하면 워커가 다음 주기에 다시 돕니다.")
     elif code == "G2":
         names = sorted(n[len(".gate-notree-"):] for n in os.listdir(workers_dir)
@@ -148,12 +164,19 @@ def describe(root, code, who, text):
                 f"`printf '%s' '<받은 토큰>' > {path}`로 저장하세요.")
     elif code == "G5":
         m = re.match(r"워커 (\S+) 셸이 (\d+)벌\(상한 (\d+)\)", text)
-        name, n, cap = m.groups() if m else ("(워커)", "?", "?")
-        title = f"워커 {name}의 셸이 {n}벌 쌓여 있습니다(상한 {cap})"
+        if m:
+            name, n, cap = m.groups()
+            title = f"워커 {name}의 셸이 {n}벌 쌓여 있습니다(상한 {cap})"
+            target = f"워커 {name}, 셸 {n}벌"
+        else:
+            title = "워커의 셸이 상한을 넘게 쌓여 있습니다"
+            target = text
         what = "워커가 띄운 셸 프로세스가 정리되지 않고 쌓이고 있습니다. 더 쌓이면 컴퓨터가 느려집니다."
-        target = f"워커 {name}, 셸 {n}벌"
         why = retried or "정리 대상을 가려내지 못했습니다."
-        todo = (f"`pgrep -fl {name}`으로 어떤 프로세스인지 확인한 뒤 오래된 것부터 `kill <pid>`로 정리하세요.")
+        # recover와 같은 기준(상한 초과분만, 세션을 쥔 셸 제외, 오래된 것부터)으로 정리하는 명령이다.
+        gates = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchdog_gates.py")
+        todo = (f"터미널에서 `python3 {shlex.quote(gates)} recover {shlex.quote(os.path.abspath(root))}`를 "
+                "실행하세요. 상한을 넘은 만큼만, 작업 중인 세션의 셸은 빼고 오래된 것부터 정리합니다.")
     elif code == "G6":
         title = f"워커 자동 실행이 꺼져 있습니다: 워커 {len(worker_names)}개"
         what = "워커를 주기적으로 깨우는 crontab 줄이 하나도 없어서 워커가 저절로 돌지 않습니다."

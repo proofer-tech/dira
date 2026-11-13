@@ -83,4 +83,34 @@ assert "한 번 고쳤는데 같은 문제가 다시 걸렸습니다" in why, wh
 # 표식 없는 자력 줄은 티켓이 없다
 r = mkroot()
 assert wa.alert(r, ["G1 자력 받는 트리가 더러워 push가 막힌다(1건)"], notify_fn=lambda *a: None) == []
+
+# 5. 모서리 입력 (티켓 c062b0aa)
+def g1_body(dirty):
+    r = mkroot(dirty)
+    assert wa.alert(r, ["G1 사람 받는 트리가 더러워 push가 막힌다(1건)"], notify_fn=lambda *a: None)
+    return only_ticket(r)
+
+b = g1_body("1700000000 /tmp/p\n R  old.md -> new.md\t사람편집\n")
+assert "/tmp/p/new.md" in b and "old.md" not in b, b
+assert "restore new.md`" in b, b
+b = g1_body('1700000000 /tmp/p\n?? "sp ace.md"\t잔해\n')
+assert "/tmp/p/sp ace.md" in b and '"sp ace.md"' not in b.split("## 하실 일")[0], b
+assert "restore 'sp ace.md'`" in b, b
+for dirty in (None, "", "1700000000 /tmp/p\n"):
+    r = mkroot(dirty)
+    assert wa.alert(r, ["G1 사람 받는 트리가 더러워 push가 막힌다(1건)"], notify_fn=lambda *a: None)
+    b = only_ticket(r)
+    t = title_of(b)
+    assert "0개" not in t and "읽지 못했" in t, t
+    assert "<" not in b.split("## 하실 일")[1].split("## 진단")[0], b
+
+r = mkroot()
+open(os.path.join(r, "workers", "w1.sh"), "w").write("")
+for line in ("G5 사람 워커 w1 셸이 30벌(상한 25)", "G5 사람 이상한 줄"):
+    r = mkroot()
+    assert wa.alert(r, [line], notify_fn=lambda *a: None)
+    b = only_ticket(r)
+    todo = b.split("## 하실 일")[1].split("## 진단")[0]
+    assert "?" not in title_of(b) and "(워커)" not in title_of(b), title_of(b)
+    assert "<pid>" not in todo and "kill" not in todo and "watchdog_gates.py" in todo and " recover " in todo, todo
 print("ok")
