@@ -9036,9 +9036,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P564-1 | GUI - `lib/follows.ts`(읽기 - 쓰기 - done 판정), `/api/follows/done` - `/api/follows/ack`, 상세 `팔로우` 토글(결정 1-3, 6) + 테스트 | developer | - | 발행 |
-| P564-2 | 데스크톱 - `main.ts` 폴링 - 알림 - 클릭 이동 - `ack`(결정 3-5) + 테스트 | developer | - | 발행 |
-| P564-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P564-1, P564-2 | 발행 |
+| P564-1 | GUI - `lib/follows.ts`(읽기 - 쓰기 - done 판정), `/api/follows/done` - `/api/follows/ack`, 상세 `팔로우` 토글(결정 1-3, 6) + 테스트 `2da9f129` | developer | - | 발행 |
+| P564-2 | 데스크톱 - `main.ts` 폴링 - 알림 - 클릭 이동 - `ack`(결정 3-5) + 테스트 `3a4ca833` | developer | - | 발행 |
+| P564-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 `280e0e94` | qa | P564-1, P564-2 | 발행 |
 
 **designer 0장 - writer 0장.** 버튼은 옆 버튼과 같은 모양의 토글 하나이고, 매뉴얼에 상세 머리 버튼 설명이 없다.
 P564-1과 P564-2는 결정 3의 API 계약만 공유하므로 deps 없이 병렬로 진행한다.
