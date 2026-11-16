@@ -27,6 +27,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { badgeText, nextCount, type DockCounts } from "./dock-badge.ts";
+import { followDoneBody, parseFollowDone, type FollowDone } from "./follow-done.ts";
 import { classifyLink } from "./link.ts";
 import { closeTabOutcome } from "./close-tab.ts";
 import { cachedNotes, cacheNotes, newNotesCache, releaseNotes } from "./release-notes.ts";
@@ -578,6 +579,43 @@ async function pollGate() {
     updateDockBadge();
   } catch (e) {
     console.error(`[dira] 디스패치 보류 폴링 실패: ${(e as Error).message}`);
+  }
+}
+
+/** P564 팔로우 완료 알림. 씨 뿌리기 없이 응답 항목마다 알리고 `ack`로 지운다(한 번만 뜬다). 클릭은
+ *  `notify()`와 같은 순서이며 그 시점의 `readyOrigin`을 읽는다. */
+function notifyFollowDone(item: FollowDone) {
+  const n = new Notification({ title: "티켓 완료", body: followDoneBody(item) });
+  n.on("click", () => {
+    const url = `${readyOrigin}/p/${encodeURIComponent(item.project)}/tickets/${encodeURIComponent(item.stem)}`;
+    if (!win || win.isDestroyed()) win = openWindow(readyOrigin!);
+    win.loadURL(url);
+    win.show();
+    win.focus();
+  });
+  n.on("show", () => console.log(`[dira] 알림 -> ${item.project}/${item.stem} 팔로우 완료`));
+  n.show();
+}
+
+async function pollFollows() {
+  try {
+    const res = await fetch(`${readyOrigin}/api/follows/done`, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    for (const item of parseFollowDone(await res.json())) {
+      notifyFollowDone(item);
+      try {
+        await fetch(`${readyOrigin}/api/follows/ack`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ project: item.project, stem: item.stem }),
+          signal: AbortSignal.timeout(10_000),
+        });
+      } catch (e) {
+        console.error(`[dira] 팔로우 ack 실패: ${(e as Error).message}`);
+      }
+    }
+  } catch (e) {
+    console.error(`[dira] 팔로우 폴링 실패: ${(e as Error).message}`);
   }
 }
 
@@ -1282,12 +1320,14 @@ async function boot() {
 
   await pollAwaiting(); // 첫 응답 = 씨 뿌리기
   await pollGate(); // 마찬가지로 첫 응답은 씨 뿌리기
+  void pollFollows(); // 팔로우는 씨 뿌리기 없이 바로 알린다(P564 결정 3)
   // 타이머는 하나다 (N6 · N2 둘째 사건) — 같은 30초를 나눠 쓴다. 셋 다 부를 때마다 지금
   // `readyOrigin`을 읽으므로(고정하는 것 4 개정) 되살리기로 포트가 바뀐 뒤에도 죽은 포트만
   // 물어보지 않는다.
   setInterval(() => {
     pollAwaiting();
     pollGate();
+    pollFollows();
     pollWork();
   }, POLL_MS);
 }
