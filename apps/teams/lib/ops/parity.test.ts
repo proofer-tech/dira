@@ -119,7 +119,7 @@ const EXCLUDED: Record<string, string> = {
   openPersonaProfileAction: NO_SCREEN, openProtocolFileAction: NO_SCREEN, openTicketFileAction: NO_SCREEN,
   uploadAttachment: NO_SCREEN, tailSession: NO_SCREEN, dropTicketToWip: NO_SCREEN,
   setBindingAction: NO_SCREEN, resetKeymapAction: NO_SCREEN, markFailuresReadAction: NO_SCREEN, markResumeReadAction: NO_SCREEN,
-  toggleFavoriteAction: NO_SCREEN,
+  toggleFavoriteAction: NO_SCREEN, toggleFollowAction: NO_SCREEN,
   readSelfishAction: NO_SCREEN, startSelfishAction: NO_SCREEN, stopSelfishAction: NO_SCREEN, checkSelfishPermissionAction: NO_SCREEN,
   readSelfishPanelAction: NO_SCREEN, previewSelfishAction: NO_SCREEN, saveSelfishSettingsAction: NO_SCREEN,
   reportRendererErrorAction: NO_SCREEN, feedbackMetaAction: NO_SCREEN, readMcpAction: NO_SCREEN,
