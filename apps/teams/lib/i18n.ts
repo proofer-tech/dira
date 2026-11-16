@@ -1548,6 +1548,9 @@ export const ko: Record<string, string> = {
   "ticketDetail.answerDialogDesc": "답변을 달면 이 티켓이 다시 큐에 뜨고 담당 세션이 이어서 봅니다.",
 
   "ticketDetail.delete": "삭제",
+  "ticketDetail.follow": "팔로우",
+  "ticketDetail.following": "팔로우 중",
+  "ticketDetail.followTooltip": "이 티켓이 완료되면 시스템 알림을 받습니다",
   "ticketDetail.deleteConfirmTitle": "티켓 삭제",
   "ticketDetail.deleteConfirmDescSuffix": "의 파일을 지웁니다. 되돌릴 수 없습니다.",
   "ticketDetail.deleteFailedFallback": "삭제하지 못했습니다.",
@@ -4637,6 +4640,9 @@ export const en: Record<string, string> = {
     "Answer it and this ticket comes back to the queue, and the session that holds it carries on.",
 
   "ticketDetail.delete": "Delete",
+  "ticketDetail.follow": "Follow",
+  "ticketDetail.following": "Following",
+  "ticketDetail.followTooltip": "Get a system notification when this ticket is done",
   "ticketDetail.deleteConfirmTitle": "Delete ticket",
   "ticketDetail.deleteConfirmDescSuffix": " is deleted, file and all. This can't be undone.",
   "ticketDetail.deleteFailedFallback": "Couldn't delete it.",

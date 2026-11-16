@@ -589,3 +589,11 @@ export async function deleteTicket(projectId: string, hash: string): Promise<Del
     return { ok: false, message: (e as Error).message };
   }
 }
+
+/** 팔로우 토글 (DESIGN.md §P564). 큐 파일이 아니라 기계 로컬 `follows.json`만 쓴다.
+ *  프로젝트·해시를 `target`이 서버에서 다시 찾고, 키는 찾아낸 파일의 stem이다. `.done`은 거부한다. */
+export async function toggleFollowAction(projectId: string, hash: string): Promise<boolean> {
+  const tg = await target(projectId, hash);
+  if (tg.state === "done") throw new Error("ticket already done");
+  return (await import("@/lib/follows")).toggleFollow(projectId, tg.stem);
+}

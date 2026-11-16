@@ -22,6 +22,7 @@ import { DepBadge, StatusBadge, daysSince } from "@/components/status-badge";
 import { WipWorker } from "@/components/worker-mark";
 import {
   DeleteTicketButton,
+  FollowButton,
   FrontmatterTable,
   NewTicketDialog,
   OpenTicketFileButton,
@@ -35,6 +36,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { findTicket } from "@/lib/engine";
+import { isFollowing } from "@/lib/follows";
 import { listEpics, resolveMarkdownRefs } from "@/lib/epics";
 import { t, type Locale } from "@/lib/i18n";
 import { t as tr } from "@/lib/i18n";
@@ -532,6 +534,9 @@ export default async function TicketDetail({
               완료가 읽기 전용이 되면 "같은 일을 조건만 바꿔 다시" 하는 자리가 여기뿐이다(§2 복사).
               frontmatter는 **원문**을 넘긴다: `ticket.persona`는 `PERSONA_RE`를 못 넘긴 값을 ''로
               만든 것이라 사본이 조용히 페르소나를 잃는다(편집 폼이 같은 이유로 `fm`을 넘긴다). */}
+          {ticket.state !== "done" && (
+            <FollowButton project={id} hash={hash} initial={await isFollowing(id, ticket.stem)} />
+          )}
           <NewTicketDialog
             project={id}
             personas={personas}

@@ -20,6 +20,8 @@ import Link from "@/components/link";
 import { useTrackedRouter } from "@/lib/route-pending";
 import {
   ArrowDown,
+  Bell,
+  BellRing,
   Check,
   ChevronRight,
   Copy,
@@ -39,6 +41,7 @@ import {
   openTicketFileAction,
   retryBackoffNowAction,
   saveTicket,
+  toggleFollowAction,
   saveTicketFrontmatter,
   unassignTicket,
   type SaveState,
@@ -1397,6 +1400,28 @@ export function OpenTicketFileButton({ project, hash }: { project: string; hash:
       </Tooltip>
       {error && <span className="text-xs text-destructive">{error}</span>}
     </span>
+  );
+}
+
+// ── 팔로우 (DESIGN.md §P564) ───────────────────────────────────────────────
+
+/** 완료되면 시스템 알림을 받는 토글. 상태는 서버가 `follows.json`에 적고, 초기값은 페이지가 읽어 넘긴다. */
+export function FollowButton({ project, hash, initial }: { project: string; hash: string; initial: boolean }) {
+  const t = useT();
+  const [on, setOn] = useState(initial);
+  const [pending, start] = useTransition();
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      aria-pressed={on}
+      disabled={pending}
+      title={t("ticketDetail.followTooltip")}
+      onClick={() => start(async () => setOn(await toggleFollowAction(project, hash)))}
+    >
+      {on ? <BellRing aria-hidden /> : <Bell aria-hidden />}
+      {on ? t("ticketDetail.following") : t("ticketDetail.follow")}
+    </Button>
   );
 }
 
