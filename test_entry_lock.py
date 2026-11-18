@@ -20,6 +20,8 @@ def make():
         os.makedirs(os.path.join(root, p))
     os.makedirs(os.path.join(local, "run"))
     os.makedirs(bindir)
+    with open(os.path.join(root, "tickets", "aaaaaaaa.md"), "w") as f:  # 빈 큐면 cron이 아예 안 띄운다(P565)
+        f.write("---\nticket: aaaaaaaa\ntitle: t\n---\n\nx\n")
     with open(os.path.join(bindir, "crontab"), "w") as f:
         f.write("#!/bin/sh\necho '* * * * * %s/workers/w1.sh'\n" % root)
     os.chmod(os.path.join(bindir, "crontab"), 0o755)

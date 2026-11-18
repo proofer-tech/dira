@@ -1654,6 +1654,8 @@ test("cronPeriod — 짝줄(sleep 30) 있으면 30, 본 줄만 있으면 60, 미
   assert.strictEqual(cronPeriod(handRegistered, "/tmp/w2.sh"), 60);
 
   assert.strictEqual(cronPeriod(registered, "/tmp/w9.sh"), null); // 미등록
+  // 엔진 sweep 데몬이 실행 줄을 표지로 바꾼 뒤에도 등록이고 30이다(P565)
+  assert.strictEqual(cronPeriod('# dira-worker "/tmp/w3.sh"', "/tmp/w3.sh"), 30);
   assert.strictEqual(cronPeriod("", "/tmp/w1.sh"), null); // 빈 crontab
 });
 
@@ -1841,6 +1843,38 @@ test("§4-4 ③ 마지막 dira 줄이 빠지면 키맵만 지운다", () => {
   assert.strictEqual(bed.run("w1"), "");
   assert.strictEqual(bed.out(), [...OTHERS, ""].join("\n")); // 남의 잡은 그대로
   assert.strictEqual(bed.keymapLeft(), false);
+});
+
+test("§4-4 sweep 표지 줄도 dira 줄이다 - 살아 있는 표지가 남으면 키맵을 안 지우고, 죽은 표지는 뺀다 (P565)", () => {
+  const bed = selfHealBed(["w1", "w2"], true);
+  const mark = (n: string) => `# dira-worker "${bed.wpath(n)}"`;
+  const deadMark = `# dira-worker "/Users/x/Projects/gone/.dira/workers/w8.sh"`;
+  const deadLine = cronLine({ path: "/Users/x/Projects/gone/.dira/workers/w7.sh" });
+  const sweep = `* * * * * python3 "${bed.repo}/dispatch.py" sweep >> "/tmp/sweep.log" 2>&1`;
+  bed.setTab([...OTHERS, mark("w1"), mark("w2"), deadMark, deadLine, sweep, ""].join("\n"));
+
+  assert.strictEqual(bed.run("w1"), "ALIVE\n");
+  // 죽은 표지와 죽은 실행 줄만 빠지고, 산 표지 둘과 엔진이 있는 sweep 줄은 남는다
+  assert.strictEqual(bed.out(), [...OTHERS, mark("w1"), mark("w2"), sweep, ""].join("\n"));
+  // 실행 줄은 하나도 안 남았지만 산 표지가 있으므로 이 머신의 dira는 살아 있다
+  assert.strictEqual(bed.keymapLeft(), true);
+});
+
+test("§4-4 엔진을 지웠으면 내 표지와 그 엔진의 sweep 기동 줄을 빼고, 마지막이면 키맵을 지운다", () => {
+  const bed = selfHealBed(["w1"], false);
+  const sweep = `* * * * * python3 "${bed.repo}/dispatch.py" sweep >> "/tmp/sweep.log" 2>&1`;
+  bed.setTab([...OTHERS, `# dira-worker "${bed.wpath("w1")}"`, sweep, ""].join("\n"));
+
+  assert.strictEqual(bed.run("w1"), "");
+  assert.strictEqual(bed.out(), [...OTHERS, ""].join("\n"));
+  assert.strictEqual(bed.keymapLeft(), false);
+});
+
+test("§4-4 표지 줄 판정은 마이그레이션 0007이 바꾸는 바이트와 같다", () => {
+  const py = readFileSync(path.join(import.meta.dirname, "..", "..", "..", "migrations", "0007_self_heal_marker.py"), "utf8");
+  assert.ok(py.includes(`'# dira-worker '*) _dira_p=`), "0007에 표지 줄 갈래가 없다");
+  assert.ok(SELF_HEAL_SH.includes(`'# dira-worker '*) _dira_p=$(printf '%s\\n' "$_dira_l"`), "SELF_HEAL_SH에 표지 줄 갈래가 없다");
+  assert.ok(SELF_HEAL_SH.includes(`*"\${_dira_engine%/tick.sh}/dispatch.py\\" sweep"*)`), "SELF_HEAL_SH에 sweep 줄 빼기가 없다");
 });
 
 test("§4-4 crontab을 못 읽거나 비었으면 아무것도 안 쓴다 (rc=0)", () => {

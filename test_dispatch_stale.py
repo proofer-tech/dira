@@ -46,7 +46,7 @@ def cron(S, w="w1", *extra):
 
 def main():
     # 결정 1: 죽은 pid 락은 걷고 go, 산 pid 락은 go false
-    S = setup([])
+    S = setup(["aaaaaaaa"])  # 빈 큐면 cron은 아예 안 띄운다(P565) - 락 판정을 보려고 티켓 하나
     d = lockdir(S[1], S[2], "w1")
     put(os.path.join(d, "pid"), "999999\n")
     rc, j = cron(S, "w1", "--dryrun")
@@ -69,14 +69,14 @@ def main():
     rc, j = cron(S, "w1", "--dryrun")
     assert rc == 0 and not os.path.exists(d), j
     # 죽은 진입 잠금은 로그 없이 걷는다
-    S = setup([])
+    S = setup(["aaaaaaaa"])  # 빈 큐면 cron은 아예 안 띄운다(P565) - 락 판정을 보려고 티켓 하나
     e = lockdir(S[1], S[2], "w1", "entry")
     put(os.path.join(e, "pid"), "999999\n")
     rc, j = cron(S, "w1", "--dryrun")
     assert rc == 0 and not os.path.exists(e) and runlog(S[1]) == "", j
 
     # 결정 2: 60초 자는 워커를 10번 불러도 하나만 뜬다. 죽이면 다시 뜬다
-    S = setup([])
+    S = setup(["aaaaaaaa"])  # 빈 큐면 cron은 아예 안 띄운다(P565) - 락 판정을 보려고 티켓 하나
     sh = os.path.join(S[1], "workers", "w1.sh")
     put(sh, "#!/bin/bash\nsleep 60\n")
     whys = [cron(S)[1]["why"] for _ in range(10)]
@@ -108,7 +108,7 @@ def main():
     assert rc == 0 and j["go"], j
 
     # 결정 5: 세션 없이 오래된 산 pid 락은 끝내고 go, session에 산 pid가 있으면 busy
-    S = setup([])
+    S = setup(["aaaaaaaa"])  # 빈 큐면 cron은 아예 안 띄운다(P565) - 락 판정을 보려고 티켓 하나
     d = lockdir(S[1], S[2], "w1")
     live = sleeper()
     put(os.path.join(d, "pid"), "%d\n" % live.pid)

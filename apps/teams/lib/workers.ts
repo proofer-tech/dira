@@ -1976,7 +1976,9 @@ export function cronMigrate(text: string, roots: string[], engine: string): stri
 export function cronPeriod(cronTextNfc: string, workerPathNfc: string): 30 | 60 | null {
   const lines = cronTextNfc.split("\n").filter((l) => l.includes(workerPathNfc));
   if (lines.length === 0) return null;
-  return lines.some((l) => /\bsleep 30\b/.test(l)) ? 30 : 60;
+  // 엔진의 sweep 데몬(P565)이 실행 줄을 `# dira-worker "<경로>"` 표지로 바꾼다.
+  // 데몬은 10초마다 큐를 보므로 30초 약속보다 짧다 - 화면 문구(30초)는 그대로 둔다.
+  return lines.some((l) => /\bsleep 30\b/.test(l) || /^\s*# dira-worker\s/.test(l)) ? 30 : 60;
 }
 
 /** `grep -F`는 **바이트로** 비교한다. crontab 줄은 사람이 넣은 NFC인데 `readdir`가 준 경로는
@@ -2329,6 +2331,8 @@ if [ -n "$_dira_tab" ]; then
     #           (보수적인 쪽으로 틀린다). 그런 큐가 생기면 그때 인용 해제를 붙인다.
     _dira_p=
     case $_dira_l in
+      # 엔진 sweep 데몬이 실행 줄을 바꿔 둔 등록 표지다 - cron은 안 돌려도 dira 줄로 센다(P565)
+      '# dira-worker '*) _dira_p=$(printf '%s\\n' "$_dira_l" | sed -n 's|.*"\\(/[^"]*/workers/[^"/]*\\.sh\\)".*|\\1|p') ;;
       '#'*) ;;   # 주석은 cron이 실행하지 않는다 = dira 줄이 아니다
       *) _dira_p=$(printf '%s\\n' "$_dira_l" | sed -n 's|.*"\\(/[^"]*/workers/[^"/]*\\.sh\\)".*|\\1|p') ;;
     esac
@@ -2336,7 +2340,8 @@ if [ -n "$_dira_tab" ]; then
     _dira_drop=0
     if [ "$_dira_gone" = 1 ]; then
       # ① 엔진이 없다 = 앱·레포를 지웠다. 내 줄(등록 단위 2줄)을 빼고 이 tick은 여기서 끝낸다.
-      case $_dira_l in *"$0"*) _dira_drop=1 ;; esac
+      # 지운 엔진의 sweep 기동 줄도 같이 뺀다 - 남기면 cron이 없는 dispatch.py를 1분마다 부른다.
+      case $_dira_l in *"$0"*|*"\${_dira_engine%/tick.sh}/dispatch.py\\" sweep"*) _dira_drop=1 ;; esac
     elif [ -n "$_dira_p" ] && [ ! -f "$_dira_p" ]; then
       # ② 죽은 줄은 자기를 못 뺀다(부를 .sh가 없다). 살아 있는 워커가 대신 뺀다 — 남의 줄이어도.
       _dira_drop=1

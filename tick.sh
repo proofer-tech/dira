@@ -868,7 +868,10 @@ esac
 
 # --- 원격 큐(P478): 워커 락보다 앞이다 - 락 때문에 이번 tick이 빠져도 살아 있음 신호는 간다 ---
 # remote.json이 없으면 이 블록은 아무것도 안 한다. 실패는 tick을 막지 않는다(로그 한 줄).
-if [ "$CMD" = "tick" ] && [ -z "$REMOTE_SLOT" ] && [ -f "$TICKET_ROOT/remote.json" ]; then
+# DIRA_SWEEP=1: sweep 데몬이 띄운 tick이다. reap - 원격 - 슬림 - 로그 보존 - agy-gui 걷기는 데몬이
+# 느린 주기로 머신에 한 번 돌므로 여기서 다시 돌지 않는다(P565).
+HK=1; [ "${DIRA_SWEEP:-}" = 1 ] && HK=""; unset DIRA_SWEEP   # 세션과 그 자식에게는 넘기지 않는다
+if [ -n "$HK" ] && [ "$CMD" = "tick" ] && [ -z "$REMOTE_SLOT" ] && [ -f "$TICKET_ROOT/remote.json" ]; then
   _TO=""; command -v timeout >/dev/null 2>&1 && _TO="timeout 20"
   $_TO python3 "$CODE/remote.py" tick --root "$TICKET_ROOT" 2>&1 | while IFS= read -r line; do
     [ -n "$line" ] && log "$line"
@@ -879,7 +882,7 @@ fi
 # 없으면 사람에게 질문하고 rc=0으로 종료한 세션의 티켓이 영구 유실된다(2026-07-28 스트림 실사고 3건).
 # §폴링 대기 결정 5와 같은 이유로 아래 워커 락(SKIP)보다 앞이다 - reap은 이 워커의 바쁨과
 # 무관한 큐 전체의 스테일 수거라, 원래도 워커 락 성패에 기댈 이유가 없었다.
-if [ "$CMD" = "tick" ]; then
+if [ -n "$HK" ] && [ "$CMD" = "tick" ]; then
   python3 "$PY" reap "$TICKET_ROOT" "$LOCAL" 2>/dev/null | while IFS= read -r line; do
     [ -n "$line" ] && log "$line"
   done
@@ -887,7 +890,7 @@ fi
 
 # --- P519: 슬림 체크아웃 자동 비우기. 옵션이 꺼진 큐는 아무것도 부르지 않는다. 실패는 tick을 막지 않는다 ---
 slim_on() { [ "$(head -n1 "$TICKET_ROOT/slim-checkout" 2>/dev/null)" = "on" ] && [ -f "$CODE/slim.py" ]; }
-if [ "$CMD" = "tick" ] && slim_on; then
+if [ -n "$HK" ] && [ "$CMD" = "tick" ] && slim_on; then
   _TO=""; command -v timeout >/dev/null 2>&1 && _TO="timeout 120"
   $_TO python3 "$CODE/slim.py" auto "$TICKET_ROOT" >/dev/null 2>&1
 fi
@@ -896,7 +899,7 @@ fi
 # 실측(P409-2, 2026-09-15): 3,014개 3.8GB, 세션 로그 하나가 119MB까지 간다 - 그 위에서 큐
 # 탐색이 느려진다. 하루 한 번만 훑는다 - 매 tick(1분 주기)마다 3,000개를 훑으면 이 손이 스스로
 # 탐색 지연을 보탠다. 실패해도 디스패치를 막지 않는다(reap과 같은 이유).
-if [ "$CMD" = "tick" ]; then
+if [ -n "$HK" ] && [ "$CMD" = "tick" ]; then
   LOGKEEPDAYS="${TICKET_LOG_KEEP_DAYS:-14}"
   LOGRETMARK="$LOCAL/run/log-retention-date"
   LOGRETTODAY="$(date +%F)"
@@ -944,7 +947,7 @@ reap_dead_agy_gui() {
   done
   return 0
 }
-[ "$CMD" = "tick" ] && reap_dead_agy_gui
+[ -n "$HK" ] && [ "$CMD" = "tick" ] && reap_dead_agy_gui
 
 # --- §폴링 대기 결정 3·5·6 — 폴링 단계: reap 다음, `select` 앞이고, 이 워커가 바빠서 아래
 # 워커 락에 걸려 SKIP하는 자리보다도 앞이다 - 대기는 워커 슬롯과 무관한 큐 전체의 상태라서다.

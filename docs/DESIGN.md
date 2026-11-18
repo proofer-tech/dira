@@ -8988,6 +8988,78 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P565. 큐가 비어 있으면 dira가 맥에 부하를 만들지 않는다 - cron 워커 줄 대신 sweep 데몬 하나 (사람 직접 수정, 티켓 없음)
+
+사람 요구(2026-11-17, 수정 요청서): *"큐가 비어 있으면 cron은 거의 비용 없이 끝나야 합니다. 빈 큐일 때 tick을 아예
+띄우지 않도록 고쳐 주세요."* 시뮬레이터 부팅 같은 작업이 멈출 만큼 맥 전체가 무거워졌다. 티켓 없이 사람이 세션에서
+직접 고치고 통합 체크아웃에 커밋했다(`Exception:` 줄).
+
+#### 실측 (2026-11-17, 10코어 16GB)
+
+- crontab 51줄 = 워커 24개 x 2줄(`* * * * *` + `sleep 30;`) + remote `sync-all` 2줄 + MCP keepalive 1줄.
+- 모든 큐가 빈 상태에서 머신 전체 새 프로세스 분당 15,416개, load 53~65. 워커 디스패치 줄만 지우자 분당 311개,
+  load는 1분 안에 76에서 21로 내려갔다. 빈 tick 1회 = 자식 프로세스 약 155개, 0.7초.
+- `dispatch.py decide()`는 `reason=cron`이면 후보를 보지 않고 idle 워커면 바로 `launch()`했다. 빈 큐 판정 비용이
+  전부 `tick.sh` 쪽에 실렸고, reap은 워커 tick마다 돌아 `SKIP 다른 reap이 도는 중`을 30초마다 남겼다.
+- P522 결정 3의 `cron_load_max` 기본값 코어 수 x 40(400)은 load 323에서도 열려 있었다. 다만 그 load의 주원인이
+  dira 자신(빈 tick)이었다.
+
+#### 결정
+
+1. **sweep 데몬 하나가 모든 큐를 본다.** `dispatch.py sweep --daemon`이 `$LOCAL/run/sweep.lock`(flock)을 쥐고
+   머신에 하나만 산다. `sweep_interval`(기본 10초)마다 등록 워커의 큐를 stat과 열린 티켓 frontmatter로만 본다
+   (`queue_state` - 미할당 - 폴링 아님 - 백오프 아님 - deps 충족 = `select`와 같은 판정). 열린 티켓이 없으면
+   `tickets/` mtime이 그대로인 동안 다시 읽지도 않는다. 빈 큐 회차는 프로세스 0개, 파일 쓰기 0개다.
+2. **일이 있는 워커만 띄운다.** 집을 티켓 수만큼 idle 워커를 `DIRA_SWEEP=1`로 띄우고, 때가 된 폴링이 있으면 하나
+   띄운다. 놀고 있는 워커가 없고 유효 우선순위 5 후보가 있으면 바쁜 워커 tick 하나로 선점 판정(§1-5 갈래 C)을
+   맡긴다. 집은 것 없이 끝난 tick은 그 큐를 30초에서 300초까지 두 배씩 쉬게 한다(`tickets/` mtime이 바뀌면 푼다).
+   폴링 tick도 `polled_at`을 못 옮기면 같은 방식으로 쉰다.
+3. **기동은 cron 한 줄이다.** `* * * * * python3 "<엔진>/dispatch.py" sweep >> "$LOCAL/sweep.log" 2>&1` - 데몬이
+   살아 있으면 아무것도 쓰지 않고 끝난다(분당 프로세스 3개). launchd 대신 cron인 이유: 띄운 tick이 지금과 같은
+   cron 문맥(TCC 권한)을 물려받는다. 엔진 `dispatch.py` - `tickets.py`가 바뀌면 데몬이 새 데몬에 넘기고 끝난다.
+4. **등록 원천은 crontab 그대로다.** GUI는 지금처럼 워커 줄을 쓴다. 데몬이 60초마다 `crontab -l`을 읽어
+   워커 실행 줄(옛 dispatch 줄 - 더 옛 직접 실행 줄)을 실행되지 않는 표지 `# dira-worker "<워커 경로>"` 한 줄로
+   바꾸고 기동 줄이 없으면 넣는다(`normalize_crontab`). 설치본(`.version`이 있는 엔진)에서만 쓴다. 읽고 쓰는
+   사이에 crontab이 바뀌었으면 이번엔 건너뛰고, 읽기에 실패하면 지난 사본을 쓴다. 사본은 `$LOCAL/run/registry.txt`이고
+   `request` - `judge` - `direct` 길은 데몬이 살아 있으면 이 사본을 읽어 `crontab -l`을 띄우지 않는다.
+5. **reap과 정리 작업은 데몬이 머신에 한 번 돈다.** reap은 `.wip`이 있는 큐만 `reap_interval`(기본 300초)마다,
+   로그 보존은 큐마다 하루 1회, 슬림 `auto`는 1시간 1회, 죽은 agy-gui 잡 걷기는 300초마다다. 원격 tick은
+   `sync-all` 시계 줄이 없을 때만 60초마다다. `tick.sh`는 `DIRA_SWEEP=1`이면 이 다섯 단계를 건너뛰고 그 변수를
+   세션에 넘기지 않는다. 폴링 단계는 그대로 돈다.
+6. **옛 cron 줄 길(`run --reason cron`)도 빈 큐면 안 띄운다.** 데몬이 살아 있으면 `sweep 데몬이 맡는다`로 끝나고,
+   설치본에서 데몬이 없으면 띄운 뒤 이번 한 번은 옛 판정을 한다. 옛 판정은 집을 티켓 - 때가 된 폴링 - `.wip`이
+   하나도 없으면 `빈 큐`로 끝난다.
+7. **부하 상한 기본값은 코어 수 x 60이다(10코어 맥 600).** 이 맥은 세션이 돌 때 load1 중앙값 165, p95 442이고
+   (P522 실측) load 335에서도 원활하다(사람 확인 2026-11-18). x 1.5(15)로 잡자 load 35에서 새 티켓이 10분 넘게
+   섰다. 빈 큐 부하가 없어졌으므로 이 상한은 일이 있을 때만 쓰인다. 넘으면 그 큐의 `runner.log`에 600초에 한 번
+   `SKIP-LOAD` 한 줄이다. `~/.config/dira/dispatch.json`의 `cron_load_max`로 바꾼다.
+8. **Spotlight에서 뺀다.** 데몬이 `$LOCAL`, `$LOCAL/run`, 각 큐 `workers/` - `workers/logs` - `workers/health`에
+   `.metadata_never_index`를 한 번 둔다.
+9. **계측은 `$LOCAL/sweep.log`다.** 띄운 회차는 `SWEEP ms= children= go=` 한 줄, tick이 끝나면 `TICK-END
+   <프로젝트>/<워커> kind= rc= secs= progress=` 한 줄, 빈 회차는 600초마다 `SWEEP-SUM cycles= avg_ms= children=
+   launched=` 요약 한 줄만 쓴다.
+10. **GUI 쪽 둘.** `cronPeriod`는 표지 줄을 30으로 본다. 큐 사본 `self-heal.sh`는 표지 줄을 dira 줄로 세고(살아 있으면
+    키맵을 안 지우고, 워커 파일이 없으면 뺀다), 엔진을 지웠으면 그 엔진의 sweep 기동 줄도 뺀다. 기존 사본은
+    마이그레이션 `0007`이 같은 바이트로 바꾼다.
+
+#### 안 하는 것
+
+- remote `sync-all` 시계 줄 2개와 MCP keepalive 줄 1개는 그대로 둔다.
+- GUI의 `cronLine`(워커 등록 2줄)과 화면 문구(30초)는 바꾸지 않는다 - 데몬이 60초 안에 표지로 바꾼다.
+
+#### 되돌리기
+
+`crontab`에서 표지 줄을 옛 2줄로 되돌리고 기동 줄을 지운 뒤 `pkill -f "dispatch.py sweep"`. 옛 줄 길은 데몬이 없으면
+옛 판정을 그대로 한다(빈 큐만 안 띄운다).
+
+#### 수용조건
+
+- [x] 모든 큐가 빈 상태로 10분 - dira가 만드는 프로세스 분당 10개 이하. 실측 데몬 10분에 12개 + 기동 줄 분당 3개 = 분당 약 4개.
+- [x] load 기여분 1 미만. 실측 데몬 CPU 10분에 0.33초.
+- [x] 빈 큐에서 `cron.log`에 `go: true`가 없다(기동 이후 기록 자체가 없다).
+- [x] 티켓 하나를 넣으면 30초 안에 집힌다. 실측 5회 0.7~6.0초.
+- [x] `test_*.py` 전량과 `workers.test.ts`의 `§4-4` - `cronPeriod`가 통과한다. 새 `test_sweep.py`.
+
 ### P564. 티켓 상세의 `팔로우`를 켜 두면 그 티켓이 끝날 때 시스템 알림이 오고, 알림을 누르면 그 티켓 상세가 열린다 (요구 `341cfb72`, 왕복 0회)
 
 사람 요구(2026-11-16): *"티켓에 복제 삭제 버튼 위치에 팔로우 버튼이 있어서 눌러두면 티켓 끝나면 시스템 알림받기
