@@ -4,9 +4,18 @@ import { ORIGIN, docPath } from "./meta.ts";
 /** 랜딩의 다운로드 링크가 가리키는 주소(`landing.tsx`의 `dmg` 기본값)와 같다. */
 export const RELEASES_URL = "https://github.com/proofer-tech/dira/releases/latest";
 
-/** 홈의 SoftwareApplication과 Organization. 랜딩이 "로컬 엔진과 앱은 영원히 무료"라고 하므로 가격은 0이다. */
+/** 홈의 WebSite, SoftwareApplication, Organization. WebSite가 구글 검색 결과의 사이트 이름(`dira`)을 정한다(P566 결정 1).
+ *  Organization 이름은 회사 이름이라 바꾸지 않는다. 랜딩이 "로컬 엔진과 앱은 영원히 무료"라고 하므로 가격은 0이다. */
 export function homeJsonLd(): object[] {
+  const publisher = { "@type": "Organization", name: "프루퍼 주식회사", url: "https://proofer.tech" };
   return [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "dira",
+      alternateName: ["디라"],
+      url: `${ORIGIN}/`,
+    },
     {
       "@context": "https://schema.org",
       "@type": "SoftwareApplication",
@@ -17,12 +26,11 @@ export function homeJsonLd(): object[] {
       url: `${ORIGIN}/`,
       downloadUrl: RELEASES_URL,
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      publisher,
     },
     {
       "@context": "https://schema.org",
-      "@type": "Organization",
-      name: "프루퍼 주식회사",
-      url: "https://proofer.tech",
+      ...publisher,
     },
   ];
 }

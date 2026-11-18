@@ -1,7 +1,7 @@
 import type { Locale } from "@/lib/i18n";
 import { pickManuscript } from "@/lib/site-locale";
 import { Shell } from "../doc";
-import { pageMetadata, titleOf } from "../meta";
+import { descriptionOf, pageMetadata, titleOf } from "../meta";
 import { siteLocale } from "../request-locale";
 
 // 셸·크롬 판정과 메타데이터 자리는 `app/privacy/page.tsx`와 같다 — 두 장이 같은 성질의 산문이고
@@ -17,7 +17,10 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
   const locale = await siteLocale();
-  return pageMetadata("/terms", titleOf(source(locale)), { locale });
+  return pageMetadata("/terms", titleOf(source(locale)), {
+    locale,
+    description: descriptionOf(source(locale)),
+  });
 }
 
 export default async function Page() {

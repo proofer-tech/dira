@@ -1,7 +1,7 @@
 import type { Locale } from "@/lib/i18n";
 import { pickManuscript } from "@/lib/site-locale";
 import { Shell } from "../doc";
-import { pageMetadata, titleOf } from "../meta";
+import { descriptionOf, pageMetadata, titleOf } from "../meta";
 import { siteLocale } from "../request-locale";
 
 // 셸도 마크다운 렌더도 매뉴얼과 한 벌이다(`app/doc.tsx`). 이 장이 안 받는 것은 사이드바와
@@ -19,7 +19,10 @@ export const dynamic = "force-dynamic";
 
 export async function generateMetadata() {
   const locale = await siteLocale();
-  return pageMetadata("/privacy", titleOf(source(locale)), { locale });
+  return pageMetadata("/privacy", titleOf(source(locale)), {
+    locale,
+    description: descriptionOf(source(locale)),
+  });
 }
 
 export default async function Page() {

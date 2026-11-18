@@ -140,3 +140,12 @@ test("P548 - canonical은 자기 언어 주소, hreflang ko/en/x-default(=한국
     }
   }
 });
+
+test("P566 - privacy와 terms는 두 언어 모두 자기 원고에서 뽑은 description이고 넷이 서로 다르다", () => {
+  const read = (f: string) => readFileSync(new URL(f, import.meta.url), "utf8");
+  const ds = ["privacy.md", "terms.md", "en/privacy.md", "en/terms.md"].map((f) => descriptionOf(read(f)));
+  for (const d of ds) assert.ok(d.length > 0, "빈 description은 홈 설명으로 떨어진다");
+  assert.equal(new Set(ds).size, 4);
+  assert.match(ds[2], /^[\x20-\x7e]+$|[A-Za-z]{3}/);
+  assert.ok(!ds.includes(String(pageMetadata("/", "T").description)));
+});

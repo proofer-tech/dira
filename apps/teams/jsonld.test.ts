@@ -6,7 +6,12 @@ type Json = Record<string, unknown> & { offers: Record<string, unknown> };
 import { breadcrumbJsonLd, homeJsonLd, jsonLdString, RELEASES_URL } from "./app/(site)/jsonld.ts";
 
 test("홈 JSON-LD - SoftwareApplication 필수 속성과 Organization", () => {
-  const [app, org] = homeJsonLd() as Json[];
+  const [site, app, org] = homeJsonLd() as Json[];
+  assert.equal(site["@type"], "WebSite");
+  assert.equal(site.name, "dira");
+  assert.deepEqual(site.alternateName, ["디라"]);
+  assert.equal(site.url, "https://dira.proofer.tech/");
+  assert.deepEqual(app.publisher, { "@type": "Organization", name: "프루퍼 주식회사", url: "https://proofer.tech" });
   assert.equal(app["@type"], "SoftwareApplication");
   assert.equal(app.alternateName, "디라");
   assert.equal(app.applicationCategory, "DeveloperApplication");
