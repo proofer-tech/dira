@@ -1,0 +1,42 @@
+# 러너를 못 잡아 죽은 회차만 다시 돌린다. 테스트·빌드가 실제로 실패한 회차는 건드리지 않는다.
+#
+# macOS arm64 호스티드 러너가 모자라면 GitHub이 잡을 15분 붙들다가 「The job was not acquired by
+# Runner of type hosted even after multiple attempts」로 회차를 failure로 끝낸다. 코드는 한 줄도
+# 안 돌았는데 빨간 X가 남는다(실측 2026-11-18 CI 44351111644 · release 44354203004).
+# 그 잡은 runner_name이 비고 step이 0개다 - 판정은 그 둘뿐이다.
+#
+# 이 잡은 ubuntu에서 돈다. 다시 돌리기만 하므로 macOS가 필요 없고, 모자란 그 러너를 또 기다리지 않는다.
+name: rerun
+
+on:
+  workflow_run:
+    workflows: [CI, release]
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  rerun:
+    # ponytail: 세 번째 회차까지만. 러너 품귀가 한 시간 넘게 가면 그때 사람이 누른다.
+    if: github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 3
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN: ${{ github.event.workflow_run.id }}
+          WF: ${{ github.event.workflow_run.name }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          stuck=$(gh api "repos/$REPO/actions/runs/$RUN/jobs" --jq '[.jobs[] | select(.runner_name == "" and (.steps | length) == 0)] | length')
+          if [ "$stuck" = 0 ]; then
+            echo "러너를 잡은 회차다 - 실제 실패라 다시 돌리지 않는다."
+            exit 0
+          fi
+          # release는 master 끝 커밋일 때만 다시 굽는다. 그 뒤에 커밋이 들어왔으면 그 커밋의 회차가 굽는다.
+          if [ "$WF" = release ] && [ "$(gh api "repos/$REPO/commits/master" --jq .sha)" != "$SHA" ]; then
+            echo "master가 이미 움직였다 - 다음 release 회차가 굽는다."
+            exit 0
+          fi
+          gh run rerun "$RUN" --repo "$REPO"

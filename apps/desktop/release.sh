@@ -145,7 +145,19 @@ fi
 # 태그다(실측 2026-09-02 `v1.0.41`). 그 뒤로는 같은 번호를 다시 굽는 회차마다 태그가 원격
 # 것과 달라 push가 거절돼서, 사람이 원격 태그를 지우기 전까지 릴리스가 영영 안 나간다.
 # 둘을 한 묶음으로 밀면 그 회차는 그냥 실패하고, 다음 master 커밋의 회차가 깨끗이 다시 굽는다.
-git push --atomic origin master --follow-tags || exit 1
+#
+# **CI에서 master가 움직여 거절된 것은 실패로 치지 않는다.** 위 「다음 회차가 다시 굽는다」가
+# 그대로 성립해서 릴리스는 빠지지 않는데, 이 회차가 빨간 X로 끝나면 CI가 늘 터지는 것처럼
+# 보인다(실측 2026-11-06 · 11-18 두 번, 전부 이 갈래). 사람 맥에서는 그대로 실패한다 - 거기서
+# 0으로 끝나면 사람은 릴리스가 나간 줄 안다.
+if ! git push --atomic origin master --follow-tags; then
+  if [ -n "${GITHUB_ACTIONS:-}" ] && git fetch -q origin master \
+     && ! git merge-base --is-ancestor FETCH_HEAD HEAD; then
+    echo "::warning::v$ver는 올리지 않았다 - 굽는 동안 master가 움직였다. 그 커밋의 release 회차가 다시 굽는다."
+    exit 0
+  fi
+  exit 1
+fi
 
 # 6. --generate-notes가 없으면 사람 터미널에서 에디터가 열려 멈춘다. 본문은 무엇이든 상관없다 —
 # 사람이 읽는 릴리즈 노트는 앱이 받은 시점에 스스로 만든다(R7).
