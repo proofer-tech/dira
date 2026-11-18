@@ -9025,9 +9025,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P566-1 | 결정 1-2: 홈 `WebSite` JSON-LD와 `publisher`, privacy-terms description 추출 + `jsonld.test.ts` `meta.test.ts` | developer | - | 발행 |
-| P566-2 | 결정 3: 인증 메타 태그를 굽고 Search Console 등록, sitemap 제출, 색인 재요청 | developer | - | 발행 |
-| P566-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 운영 사이트에서 한 줄씩 판정한다 | qa | P566-1, P566-2 | 발행 |
+| P566-1 | 결정 1-2: 홈 `WebSite` JSON-LD와 `publisher`, privacy-terms description 추출 + `jsonld.test.ts` `meta.test.ts` | developer | - | 발행 `5e94d063` |
+| P566-2 | 결정 3: 인증 메타 태그를 굽고 Search Console 등록, sitemap 제출, 색인 재요청 | developer | - | 발행 `a4d2d471` |
+| P566-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 운영 사이트에서 한 줄씩 판정한다 | qa | P566-1, P566-2 | 발행 `a929d5a3` |
 
 P566-1과 P566-2는 고치는 파일이 겹치지 않으므로(`jsonld.ts` - `privacy` `terms` 대 `layout.tsx`) deps 없이 병렬로 진행한다.
 designer와 writer는 0장이다(화면과 문구가 바뀌지 않는다).
