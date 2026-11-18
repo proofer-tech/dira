@@ -8988,6 +8988,59 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P566. 구글 검색 결과에 사이트 이름이 `dira`로 뜨고, 각 페이지가 자기 설명과 현재 언어로 색인된다 (요구 `97addaba`, 왕복 0회)
+
+사람 요구(2026-11-18): "SEO 문제가 있습니다" + `site:dira.proofer.tech` 구글 검색 결과 스크린샷.
+
+#### 실측 - 2026-11-18, 스크린샷과 운영 사이트 `curl`
+
+- 결과 다섯 줄의 사이트 이름이 전부 `프루퍼`다. 홈 JSON-LD에는 `SoftwareApplication`(`name: dira`)과
+  `Organization`(`name: 프루퍼 주식회사`)만 있고 `WebSite`가 없다. 구글은 사이트 이름을 홈의 `WebSite` 구조화
+  데이터에서 먼저 읽으므로, 그것이 없으니 `Organization` 쪽 이름을 고른 것으로 본다.
+- `/privacy` `/terms` `/en/privacy` `/en/terms`의 `meta name="description"`이 홈 설명과 같다. 스크린샷의
+  `Privacy Policy` 줄 설명이 홈 문구인 것이 이것이다. 두 페이지만 `pageMetadata`에 description을 넘기지 않는다
+  (`app/(site)/privacy/page.tsx`, `terms/page.tsx`).
+- 스크린샷의 `Privacy Policy` `Manual` 같은 영어 제목과, 내비게이션 글자가 그대로 설명이 된 `Manual` 줄은 P548
+  이전에 같은 주소가 언어를 바꿔 내던 때의 색인이다. 지금 운영 사이트는 한국어 주소가 한국어 제목-설명-hreflang을
+  내고 sitemap에 66개 URL과 `lastmod`가 있어서, 남은 것은 다시 색인되는 일뿐이다.
+- 스크린샷 맨 위에 `Google Search Console 사용해 보기` 프로모션이 뜬다. 이 도메인은 Search Console에 등록되지
+  않았고 sitemap도 제출되지 않았다(P548이 사람 몫으로 범위 밖에 둔 일).
+
+#### 결정
+
+1. **홈 두 언어에 `WebSite` JSON-LD를 더한다.** `name: dira`, `alternateName: ["디라"]`, `url: https://dira.proofer.tech/`다.
+   `/`와 `/en` 모두 `url`은 한국어 홈 주소 하나다. `Organization`은 지우지 않고, `SoftwareApplication`에
+   `publisher`로 그 `Organization`을 단다.
+2. **`/privacy` `/terms`(두 언어)의 description은 원고에서 뽑는다.** 매뉴얼과 같은 `descriptionOf`를 그 언어 원고에
+   적용한다. 원고 첫 문단이 "프루퍼 주식회사(이하 회사)는 ..."으로 시작해 그 페이지 설명으로 읽힌다.
+3. **Search Console에 이 도메인을 등록하고 sitemap을 제출하고 색인을 다시 요청한다.** 등록 방식은 HTML 메타 태그
+   (`google-site-verification`)를 사이트 루트 레이아웃에 굽는 것이다. 이 머신의 브라우저(`.dira/browse.sh`)에 이미
+   로그인된 구글 계정으로 시도한다. 색인 재요청 대상은 `/`, `/docs/`, `/privacy`, `/terms`, `/en`이다.
+
+```autonomy
+주도성 5 판단: P548이 Search Console 제출을 사람 몫으로 두었지만, 오토파일럿이라 이미 로그인된 브라우저로 먼저 시도하는 티켓을 낸다. 로그인이 없으면 그 티켓이 외부-계정.md 순서대로 다른 길을 찾는다.
+주도성 5 판단: 영어 제목이 남은 옛 색인은 코드로 고칠 것이 없다고 판정했다. 운영 사이트를 curl로 확인한 결과 한국어 주소가 이미 한국어로 응답한다. 재색인 요청(결정 3)이 그 처리다.
+주도성 5 판단: Organization 이름을 dira로 바꾸지 않는다. 회사 이름은 사실이고, 사이트 이름은 WebSite가 정하는 자리다.
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P566-1 | 결정 1-2: 홈 `WebSite` JSON-LD와 `publisher`, privacy-terms description 추출 + `jsonld.test.ts` `meta.test.ts` | developer | - | 발행 |
+| P566-2 | 결정 3: 인증 메타 태그를 굽고 Search Console 등록, sitemap 제출, 색인 재요청 | developer | - | 발행 |
+| P566-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 운영 사이트에서 한 줄씩 판정한다 | qa | P566-1, P566-2 | 발행 |
+
+P566-1과 P566-2는 고치는 파일이 겹치지 않으므로(`jsonld.ts` - `privacy` `terms` 대 `layout.tsx`) deps 없이 병렬로 진행한다.
+designer와 writer는 0장이다(화면과 문구가 바뀌지 않는다).
+
+#### 수용조건
+
+- [ ] `curl -s https://dira.proofer.tech/`와 `/en`의 HTML에 `"@type":"WebSite"`가 있고, 그 객체의 `name`이 `dira`, `url`이 `https://dira.proofer.tech/`다. Rich Results Test(코드 입력)에 넣으면 오류가 0이다.
+- [ ] `/privacy`, `/terms`, `/en/privacy`, `/en/terms` 넷의 `meta name="description"`이 서로 다르고 `/`의 것과도 다르다. `/en/*` 둘은 영어다.
+- [ ] `curl -s https://dira.proofer.tech/ | grep google-site-verification`이 한 줄을 낸다.
+- [ ] Search Console에서 `https://dira.proofer.tech/` 속성이 인증됨 상태이고, `sitemap.xml`의 제출 상태가 `성공`이다(스크린샷을 `## 결과`에 남긴다).
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`과 바뀐 파일의 테스트가 통과한다.
+- [ ] (기록, 판정 아님) 제출 1주 뒤 `site:dira.proofer.tech`의 사이트 이름과 `/privacy` 줄 제목을 `## 결과`에 적는다. 구글 반영 시점은 우리가 통제하지 못한다.
+
 ### P565. 큐가 비어 있으면 dira가 맥에 부하를 만들지 않는다 - cron 워커 줄 대신 sweep 데몬 하나 (사람 직접 수정, 티켓 없음)
 
 사람 요구(2026-11-17, 수정 요청서): *"큐가 비어 있으면 cron은 거의 비용 없이 끝나야 합니다. 빈 큐일 때 tick을 아예
