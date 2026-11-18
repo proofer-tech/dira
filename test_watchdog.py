@@ -113,4 +113,22 @@ for line in ("G5 사람 워커 w1 셸이 30벌(상한 25)", "G5 사람 이상한
     todo = b.split("## 하실 일")[1].split("## 진단")[0]
     assert "?" not in title_of(b) and "(워커)" not in title_of(b), title_of(b)
     assert "<pid>" not in todo and "kill" not in todo and "watchdog_gates.py" in todo and " recover " in todo, todo
+# 6. G6: 표지 줄만 있는 crontab(P565 sweep)은 등록이다. 표지도 실행 줄도 없으면 G6이 선다.
+import watchdog_gates as wg  # noqa: E402
+
+
+def g6(cron):
+    r = mkroot()
+    w = os.path.join(r, "workers", "w1.sh")
+    open(w, "w").write("")
+    open(os.path.join(r, "tickets", "aaaaaaaa.md"), "w").write("---\nticket: aaaaaaaa\n---\n")
+    got = wg.diagnose(r, local=tempfile.mkdtemp(), now=1, pgrep_count=lambda p: 1,
+                      crontab_lines=lambda: [c.replace("@W@", w) for c in cron],
+                      git_version=lambda: (0, "git"))
+    return [x for x in got if x.startswith("G6")]
+
+assert g6(['# dira-worker "@W@"', "* * * * * python3 /x/dispatch.py sweep"]) == []
+assert len(g6(["# 그냥 주석 \"@W@\"", "* * * * * python3 /x/dispatch.py sweep"])) == 1
+assert len(g6([])) == 1
+
 print("ok")

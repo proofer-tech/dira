@@ -198,7 +198,8 @@ def diagnose(root, local=None, now=None, pgrep_count=_real_pgrep_count,
         found = False
         for cl in cron:
             cl = cl.strip()
-            if cl.startswith("#"):
+            # dispatch.py MARKER와 같은 규칙: 표지 줄(`# dira-worker "<경로>"`)은 sweep이 돌리는 등록이다.
+            if cl.startswith("#") and not cl.startswith("# dira-worker"):
                 continue
             for p in worker_paths:
                 if f'"{p}"' in cl:
