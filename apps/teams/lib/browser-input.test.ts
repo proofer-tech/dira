@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { commentPoint, inputPoint, keyBody, mouseButtonBody, scaleToFrame, wheelBody } from "./browser-input.ts";
+import { commentPoint, inputPoint, isLocalClipboardChord, keyBody, latinKey, mouseButtonBody, scaleToFrame, wheelBody } from "./browser-input.ts";
 import { toCdpInputCommand } from "./cdp-relay.ts";
 
 test("scaleToFrame — 화면 사각형 안 비율을 그대로 프레임 원본 해상도로 옮긴다", () => {
@@ -46,10 +46,47 @@ test("wheelBody — mouseWheel 타입에 델타를 싣는다", () => {
   assert.deepStrictEqual(wheelBody(5, 5, 0, 100), { type: "mouseWheel", x: 5, y: 5, button: "none", deltaX: 0, deltaY: 100 });
 });
 
-test("keyBody — 출력 가능한 한 글자 keydown은 text를 같이 싣고, 그 밖은 안 싣는다", () => {
-  assert.deepStrictEqual(keyBody("keydown", "a", "KeyA"), { type: "keyDown", key: "a", code: "KeyA", text: "a" });
-  assert.deepStrictEqual(keyBody("keydown", "Enter", "Enter"), { type: "keyDown", key: "Enter", code: "Enter" });
-  assert.deepStrictEqual(keyBody("keyup", "a", "KeyA"), { type: "keyUp", key: "a", code: "KeyA" });
+test("keyBody — 글자 키는 text와 가상 키코드를 싣고, 기능키는 rawKeyDown + 가상 키코드다", () => {
+  assert.deepStrictEqual(keyBody("keydown", "a", "KeyA"), {
+    type: "keyDown", key: "a", code: "KeyA", modifiers: 0, windowsVirtualKeyCode: 65, text: "a",
+  });
+  assert.deepStrictEqual(keyBody("keydown", "Backspace", "Backspace"), {
+    type: "rawKeyDown", key: "Backspace", code: "Backspace", modifiers: 0, windowsVirtualKeyCode: 8,
+  });
+  assert.deepStrictEqual(keyBody("keydown", "Enter", "Enter"), {
+    type: "keyDown", key: "Enter", code: "Enter", modifiers: 0, windowsVirtualKeyCode: 13, text: "\r",
+  });
+  assert.deepStrictEqual(keyBody("keyup", "a", "KeyA"), { type: "keyUp", key: "a", code: "KeyA", modifiers: 0, windowsVirtualKeyCode: 65 });
+  assert.strictEqual(keyBody("keydown", "ArrowLeft", "ArrowLeft").windowsVirtualKeyCode, 37);
+  assert.strictEqual(keyBody("keydown", "!", "Digit1", { altKey: false, ctrlKey: false, metaKey: false, shiftKey: true }).text, "!");
+});
+
+const META = { altKey: false, ctrlKey: false, metaKey: true, shiftKey: false };
+const ALT = { altKey: true, ctrlKey: false, metaKey: false, shiftKey: false };
+
+test("keyBody — Cmd/Alt 조합은 글자를 안 싣고 편집 명령으로 옮긴다", () => {
+  const selectAll = keyBody("keydown", "a", "KeyA", META);
+  assert.strictEqual(selectAll.text, undefined);
+  assert.deepStrictEqual(selectAll.commands, ["selectAll"]);
+  assert.strictEqual(selectAll.modifiers, 4);
+  assert.deepStrictEqual(keyBody("keydown", "Backspace", "Backspace", META).commands, ["deleteToBeginningOfLine"]);
+  assert.deepStrictEqual(keyBody("keydown", "Backspace", "Backspace", ALT).commands, ["deleteWordBackward"]);
+  assert.deepStrictEqual(keyBody("keydown", "z", "KeyZ", { ...META, shiftKey: true }).commands, ["redo"]);
+  assert.strictEqual(keyBody("keydown", "r", "KeyR", META).text, undefined); // 명령 없는 Cmd 조합도 글자는 안 찍는다
+});
+
+test("keyBody — 한/영이 한글이라 자모로 온 키는 물리 키의 영문으로 되돌린다", () => {
+  assert.strictEqual(keyBody("keydown", "ㅗ", "KeyH").text, "h");
+  assert.strictEqual(keyBody("keydown", "ㅃ", "KeyQ", { altKey: false, ctrlKey: false, metaKey: false, shiftKey: true }).text, "Q");
+  assert.strictEqual(keyBody("keydown", "Process", "Digit2", { altKey: false, ctrlKey: false, metaKey: false, shiftKey: true }).text, "@");
+  assert.strictEqual(latinKey("é", "KeyE", false), "é"); // 자모가 아니면 손대지 않는다
+});
+
+test("isLocalClipboardChord — Cmd/Ctrl+V-C만 사람 쪽에 남긴다", () => {
+  assert.ok(isLocalClipboardChord("v", META));
+  assert.ok(isLocalClipboardChord("c", { ...META, metaKey: false, ctrlKey: true }));
+  assert.ok(!isLocalClipboardChord("a", META));
+  assert.ok(!isLocalClipboardChord("v", ALT));
 });
 
 test("이 모듈이 낸 본문 전부가 cdp-relay의 화이트리스트(toCdpInputCommand)를 통과한다", () => {
@@ -60,8 +97,15 @@ test("이 모듈이 낸 본문 전부가 cdp-relay의 화이트리스트(toCdpIn
     wheelBody(1, 1, 0, 10),
     keyBody("keydown", "a", "KeyA"),
     keyBody("keyup", "a", "KeyA"),
+    keyBody("keydown", "Backspace", "Backspace"),
+    keyBody("keydown", "a", "KeyA", META),
   ];
   for (const body of bodies) assert.ok(toCdpInputCommand(body) !== null, JSON.stringify(body));
+  assert.deepStrictEqual(toCdpInputCommand({ type: "insertText", text: "붙여넣기", extra: 1 }), {
+    method: "Input.insertText",
+    params: { text: "붙여넣기" },
+  });
+  assert.strictEqual(toCdpInputCommand({ type: "insertText", text: 3 }), null);
 });
 
 test("commentPoint — 위아래 띠: 내용 사각형 기준 프레임 좌표, 띠 위 클릭은 null", () => {

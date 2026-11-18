@@ -2548,6 +2548,12 @@ export const ko: Record<string, string> = {
   "browser.wrap.confirm": "지금 이 브라우저로 세션이 일하는 중입니다. 만지면 그 회차의 실측이 어긋날 수 있습니다. 계속하시겠습니까?",
   "browser.wrap.unlocked": "입력 열림",
   "browser.wrap.lock": "다시 잠그기",
+  // 핸드오프(`browse.sh handoff`) — 세션이 로그인 같은 사람 몫 단계를 넘겼을 때.
+  "browser.handoff.banner": "세션이 넘긴 일:",
+  "browser.handoff.done": "다 했어요",
+  "browser.handoff.badge": "손 필요",
+  "browser.handoff.returned": "돌려줬습니다. 세션이 이어받기를 기다립니다",
+  "browser.handoff.failed": "돌려주지 못했습니다. 브라우저가 이미 반납됐을 수 있습니다",
   "browser.disconnected": "브라우저가 반납되어 화면이 끊겼습니다",
 
   // 브라우저 풀 주인 표식(§11-13 결정 1 · 3) — 셸이 적는 `owner` 원문 토큰(`home` -
@@ -5130,6 +5136,11 @@ export const en: Record<string, string> = {
   "browser.wrap.confirm": "A session is working in this browser right now. Touching it may throw off that run's measurements. Continue anyway?",
   "browser.wrap.unlocked": "Input unlocked",
   "browser.wrap.lock": "Lock again",
+  "browser.handoff.banner": "The session handed you:",
+  "browser.handoff.done": "Done, hand back",
+  "browser.handoff.badge": "Needs you",
+  "browser.handoff.returned": "Handed back. Waiting for the session to resume",
+  "browser.handoff.failed": "Could not hand back. The browser may already be released",
   "browser.disconnected": "The browser was released and the screen went dark",
 
   "home.surface.browser.owner.home": "Home chat",

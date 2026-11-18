@@ -15,24 +15,44 @@ import { uploadAttachment } from "@/app/(app)/p/[project]/actions";
 import { toast } from "sonner";
 import { useLocale, useT } from "@/components/language-provider";
 import { LINK_SLOT_HASH, LINK_TAB_EVENT, normalizeAddressInput, readCdpFrameStream } from "@/lib/cdp-relay";
-import { commentPoint, inputPoint, keyBody, mouseButtonBody, wheelBody, type KeyCdpBody, type MouseCdpBody } from "@/lib/browser-input";
+import {
+  commentPoint,
+  inputPoint,
+  isLocalClipboardChord,
+  keyBody,
+  mouseButtonBody,
+  wheelBody,
+  type InsertTextCdpBody,
+  type KeyCdpBody,
+  type MouseCdpBody,
+} from "@/lib/browser-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { trackPending, useLinkPendingReporter, useTrackedRouter } from "@/lib/route-pending";
 import { writeStoredActiveTab } from "@/lib/tabs";
 import {
+  handBackBrowserAction,
   openBrowserTabAction,
   openLinkAction,
   releaseLinkAction,
   type BrowserPoolRow,
 } from "@/app/(app)/p/[project]/home/actions";
+import type { BrowserHandoff } from "@/lib/browser-pool";
 import { linkCapToastMessage, linkErrorToastMessage, wrap, type Locale } from "@/lib/i18n";
 import { TicketRef } from "@/components/queue-ref";
 import type { TicketRefValue } from "@/lib/markdown-refs";
 import type { HomeChunk } from "@/lib/home-session";
 
-function postInput(url: string, body: MouseCdpBody | KeyCdpBody): void {
-  fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).catch(() => {});
+/** 입력은 슬롯마다 한 줄로 세워 보낸다 - POST마다 라우트가 소켓을 새로 열어서, 동시에 쏘면 빨리 친
+ *  글자-keyUp이 순서가 뒤바뀌어 도착한다(비밀번호 입력에서 치명적). 앞 요청이 끝나야 다음을 보낸다. */
+const inputQueues = new Map<string, Promise<unknown>>();
+
+function postInput(url: string, body: MouseCdpBody | KeyCdpBody | InsertTextCdpBody): void {
+  const prev = inputQueues.get(url) ?? Promise.resolve();
+  const next = prev
+    .then(() => fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }))
+    .catch(() => {});
+  inputQueues.set(url, next);
 }
 
 function postNavigate(url: string, addr: string): void {
@@ -216,6 +236,7 @@ export function BrowserMirror({
   ownerName,
   ticket,
   busy,
+  handoff,
   onRelease,
   focusAddressToken,
 }: {
@@ -228,6 +249,9 @@ export function BrowserMirror({
   ticket?: TicketRefValue | null;
   /** 명령이 도는 동안만 참(§11-13 결정 2) — 이름 옆 점의 출처. */
   busy: boolean;
+  /** 세션이 이 브라우저를 사람에게 넘겼으면(`browse.sh handoff`) 그 상태. 넘긴 동안은 입력이 처음부터
+   *  열리고 머리에 사유와 `다 했어요` 단추가 선다. */
+  handoff?: BrowserHandoff | null;
   /** `반납` 단추를 누르고 셸이 실제로 끝난 뒤 불린다(§11-15 결정 5) — 이 탭 자체를 닫는 것은
    *  부모(`home-ui.tsx`의 `closeTab`) 몫이다, 여기서는 셸 하나(`releaseLinkAction`)만 안다. */
   onRelease?: () => void;
@@ -243,7 +267,16 @@ export function BrowserMirror({
   const [frame, setFrame] = useState<string | null>(null);
   const viewportRef = useRef<{ width: number; height: number } | null>(null);
   const [lost, setLost] = useState(false);
-  const [unlocked, setUnlocked] = useState(false);
+  const handoffPending = handoff?.state === "pending";
+  const [unlocked, setUnlocked] = useState(handoffPending);
+  const [handingBack, setHandingBack] = useState(false);
+  // 넘겨받은 순간 입력을 연다 — 사람에게 해 달라고 넘긴 화면이라 `만지면 실측이 어긋난다` 확인이
+  // 필요 없다. 이펙트 대신 렌더 중 이전 값과 비교한다(React 권장 관용구, set-state-in-effect 규칙).
+  const [prevHandoffPending, setPrevHandoffPending] = useState(handoffPending);
+  if (prevHandoffPending !== handoffPending) {
+    setPrevHandoffPending(handoffPending);
+    if (handoffPending) setUnlocked(true);
+  }
   // §P466 - 댓글 모드(저장 안 함)와 열려 있는 댓글 하나. 팝오버가 열린 동안 미러를 누르면 먼저
   // 닫기를 거치므로(밖 클릭이 `pointerdown`에서 닫는다) 그 클릭은 새 자리로 안 받는다.
   const [commentMode, setCommentMode] = useState(false);
@@ -332,6 +365,35 @@ export function BrowserMirror({
   // 없다 — 빈 줄을 안 남긴다.
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
+      {handoff && (
+        <div
+          role="status"
+          className="flex items-center justify-between gap-2 border-b bg-amber-100 px-3 py-1.5 text-xs text-amber-950 dark:bg-amber-950 dark:text-amber-100"
+        >
+          <span className="min-w-0 truncate">
+            <span className="mr-1 font-medium">
+              {handoffPending ? t("browser.handoff.banner") : t("browser.handoff.returned")}
+            </span>
+            {handoffPending && handoff.reason}
+          </span>
+          {handoffPending && (
+            <Button
+              size="xs"
+              disabled={handingBack}
+              onClick={() => {
+                setHandingBack(true);
+                void handBackBrowserAction(hash).then((ok) => {
+                  setHandingBack(false);
+                  if (ok) setUnlocked(false);
+                  else toast.error(t("browser.handoff.failed"));
+                });
+              }}
+            >
+              {t("browser.handoff.done")}
+            </Button>
+          )}
+        </div>
+      )}
       {(ownerName || unlocked) && (
         <div className="flex items-center justify-between border-b bg-muted/50 px-3 py-1.5">
           <span className="flex items-center gap-1.5 text-xs font-medium">
@@ -417,13 +479,22 @@ export function BrowserMirror({
         className="relative min-h-0 flex-1 bg-black outline-none"
         onKeyDown={(e) => {
           if (!unlocked || commentMode || pick) return;
+          // Cmd/Ctrl+V-C는 사람 쪽 클립보드 일이다 - 기본 동작을 살려 두면 아래 `onPaste`가 받는다.
+          if (isLocalClipboardChord(e.key, e)) return;
           e.preventDefault();
-          postInput(url, keyBody("keydown", e.key, e.code));
+          postInput(url, keyBody("keydown", e.key, e.code, e));
         }}
         onKeyUp={(e) => {
           if (!unlocked || commentMode || pick) return;
+          if (isLocalClipboardChord(e.key, e)) return;
           e.preventDefault();
-          postInput(url, keyBody("keyup", e.key, e.code));
+          postInput(url, keyBody("keyup", e.key, e.code, e));
+        }}
+        onPaste={(e) => {
+          if (!unlocked || commentMode || pick) return;
+          const text = e.clipboardData.getData("text/plain");
+          e.preventDefault();
+          if (text) postInput(url, { type: "insertText", text });
         }}
       >
         {/* eslint-disable-next-line @next/next/no-img-element -- base64 데이터 URL, `next/image`의 최적화 대상이 아니다 */}

@@ -43,6 +43,28 @@ _used() {
   find "$_pool" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' '
 }
 
+# 핸드오프(browse.sh handoff) 중인 슬롯은 빌린 세션이 끝나도 회수하지 않는다 - 사람이 그 화면에서
+# 로그인-캡차-2단계 인증을 하는 동안 세션은 `## 블록`을 남기고 끝나는 것이 보통이고, 그때 회수하면
+# 사람이 넣은 로그인이 프로필(/tmp/qa-<해시>)째 지워진다. 면제는 상한이 있다 - handoff-ttl 첫 줄
+# (초), 없거나 정수가 아니면 7200(2시간). 크롬 그룹이 이미 죽었으면 면제하지 않는다.
+_handoff_ttl() {
+  local n
+  n=$(sed -n '1p' "$_local/handoff-ttl" 2>/dev/null | tr -d ' \t\r\n')
+  case "$n" in ''|*[!0-9]*) n=7200 ;; esac
+  echo "$n"
+}
+
+_handoff_live() {
+  local slot="$1" pgid since now
+  [ -f "$slot/handoff" ] || return 1
+  pgid=$(cat "$slot/pgid" 2>/dev/null)
+  [ -n "$pgid" ] && kill -0 -- "-$pgid" 2>/dev/null || return 1
+  since=$(sed -n 's/^since=//p' "$slot/handoff" 2>/dev/null | head -1)
+  case "$since" in ''|*[!0-9]*) return 1 ;; esac
+  now=$(date +%s)
+  [ $((now - since)) -lt "$(_handoff_ttl)" ]
+}
+
 # 로그 문구는 결정 5의 모양 그대로 - 앞에 타임스탬프/워커 이름을 안 붙인다(수용조건 (6)이
 # `^BROWSER `로 센다).
 _log() {
@@ -69,6 +91,7 @@ _reclaim() {
     if kill -0 "$pid" 2>/dev/null; then
       { [ -z "$pgid" ] || kill -0 -- "-$pgid" 2>/dev/null; } && continue
     fi
+    _handoff_live "$slot" && continue
     hash=$(cat "$slot/hash" 2>/dev/null)
     if [ -n "$pgid" ]; then
       kill -TERM -- "-$pgid" 2>/dev/null
@@ -96,6 +119,14 @@ _existing_port() {
     [ -d "$slot" ] || continue
     slot_hash=$(cat "${slot}hash" 2>/dev/null)
     if [ "$slot_hash" = "$1" ]; then
+      # 핸드오프로 살아남은 슬롯을 다음 세션이 이어받는다 - 적힌 pid가 죽었으면 지금 부른 세션으로
+      # 갈아 적는다. 산 pid는 안 건드린다(남의 슬롯을 뺏지 않는다).
+      local old_pid
+      old_pid=$(cat "${slot}pid" 2>/dev/null)
+      if [ -z "$old_pid" ] || ! kill -0 "$old_pid" 2>/dev/null; then
+        _session_pid > "${slot}pid"
+        _log "adopt $1 slot=$(basename "$slot") pid=$(cat "${slot}pid")"
+      fi
       head -1 "/tmp/qa-$slot_hash/chrome-profile/DevToolsActivePort" 2>/dev/null
       return 0
     fi

@@ -3192,6 +3192,7 @@ function BrowserSurface({
                 ownerName={row ? browserOwnerLabel(row, t) : null}
                 ticket={row?.ticket ?? null}
                 busy={row?.busy ?? false}
+                handoff={row?.handoff ?? null}
                 onRelease={() => onReleaseTab(tab)}
                 focusAddressToken={focusAddressToken}
               />
@@ -3280,6 +3281,11 @@ function BrowserLeftPanel({
                     {name && <span className="mr-1">{name}</span>}
                     <span className="font-mono text-muted-foreground">{row.hash}</span>
                   </span>
+                  {row.handoff?.state === "pending" && (
+                    <span className="shrink-0 rounded bg-amber-200 px-1 text-[10px] font-medium text-amber-950 dark:bg-amber-900 dark:text-amber-100">
+                      {t("browser.handoff.badge")}
+                    </span>
+                  )}
                 </SidebarMenuButton>
               </SidebarMenuItem>
             );

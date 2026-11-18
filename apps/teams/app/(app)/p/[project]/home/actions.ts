@@ -55,7 +55,7 @@ import {
   type HomeChunk,
   type ScheduleView,
 } from "@/lib/home-session";
-import { listBrowserPoolSlots, linkOpenBlocked } from "@/lib/browser-pool";
+import { handBackBrowser, listBrowserPoolSlots, linkOpenBlocked, type BrowserHandoff } from "@/lib/browser-pool";
 import { openLinkBrowser, reclaimBrowserPool, releaseLinkBrowser, type Run } from "@/lib/engine";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
 import { killPty, openPty, ptyStatuses, restartPty, writePty, type PtyStatus } from "@/lib/pty";
@@ -468,6 +468,8 @@ export type BrowserPoolRow = {
   /** `worker:` 슬롯이고 그 해시의 티켓이 큐에 있을 때만 값이 있다(P472) - 머리 줄이 제목 대신 이 표식을 그린다. */
   ticket: TicketRefValue | null;
   busy: boolean;
+  /** 세션이 사람에게 넘긴 상태(`browse.sh handoff`) — 없으면 `null`. */
+  handoff: BrowserHandoff | null;
 };
 
 /** 좌측 `브라우저` 패널의 줄 목록(§11-11 수용조건 §`ls browser-pool | wc -l`의 값과 같다,
@@ -509,9 +511,15 @@ export async function browserPoolTickets(projectId: string): Promise<BrowserPool
         ticketRef = refs.tickets[ticket.stem] ?? null;
       }
     }
-    rows.push({ hash: slot.hash, ownerKind, ownerName, ticket: ticketRef, busy: slot.busy });
+    rows.push({ hash: slot.hash, ownerKind, ownerName, ticket: ticketRef, busy: slot.busy, handoff: slot.handoff });
   }
   return rows;
+}
+
+/** 넘겨받은 브라우저를 사람이 돌려준다(`browse.sh handback`과 같은 일) — 슬롯은 머신 전역이라
+ *  프로젝트 스코프를 다시 재지 않는다(`cdp/[hash]` 라우트와 같은 경계, 해시 관문은 안에서 잰다). */
+export async function handBackBrowserAction(hash: string, note = ""): Promise<boolean> {
+  return handBackBrowser(hash, note).catch(() => false);
 }
 
 /** `openLinkAction`의 결과(§11-15 결정 1 · 4) — `reason: "cap"`일 때만 토스트가 상한·지금

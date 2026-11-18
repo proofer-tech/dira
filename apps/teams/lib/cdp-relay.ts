@@ -31,7 +31,7 @@ const MOUSE_TYPES = new Set(["mousePressed", "mouseReleased", "mouseMoved", "mou
 const KEY_TYPES = new Set(["keyDown", "keyUp", "rawKeyDown", "char"]);
 
 export type CdpInputCommand = {
-  method: "Input.dispatchMouseEvent" | "Input.dispatchKeyEvent";
+  method: "Input.dispatchMouseEvent" | "Input.dispatchKeyEvent" | "Input.insertText";
   params: Record<string, unknown>;
 };
 
@@ -44,6 +44,11 @@ export function toCdpInputCommand(body: unknown): CdpInputCommand | null {
   const params = body as Record<string, unknown>;
   if (MOUSE_TYPES.has(type)) return { method: "Input.dispatchMouseEvent", params };
   if (KEY_TYPES.has(type)) return { method: "Input.dispatchKeyEvent", params };
+  // 붙여넣기 - 사람 쪽 클립보드 글자를 그대로 넣는다. 글자 한 칸 말고는 아무것도 안 싣는다.
+  if (type === "insertText") {
+    const { text } = params;
+    return typeof text === "string" && text.length <= 10_000 ? { method: "Input.insertText", params: { text } } : null;
+  }
   return null;
 }
 

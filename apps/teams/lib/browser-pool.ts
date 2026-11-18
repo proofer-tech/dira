@@ -7,7 +7,7 @@
  *
  *  `localDir()`이 `TICKET_LOCAL` 존중을 이미 하므로(`lib/paths.ts`) 여기서 다시 안 쓴다 —
  *  `session-cap.ts`와 같은 자리다. */
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { localDir } from "./paths.ts";
 import { LINK_SLOT_HASH, isValidCdpHash } from "./cdp-relay.ts";
@@ -38,7 +38,70 @@ export type BrowserPoolSlot = {
   /** `busy` 파일이 있고 그 pid가 살아 있을 때만 참이다(§11-13 결정 2) — 파일 존재 하나로
    *  판정하면 `kill -9`로 남은 찌꺼기가 점을 영원히 켜 둔다. */
   busy: boolean;
+  /** 세션이 사람에게 넘긴 상태(`browse.sh handoff`). 슬롯의 `handoff` 파일이 없으면 `null`이다. */
+  handoff: BrowserHandoff | null;
 };
+
+/** 슬롯의 `handoff` 파일(key=value 줄) — 형식의 정본은 `templates/hooks/browse.sh` §핸드오프다.
+ *  `pending`은 사람이 쥔 상태, `returned`는 사람이 돌려줬고 세션이 아직 안 거둔 상태다. */
+export type BrowserHandoff = {
+  state: "pending" | "returned";
+  reason: string;
+  url: string;
+  since: number;
+};
+
+/** 핸드오프 면제 상한(초) — `browser.sh`의 `_handoff_ttl()`과 같은 판정(`handoff-ttl` 첫 줄, 기본 7200). */
+export async function handoffTtl(): Promise<number> {
+  const raw = await readTrimmed(path.join(localDir(), "handoff-ttl"));
+  const n = Number.parseInt(raw, 10);
+  return /^\d+$/.test(raw) && Number.isInteger(n) ? n : 7200;
+}
+
+export function parseHandoff(raw: string | null): BrowserHandoff | null {
+  if (raw === null) return null;
+  const kv: Record<string, string> = {};
+  for (const line of raw.split("\n")) {
+    const i = line.indexOf("=");
+    if (i > 0 && !(line.slice(0, i) in kv)) kv[line.slice(0, i)] = line.slice(i + 1).trim();
+  }
+  const since = Number.parseInt(kv.since ?? "", 10);
+  return {
+    state: kv.state === "returned" ? "returned" : "pending",
+    reason: kv.reason ?? "",
+    url: kv.url ?? "",
+    since: Number.isInteger(since) ? since : 0,
+  };
+}
+
+async function findSlotDir(hash: string): Promise<string | null> {
+  const dir = poolDir();
+  const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const slotDir = path.join(dir, entry.name);
+    if ((await readTrimmed(path.join(slotDir, "hash"))) === hash) return slotDir;
+  }
+  return null;
+}
+
+/** 사람이 `다 했어요`를 눌렀다 — `browse.sh <해시> handback`과 같은 일을 셸 없이 한다(셸을 부르면
+ *  그 안의 판정이 화면 프로세스를 슬롯 주인으로 오인할 길이 생겨서 파일만 고친다). 넘긴 것이 없으면 `false`. */
+export async function handBackBrowser(hash: string, note = ""): Promise<boolean> {
+  if (!isValidCdpHash(hash)) return false;
+  const slotDir = await findSlotDir(hash);
+  if (!slotDir) return false;
+  const file = path.join(slotDir, "handoff");
+  const raw = await readFile(file, "utf8").catch(() => null);
+  if (raw === null) return false;
+  const kept = raw.split("\n").filter((l) => l && !/^(state|returned_at|note)=/.test(l));
+  const oneLine = note.replace(/[\r\n\t]+/g, " ").slice(0, 500);
+  kept.push("state=returned", `returned_at=${Math.floor(Date.now() / 1000)}`, `note=${oneLine}`);
+  const tmp = path.join(slotDir, `.handoff.${process.pid}`);
+  await writeFile(tmp, kept.join("\n") + "\n");
+  await rename(tmp, file);
+  return true;
+}
 
 /** 슬롯 목록 하나 — `slots`는 산 슬롯만 담고, `hasDeadSlot`은 이번 호출에서 죽은 주인을 하나라도
  *  봤다는 신호다(§11-13 결정 4). 회수(`browser.sh reclaim`)를 부를지는 이 신호를 본 호출자가
@@ -64,14 +127,19 @@ export async function listBrowserPoolSlots(): Promise<BrowserPoolSlots> {
     const slotDir = path.join(dir, entry.name);
     const hash = await readTrimmed(path.join(slotDir, "hash"));
     if (!isValidCdpHash(hash)) continue;
+    const handoff = parseHandoff(await readFile(path.join(slotDir, "handoff"), "utf8").catch(() => null));
     const pid = parsePid(await readTrimmed(path.join(slotDir, "pid")));
     if (pid !== null && !alive(pid)) {
-      hasDeadSlot = true;
-      continue;
+      // 넘긴 슬롯은 세션이 끝나도 `browser.sh`가 면제 상한까지 안 거둔다 — 화면도 그동안 목록에 남긴다.
+      const now = Math.floor(Date.now() / 1000);
+      if (!handoff || now - handoff.since >= (await handoffTtl())) {
+        hasDeadSlot = true;
+        continue;
+      }
     }
     const busyPid = parsePid(await readTrimmed(path.join(slotDir, "busy")));
     const owner = (await readTrimmed(path.join(slotDir, "owner"))) || null;
-    slots.push({ hash, owner, busy: busyPid !== null && alive(busyPid) });
+    slots.push({ hash, owner, busy: busyPid !== null && alive(busyPid), handoff });
   }
   return { slots, hasDeadSlot };
 }

@@ -21,8 +21,18 @@ export type KeyCdpBody = {
   key: string;
   code: string;
   text?: string;
+  /** Chromium은 이 값이 없으면 Backspace-화살표-Enter 같은 기능키를 무시한다. */
+  windowsVirtualKeyCode?: number;
+  /** CDP 비트마스크 - Alt 1, Ctrl 2, Meta(Cmd) 4, Shift 8. */
+  modifiers?: number;
+  /** 편집 명령(`selectAll` 등). 원격 브라우저는 macOS 키 바인딩을 모르니 Cmd 조합을 이걸로 옮긴다. */
+  commands?: string[];
 };
 
+/** 붙여넣기 - 원격 브라우저의 클립보드는 사람 것과 다르다. 사람 쪽 `paste` 사건의 글자를 그대로 넣는다. */
+export type InsertTextCdpBody = { type: "insertText"; text: string };
+
+export type KeyMods = { altKey: boolean; ctrlKey: boolean; metaKey: boolean; shiftKey: boolean };
 const BUTTONS = ["left", "middle", "right"] as const;
 
 /** DOM `MouseEvent.button`(0·1·2) -> CDP 버튼 이름. 안 눌린 상태(`mouseMoved`)에 쓰는 `none`은
@@ -113,11 +123,88 @@ export function wheelBody(x: number, y: number, deltaX: number, deltaY: number):
   return { type: "mouseWheel", x, y, button: "none", deltaX, deltaY };
 }
 
-const DOM_KEY_TYPE: Record<"keydown" | "keyup", "keyDown" | "keyUp"> = { keydown: "keyDown", keyup: "keyUp" };
+const NAMED_VK: Record<string, number> = {
+  Backspace: 8, Tab: 9, Enter: 13, Shift: 16, Control: 17, Alt: 18, Pause: 19, CapsLock: 20,
+  Escape: 27, " ": 32, PageUp: 33, PageDown: 34, End: 35, Home: 36,
+  ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40, Insert: 45, Delete: 46, Meta: 91,
+};
+const CODE_VK: Record<string, number> = {
+  Space: 32, Semicolon: 186, Equal: 187, Comma: 188, Minus: 189, Period: 190, Slash: 191,
+  Backquote: 192, BracketLeft: 219, Backslash: 220, BracketRight: 221, Quote: 222,
+  MetaLeft: 91, MetaRight: 93, ShiftLeft: 16, ShiftRight: 16, ControlLeft: 17, ControlRight: 17,
+  AltLeft: 18, AltRight: 18, NumpadEnter: 13,
+};
+/** 물리 키(`code`)의 US 배열 글자 - [보통, Shift]. 한/영이 한글일 때 `key`로 오는 자모를 되돌린다. */
+const CODE_US: Record<string, [string, string]> = {
+  Backquote: ["`", "~"], Minus: ["-", "_"], Equal: ["=", "+"], BracketLeft: ["[", "{"],
+  BracketRight: ["]", "}"], Backslash: ["\\", "|"], Semicolon: [";", ":"], Quote: ["'", '"'],
+  Comma: [",", "<"], Period: [".", ">"], Slash: ["/", "?"], Space: [" ", " "],
+};
+const DIGIT_SHIFT = ")!@#$%^&*(";
 
-export function keyBody(domType: "keydown" | "keyup", key: string, code: string): KeyCdpBody {
-  const type = DOM_KEY_TYPE[domType];
-  // 출력 가능한 단일 글자 keydown은 `text`도 실어 `Input.dispatchKeyEvent`가 문자 입력까지
-  // 낸다(CDP 계약 — `char` 커맨드 없이 `keyDown`에 `text`를 실으면 그걸로 입력이 된다).
-  return type === "keyDown" && key.length === 1 ? { type, key, code, text: key } : { type, key, code };
+function virtualKeyCode(key: string, code: string): number | undefined {
+  if (/^Key[A-Z]$/.test(code)) return code.charCodeAt(3);
+  if (/^Digit[0-9]$/.test(code)) return code.charCodeAt(5);
+  if (/^Numpad[0-9]$/.test(code)) return 96 + Number(code.slice(6));
+  if (/^F([1-9]|1[0-2])$/.test(key)) return 111 + Number(key.slice(1));
+  return NAMED_VK[key] ?? CODE_VK[code];
+}
+
+/** 한글 자모(U+3131-318E)나 조합 중(`Process`)으로 온 키는 원격에 IME가 없어 그대로 넣으면 자모가
+ *  찍힌다(실측 a4d2d471 - `hsol`이 `ㅗㄴㅐㅣ`로 들어갔다). 물리 키의 US 글자로 되돌린다. */
+export function latinKey(key: string, code: string, shift: boolean): string {
+  const hangul = key.length === 1 && key.charCodeAt(0) >= 0x3131 && key.charCodeAt(0) <= 0x318e;
+  if (!hangul && key !== "Process") return key;
+  if (/^Key[A-Z]$/.test(code)) return shift ? code.slice(3) : code.slice(3).toLowerCase();
+  if (/^Digit[0-9]$/.test(code)) return shift ? DIGIT_SHIFT[Number(code.slice(5))] : code.slice(5);
+  const us = CODE_US[code];
+  return us ? us[shift ? 1 : 0] : key;
+}
+
+/** Cmd(macOS)-Alt 조합 -> Chromium 편집 명령. 원격 헤드리스는 macOS 키 바인딩이 없어 Cmd+A 같은
+ *  조합이 아무 일도 안 하거나 글자로 찍힌다 - Puppeteer가 macOS에서 쓰는 명령 이름과 같다. */
+function editCommands(key: string, m: KeyMods): string[] | undefined {
+  const sel = m.shiftKey ? "AndModifySelection" : "";
+  if (m.metaKey && !m.ctrlKey) {
+    const k = key.length === 1 ? key.toLowerCase() : key;
+    if (k === "a") return ["selectAll"];
+    if (k === "z") return [m.shiftKey ? "redo" : "undo"];
+    if (k === "x") return ["cut"];
+    if (key === "Backspace") return ["deleteToBeginningOfLine"];
+    if (key === "Delete") return ["deleteToEndOfLine"];
+    if (key === "ArrowLeft") return [`moveToBeginningOfLine${sel}`];
+    if (key === "ArrowRight") return [`moveToEndOfLine${sel}`];
+    if (key === "ArrowUp") return [`moveToBeginningOfDocument${sel}`];
+    if (key === "ArrowDown") return [`moveToEndOfDocument${sel}`];
+  }
+  if (m.altKey && !m.metaKey && !m.ctrlKey) {
+    if (key === "Backspace") return ["deleteWordBackward"];
+    if (key === "Delete") return ["deleteWordForward"];
+    if (key === "ArrowLeft") return [`moveWordLeft${sel}`];
+    if (key === "ArrowRight") return [`moveWordRight${sel}`];
+  }
+  return undefined;
+}
+
+const NO_MODS: KeyMods = { altKey: false, ctrlKey: false, metaKey: false, shiftKey: false };
+
+/** 사람이 자기 쪽에서 처리해야 하는 조합 - Cmd/Ctrl+V는 `paste` 사건으로, Cmd/Ctrl+C는 원격
+ *  클립보드라 의미가 없다. 이 둘은 원격에 안 보내고 기본 동작(붙여넣기 사건)을 막지 않는다. */
+export function isLocalClipboardChord(key: string, m: KeyMods): boolean {
+  const k = key.toLowerCase();
+  return (m.metaKey || m.ctrlKey) && (k === "v" || k === "c");
+}
+
+export function keyBody(domType: "keydown" | "keyup", rawKey: string, code: string, mods: KeyMods = NO_MODS): KeyCdpBody {
+  const key = latinKey(rawKey, code, mods.shiftKey);
+  const modifiers = (mods.altKey ? 1 : 0) | (mods.ctrlKey ? 2 : 0) | (mods.metaKey ? 4 : 0) | (mods.shiftKey ? 8 : 0);
+  const windowsVirtualKeyCode = virtualKeyCode(key, code);
+  const base = { key, code, modifiers, ...(windowsVirtualKeyCode !== undefined ? { windowsVirtualKeyCode } : {}) };
+  if (domType === "keyup") return { type: "keyUp", ...base };
+  const commands = editCommands(key, mods);
+  if (commands) return { type: "rawKeyDown", ...base, commands };
+  // 글자를 내는 키 - Cmd/Ctrl이 같이 눌렸으면 단축키라 글자를 안 싣는다(Alt는 macOS에서 특수문자다).
+  // Enter는 `\r`을 실어야 폼 제출-줄바꿈이 된다(CDP 계약, Puppeteer와 같다).
+  const text = key === "Enter" ? "\r" : key.length === 1 && !mods.metaKey && !mods.ctrlKey ? key : undefined;
+  return text !== undefined ? { type: "keyDown", ...base, text } : { type: "rawKeyDown", ...base };
 }

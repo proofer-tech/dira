@@ -54,6 +54,11 @@
 #   cookies                  지금 쿠키를 "name=value; domain=..; path=.." 줄로 낸다
 #   storage [set <k> <v>]    localStorage를 key=value 줄로 낸다. set이 있으면 그 키를 쓴다
 #
+# D 묶음 - 사람에게 넘기기(로그인-캡차-2단계 인증, 아래 `핸드오프` 블록이 정본이다):
+#   handoff [--wait <초>] <사유>   이 브라우저를 사람에게 넘긴다. 넘긴 동안 쓰기 명령은 종료 코드 4
+#   handoff-status [--wait <초>]   none | pending<TAB>사유 | returned<TAB>메모
+#   handback [메모]                사람이 돌려준다(화면의 `다 했어요` 단추와 같은 일)
+#
 # 셀렉터를 받는 C 묶음 명령(그리고 click - fill)은 전부 _resolve_sel() 한 곳을 거친다.
 # `@e<n>` 참조(498ac41d B묶음)를 여기서 그 요소에 임시 data-dira-ref 속성을 달아 CSS
 # 셀렉터로 바꾼다 - 참조가 없거나 페이지가 갈려 죽었으면 0이 아닌 종료 코드와 사유 한 줄로
@@ -73,6 +78,153 @@ shift 2
 if [ "$_cmd" = release ]; then
   exec bash "$_root/browser.sh" release "$_hash"
 fi
+
+# ── 핸드오프 - 세션이 쥔 브라우저를 사람에게 넘기고 돌려받는다 ─────────────────────────────
+# 로그인-캡차-2단계 인증처럼 사람만 할 수 있는 단계에서 쓴다. 상태는 슬롯 디렉터리의 `handoff`
+# 파일 하나(key=value 줄)다 - 셸과 화면(apps/teams/lib/browser-pool.ts)이 같은 파일을 읽고 쓴다.
+#   state=pending|returned  reason=<사유>  url=<넘길 때 주소>  since=<epoch>
+#   returned_at=<epoch>  note=<돌려줄 때 메모>
+# 이 셋은 acquire를 안 부른다 - 슬롯을 새로 띄우지도, pid를 갈아 적지도 않는다(화면이나 사람
+# 터미널이 handback을 불러도 슬롯 주인이 안 바뀐다).
+#   handoff [--wait <초>] <사유...>   사람에게 넘긴다. --wait면 돌아올 때까지(또는 초 상한) 기다린다
+#   handoff-status [--wait <초>]       none | pending<TAB>사유 | returned<TAB>메모 한 줄
+#   handback [메모...]                 사람이 다 했다고 돌려준다(화면의 `다 했어요`와 같은 일)
+# 종료 코드: 0 돌아옴/조회됨, 1 슬롯 없음-넘긴 것 없음, 2 사용법, 3 --wait 상한까지 안 돌아옴.
+_hf_local="${TICKET_LOCAL:-$HOME/.config/dira}"
+_hf_runlog="$_root/workers/runner.log"
+
+_hf_slot() {
+  local slot
+  for slot in "$_hf_local/browser-pool"/*/; do
+    [ -d "$slot" ] || continue
+    if [ "$(cat "${slot}hash" 2>/dev/null)" = "$_hash" ]; then
+      echo "${slot%/}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+_hf_get() {
+  sed -n "s/^$2=//p" "$1/handoff" 2>/dev/null | head -1
+}
+
+# 값 한 줄 - 줄바꿈-탭을 공백으로 접고 500자에서 자른다(파일 형식이 줄 단위라서).
+_hf_line() {
+  printf '%s' "$*" | tr '\r\n\t' '   ' | cut -c1-500
+}
+
+_hf_status() {
+  local slot="$1" state
+  if [ -z "$slot" ] || [ ! -f "$slot/handoff" ]; then
+    echo "none"
+    return
+  fi
+  state=$(_hf_get "$slot" state)
+  if [ "$state" = returned ]; then
+    printf 'returned\t%s\n' "$(_hf_get "$slot" note)"
+  else
+    printf 'pending\t%s\n' "$(_hf_get "$slot" reason)"
+  fi
+}
+
+_hf_wait() {
+  local limit="$1" waited=0 slot st
+  while :; do
+    slot="$(_hf_slot)" || slot=""
+    st="$(_hf_status "$slot")"
+    case "$st" in
+      pending*) ;;
+      *) echo "$st"; return 0 ;;
+    esac
+    if [ "$waited" -ge "$limit" ]; then
+      echo "$st"
+      echo "browse.sh: ${limit}초 동안 사람이 돌려주지 않았다 - 슬롯은 handoff-ttl 동안 남는다. ## 블록에 무엇을 기다리는지 적고 끝내도 된다" >&2
+      return 3
+    fi
+    sleep 2
+    waited=$((waited + 2))
+  done
+}
+
+_hf_parse_wait() {
+  _hf_wait_s=""
+  _hf_rest=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --wait)
+        shift
+        case "${1:-}" in ''|*[!0-9]*) echo "browse.sh: --wait 뒤에는 초(정수)가 온다" >&2; exit 2 ;; esac
+        _hf_wait_s="$1"
+        ;;
+      *) _hf_rest+=("$1") ;;
+    esac
+    shift
+  done
+}
+
+case "$_cmd" in
+  handoff)
+    _hf_parse_wait "$@"
+    _hf_reason="$(_hf_line "${_hf_rest[*]:-}")"
+    if [ -z "$_hf_reason" ]; then
+      echo "browse.sh: 사용법 - browse.sh <해시> handoff [--wait <초>] <사람이 할 일>" >&2
+      exit 2
+    fi
+    _hf_s="$(_hf_slot)" || { echo "browse.sh: $_hash 가 쥔 브라우저가 없다 - 먼저 goto로 그 화면을 띄운 뒤 넘긴다" >&2; exit 1; }
+    _hf_port="$(head -1 "/tmp/qa-$_hash/chrome-profile/DevToolsActivePort" 2>/dev/null)"
+    _hf_url=""
+    if [ -n "$_hf_port" ]; then
+      _hf_url="$(curl -s --max-time 3 "http://127.0.0.1:$_hf_port/json/list" 2>/dev/null | python3 -c '
+import json, sys
+try:
+    ts = json.load(sys.stdin)
+except Exception:
+    ts = []
+print(next((t.get("url", "") for t in ts if t.get("type") == "page"), ""))
+' 2>/dev/null)"
+    fi
+    _hf_tmp="$_hf_s/.handoff.$$"
+    {
+      echo "state=pending"
+      echo "reason=$_hf_reason"
+      echo "url=$(_hf_line "$_hf_url")"
+      echo "since=$(date +%s)"
+    } > "$_hf_tmp" && mv -f "$_hf_tmp" "$_hf_s/handoff"
+    printf 'BROWSER handoff %s slot=%s\n' "$_hash" "$(basename "$_hf_s")" >> "$_hf_runlog" 2>/dev/null
+    echo "handoff pending - 사람이 dira 홈 > 브라우저 패널의 $_hash 줄에서 이 화면을 이어받는다: $_hf_reason"
+    echo "돌려받으면 handoff-status가 returned를 낸다. 그 전까지 이 슬롯은 읽기 명령(url-text-screenshot-snapshot 등)만 받는다."
+    [ -n "$_hf_wait_s" ] && { _hf_wait "$_hf_wait_s"; exit $?; }
+    exit 0
+    ;;
+  handoff-status)
+    _hf_parse_wait "$@"
+    if [ -n "$_hf_wait_s" ]; then
+      _hf_wait "$_hf_wait_s"
+      exit $?
+    fi
+    _hf_s="$(_hf_slot)" || _hf_s=""
+    _hf_status "$_hf_s"
+    exit 0
+    ;;
+  handback)
+    _hf_s="$(_hf_slot)" || _hf_s=""
+    if [ -z "$_hf_s" ] || [ ! -f "$_hf_s/handoff" ]; then
+      echo "browse.sh: $_hash 는 넘겨받은 브라우저가 아니다" >&2
+      exit 1
+    fi
+    _hf_tmp="$_hf_s/.handoff.$$"
+    {
+      grep -v -E '^(state|returned_at|note)=' "$_hf_s/handoff"
+      echo "state=returned"
+      echo "returned_at=$(date +%s)"
+      echo "note=$(_hf_line "$*")"
+    } > "$_hf_tmp" && mv -f "$_hf_tmp" "$_hf_s/handoff"
+    printf 'BROWSER handback %s slot=%s\n' "$_hash" "$(basename "$_hf_s")" >> "$_hf_runlog" 2>/dev/null
+    echo "returned"
+    exit 0
+    ;;
+esac
 
 # browser.sh 안의 _session_pid()가 부모(=이 스크립트)의 조부모를 잡으면 이 스크립트를
 # 부른 임시 셸이 나온다(efa22ca0 실측 - 두 겹 래핑). 그 셸은 다음 Bash 호출 전에 죽으므로
@@ -134,6 +286,25 @@ if [ -n "$_slot" ]; then
   _owner_value > "$_slot/owner"
   echo $$ > "$_slot/busy"
   trap 'rm -f "$_slot/busy"' EXIT
+
+  # 사람이 쥔 동안(handoff pending)은 읽기 명령만 받는다 - 세션이 화면을 움직이면 사람이 하던
+  # 로그인이 깨진다. 돌려받은 뒤(returned) 첫 쓰기 명령이 handoff 파일을 거둬 제어를 되찾는다.
+  if [ -f "$_slot/handoff" ]; then
+    case "$_cmd" in
+      url|text|html|screenshot|snapshot|console|cookies|links|forms|attrs|css|is|network|dialog|wait) _hf_ro=1 ;;
+      storage) [ "${1:-}" = set ] && _hf_ro=0 || _hf_ro=1 ;;
+      *) _hf_ro=0 ;;
+    esac
+    if [ "$_hf_ro" = 0 ]; then
+      if [ "$(_hf_get "$_slot" state)" = returned ]; then
+        rm -f "$_slot/handoff"
+        printf 'BROWSER resume %s slot=%s\n' "$_hash" "$(basename "$_slot")" >> "$_hf_runlog" 2>/dev/null
+      else
+        echo "browse.sh: 사람이 이 브라우저를 쥐고 있다(handoff pending) - '$_cmd'를 안 보냈다. handoff-status --wait <초>로 돌아오길 기다린다" >&2
+        exit 4
+      fi
+    fi
+  fi
 fi
 
 export DIRA_BROWSE_PORT="$_port"

@@ -8,13 +8,13 @@ import path from "node:path";
 const LOCAL = mkdtempSync(path.join(tmpdir(), "browser-pool-local-"));
 process.env.TICKET_LOCAL = LOCAL;
 
-const { linkOpenBlocked, listBrowserPoolSlots, poolLimit } = await import("./browser-pool.ts");
+const { handBackBrowser, linkOpenBlocked, listBrowserPoolSlots, parseHandoff, poolLimit } = await import("./browser-pool.ts");
 
 process.on("exit", () => rmSync(LOCAL, { recursive: true, force: true }));
 
 function slot(
   name: string,
-  files: { hash?: string | null; pid?: string | null; owner?: string | null; busy?: string | null },
+  files: { hash?: string | null; pid?: string | null; owner?: string | null; busy?: string | null; handoff?: string | null },
 ): void {
   const dir = path.join(LOCAL, "browser-pool", name);
   mkdirSync(dir, { recursive: true });
@@ -52,9 +52,9 @@ test("listBrowserPoolSlots — owner·busy를 같이 읽는다. owner 없으면 
   slot("slot-stale-busy", { hash: "99aabbcc", pid: String(process.pid), busy: "999999" }); // 죽은 busy pid
   const { slots } = await listBrowserPoolSlots();
   const byHash = Object.fromEntries(slots.map((s) => [s.hash, s]));
-  assert.deepStrictEqual(byHash["11223344"], { hash: "11223344", owner: "worker:w3", busy: true });
-  assert.deepStrictEqual(byHash["55667788"], { hash: "55667788", owner: null, busy: false });
-  assert.deepStrictEqual(byHash["99aabbcc"], { hash: "99aabbcc", owner: null, busy: false });
+  assert.deepStrictEqual(byHash["11223344"], { hash: "11223344", owner: "worker:w3", busy: true, handoff: null });
+  assert.deepStrictEqual(byHash["55667788"], { hash: "55667788", owner: null, busy: false, handoff: null });
+  assert.deepStrictEqual(byHash["99aabbcc"], { hash: "99aabbcc", owner: null, busy: false, handoff: null });
 });
 
 // ── poolLimit · linkOpenBlocked (DESIGN.md §11-15 결정 4, 요구 `69b74fed`) ──────────────────
@@ -92,4 +92,40 @@ test("linkOpenBlocked — c0ffee00 슬롯이 없고 상한이 다 찼으면 막�
     process.env.TICKET_LOCAL = prev;
     rmSync(local, { recursive: true, force: true });
   }
+});
+
+// ── 핸드오프 (`browse.sh handoff`) ───────────────────────────────────────────────────────
+
+test("parseHandoff — key=value 줄을 읽고, 없으면 null", () => {
+  assert.strictEqual(parseHandoff(null), null);
+  assert.deepStrictEqual(parseHandoff("state=pending\nreason=구글 로그인 = 한 번\nurl=https://a.b/?x=1\nsince=100\n"), {
+    state: "pending",
+    reason: "구글 로그인 = 한 번",
+    url: "https://a.b/?x=1",
+    since: 100,
+  });
+  assert.strictEqual(parseHandoff("state=returned\nsince=x\n")?.state, "returned");
+  assert.strictEqual(parseHandoff("state=returned\nsince=x\n")?.since, 0);
+});
+
+test("listBrowserPoolSlots — 세션이 죽어도 넘긴 슬롯은 상한 안에서 남고, 상한을 넘으면 회수 신호를 낸다", async () => {
+  const now = Math.floor(Date.now() / 1000);
+  slot("slot-ho-live", { hash: "a0a0a0a0", pid: "999999", handoff: `state=pending\nreason=로그인\nsince=${now}\n` });
+  slot("slot-ho-old", { hash: "b0b0b0b0", pid: "999999", handoff: `state=pending\nreason=로그인\nsince=${now - 99999}\n` });
+  const { slots, hasDeadSlot } = await listBrowserPoolSlots();
+  const live = slots.find((s) => s.hash === "a0a0a0a0");
+  assert.strictEqual(live?.handoff?.state, "pending");
+  assert.strictEqual(live?.handoff?.reason, "로그인");
+  assert.ok(!slots.some((s) => s.hash === "b0b0b0b0"));
+  assert.strictEqual(hasDeadSlot, true);
+});
+
+test("handBackBrowser — pending을 returned로 고치고 사유는 남긴다. 넘긴 것이 없거나 해시가 틀리면 false", async () => {
+  slot("slot-hb", { hash: "c0c0c0c0", pid: String(process.pid), handoff: "state=pending\nreason=캡차\nsince=5\n" });
+  assert.strictEqual(await handBackBrowser("c0c0c0c0", "끝\n줄"), true);
+  const { slots } = await listBrowserPoolSlots();
+  const s = slots.find((x) => x.hash === "c0c0c0c0");
+  assert.deepStrictEqual(s?.handoff, { state: "returned", reason: "캡차", url: "", since: 5 });
+  assert.strictEqual(await handBackBrowser("11223344"), false);
+  assert.strictEqual(await handBackBrowser("../x"), false);
 });
