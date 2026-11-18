@@ -3281,7 +3281,7 @@ function BrowserLeftPanel({
                     {name && <span className="mr-1">{name}</span>}
                     <span className="font-mono text-muted-foreground">{row.hash}</span>
                   </span>
-                  {row.handoff?.state === "pending" && (
+                  {row.handoff?.state === "pending" && row.handoff.by === "agent" && (
                     <span className="shrink-0 rounded bg-amber-200 px-1 text-[10px] font-medium text-amber-950 dark:bg-amber-900 dark:text-amber-100">
                       {t("browser.handoff.badge")}
                     </span>

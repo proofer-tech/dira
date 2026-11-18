@@ -59,6 +59,8 @@
 #   handoff-status [--wait <초>]   none | pending<TAB>사유 | returned<TAB>메모
 #   handback [메모]                사람이 돌려준다(화면의 `다 했어요` 단추와 같은 일)
 #
+# 모든 조작 명령은 `--label "<3-6단어>"`를 더 받는다 - 홈 브라우저 미러가 에이전트 커서 옆에
+# 그 라벨을 그린다(예: click '#next' --label "다음 단계로").
 # 셀렉터를 받는 C 묶음 명령(그리고 click - fill)은 전부 _resolve_sel() 한 곳을 거친다.
 # `@e<n>` 참조(498ac41d B묶음)를 여기서 그 요소에 임시 data-dira-ref 속성을 달아 CSS
 # 셀렉터로 바꾼다 - 참조가 없거나 페이지가 갈려 죽었으면 0이 아닌 종료 코드와 사유 한 줄로
@@ -309,6 +311,7 @@ fi
 
 export DIRA_BROWSE_PORT="$_port"
 export DIRA_BROWSE_HASH="$_hash"
+export DIRA_BROWSE_SLOT="$_slot"
 # exec을 안 쓴다 - exec은 이 프로세스 이미지를 python3로 갈아치워 위에서 건 trap(busy 정리)이
 # 등록된 채로 통째로 사라진다. 자식으로 돌리고 종료 코드를 그대로 물려준다.
 python3 - "$_cmd" "$@" <<'PYEOF'
@@ -1206,15 +1209,84 @@ _COMMANDS = {
 }
 
 
+# 에이전트 커서 - 화면(홈 브라우저 미러)이 세션이 지금 어디를 무엇 때문에 누르는지 그린다.
+# 슬롯의 `cursor` 파일 하나에 마지막 동작의 뷰포트 CSS 좌표와 라벨을 남긴다(JSON 한 줄).
+# 형식의 짝은 apps/teams/app/(app)/p/[project]/cdp/[hash]/route.ts의 `event: cursor`다.
+# 라벨은 `--label "<3-6단어>"`로 세션이 직접 준다(ego-browser의 label과 같은 자리). 없으면 기본값.
+_POINTER_CMDS = {"click", "fill", "hover", "select", "scroll"}
+_DEFAULT_LABELS = {
+    "click": "클릭", "fill": "입력", "hover": "가리키기", "select": "선택", "scroll": "스크롤",
+    "type": "타이핑", "press": "키 입력", "goto": "페이지 이동", "back": "뒤로",
+    "forward": "앞으로", "reload": "새로고침",
+}
+
+
+def _pop_label(args):
+    if "--label" in args:
+        i = args.index("--label")
+        if i + 1 < len(args):
+            label = args[i + 1]
+            return args[:i] + args[i + 2:], label
+        return args[:i], None
+    return args, None
+
+
+def _element_point(cdp, sel):
+    expr = (
+        "(function(){var e=document.querySelector(%s); if(!e) return null; "
+        "var r=e.getBoundingClientRect(); return JSON.stringify({x:r.left+r.width/2, "
+        "y:r.top+Math.min(r.height/2, 24), vw:innerWidth, vh:innerHeight});})()" % json.dumps(sel)
+    )
+    try:
+        raw = cdp.eval_js(expr)
+        return json.loads(raw) if raw else None
+    except Exception:
+        return None
+
+
+def _write_cursor(point, label):
+    slot = os.environ.get("DIRA_BROWSE_SLOT") or ""
+    if not slot or not os.path.isdir(slot):
+        return
+    path = os.path.join(slot, "cursor")
+    prev = {}
+    try:
+        with open(path) as f:
+            prev = json.load(f)
+    except Exception:
+        prev = {}
+    data = {k: prev.get(k) for k in ("x", "y", "vw", "vh")}
+    if point:
+        data.update(point)
+    data["label"] = (label or "")[:80]
+    data["ts"] = int(time.time() * 1000)
+    tmp = path + ".%d" % os.getpid()
+    try:
+        with open(tmp, "w") as f:
+            json.dump(data, f, ensure_ascii=False)
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
 def main():
     argv = sys.argv[1:]
     if not argv:
         die("명령이 없다")
     cmd, args = argv[0], argv[1:]
+    args, label = _pop_label(args)
     handler = _COMMANDS.get(cmd)
     if handler is None:
         die("모르는 명령 - " + cmd)
     cdp = connect()
+    point = None
+    if cmd in _POINTER_CMDS and args:
+        # 누르기 전 자리를 잰다 - 누른 뒤에는 페이지가 바뀌어 요소가 없을 수 있다. @eN은 여기서
+        # CSS 셀렉터로 한 번 풀어 두고 그 값을 그대로 넘긴다(_resolve_sel은 CSS를 그대로 돌려준다).
+        args = [_resolve_sel(cdp, args[0])] + args[1:]
+        point = _element_point(cdp, args[0])
+    if cmd in _DEFAULT_LABELS:
+        _write_cursor(point, label or _DEFAULT_LABELS[cmd])
     handler(cdp, args)
 
 

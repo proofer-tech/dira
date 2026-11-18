@@ -12,6 +12,8 @@
  *  보낸 메서드 이름을 그대로 실어 나르는 줄이 없다 - `toCdpInputCommand`/`toCdpNavigateCommand`가
  *  그 화이트리스트다. `navigate`는 링크 슬롯(`c0ffee00`, §11-15 결정 1) 하나에만 선다. */
 import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { findSlotDir } from "@/lib/browser-pool";
 import {
   browserPortPath,
   isNavigableUrl,
@@ -58,6 +60,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
 
   let ws: WebSocket | null = null;
   let closed = false;
+  // 에이전트 커서 - 슬롯의 `cursor` 파일을 짧게 훑어 바뀌었을 때만 `event: cursor`로 흘린다.
+  // 파일 감시(fs.watch)는 원자 교체(rename)를 놓치는 플랫폼이 있어 폴링으로 둔다.
+  const slotDir = await findSlotDir(hash);
+  let cursorTimer: ReturnType<typeof setInterval> | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
@@ -72,6 +78,25 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
         }
       };
       ws = new WebSocket(wsUrl);
+      if (slotDir) {
+        let lastCursor = "";
+        const cursorFile = path.join(slotDir, "cursor");
+        cursorTimer = setInterval(() => {
+          void readFile(cursorFile, "utf8").then(
+            (raw) => {
+              const line = raw.trim();
+              if (closed || !line || line === lastCursor || line.includes("\n")) return;
+              lastCursor = line;
+              try {
+                controller.enqueue(enc.encode(`event: cursor\ndata: ${line}\n\n`));
+              } catch {
+                // 구독자가 이미 정리된 뒤
+              }
+            },
+            () => {},
+          );
+        }, 250);
+      }
 
       ws.addEventListener("open", () => {
         // Page.frameNavigated 사건은 Page 도메인을 켜야 온다(§11-15 결정 2).
@@ -139,6 +164,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
       const finish = () => {
         if (closed) return;
         closed = true;
+        if (cursorTimer) clearInterval(cursorTimer);
         try {
           controller.close();
         } catch {
@@ -150,6 +176,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ hash: s
     },
     cancel() {
       closed = true;
+      if (cursorTimer) clearInterval(cursorTimer);
       try {
         ws?.send(JSON.stringify({ id: 0, method: "Page.stopScreencast" }));
       } catch {

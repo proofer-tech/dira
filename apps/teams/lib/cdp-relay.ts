@@ -97,6 +97,7 @@ export async function readCdpFrameStream(
   signal?: AbortSignal,
   onUrl?: (url: string) => void,
   onViewport?: (viewport: { width: number; height: number }) => void,
+  onCursor?: (cursor: unknown) => void,
 ): Promise<CdpFrameOutcome> {
   if (!res.ok) return "disconnected";
   const reader = res.body?.getReader();
@@ -123,6 +124,15 @@ export async function readCdpFrameStream(
         pendingEvent = null;
         if (event === "url") {
           onUrl?.(data);
+          continue;
+        }
+        if (event === "cursor") {
+          // 에이전트 커서(`browse.sh`가 남긴 마지막 동작) - 모양 검사는 받는 쪽(`parseAgentCursor`)이 한다.
+          try {
+            onCursor?.(JSON.parse(data));
+          } catch {
+            // 무시
+          }
           continue;
         }
         if (event === "viewport") {
@@ -153,4 +163,25 @@ export async function readCdpFrameStream(
 export function normalizeAddressInput(value: string): string {
   const trimmed = value.trim();
   return /^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+/** 에이전트 커서 — `browse.sh`가 슬롯의 `cursor` 파일에 남긴 마지막 동작(뷰포트 CSS px와 라벨). */
+export type AgentCursor = { x: number | null; y: number | null; vw: number | null; vh: number | null; label: string; ts: number };
+
+export function parseAgentCursor(raw: string | null): AgentCursor | null {
+  if (!raw) return null;
+  try {
+    const v = JSON.parse(raw) as Record<string, unknown>;
+    const num = (k: string) => (typeof v[k] === "number" && Number.isFinite(v[k]) ? (v[k] as number) : null);
+    return {
+      x: num("x"),
+      y: num("y"),
+      vw: num("vw"),
+      vh: num("vh"),
+      label: typeof v.label === "string" ? v.label.slice(0, 80) : "",
+      ts: num("ts") ?? 0,
+    };
+  } catch {
+    return null;
+  }
 }

@@ -100,6 +100,7 @@ test("parseHandoff — key=value 줄을 읽고, 없으면 null", () => {
   assert.strictEqual(parseHandoff(null), null);
   assert.deepStrictEqual(parseHandoff("state=pending\nreason=구글 로그인 = 한 번\nurl=https://a.b/?x=1\nsince=100\n"), {
     state: "pending",
+    by: "agent",
     reason: "구글 로그인 = 한 번",
     url: "https://a.b/?x=1",
     since: 100,
@@ -125,7 +126,22 @@ test("handBackBrowser — pending을 returned로 고치고 사유는 남긴다. 
   assert.strictEqual(await handBackBrowser("c0c0c0c0", "끝\n줄"), true);
   const { slots } = await listBrowserPoolSlots();
   const s = slots.find((x) => x.hash === "c0c0c0c0");
-  assert.deepStrictEqual(s?.handoff, { state: "returned", reason: "캡차", url: "", since: 5 });
+  assert.deepStrictEqual(s?.handoff, { state: "returned", by: "agent", reason: "캡차", url: "", since: 5 });
   assert.strictEqual(await handBackBrowser("11223344"), false);
   assert.strictEqual(await handBackBrowser("../x"), false);
+});
+
+test("takeOverBrowser — 사람이 가져가면 by=user로 pending을 쓰고, 이미 넘겨진 슬롯은 덮지 않는다", async () => {
+  const { takeOverBrowser } = await import("./browser-pool.ts");
+  slot("slot-to", { hash: "d0d0d0d0", pid: String(process.pid) });
+  assert.strictEqual(await takeOverBrowser("d0d0d0d0", "사람이 조작"), true);
+  let s = (await listBrowserPoolSlots()).slots.find((x) => x.hash === "d0d0d0d0");
+  assert.strictEqual(s?.handoff?.state, "pending");
+  assert.strictEqual(s?.handoff?.by, "user");
+  slot("slot-to2", { hash: "e0e0e0e0", pid: String(process.pid), handoff: "state=pending\nreason=에이전트가 넘김\nsince=1\n" });
+  assert.strictEqual(await takeOverBrowser("e0e0e0e0", "사람이 조작"), true);
+  s = (await listBrowserPoolSlots()).slots.find((x) => x.hash === "e0e0e0e0");
+  assert.strictEqual(s?.handoff?.by, "agent");
+  assert.strictEqual(s?.handoff?.reason, "에이전트가 넘김");
+  assert.strictEqual(await takeOverBrowser("f0f0f0f0", "x"), false);
 });

@@ -37,6 +37,9 @@ until curl -s -o /dev/null "http://127.0.0.1:$_srv_port/index.html"; do sleep 0.
 BROWSER_SESSION_PID="$_sess" bash "$_tmp/root/browser.sh" acquire "$_hash" >/dev/null || { echo "FAIL acquire"; exit 1; }
 bash "$_b" "$_hash" goto "http://127.0.0.1:$_srv_port/index.html" >/dev/null || ng "goto"
 
+bash "$_b" "$_hash" hover '#b' --label "단추 위로" >/dev/null || ng "hover"
+_cur="$(cat "$(slot_dir)/cursor" 2>/dev/null)"
+case "$_cur" in *'"label": "단추 위로"'*'"x":'*|*'"x":'*'"label": "단추 위로"'*) ok "--label이 에이전트 커서(좌표+라벨)를 남긴다" ;; *) ng "에이전트 커서 ($_cur)" ;; esac
 [ "$(bash "$_b" "$_hash" handoff-status)" = none ] && ok "넘기기 전 handoff-status = none" || ng "handoff-status none"
 bash "$_b" "$_hash" handoff >/dev/null 2>&1; [ $? -eq 2 ] && ok "사유 없는 handoff는 종료 코드 2" || ng "handoff 사용법"
 bash "$_b" "$_hash" handoff "구글 로그인을 해 주세요" >/dev/null && ok "handoff 종료 코드 0" || ng "handoff"

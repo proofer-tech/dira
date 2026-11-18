@@ -110,7 +110,7 @@ const EXCLUDED: Record<string, string> = {
   stopHome: NO_SCREEN, clearHome: NO_SCREEN, switchHome: NO_SCREEN, closeTab: NO_SCREEN, openTerminal: NO_SCREEN,
   runCommandInTerminal: NO_SCREEN, restartTerminal: NO_SCREEN, closeTerminalTab: NO_SCREEN, terminalStatuses: NO_SCREEN,
   scmCheckouts: NO_SCREEN, scmStatus: NO_SCREEN, openBrowserTabAction: NO_SCREEN, browserPoolTickets: NO_SCREEN,
-  openLinkAction: NO_SCREEN, releaseLinkAction: NO_SCREEN, handBackBrowserAction: NO_SCREEN, scmStage: NO_SCREEN, scmUnstage: NO_SCREEN, scmStageAll: NO_SCREEN,
+  openLinkAction: NO_SCREEN, releaseLinkAction: NO_SCREEN, handBackBrowserAction: NO_SCREEN, takeOverBrowserAction: NO_SCREEN, scmStage: NO_SCREEN, scmUnstage: NO_SCREEN, scmStageAll: NO_SCREEN,
   scmRemoteBranches: NO_SCREEN, scmSetUpstream: NO_SCREEN, scmCommit: NO_SCREEN, scmPush: NO_SCREEN, scmPull: NO_SCREEN,
   listExplorerDirAction: NO_SCREEN, openExplorerFileAction: NO_SCREEN, openExplorerFileTab: NO_SCREEN,
   setExplorerTabUnsaved: NO_SCREEN, saveExplorerFileAction: NO_SCREEN, findByNameAction: NO_SCREEN,

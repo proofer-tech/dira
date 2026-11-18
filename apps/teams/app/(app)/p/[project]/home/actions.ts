@@ -55,7 +55,7 @@ import {
   type HomeChunk,
   type ScheduleView,
 } from "@/lib/home-session";
-import { handBackBrowser, listBrowserPoolSlots, linkOpenBlocked, type BrowserHandoff } from "@/lib/browser-pool";
+import { handBackBrowser, listBrowserPoolSlots, linkOpenBlocked, takeOverBrowser, type BrowserHandoff } from "@/lib/browser-pool";
 import { openLinkBrowser, reclaimBrowserPool, releaseLinkBrowser, type Run } from "@/lib/engine";
 import { explorerRoot, getProject, resolveConfig, type Project } from "@/lib/projects";
 import { killPty, openPty, ptyStatuses, restartPty, writePty, type PtyStatus } from "@/lib/pty";
@@ -520,6 +520,11 @@ export async function browserPoolTickets(projectId: string): Promise<BrowserPool
  *  프로젝트 스코프를 다시 재지 않는다(`cdp/[hash]` 라우트와 같은 경계, 해시 관문은 안에서 잰다). */
 export async function handBackBrowserAction(hash: string, note = ""): Promise<boolean> {
   return handBackBrowser(hash, note).catch(() => false);
+}
+
+/** 사람이 미러의 `직접 하기`를 눌렀다 — 세션의 쓰기 명령을 멈추고 입력을 사람에게 준다. */
+export async function takeOverBrowserAction(hash: string, reason: string): Promise<boolean> {
+  return takeOverBrowser(hash, reason).catch(() => false);
 }
 
 /** `openLinkAction`의 결과(§11-15 결정 1 · 4) — `reason: "cap"`일 때만 토스트가 상한·지금

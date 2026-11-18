@@ -174,3 +174,13 @@ test("스킴을 이미 적었으면 그대로 둔다", () => {
   assert.equal(normalizeAddressInput("https://example.com"), "https://example.com");
   assert.equal(normalizeAddressInput("http://example.com"), "http://example.com");
 });
+
+test("parseAgentCursor - browse.sh의 cursor JSON을 읽고, 숫자 밖 값은 null로 둔다", async () => {
+  const { parseAgentCursor } = await import("./cdp-relay.ts");
+  assert.deepStrictEqual(parseAgentCursor('{"x": 10, "y": 20.5, "vw": 1440, "vh": 900, "label": "다음", "ts": 5}'), {
+    x: 10, y: 20.5, vw: 1440, vh: 900, label: "다음", ts: 5,
+  });
+  assert.deepStrictEqual(parseAgentCursor('{"x": null, "label": "페이지 이동"}'), { x: null, y: null, vw: null, vh: null, label: "페이지 이동", ts: 0 });
+  assert.strictEqual(parseAgentCursor("깨진"), null);
+  assert.strictEqual(parseAgentCursor(null), null);
+});

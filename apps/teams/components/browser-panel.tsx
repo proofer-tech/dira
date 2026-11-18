@@ -31,13 +31,14 @@ import { Input } from "@/components/ui/input";
 import { trackPending, useLinkPendingReporter, useTrackedRouter } from "@/lib/route-pending";
 import { writeStoredActiveTab } from "@/lib/tabs";
 import {
-  handBackBrowserAction,
   openBrowserTabAction,
   openLinkAction,
   releaseLinkAction,
   type BrowserPoolRow,
 } from "@/app/(app)/p/[project]/home/actions";
 import type { BrowserHandoff } from "@/lib/browser-pool";
+import { parseAgentCursor, type AgentCursor } from "@/lib/cdp-relay";
+import { AgentCursorMark, ControlGlow, ControlPill, controlMode, measureFrame, type FrameSize } from "@/components/browser-control";
 import { linkCapToastMessage, linkErrorToastMessage, wrap, type Locale } from "@/lib/i18n";
 import { TicketRef } from "@/components/queue-ref";
 import type { TicketRefValue } from "@/lib/markdown-refs";
@@ -267,9 +268,20 @@ export function BrowserMirror({
   const [frame, setFrame] = useState<string | null>(null);
   const viewportRef = useRef<{ width: number; height: number } | null>(null);
   const [lost, setLost] = useState(false);
-  const handoffPending = handoff?.state === "pending";
+  // 버튼을 누른 뒤 5초 폴링이 새 `handoff`를 가져오기 전까지 화면이 먼저 바뀌게 하는 낙관값 -
+  // 폴링 값이 바뀌면 버린다(아래 렌더 중 비교).
+  const [optimistic, setOptimistic] = useState<BrowserHandoff | null | undefined>(undefined);
+  const [prevHandoff, setPrevHandoff] = useState(handoff);
+  if (prevHandoff !== handoff) {
+    setPrevHandoff(handoff);
+    setOptimistic(undefined);
+  }
+  const effectiveHandoff = optimistic === undefined ? (handoff ?? null) : optimistic;
+  const handoffPending = effectiveHandoff?.state === "pending";
   const [unlocked, setUnlocked] = useState(handoffPending);
-  const [handingBack, setHandingBack] = useState(false);
+  const [cursor, setCursor] = useState<AgentCursor | null>(null);
+  const [frameSize, setFrameSize] = useState<FrameSize | null>(null);
+  const mode = controlMode({ isLinkSlot, hasOwner: !!ownerName || busy, handoff: effectiveHandoff });
   // 넘겨받은 순간 입력을 연다 — 사람에게 해 달라고 넘긴 화면이라 `만지면 실측이 어긋난다` 확인이
   // 필요 없다. 이펙트 대신 렌더 중 이전 값과 비교한다(React 권장 관용구, set-state-in-effect 규칙).
   const [prevHandoffPending, setPrevHandoffPending] = useState(handoffPending);
@@ -333,6 +345,7 @@ export function BrowserMirror({
         (v) => {
           viewportRef.current = v;
         },
+        (c) => setCursor(parseAgentCursor(JSON.stringify(c))),
       );
       if (outcome === "disconnected") setLost(true);
     })();
@@ -365,35 +378,6 @@ export function BrowserMirror({
   // 없다 — 빈 줄을 안 남긴다.
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col">
-      {handoff && (
-        <div
-          role="status"
-          className="flex items-center justify-between gap-2 border-b bg-amber-100 px-3 py-1.5 text-xs text-amber-950 dark:bg-amber-950 dark:text-amber-100"
-        >
-          <span className="min-w-0 truncate">
-            <span className="mr-1 font-medium">
-              {handoffPending ? t("browser.handoff.banner") : t("browser.handoff.returned")}
-            </span>
-            {handoffPending && handoff.reason}
-          </span>
-          {handoffPending && (
-            <Button
-              size="xs"
-              disabled={handingBack}
-              onClick={() => {
-                setHandingBack(true);
-                void handBackBrowserAction(hash).then((ok) => {
-                  setHandingBack(false);
-                  if (ok) setUnlocked(false);
-                  else toast.error(t("browser.handoff.failed"));
-                });
-              }}
-            >
-              {t("browser.handoff.done")}
-            </Button>
-          )}
-        </div>
-      )}
       {(ownerName || unlocked) && (
         <div className="flex items-center justify-between border-b bg-muted/50 px-3 py-1.5">
           <span className="flex items-center gap-1.5 text-xs font-medium">
@@ -503,6 +487,12 @@ export function BrowserMirror({
           alt=""
           src={frame ? `data:image/jpeg;base64,${frame}` : undefined}
           className="h-full w-full object-contain"
+          onLoad={(e) => {
+            const next = measureFrame(e.currentTarget);
+            setFrameSize((prev) =>
+              prev && prev.W === next.W && prev.H === next.H && prev.nw === next.nw && prev.nh === next.nh ? prev : next,
+            );
+          }}
         />
         {/* 랩 레이어(§11-11 결정 6) — 막힌 동안은 투명한 이 층이 전부를 받는다. 걷힌 동안에는
             이 층이 곧 입력 캡처 표면이다(이미지 자신은 상호작용 요소가 아니다 — 마우스·휠을
@@ -551,6 +541,27 @@ export function BrowserMirror({
             const p = point(e.clientX, e.clientY);
             if (!p) return;
             postInput(url, wheelBody(p.x, p.y, e.deltaX, e.deltaY));
+          }}
+        />
+        {/* 제어권 표시(ego-browser task space를 따른다) — 빛과 커서는 포인터를 안 받고, 알약만 받는다. */}
+        <ControlGlow mode={mode} frame={frameSize} />
+        {mode === "agent" && <AgentCursorMark cursor={cursor} frame={frameSize} />}
+        <ControlPill
+          mode={mode}
+          title={ownerName ?? hash}
+          busy={busy}
+          cursorLabel={cursor?.label || null}
+          reason={effectiveHandoff?.reason ?? ""}
+          projectId={projectId}
+          hash={hash}
+          canStop={!!ticket}
+          onTookOver={() => {
+            setOptimistic({ state: "pending", by: "user", reason: "", url: "", since: Math.floor(Date.now() / 1000) });
+            setUnlocked(true);
+          }}
+          onHandedBack={() => {
+            setOptimistic(effectiveHandoff ? { ...effectiveHandoff, state: "returned" } : null);
+            setUnlocked(false);
           }}
         />
         {pick && <CommentPopover key={pick.frame + pick.px + pick.py} projectId={projectId} pick={pick} onClosed={() => setPick(null)} />}

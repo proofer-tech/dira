@@ -46,6 +46,8 @@ export type BrowserPoolSlot = {
  *  `pending`은 사람이 쥔 상태, `returned`는 사람이 돌려줬고 세션이 아직 안 거둔 상태다. */
 export type BrowserHandoff = {
   state: "pending" | "returned";
+  /** 누가 넘겼나 - `agent`는 세션의 `browse.sh handoff`, `user`는 사람이 화면에서 `직접 하기`로 가져간 것. */
+  by: "agent" | "user";
   reason: string;
   url: string;
   since: number;
@@ -68,13 +70,14 @@ export function parseHandoff(raw: string | null): BrowserHandoff | null {
   const since = Number.parseInt(kv.since ?? "", 10);
   return {
     state: kv.state === "returned" ? "returned" : "pending",
+    by: kv.by === "user" ? "user" : "agent",
     reason: kv.reason ?? "",
     url: kv.url ?? "",
     since: Number.isInteger(since) ? since : 0,
   };
 }
 
-async function findSlotDir(hash: string): Promise<string | null> {
+export async function findSlotDir(hash: string): Promise<string | null> {
   const dir = poolDir();
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
@@ -99,6 +102,29 @@ export async function handBackBrowser(hash: string, note = ""): Promise<boolean>
   kept.push("state=returned", `returned_at=${Math.floor(Date.now() / 1000)}`, `note=${oneLine}`);
   const tmp = path.join(slotDir, `.handoff.${process.pid}`);
   await writeFile(tmp, kept.join("\n") + "\n");
+  await rename(tmp, file);
+  return true;
+}
+
+/** 사람이 화면에서 `직접 하기`를 눌렀다 — 세션이 넘긴 것과 같은 `handoff` 파일을 `by=user`로 쓴다.
+ *  셸의 관문이 같은 파일을 보므로 그 순간부터 세션의 쓰기 명령은 종료 코드 4로 멈춘다(ego-browser의
+ *  `Take over`와 같은 계약 - 사람이 쥐면 에이전트는 손을 뗀다). 이미 넘겨진 슬롯이면 덮지 않는다. */
+export async function takeOverBrowser(hash: string, reason: string): Promise<boolean> {
+  if (!isValidCdpHash(hash)) return false;
+  const slotDir = await findSlotDir(hash);
+  if (!slotDir) return false;
+  const file = path.join(slotDir, "handoff");
+  const existing = parseHandoff(await readFile(file, "utf8").catch(() => null));
+  if (existing?.state === "pending") return true;
+  const lines = [
+    "state=pending",
+    "by=user",
+    `reason=${reason.replace(/[\r\n\t]+/g, " ").slice(0, 500)}`,
+    "url=",
+    `since=${Math.floor(Date.now() / 1000)}`,
+  ];
+  const tmp = path.join(slotDir, `.handoff.${process.pid}`);
+  await writeFile(tmp, lines.join("\n") + "\n");
   await rename(tmp, file);
   return true;
 }
