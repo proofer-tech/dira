@@ -9040,6 +9040,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 | P567-1 | 결정 1: `templates/hooks/browse.sh` `_hf_wait`의 `waiting_until` 쓰기-지우기 + trap, `browse-selfcheck-handoff.sh` 항목 추가, 큐 사본의 `_hf_wait`만 바꾸는 마이그레이션 | developer | - | 발행 `5f191092` |
 | P567-2 | 결정 2: `parseHandoff`의 `waitingUntil`, 슬롯에 `handoff-ttl` 싣기, 알약 문구 두 갈래와 1분 갱신, ko-en 문구, 테스트 | developer | - | 발행 `a48195bf` |
 | P567-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 실제 슬롯에서 한 줄씩 판정한다 | qa | P567-1, P567-2 | 발행 `9333340a` |
+| P567-4 | 결함 수정(요구 `93293b8b`): 마이그레이션 `0009`가 `_hf_wait`가 없는 옛 사본(핸드오프 기능 이전, 예: with-cto 2026-10-12 사본)에서 apply는 건너뛰는데 verify는 `waiting_until`을 요구해 매번 실패한다. verify를 apply와 같은 판정으로 맞춘다 - apply가 건너뛰는 사본(없음 - `_hf_wait() {`도 `# 대기 중 표지`도 없음)은 verify도 통과한다. 사본을 정본으로 덮지 않는다 | developer | - | 발행 `e6d61d4a` |
 
 P567-1과 P567-2는 위 파일 형식(`waiting_until=<epoch 초>`)만 공유하고 고치는 파일이 겹치지 않으므로 deps 없이 병렬로
 진행한다. designer는 0장이다(기존 알약 안에서 문구만 바뀐다). writer도 0장이다(문구는 사람이 동의한 제안을 그대로 쓴다).
@@ -9052,6 +9053,7 @@ P567-1과 P567-2는 위 파일 형식(`waiting_until=<epoch 초>`)만 공유하�
 - [ ] 알약 문구를 만드는 함수에 (가) `waiting_until`이 지금 + 290초 (나) `waiting_until`이 지난 값이고 `since`가 지금 - 60초, ttl 7200 (다) `waiting_until` 없음을 넣으면 각각 `에이전트가 기다리고 있습니다 (5분 남음)`, `... 1시간 59분 뒤에 정리됩니다.`가 든 대기 종료 문구, 대기 종료 문구가 나온다. 영어 로캘에서도 세 경우가 영어로 나온다.
 - [ ] 실제 슬롯에서 `browse.sh <해시> handoff --wait 120 <사유>`를 부르면 미러 알약이 10초 안에 `에이전트가 기다리고 있습니다 (2분 남음)`을 보이고, 대기가 종료 코드 3으로 끝난 뒤 70초 안에 대기 종료 문구와 정리까지 남은 시간을 보인다(스크린샷 둘을 `## 결과`에 남긴다).
 - [ ] `cd apps/teams && pnpm exec tsc --noEmit`과 바뀐 파일의 테스트가 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
+- [ ] (P567-4) `_hf_wait`와 `# 대기 중 표지`가 없는 `browse.sh` 사본을 둔 임시 큐에서 `migrate.py apply --root <루트>`가 rc 0이고 `0009`가 `ok`로 기록되며, 사본의 sha256이 적용 전과 같다.
 
 ### P566. 구글 검색 결과에 사이트 이름이 `dira`로 뜨고, 각 페이지가 자기 설명과 현재 언어로 색인된다 (요구 `97addaba`, 왕복 0회)
 
@@ -13648,6 +13650,7 @@ P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 �
 | 러너가 죽음 | 다음 러너가 진행 표식으로 복원한다. 그 사이에도 기록이 `ok`가 아니므로 게이트가 막는다 |
 | machine 항목 실패 | 같은 복원. 프로젝트 항목은 돌리지 않는다 - 모든 프로젝트가 미적용으로 막힌다 |
 | 백업 실패(디스크 등) | 적용하지 않고 `failed` |
+| 이미 `failed`-`broken`인 항목(결정적 실패의 반복 방지, 요구 `93293b8b`) | 헤드리스 경로(`remote.py` claim 전 적용)는 그 항목을 다시 돌리지 않고 게이트만 본다 - 백업도 새로 만들지 않는다. 다시 돌리는 경로는 서버 기동(`ensureRunner(true)`) - 오버레이 `다시 시도` - 사람이 직접 부른 `apply`뿐이다. 앱 폴링이 자동 재시도하지 않는 기존 규칙(`failedStays`)과 같다 |
 
 #### 안 하는 것
 
@@ -13664,6 +13667,7 @@ P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 �
 | P505-4 | 개발자 문서 - `docs/design/마이그레이션.md` "마이그레이션 항목 쓰는 법"(위 항목 형식 - 멱등 - targets - canary와 promote - 테스트 방법) | writer | - | 발행 `558a8209` |
 | P505-5 | 매뉴얼 - 사용자용 ko-en: `install.md` 업데이트 절에 오버레이와 건너뛰기, `troubleshooting.md` `멈춤:` 표에 `migration` 행, `ref-cli.md`에 `migrate.py` | writer | - | 발행 `fcd21810` |
 | P505-6 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P505-1, P505-2, P505-3 | 발행 `bc3286b8` |
+| P505-7 | 결함 수정(요구 `93293b8b`): `remote.py` `migration_block`이 30초 시계마다 `apply --root`를 불러 `failed` 항목을 다시 돌리고 백업을 한 벌씩 쌓는다. 위 "값 - 실패와 복원" 표의 `failed`-`broken` 행대로 헤드리스 경로는 재시도하지 않게 한다 + 테스트 | developer | - | 발행 `251d54d0` |
 
 **여섯 장이다.** P505-3은 상태 파일 형식과 게이트 줄이 이 표에 정해져 있어 러너 없이 착수한다(가짜 상태 파일로
 그린다). P505-2만 `migrate.py gate`를 실제로 불러야 테스트가 되므로 P505-1을 기다린다. designer 0장 - 오버레이는 위
@@ -13683,6 +13687,7 @@ P505-1(`51920d1e`, 러너)을 기다린다. 매뉴얼은 이 절에 글감이 �
 - [ ] 패키징한 앱의 `Contents/Resources/engine/`에 `migrate.py`와 `migrations/0001_migrations_readme.py`가 있다(`pnpm run dist`의 존재 검사가 통과한다).
 - [ ] `python3 test_migrate.py`, 게이트를 고친 엔진 테스트, `cd apps/teams && pnpm test`, `pnpm exec tsc --noEmit`이 통과한다.
 - [ ] 9개 등록 프로젝트에서 앱을 한 번 재기동하면 예시 항목 `0001`이 모두 `ok`이고 각 큐 루트에 `migrations/README.md`가 있다.
+- [ ] (P505-7) verify가 늘 실패하는 항목을 `DIRA_MIGRATIONS_DIR`에 두고 `migrate.py apply --root R`을 한 번 돌려 `failed`로 만든 뒤 `remote.py`의 claim 전 경로(`migration_block`)를 두 번 부르면, `migrate.log`에 새 `START` 줄이 없고 `backup/<id>/` 아래 폴더 수가 늘지 않으며, 게이트는 여전히 rc 1로 막는다. 이어서 `migrate.py apply --root R`을 직접 부르면 그 항목을 다시 `START`한다.
 
 ### P504. 원격 큐 - 원격 읽기는 런타임이 켜져 있는 동안 늘 받는다 - 읽기 전용 상주 프로세스와 object 이름 일괄 조회 (요구 `ec92852b`, 왕복 0회)
 
