@@ -8988,6 +8988,71 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P567. 브라우저 미러가 핸드오프를 넘긴 세션이 아직 기다리는지, 대기를 끝냈는지 보여 준다 (요구 `342f1a83`, 왕복 0회)
+
+사람 요구(2026-11-19): *"상한까지 기다렸는데도"를 브라우저에 오버레이로 볼 수 있으면 어떨까요?* 홈 세션이 아래 결정
+1-2를 제안했고, 사람이 "네 그렇게해주세요"라고 답했다.
+
+#### 실측 - 2026-11-19, 홈 세션의 핸드오프 시뮬레이션
+
+- 홈 세션이 슬롯 `b4fefdcc`에서 GitHub 로그인 화면을 `browse.sh handoff`로 넘기고 `handoff-status --wait 600`으로
+  기다렸다. 사람이 `다 했어요`를 누르지 않아 대기가 종료 코드 3으로 끝났는데, 미러에는 `손 필요` 배지와 `다 했어요`
+  단추가 그대로 남았다.
+- `handoff` 파일(정본 형식은 `templates/hooks/browse.sh` §핸드오프)에는 `state` `by` `reason` `url` `since`만 있다.
+  세션이 `--wait`로 아직 기다리는지는 파일에 남지 않고 세션 stderr에만 출력된다. 대기가 끝난 뒤에도 세션
+  프로세스가 살아 있을 수 있으므로 pid로도 판정하지 못한다.
+- 그래서 사람은 `다 했어요`를 누르면 곧바로 이어진다고 기대하기 쉽다. 실제로는 세션이 다시 불리거나 재디스패치될
+  때까지 아무 일도 일어나지 않는다. 슬롯은 `handoff-ttl`(기본 7200초) 동안 남는다(`browser.sh` `_handoff_ttl`,
+  `browser-pool.ts` `handoffTtl`).
+
+#### 결정
+
+1. **`browse.sh`의 `_hf_wait`가 대기 시작 때 `handoff` 파일에 `waiting_until=<epoch 초>`(시작 시각 + 상한)를 적고,
+   어떻게 끝나든 그 줄을 지운다.** `handoff --wait`와 `handoff-status --wait` 둘 다 이 함수를 지난다.
+   - 쓰기와 지우기는 기존 `handback`처럼 다른 줄을 보존하고 임시 파일 + `mv`로 바꾼다. 지울 때는 그 순간의 파일을
+     다시 읽으므로, 그 사이 화면이 적은 `state=returned`를 잃지 않는다. 파일이 없으면(쓰기 관문이 거뒀으면) 아무것도
+     하지 않는다.
+   - 끝나는 경우는 셋이다: 돌려받음(`returned`) - 파일 없음(`none`) - 상한 도달(종료 코드 3). `INT` `TERM` `HUP`
+     신호로 끊겨도 trap이 지운다.
+   - `kill -9`처럼 trap이 못 도는 경우에는 줄이 남는다. 값이 절대 시각이므로 화면은 `지금 >= waiting_until`이면
+     대기 종료로 판정한다. 그래서 남은 줄도 상한이 지나면 해롭지 않다.
+   - 큐에 이미 깔린 사본(`.dira/browse.sh`)은 정본과 다른 명령(`throttle` `clickshot` `clickattrs`)을 더 갖고 있다.
+     따라서 사본 전체를 정본으로 덮지 않고, 마이그레이션이 사본의 `_hf_wait` 부분만 정본과 같게 바꾼다.
+2. **미러 제어 알약(`ControlPill`)은 `by=agent`인 `pending` 상태를 두 문구로 나눈다.**
+   - 대기 중(`지금 < waiting_until`): `에이전트가 기다리고 있습니다 (n분 남음)`. n은 남은 초를 60으로 나눠 올림한다.
+   - 대기 종료(`waiting_until`이 없거나 지났음): `에이전트는 더 이상 기다리지 않습니다. 다 했어요를 누르면 다음 실행 때
+     이어집니다. 이 화면은 h시간 m분 뒤에 정리됩니다.` 정리 시각은 `since + handoff-ttl`이다. 1시간 미만이면
+     `m분 뒤`만 쓴다.
+   - 기존 사유(`reason`)는 그대로 함께 보인다. 문구가 길어지므로 알약은 두 줄까지 줄바꿈한다.
+   - `by=user`(사람이 `직접 하기`로 가져감)와 `returned` 상태의 문구는 바꾸지 않는다.
+   - 남은 분은 5초 폴링과 별개로 1분 안에 갱신된다. 화면은 `handoff-ttl`을 서버에서 받아 쓴다(클라이언트가
+     7200을 가정하지 않는다).
+   - 영어 문구도 같은 구조로 더한다(`i18n.ts`).
+
+```autonomy
+주도성 5 판단: 결정 1은 엔진(템플릿 browse.sh) 수정이다. 사람이 홈 대화에서 이 방향에 "네 그렇게해주세요"로 승인했으므로 승인 근거로 보고 별도 블록 없이 발행한다.
+주도성 5 판단: 정리 카운트다운은 사람이 동의한 제안대로 대기 종료 문구에만 붙인다. 대기 중에는 세션이 먼저 반응하므로 정리 시각을 보일 이유가 약하다.
+주도성 5 판단: 에픽은 열지 않는다. 티켓 세 장 규모라 행 추적으로 충분하다.
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P567-1 | 결정 1: `templates/hooks/browse.sh` `_hf_wait`의 `waiting_until` 쓰기-지우기 + trap, `browse-selfcheck-handoff.sh` 항목 추가, 큐 사본의 `_hf_wait`만 바꾸는 마이그레이션 | developer | - | 미발행 |
+| P567-2 | 결정 2: `parseHandoff`의 `waitingUntil`, 슬롯에 `handoff-ttl` 싣기, 알약 문구 두 갈래와 1분 갱신, ko-en 문구, 테스트 | developer | - | 미발행 |
+| P567-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 실제 슬롯에서 한 줄씩 판정한다 | qa | P567-1, P567-2 | 미발행 |
+
+P567-1과 P567-2는 위 파일 형식(`waiting_until=<epoch 초>`)만 공유하고 고치는 파일이 겹치지 않으므로 deps 없이 병렬로
+진행한다. designer는 0장이다(기존 알약 안에서 문구만 바뀐다). writer도 0장이다(문구는 사람이 동의한 제안을 그대로 쓴다).
+
+#### 수용조건
+
+- [ ] `bash templates/hooks/browse-selfcheck-handoff.sh`가 통과하고, 새 항목이 다음을 확인한다: `handoff --wait 6` 도중 `handoff` 파일에 `waiting_until=` 줄이 하나 있고 값이 `since + 6` 이상 `since + 8` 이하다. 종료 코드 3으로 끝난 뒤에는 그 줄이 없고 `state=pending`은 남아 있다. 대기 중 `handback`하면 `returned`로 끝나고 그 줄이 없다. 대기 중인 프로세스에 `kill -TERM`을 보내면 그 줄이 없다.
+- [ ] 마이그레이션을 돌린 큐에서 `grep -c waiting_until .dira/browse.sh`가 1 이상이고, `grep -c 'def cmd_throttle\|def cmd_clickshot\|def cmd_clickattrs' .dira/browse.sh`가 3이다. 같은 마이그레이션을 두 번 돌려도 사본의 바이트가 변하지 않는다.
+- [ ] `parseHandoff`에 `waiting_until=1700000000`이 든 원문을 넣으면 `waitingUntil`이 `1700000000`이고, 그 줄이 없으면 `null`이다.
+- [ ] 알약 문구를 만드는 함수에 (가) `waiting_until`이 지금 + 290초 (나) `waiting_until`이 지난 값이고 `since`가 지금 - 60초, ttl 7200 (다) `waiting_until` 없음을 넣으면 각각 `에이전트가 기다리고 있습니다 (5분 남음)`, `... 1시간 59분 뒤에 정리됩니다.`가 든 대기 종료 문구, 대기 종료 문구가 나온다. 영어 로캘에서도 세 경우가 영어로 나온다.
+- [ ] 실제 슬롯에서 `browse.sh <해시> handoff --wait 120 <사유>`를 부르면 미러 알약이 10초 안에 `에이전트가 기다리고 있습니다 (2분 남음)`을 보이고, 대기가 종료 코드 3으로 끝난 뒤 70초 안에 대기 종료 문구와 정리까지 남은 시간을 보인다(스크린샷 둘을 `## 결과`에 남긴다).
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`과 바뀐 파일의 테스트가 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
+
 ### P566. 구글 검색 결과에 사이트 이름이 `dira`로 뜨고, 각 페이지가 자기 설명과 현재 언어로 색인된다 (요구 `97addaba`, 왕복 0회)
 
 사람 요구(2026-11-18): "SEO 문제가 있습니다" + `site:dira.proofer.tech` 구글 검색 결과 스크린샷.
