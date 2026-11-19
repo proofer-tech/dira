@@ -45,7 +45,8 @@ for p in "${paths[@]}"; do
 done
 # `pnpm test`가 안 돌리는 곳(components/ 등)은 여기서도 뺀다 - 루트 직하와 lib/**만 남긴다.
 run=()
-for t in $(printf '%s\n' "${tests[@]}" | sort -u); do
+# bash 3.2는 set -u에서 빈 배열 "${tests[@]}"를 unbound로 죽이므로 ${tests[@]+...}로 감싼다.
+for t in $(printf '%s\n' ${tests[@]+"${tests[@]}"} | sort -u); do
   case "$t" in
     lib/*) run+=("$t") ;;
     */*) ;;
