@@ -86,6 +86,7 @@ fi
 # 파일 하나(key=value 줄)다 - 셸과 화면(apps/teams/lib/browser-pool.ts)이 같은 파일을 읽고 쓴다.
 #   state=pending|returned  reason=<사유>  url=<넘길 때 주소>  since=<epoch>
 #   returned_at=<epoch>  note=<돌려줄 때 메모>
+#   waiting_until=<epoch>  --wait로 기다리는 동안만 있다(시작 + 상한). 끝나면 지운다 - 화면은 지금 >= 이 값이면 대기 종료로 본다
 # 이 셋은 acquire를 안 부른다 - 슬롯을 새로 띄우지도, pid를 갈아 적지도 않는다(화면이나 사람
 # 터미널이 handback을 불러도 슬롯 주인이 안 바뀐다).
 #   handoff [--wait <초>] <사유...>   사람에게 넘긴다. --wait면 돌아올 때까지(또는 초 상한) 기다린다
@@ -130,23 +131,52 @@ _hf_status() {
   fi
 }
 
+# 대기 중 표지 - handoff 파일에 waiting_until=<epoch>(시작 + 상한)을 적고 끝나면 지운다(P567).
+# 다른 줄은 보존하고 임시 파일 + mv로 바꾼다. 지울 때는 그 순간의 파일을 다시 읽는다.
+# 파일이 없으면 아무것도 안 한다. 인자 하나면 지우고 둘이면 적는다.
+_hf_mark() {
+  local slot="$1" tmp
+  [ -n "$slot" ] && [ -f "$slot/handoff" ] || return 0
+  tmp="$slot/.handoff.w$$"
+  { grep -v '^waiting_until=' "$slot/handoff"; if [ $# -ge 2 ]; then echo "waiting_until=$2"; fi; } > "$tmp" 2>/dev/null \
+    && mv -f "$tmp" "$slot/handoff" || rm -f "$tmp"
+  return 0
+}
+
 _hf_wait() {
   local limit="$1" waited=0 slot st
+  _hf_marked=""
+  trap '_hf_unmark; exit 130' INT
+  trap '_hf_unmark; exit 143' TERM
+  trap '_hf_unmark; exit 129' HUP
   while :; do
     slot="$(_hf_slot)" || slot=""
     st="$(_hf_status "$slot")"
     case "$st" in
-      pending*) ;;
-      *) echo "$st"; return 0 ;;
+      pending*)
+        if [ -z "$_hf_marked" ] && [ -n "$slot" ]; then
+          _hf_marked="$slot"
+          _hf_mark "$slot" "$(( $(date +%s) + limit ))"
+        fi
+        ;;
+      *) _hf_unmark; echo "$st"; return 0 ;;
     esac
     if [ "$waited" -ge "$limit" ]; then
+      _hf_unmark
       echo "$st"
       echo "browse.sh: ${limit}초 동안 사람이 돌려주지 않았다 - 슬롯은 handoff-ttl 동안 남는다. ## 블록에 무엇을 기다리는지 적고 끝내도 된다" >&2
       return 3
     fi
-    sleep 2
+    # sleep을 기다리는 wait는 신호에 바로 깨므로 TERM trap이 2초를 안 기다린다.
+    sleep 2 &
+    wait $!
     waited=$((waited + 2))
   done
+}
+
+_hf_unmark() {
+  [ -n "${_hf_marked:-}" ] && _hf_mark "$_hf_marked"
+  _hf_marked=""
 }
 
 _hf_parse_wait() {

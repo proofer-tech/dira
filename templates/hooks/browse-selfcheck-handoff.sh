@@ -68,6 +68,36 @@ bash "$_b" "$_hash" click '#b' >/dev/null && ok "돌려받은 뒤 click 통과" 
 bash "$_b" "$_hash" text | grep -q clicked && ok "같은 브라우저에서 이어진다 (clicked)" || ng "같은 브라우저"
 [ "$(cat "$_s/pid")" != "$_sess" ] && grep -q "^BROWSER adopt $_hash" "$_tmp/root/workers/runner.log" && ok "죽은 pid를 새 세션으로 입양" || ng "입양"
 
+# waiting_until(P567) - 대기 도중에만 있고, 어떻게 끝나든 사라진다. 다른 줄(state=pending)은 남는다.
+wu_count() { grep -c '^waiting_until=' "$_s/handoff" 2>/dev/null; }
+bash "$_b" "$_hash" handoff --wait 6 "대기 표지 검사" >/dev/null 2>&1 &
+_wp=$!
+sleep 3
+_since="$(sed -n 's/^since=//p' "$_s/handoff" | head -1)"
+_wu="$(sed -n 's/^waiting_until=//p' "$_s/handoff" | head -1)"
+[ "$(wu_count)" = 1 ] && [ -n "$_wu" ] && [ "$_wu" -ge $((_since + 6)) ] && [ "$_wu" -le $((_since + 8)) ] \
+  && ok "대기 중 waiting_until이 한 줄, since+6..since+8" || ng "waiting_until 값 ($_since $_wu)"
+wait "$_wp"; _rc=$?
+[ $_rc -eq 3 ] && [ "$(wu_count)" = 0 ] && grep -q '^state=pending$' "$_s/handoff" \
+  && ok "상한 종료(3) 뒤 waiting_until은 없고 state=pending은 남는다" || ng "상한 뒤 표지 ($_rc: $(cat "$_s/handoff" 2>&1 | tr "\n" "|"))"
+
+bash "$_b" "$_hash" handoff-status --wait 30 >/dev/null 2>&1 &
+_wp=$!
+sleep 3
+[ "$(wu_count)" = 1 ] || ng "handback 전 waiting_until 없음"
+bash "$_b" "$_hash" handback "표지 검사" >/dev/null
+wait "$_wp"; _rc=$?
+[ $_rc -eq 0 ] && [ "$(wu_count)" = 0 ] && grep -q '^state=returned$' "$_s/handoff" \
+  && ok "대기 중 handback - returned로 끝나고 waiting_until은 없다" || ng "handback 뒤 표지 ($_rc)"
+
+bash "$_b" "$_hash" handoff --wait 60 "신호 검사" >/dev/null 2>&1 &
+_wp=$!
+sleep 3
+[ "$(wu_count)" = 1 ] || ng "TERM 전 waiting_until 있음"
+kill -TERM "$_wp"; wait "$_wp" 2>/dev/null
+[ "$(wu_count)" = 0 ] && grep -q '^state=pending$' "$_s/handoff" \
+  && ok "kill -TERM 뒤 waiting_until은 없다" || ng "TERM 뒤 표지"
+
 bash "$_b" "$_hash" handoff --wait 2 "기다림 상한 검사" >/dev/null 2>&1; [ $? -eq 3 ] && ok "--wait 상한이면 종료 코드 3" || ng "--wait 상한"
 
 # 면제 상한 - since를 아주 옛날로 돌리고 pid를 죽은 값으로 두면 reclaim이 거둔다.
