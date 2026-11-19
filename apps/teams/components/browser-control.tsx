@@ -6,7 +6,7 @@
  *  제어권 자체는 슬롯의 `handoff` 파일 하나가 정본이다(`templates/hooks/browse.sh` §핸드오프) -
  *  이 파일은 그 상태를 그리고 버튼을 서버 액션으로 잇기만 한다. */
 import { useState } from "react";
-import { GripVertical, Hand, Loader2, MousePointer2 } from "lucide-react";
+import { Hand, Loader2, MousePointer2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -183,11 +183,10 @@ export function ControlPill({
     <>
       <div
         role="status"
-        className={`absolute bottom-4 left-1/2 z-20 flex max-w-[min(640px,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-2xl py-2 pl-2 pr-2 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur ${
+        className={`absolute bottom-4 left-1/2 z-20 flex max-w-[min(640px,calc(100%-2rem))] -translate-x-1/2 items-center gap-3 rounded-2xl py-2 pl-3 pr-2 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur ${
           userHolds ? "bg-neutral-600/85" : "bg-neutral-900/90"
         }`}
       >
-        <GripVertical aria-hidden className="size-4 shrink-0 text-white/40" />
         <span className="shrink-0">
           {busy ? (
             <Loader2 aria-hidden className="size-5 animate-spin motion-reduce:animate-none" />
