@@ -473,7 +473,7 @@ def migration_block(root):
     막는 이유 한 줄을 돌려주고, 통과면 None. 실행 자체가 실패해도 막는다(tick.sh 게이트와 같다)."""
     mig = os.path.join(os.path.dirname(os.path.realpath(__file__)), "migrate.py")
     out = ""
-    for cmd in (["apply", "--root", root], ["gate", root]):
+    for cmd in (["apply", "--root", root, "--no-retry"], ["gate", root]):
         try:
             # ponytail: apply는 이 루트의 .wip 세션이 끝나기를 기다린다(상한 20분). sync가 그만큼 붙잡힌다
             r = subprocess.run([sys.executable, mig, *cmd], capture_output=True, text=True)

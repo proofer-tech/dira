@@ -309,6 +309,31 @@ class T(Base, unittest.TestCase):
         self.assertIn("claim-skip migration 마이그레이션 미적용 0001-touch", r.stdout)
         self.assertEqual(self.tickets(), [])
 
+    def test_failed_migration_not_retried_headless(self):
+        open(os.path.join(self.migdir, "0001_touch.py"), "w").write(self.ITEM)
+        open(os.path.join(self.root, "FAIL"), "w").close()
+        mig = os.path.join(self.engdir, "migrate.py")
+        env = dict(os.environ, TICKET_LOCAL=os.path.join(self.home, ".config", "dira"), DIRA_MIGRATIONS_DIR=self.migdir)
+        run = lambda *a: subprocess.run([sys.executable, mig, *a], capture_output=True, text=True, env=env)
+        self.assertEqual(run("apply", "--root", self.root).returncode, 1)
+        mdir = os.path.join(self.root, "migrations")
+        starts = lambda: open(os.path.join(mdir, "migrate.log")).read().count("START")
+        backups = lambda: sum(len(d) for _, d, _ in os.walk(os.path.join(mdir, "backup")))
+        n, b = starts(), backups()
+        spec = importlib.util.spec_from_file_location("remote_t", os.path.join(self.engdir, "remote.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        old = dict(os.environ)
+        os.environ.update(env)
+        try:
+            for _ in range(2):
+                self.assertIn("마이그레이션 미적용 0001-touch", mod.migration_block(self.root))
+        finally:
+            os.environ.clear(); os.environ.update(old)
+        self.assertEqual((starts(), backups()), (n, b))
+        self.assertEqual(run("apply", "--root", self.root).returncode, 1)  # 직접 부르면 다시 돈다
+        self.assertEqual(starts(), n + 1)
+
     def test_claim_skipped_when_migrate_broken(self):
         self.setup_jobs([[self.job()]])
         open(os.path.join(self.engdir, "migrate.py"), "w").write("raise SystemExit(2)\n")

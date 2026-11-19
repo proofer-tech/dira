@@ -452,6 +452,8 @@ def apply_target(tgt, items, st, args):
     """한 대상(머신 또는 프로젝트)을 끝까지. 성공 여부를 돌려준다."""
     recover_inflight(tgt)
     sts = states(items, tgt)
+    if getattr(args, "no_retry", False) and any(s in ("failed", "broken") for _, s in sts):
+        return False  # 헤드리스(remote.py): 이미 실패한 항목은 다시 안 돌린다. 게이트가 막는다
     todo = [i for i, s in sts if s in ("pending", "failed", "broken") or (args.id and s == "skipped")]
     if not todo:
         skipped = any(s == "skipped" for _, s in sts)
@@ -552,6 +554,7 @@ def main(argv=None):
     p = sub.add_parser("gate"); p.add_argument("root")
     p = sub.add_parser("dry-run"); scope(p); p.add_argument("--id")
     p = sub.add_parser("apply"); scope(p); p.add_argument("--id"); p.add_argument("--status")
+    p.add_argument("--no-retry", action="store_true")
     p = sub.add_parser("skip"); p.add_argument("--root", required=True)
     p = sub.add_parser("revert"); p.add_argument("--root"); p.add_argument("--id", required=True)
     p = sub.add_parser("promote"); p.add_argument("id")
