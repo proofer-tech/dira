@@ -2559,6 +2559,9 @@ export const ko: Record<string, string> = {
   "browser.handoff.done": "다 했어요",
   "browser.handoff.badge": "손 필요",
   "browser.handoff.returned": "돌려줬습니다. 세션이 이어받기를 기다립니다",
+  "browser.handoff.waiting": "에이전트가 기다리고 있습니다 ({m}분 남음)",
+  "browser.handoff.ended": "에이전트는 더 이상 기다리지 않습니다. 다 했어요를 누르면 다음 실행 때 이어집니다. 이 화면은 {h}시간 {m}분 뒤에 정리됩니다.",
+  "browser.handoff.endedMin": "에이전트는 더 이상 기다리지 않습니다. 다 했어요를 누르면 다음 실행 때 이어집니다. 이 화면은 {m}분 뒤에 정리됩니다.",
   "browser.handoff.failed": "돌려주지 못했습니다. 브라우저가 이미 반납됐을 수 있습니다",
   "browser.disconnected": "브라우저가 반납되어 화면이 끊겼습니다",
 
@@ -5152,6 +5155,9 @@ export const en: Record<string, string> = {
   "browser.handoff.done": "Done, hand back",
   "browser.handoff.badge": "Needs you",
   "browser.handoff.returned": "Handed back. Waiting for the session to resume",
+  "browser.handoff.waiting": "The agent is waiting ({m} min left)",
+  "browser.handoff.ended": "The agent is no longer waiting. Press Done and it picks up on its next run. This screen is cleaned up in {h}h {m}m.",
+  "browser.handoff.endedMin": "The agent is no longer waiting. Press Done and it picks up on its next run. This screen is cleaned up in {m} min.",
   "browser.handoff.failed": "Could not hand back. The browser may already be released",
   "browser.disconnected": "The browser was released and the screen went dark",
 

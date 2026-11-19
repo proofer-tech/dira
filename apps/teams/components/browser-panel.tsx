@@ -552,11 +552,12 @@ export function BrowserMirror({
           busy={busy}
           cursorLabel={cursor?.label || null}
           reason={effectiveHandoff?.reason ?? ""}
+          handoff={effectiveHandoff}
           projectId={projectId}
           hash={hash}
           canStop={!!ticket}
           onTookOver={() => {
-            setOptimistic({ state: "pending", by: "user", reason: "", url: "", since: Math.floor(Date.now() / 1000) });
+            setOptimistic({ state: "pending", by: "user", reason: "", url: "", since: Math.floor(Date.now() / 1000), waitingUntil: null });
             setUnlocked(true);
           }}
           onHandedBack={() => {

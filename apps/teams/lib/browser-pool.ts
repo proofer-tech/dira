@@ -51,6 +51,10 @@ export type BrowserHandoff = {
   reason: string;
   url: string;
   since: number;
+  /** 세션이 `--wait`로 기다리는 시각의 끝(epoch 초, `waiting_until=` 줄). 줄이 없으면 `null` = 기다리지 않는다. */
+  waitingUntil: number | null;
+  /** 서버의 `handoffTtl()`(초) - 목록이 실어 준다. 화면이 7200을 가정하지 않게 한다. `parseHandoff`는 안 채운다. */
+  ttl?: number;
 };
 
 /** 핸드오프 면제 상한(초) — `browser.sh`의 `_handoff_ttl()`과 같은 판정(`handoff-ttl` 첫 줄, 기본 7200). */
@@ -68,12 +72,14 @@ export function parseHandoff(raw: string | null): BrowserHandoff | null {
     if (i > 0 && !(line.slice(0, i) in kv)) kv[line.slice(0, i)] = line.slice(i + 1).trim();
   }
   const since = Number.parseInt(kv.since ?? "", 10);
+  const wu = Number.parseInt(kv.waiting_until ?? "", 10);
   return {
     state: kv.state === "returned" ? "returned" : "pending",
     by: kv.by === "user" ? "user" : "agent",
     reason: kv.reason ?? "",
     url: kv.url ?? "",
     since: Number.isInteger(since) ? since : 0,
+    waitingUntil: /^\d+$/.test(kv.waiting_until ?? "") && Number.isInteger(wu) ? wu : null,
   };
 }
 
@@ -154,11 +160,12 @@ export async function listBrowserPoolSlots(): Promise<BrowserPoolSlots> {
     const hash = await readTrimmed(path.join(slotDir, "hash"));
     if (!isValidCdpHash(hash)) continue;
     const handoff = parseHandoff(await readFile(path.join(slotDir, "handoff"), "utf8").catch(() => null));
+    if (handoff) handoff.ttl = await handoffTtl();
     const pid = parsePid(await readTrimmed(path.join(slotDir, "pid")));
     if (pid !== null && !alive(pid)) {
       // 넘긴 슬롯은 세션이 끝나도 `browser.sh`가 면제 상한까지 안 거둔다 — 화면도 그동안 목록에 남긴다.
       const now = Math.floor(Date.now() / 1000);
-      if (!handoff || now - handoff.since >= (await handoffTtl())) {
+      if (!handoff || now - handoff.since >= (handoff.ttl ?? 7200)) {
         hasDeadSlot = true;
         continue;
       }

@@ -104,7 +104,10 @@ test("parseHandoff — key=value 줄을 읽고, 없으면 null", () => {
     reason: "구글 로그인 = 한 번",
     url: "https://a.b/?x=1",
     since: 100,
+    waitingUntil: null,
   });
+  assert.strictEqual(parseHandoff("state=pending\nsince=1\nwaiting_until=1700000000\n")?.waitingUntil, 1700000000);
+  assert.strictEqual(parseHandoff("state=pending\nsince=1\nwaiting_until=x\n")?.waitingUntil, null);
   assert.strictEqual(parseHandoff("state=returned\nsince=x\n")?.state, "returned");
   assert.strictEqual(parseHandoff("state=returned\nsince=x\n")?.since, 0);
 });
@@ -126,7 +129,7 @@ test("handBackBrowser — pending을 returned로 고치고 사유는 남긴다. 
   assert.strictEqual(await handBackBrowser("c0c0c0c0", "끝\n줄"), true);
   const { slots } = await listBrowserPoolSlots();
   const s = slots.find((x) => x.hash === "c0c0c0c0");
-  assert.deepStrictEqual(s?.handoff, { state: "returned", by: "agent", reason: "캡차", url: "", since: 5 });
+  assert.deepStrictEqual(s?.handoff, { state: "returned", by: "agent", reason: "캡차", url: "", since: 5, waitingUntil: null, ttl: 7200 });
   assert.strictEqual(await handBackBrowser("11223344"), false);
   assert.strictEqual(await handBackBrowser("../x"), false);
 });

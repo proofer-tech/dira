@@ -5,7 +5,7 @@
  *  (2) 아래 가운데 알약: 누가 쥐었는지와 `직접 하기`-`중지`(에이전트) 또는 `다 했어요`-`돌려주기`(사람)
  *  제어권 자체는 슬롯의 `handoff` 파일 하나가 정본이다(`templates/hooks/browse.sh` §핸드오프) -
  *  이 파일은 그 상태를 그리고 버튼을 서버 액션으로 잇기만 한다. */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Hand, Loader2, MousePointer2 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -22,6 +22,7 @@ import { useT } from "@/components/language-provider";
 import { handBackBrowserAction, takeOverBrowserAction } from "@/app/(app)/p/[project]/home/actions";
 import { unassignTicket } from "@/app/(app)/p/[project]/tickets/[hash]/actions";
 import type { BrowserHandoff } from "@/lib/browser-pool";
+import { handoffWaitText } from "@/lib/handoff-wait";
 import type { AgentCursor } from "@/lib/cdp-relay";
 
 /** 미러가 그리는 제어권 상태 - `handoff` 파일과 슬롯 주인에서 한 번에 고른다. */
@@ -118,6 +119,7 @@ export function ControlPill({
   busy,
   cursorLabel,
   reason,
+  handoff,
   projectId,
   hash,
   canStop,
@@ -129,6 +131,7 @@ export function ControlPill({
   busy: boolean;
   cursorLabel: string | null;
   reason: string;
+  handoff: BrowserHandoff | null;
   projectId: string;
   hash: string;
   /** 티켓을 도는 워커 세션일 때만 `중지`가 선다(홈 대화-외부 호출은 끊을 세션 표식이 없다). */
@@ -139,6 +142,12 @@ export function ControlPill({
   const t = useT();
   const [pending, setPending] = useState(false);
   const [confirmStop, setConfirmStop] = useState(false);
+  // 남은 분이 5초 폴링과 별개로 1분 안에 바뀌게 한다.
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, []);
   if (mode === "none") return null;
 
   const takeOver = () => {
@@ -174,7 +183,7 @@ export function ControlPill({
         ? `${t("browser.control.agent")} - ${cursorLabel}`
         : t("browser.control.agent")
       : mode === "handedToUser"
-        ? `${t("browser.control.userInControl")}${reason ? ` - ${reason}` : ""}`
+        ? `${handoff ? handoffWaitText(handoff, Math.floor(nowMs / 1000), t) : t("browser.control.userInControl")}${reason ? ` - ${reason}` : ""}`
         : mode === "userTookOver"
           ? t("browser.control.userInControl")
           : t("browser.handoff.returned");
@@ -198,7 +207,7 @@ export function ControlPill({
         </span>
         <span className="min-w-0 leading-tight">
           <span className="block truncate text-sm font-medium">{title}</span>
-          <span className="block truncate text-xs font-medium text-sky-400">{status}</span>
+          <span className="line-clamp-2 text-xs font-medium text-sky-400">{status}</span>
         </span>
         <span className="flex shrink-0 items-center gap-1">
           {mode === "agent" && (
