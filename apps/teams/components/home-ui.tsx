@@ -69,6 +69,7 @@ import {
 import {
   askHome,
   browserPoolTickets,
+  browserPoolSlotsLight,
   clearHome,
   closeTab as closeTabAction,
   closeTerminalTab,
@@ -793,6 +794,30 @@ export function HomeUI({
     return () => {
       stop = true;
       clearTimeout(timer);
+    };
+  }, [project]);
+
+  // 핸드오프 표지만 2초로 갱신한다(d997846f) - 무거운 5초 폴이 티켓 큐를 훑느라 늦어도 알약이 10초 안에
+  // 바뀐다. 이미 아는 행은 handoff와 busy만 덮고(이름과 표식은 무거운 폴 값 유지), 모르는 행은 더한다.
+  useEffect(() => {
+    let stop = false;
+    const id = setInterval(() => {
+      void browserPoolSlotsLight().then(
+        (light) => {
+          if (stop) return;
+          setBrowserRows((prev) =>
+            light.map((l) => {
+              const old = prev.find((r) => r.hash === l.hash);
+              return old ? { ...old, busy: l.busy, handoff: l.handoff } : l;
+            }),
+          );
+        },
+        () => {},
+      );
+    }, 2000);
+    return () => {
+      stop = true;
+      clearInterval(id);
     };
   }, [project]);
 

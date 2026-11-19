@@ -516,6 +516,21 @@ export async function browserPoolTickets(projectId: string): Promise<BrowserPool
   return rows;
 }
 
+/** 슬롯 파일만 읽는 가벼운 목록 - 티켓 큐를 안 훑는다(`browserPoolTickets`는 워커 슬롯마다 티켓
+ *  수천 건을 스캔해서 직렬로 도는 서버 액션 줄을 막는다, d997846f). 핸드오프 대기 문구가 10초 안에
+ *  뜨게 하려는 2초 폴 전용이고, 소유자 이름과 티켓 표식은 비워 두며 화면이 무거운 쪽 값을 유지한다. */
+export async function browserPoolSlotsLight(): Promise<BrowserPoolRow[]> {
+  const { slots } = await listBrowserPoolSlots();
+  return slots.map((s) => ({
+    hash: s.hash,
+    ownerKind: s.owner === "home" ? "home" : s.owner === "external" ? "external" : s.owner?.startsWith("worker:") ? "worker" : null,
+    ownerName: s.owner?.startsWith("worker:") ? s.owner.slice("worker:".length) : null,
+    ticket: null,
+    busy: s.busy,
+    handoff: s.handoff,
+  }));
+}
+
 /** 넘겨받은 브라우저를 사람이 돌려준다(`browse.sh handback`과 같은 일) — 슬롯은 머신 전역이라
  *  프로젝트 스코프를 다시 재지 않는다(`cdp/[hash]` 라우트와 같은 경계, 해시 관문은 안에서 잰다). */
 export async function handBackBrowserAction(hash: string, note = ""): Promise<boolean> {
