@@ -9037,9 +9037,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P567-1 | 결정 1: `templates/hooks/browse.sh` `_hf_wait`의 `waiting_until` 쓰기-지우기 + trap, `browse-selfcheck-handoff.sh` 항목 추가, 큐 사본의 `_hf_wait`만 바꾸는 마이그레이션 | developer | - | 미발행 |
-| P567-2 | 결정 2: `parseHandoff`의 `waitingUntil`, 슬롯에 `handoff-ttl` 싣기, 알약 문구 두 갈래와 1분 갱신, ko-en 문구, 테스트 | developer | - | 미발행 |
-| P567-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 실제 슬롯에서 한 줄씩 판정한다 | qa | P567-1, P567-2 | 미발행 |
+| P567-1 | 결정 1: `templates/hooks/browse.sh` `_hf_wait`의 `waiting_until` 쓰기-지우기 + trap, `browse-selfcheck-handoff.sh` 항목 추가, 큐 사본의 `_hf_wait`만 바꾸는 마이그레이션 | developer | - | 발행 `5f191092` |
+| P567-2 | 결정 2: `parseHandoff`의 `waitingUntil`, 슬롯에 `handoff-ttl` 싣기, 알약 문구 두 갈래와 1분 갱신, ko-en 문구, 테스트 | developer | - | 발행 `a48195bf` |
+| P567-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 실제 슬롯에서 한 줄씩 판정한다 | qa | P567-1, P567-2 | 발행 `9333340a` |
 
 P567-1과 P567-2는 위 파일 형식(`waiting_until=<epoch 초>`)만 공유하고 고치는 파일이 겹치지 않으므로 deps 없이 병렬로
 진행한다. designer는 0장이다(기존 알약 안에서 문구만 바뀐다). writer도 0장이다(문구는 사람이 동의한 제안을 그대로 쓴다).
