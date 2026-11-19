@@ -71,5 +71,9 @@ def verify(ctx):
     if not os.path.exists(p):
         return
     cur = _read(p)
+    try:
+        _want(ctx, cur)
+    except ValueError:
+        return  # apply가 건너뛴 낯선 사본은 통과
     assert "waiting_until" in cur, "browse.sh에 waiting_until이 없다"
     assert _want(ctx, cur) == cur, "browse.sh의 _hf_wait가 정본과 다르다"

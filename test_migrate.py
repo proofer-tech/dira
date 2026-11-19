@@ -653,6 +653,48 @@ def test_migration_0004_refresh_push_sh():
         assert open(p).read() == body
 
 
+def _env_0009(browse):
+    name = "0009_browse_hf_wait_waiting_until.py"
+    e = Env({name: read(os.path.join(HERE, "migrations", name))}, ["p"])
+    bp = os.path.join(e.roots["p"], "browse.sh")
+    with open(bp, "w") as f:
+        f.write(browse)
+    return e, bp
+
+
+def test_0009_skips_old_copy_without_hf_wait():
+    import hashlib
+    old = "#!/bin/bash\n# 핸드오프 이전 사본\nthrottle() { :; }\n"
+    e, bp = _env_0009(old)
+    try:
+        before = hashlib.sha256(open(bp, "rb").read()).hexdigest()
+        r = e.run("apply", "--root", e.roots["p"])
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "0009-browse-hf-wait-waiting-until" in str(e.applied("p")), e.applied("p")
+        assert hashlib.sha256(open(bp, "rb").read()).hexdigest() == before
+    finally:
+        e.done()
+
+
+def test_0009_patches_copy_with_hf_wait_idempotently():
+    src = read(os.path.join(HERE, "templates", "hooks", "browse.sh"))
+    i = src.index("# 대기 중 표지")
+    j = src.index("_hf_parse_wait() {")
+    old = src[:i] + "_hf_wait() {\n  :\n}\n" + src[j:]
+    old = "\n".join(l for l in old.split("\n") if "waiting_until" not in l)
+    e, bp = _env_0009(old)
+    try:
+        r = e.run("apply", "--root", e.roots["p"])
+        assert r.returncode == 0, r.stdout + r.stderr
+        body = open(bp, "rb").read()
+        assert body.count(b"waiting_until") >= 1
+        os.remove(os.path.join(e.roots["p"], "migrations", "applied.json"))
+        assert e.run("apply", "--root", e.roots["p"]).returncode == 0
+        assert open(bp, "rb").read() == body
+    finally:
+        e.done()
+
+
 if __name__ == "__main__":
     bad = 0
     for name, fn in sorted(globals().items()):
