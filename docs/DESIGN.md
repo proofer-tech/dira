@@ -9043,9 +9043,9 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P569-1 | 결정 1-2: `tick.sh` inbox 자리 이동 + `DIRA_INBOX_DIR` + 24시간 넘은 FIFO 정리, inbox를 쓰는 엔진 테스트에 `DIRA_INBOX_DIR` 격리 추가 | developer | - | 미발행 |
-| P569-2 | 결정 3: `Activity`의 `background` 종류, `result` 줄에서 전환, ko-en 문구, 테스트 | developer | - | 미발행 |
-| P569-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P569-1, P569-2 | 미발행 |
+| P569-1 | 결정 1-2: `tick.sh` inbox 자리 이동 + `DIRA_INBOX_DIR` + 24시간 넘은 FIFO 정리, inbox를 쓰는 엔진 테스트에 `DIRA_INBOX_DIR` 격리 추가 | developer | - | 발행 `e2521d16` |
+| P569-2 | 결정 3: `Activity`의 `background` 종류, `result` 줄에서 전환, ko-en 문구, 테스트 | developer | - | 발행 `e24e8254` |
+| P569-3 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P569-1, P569-2 | 발행 `f38c3d35` |
 
 P569-1과 P569-2는 고치는 파일이 겹치지 않으므로 deps 없이 병렬로 진행한다. designer는 0장이다(기존 활동 줄 안에서
 문구만 바뀐다). writer도 0장이다.
