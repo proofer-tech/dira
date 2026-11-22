@@ -2385,6 +2385,9 @@ export const ko: Record<string, string> = {
   "home.noticeStopped": "중지됨",
   "home.answering": "답하는 중",
   "home.activity.thinking": "생각 중",
+  "home.activity.background": "백그라운드 작업을 기다리는 중",
+  "home.activity.backgroundMinutes": "({n}분째)",
+  "home.activity.backgroundHint": "끝나지 않으면 중지를 누르세요",
   "home.scrollToLatest": "최신으로",
   "home.askPlaceholder": "이 프로젝트에 대해 묻기",
   "home.sending": "보내는 중…",
@@ -4979,6 +4982,9 @@ export const en: Record<string, string> = {
   "home.noticeStopped": "Stopped",
   "home.answering": "Answering",
   "home.activity.thinking": "Thinking",
+  "home.activity.background": "Waiting for background work",
+  "home.activity.backgroundMinutes": "(minute {n})",
+  "home.activity.backgroundHint": "press Stop if it does not finish",
   "home.scrollToLatest": "Jump to latest",
   "home.askPlaceholder": "Ask anything about this project",
   "home.sending": "Sending…",
@@ -6115,6 +6121,14 @@ export function t(locale: Locale, key: string): string {
   const value = DICTS[locale][key] ?? ko[key];
   if (value === undefined) throw new Error(`i18n: 사전에 없는 키 "${key}" (ko에도 없음)`);
   return value;
+}
+
+/** `background` 활동 문구(§P569 결정 3). 1분 미만이면 분 조각이 빠진다. 구분은 ` - `다.
+ *  ponytail: `{n}` 치환은 이 한 곳만 쓴다 - 자리표시자 치환기는 안 만든다. */
+export function backgroundActivityLabel(locale: Locale, since: number, now: number): string {
+  const n = Math.max(0, Math.floor((now - since) / 60000));
+  const mins = n >= 1 ? t(locale, "home.activity.backgroundMinutes").replace("{n}", String(n)) : "";
+  return `${wrap(t(locale, "home.activity.background"), mins, "")} - ${t(locale, "home.activity.backgroundHint")}`;
 }
 
 /** 변수를 앞뒤 조각으로 감싼 조합 문구. **빈 조각은 빠지고 공백은 하나만 남는다** —

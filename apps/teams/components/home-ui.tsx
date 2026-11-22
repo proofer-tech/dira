@@ -122,6 +122,7 @@ import { FindBar } from "@/components/find-bar";
 import { TerminalFindBar, TerminalPanel } from "@/components/terminal-panel";
 import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
+import { backgroundActivityLabel } from "@/lib/i18n";
 import { Markdown } from "@/components/markdown";
 import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
 import { chordStep, fabIconKey, fabPlan, fabSlot, newConversationLocked as isNewConversationLocked, type CreateAction } from "@/lib/home-fab";
@@ -399,6 +400,15 @@ export function HomeUI({
   // 같다(자식의 stdout) — running이 아니면 서버가 언제나 `null`을 준다(같은 근거: 끝나면 볼
   // 활동이 없다). 값이 없는 동안(`null`)의 기본 문구는 §24가 "답하는 중"으로 정했다.
   const [activity, setActivity] = useState<Activity | null>(initial.activity);
+  // 백그라운드 대기 문구의 분 단위 갱신(§P569 결정 3) - 그 활동일 때만 1분 틱이 돈다
+  const [bgNow, setBgNow] = useState(() => Date.now());
+  const bgSince = activity?.kind === "background" ? activity.since : null;
+  useEffect(() => {
+    if (bgSince === null) return;
+    setBgNow(Date.now());
+    const id = setInterval(() => setBgNow(Date.now()), 60000);
+    return () => clearInterval(id);
+  }, [bgSince]);
   // **보낸 질문의 낙관적 말풍선**(§7 §천장이 없다 ③). 정본은 트랜스크립트다 — 첫 폴링이 그 줄을
   // 데려오면(`turns`가 늘어나면) 내린다. 실패하면 즉시 내리고 글이 입력칸으로 돌아온다.
   // **씨앗이 `initial.pendingInterject`인 이유**(§7-7 결정 4) - 아직 정본에 안 뜬 참견은 이
@@ -1702,6 +1712,8 @@ export function HomeUI({
                             >
                               {activity.tool}
                             </span>
+                          ) : activity?.kind === "background" ? (
+                            backgroundActivityLabel(locale, activity.since, bgNow)
                           ) : (
                             t("home.answering")
                           )}

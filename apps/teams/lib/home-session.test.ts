@@ -27,6 +27,7 @@ const {
   pollHome,
   pollDone,
   activityFromEvent,
+  eatLine,
   isAsking,
   sessionsPath,
   readSessionId,
@@ -2855,4 +2856,13 @@ test("toTurns - 다음 턴으로 들어간 참견은 enqueue와 user 레코드�
   assert.deepStrictEqual(merged.map((t) => [t.role, t.text]), [["question", "긴 작업"], ["question", "참견합니다"], ["answer", "답"], ["answer", "참견 답"]]);
   // 한 배치 안에서도 같다
   assert.strictEqual(toTurns([queuedEv("c", "interject", "x"), queuedEv("e", "prompt", "x")]).length, 1);
+});
+
+test("eatLine - result 줄은 background 활동을 두고 text_delta가 answering으로 덮는다 (§P569 결정 3)", () => {
+  const live = { partial: "", activity: null, model: null, lastAnswer: null } as unknown as Parameters<typeof eatLine>[1];
+  eatLine('{"type":"result","is_error":false}', live);
+  assert.equal(live.activity?.kind, "background");
+  assert.equal(typeof (live.activity as { since: number }).since, "number");
+  eatLine('{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"x"}}}', live);
+  assert.equal(live.activity?.kind, "answering");
 });

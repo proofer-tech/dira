@@ -1323,7 +1323,9 @@ export type Answer = Run & {
  *  (`content_block_stop`)과 키 이름(`file_path`·`pattern`·…)이 도구마다 갈리는 것은 **이
  *  티켓의 계정이 주간 한도로 막혀 실측하지 못했다**(`## 블록` 참조) — 잘못 짚으면 조용히
  *  아무 값도 안 잡힐 뿐이라 대상 없이 이름만 먼저 낸다. */
-export type Activity = { kind: "thinking" } | { kind: "tool"; tool: string } | { kind: "answering" };
+export type Activity = { kind: "thinking" } | { kind: "tool"; tool: string } | { kind: "answering" }
+  /** `result` 뒤 CLI가 백그라운드 작업을 기다리며 살아 있다(§P569 결정 3). `since`는 epoch ms다 */
+  | { kind: "background"; since: number };
 
 /** 트랜스크립트의 **마지막 사건 하나**를 위 활동 3종으로 옮긴다(§7 §도는 워커 세션은 스레드에서도
  *  돈다 — 요구 `161a881e`). 남의 프로세스(워커 세션)에는 `Live` 핸들이 없어서 이 값이 유일한
@@ -1595,7 +1597,7 @@ type ResultLine = { is_error?: unknown; result?: unknown; subtype?: unknown; api
  *  못 갔지만 `init` 줄은 한도 검사보다 먼저 찍힌다 —
  *  `{"type":"system","subtype":"init",…,"model":"claude-opus-5",…}`. `assistant.message.model`도
  *  후보였으나(§7 §천장이 없다 ④) `init`이 항상 먼저이고 매 턴 있어서 그거 하나로 충분하다. */
-function eatLine(line: string, live: Live): ResultLine | null {
+export function eatLine(line: string, live: Live): ResultLine | null {
   type Stream = ResultLine & {
     type?: unknown;
     subtype?: unknown;
@@ -1617,7 +1619,10 @@ function eatLine(line: string, live: Live): ResultLine | null {
   if (o.type === "system" && o.subtype === "init" && typeof o.model === "string" && !live.model) {
     live.model = o.model;
   }
-  if (o.type === "result") return o;
+  if (o.type === "result") {
+    live.activity = { kind: "background", since: Date.now() };
+    return o;
+  }
   // 서브에이전트 줄은 대화가 아니라 로그다 — `parent_tool_use_id`가 §2-1 `sidechain`의 자리다
   if (o.type !== "stream_event" || o.parent_tool_use_id) return null;
   const ev = o.event;

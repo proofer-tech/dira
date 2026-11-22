@@ -1409,3 +1409,12 @@ test("설정 MCP 절 - 꺼짐 안내가 두 언어에 있고 앱 전용 문구�
   const src = readFileSync(new URL("./i18n.ts", import.meta.url), "utf8");
   assert.ok(!src.includes("앱에서만 " + "뜹니다") && !src.includes("app" + "Only"));
 });
+
+test("backgroundActivityLabel - 분 단위 내림, 1분 미만이면 분 조각이 빠진다", async () => {
+  const { backgroundActivityLabel } = await import("./i18n.ts");
+  const now = 1_000_000_000;
+  assert.equal(backgroundActivityLabel("ko", now - 190_000, now), "백그라운드 작업을 기다리는 중 (3분째) - 끝나지 않으면 중지를 누르세요");
+  assert.equal(backgroundActivityLabel("ko", now - 20_000, now), "백그라운드 작업을 기다리는 중 - 끝나지 않으면 중지를 누르세요");
+  assert.equal(backgroundActivityLabel("en", now - 190_000, now), "Waiting for background work (minute 3) - press Stop if it does not finish");
+  assert.equal(backgroundActivityLabel("en", now - 20_000, now), "Waiting for background work - press Stop if it does not finish");
+});
