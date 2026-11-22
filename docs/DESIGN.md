@@ -9032,8 +9032,8 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P568-1 | 결정 1-3: 잠금 판정 순수 함수(지금 줄이 대화 목록에 있고 제목이 비었으며 `!busy`) + `HomeUI`의 `newConversationLocked`와 `SidePanel` `noTurns`를 그 값 하나로 + 단위 테스트 | developer | - | 미발행 |
-| P568-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P568-1 | 미발행 |
+| P568-1 | 결정 1-3: 잠금 판정 순수 함수(지금 줄이 대화 목록에 있고 제목이 비었으며 `!busy`) + `HomeUI`의 `newConversationLocked`와 `SidePanel` `noTurns`를 그 값 하나로 + 단위 테스트 | developer | - | 발행 `8df71a96` |
+| P568-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P568-1 | 발행 `aaaa949e` |
 
 #### 수용조건
 
