@@ -404,8 +404,7 @@ export function HomeUI({
   const [bgNow, setBgNow] = useState(() => Date.now());
   const bgSince = activity?.kind === "background" ? activity.since : null;
   useEffect(() => {
-    if (bgSince === null) return;
-    setBgNow(Date.now());
+    if (bgSince === null) return; // ponytail: 첫 틱(60초) 전에는 분 조각이 빠진다 - 방금 시작했으니 맞다
     const id = setInterval(() => setBgNow(Date.now()), 60000);
     return () => clearInterval(id);
   }, [bgSince]);
