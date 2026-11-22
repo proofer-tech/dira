@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert";
-import { fabIconKey, fabPlan } from "./home-fab.ts";
+import { fabIconKey, fabPlan, newConversationLocked } from "./home-fab.ts";
 import type { Surface } from "./tabs.ts";
 
 test("fabPlan - 표면 여섯의 주 액션과 다이얼", () => {
@@ -68,4 +68,13 @@ test("chordStep - ⌘N 코드 전이", () => {
   assert.deepStrictEqual(chordStep(true, ev("down", "k")), { armed: false, run: null, consume: false });
   // 조합자만 눌린 것은 코드를 끊지 않는다
   assert.strictEqual(chordStep(true, ev("down", "Shift")).armed, true);
+});
+
+test("newConversationLocked - 지금 줄이 안 물은 줄일 때만 잠긴다", () => {
+  const empty = [{ id: "a", title: "" }];
+  assert.equal(newConversationLocked(empty, "a", false), true);
+  assert.equal(newConversationLocked([{ id: "a", title: "질문" }], "a", false), false);
+  assert.equal(newConversationLocked(empty, "worker", false), false);
+  assert.equal(newConversationLocked(empty, null, false), false);
+  assert.equal(newConversationLocked(empty, "a", true), false);
 });

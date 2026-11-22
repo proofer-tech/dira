@@ -124,7 +124,7 @@ import { useKeymap } from "@/components/keymap-provider";
 import { useLocale, useT } from "@/components/language-provider";
 import { Markdown } from "@/components/markdown";
 import { SelfHealAlert, useSelfHealRetry } from "@/components/self-heal";
-import { chordStep, fabIconKey, fabPlan, fabSlot, type CreateAction } from "@/lib/home-fab";
+import { chordStep, fabIconKey, fabPlan, fabSlot, newConversationLocked as isNewConversationLocked, type CreateAction } from "@/lib/home-fab";
 import { splitAttachments } from "@/lib/attachment-format";
 import type { RefIndex } from "@/lib/markdown-refs";
 import type { PtyStatus } from "@/lib/pty";
@@ -1245,8 +1245,9 @@ export function HomeUI({
     setActiveTab(r.tabId);
   };
 
-  /** `새 대화`의 잠금 - 좌측 머리 행 버튼과 같은 조건이다(`SidePanel`의 `noTurns`). */
-  const newConversationLocked = turns.length === 0 && !busy;
+  /** `새 대화`의 잠금 - 서버 `newConversation`과 같은 자다(§P568). 좌측 머리 행 버튼(`SidePanel`의
+   *  `noTurns`)도 이 값을 받는다. */
+  const newConversationLocked = isNewConversationLocked(home.conversations, home.current, busy);
 
   /** FAB가 부르는 새로 만들기 - 좌측 머리 행 버튼과 같은 함수다(§P526 결정 3). 지금 표면이 아니면
    *  표면부터 옮긴다(결정 5). 잠긴 `새 대화`는 표면만 옮긴다. */
@@ -1359,9 +1360,8 @@ export function HomeUI({
             // 그룹을 통틀어 한 줄에만 든다"). 회차 0건 스케줄을 보는 동안은 `home.current`가
             // 못 갈리므로(위 `pendingSchedule` 주석) 그 스케줄의 `id`가 대신 뜬다.
             selected={pendingSchedule ? pendingSchedule.id : home.current}
-            // `새 대화`의 잠금 하나(§24 §0건) — **`busy`가 두 번째 조각이다**: 첫 질문 직후는
-            // 턴이 0건인데도 그 대화가 비어 있지 않다(위 `NO_TURNS` 주석).
-            noTurns={turns.length === 0 && !busy}
+            // `새 대화`의 잠금 하나(§P568 결정 2) - 위 `newConversationLocked`와 같은 값이다.
+            noTurns={newConversationLocked}
             onNew={async () => apply(await clearHome(project))}
             onPick={async (id) => {
               setPendingSchedule(null); // 회차 0건 스케줄 화면에서 벗어난다

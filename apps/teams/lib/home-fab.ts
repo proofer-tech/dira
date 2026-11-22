@@ -60,3 +60,14 @@ export function chordStep(armed: boolean, e: ChordEvent): ChordResult {
   // 조합자만 눌린 것은 다른 키가 아니다. 그 밖의 키는 실행 없이 코드를 끝내고 원래대로 간다.
   return isMod(e.key) || e.key === "Shift" || e.key === "Alt" ? pass(true) : pass(false);
 }
+
+/** `새 대화` 잠금 (§P568 결정 1). 서버 `newConversation`과 같은 자다: 지금 줄이 대화 목록에 있고 제목이
+ *  비었으며(아직 한 번도 안 물었다) 도는 답이 없을 때만 잠근다. 트랜스크립트 턴 수는 쓰지 않는다. */
+export function newConversationLocked(
+  conversations: { id: string; title: string }[],
+  current: string | null,
+  busy: boolean,
+): boolean {
+  if (busy) return false;
+  return conversations.some((c) => c.id === current && !c.title);
+}
