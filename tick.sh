@@ -2132,12 +2132,20 @@ OUTF="$LOGDIR/.out-${SID}"
 prev=""
 for arg in "${ENGINE[@]}"; do
   if [ "$prev" = "--input-format" ] && [ "$arg" = "stream-json" ]; then
-    INBOX="$LOCAL/run/inbox-$SID"; break
+    INBOXDIR="${DIRA_INBOX_DIR:-${TMPDIR:-/tmp}/dira-inbox-$(id -u)}"
+    INBOX="${INBOXDIR%/}/inbox-$SID"; break
   fi
   prev="$arg"
 done
 
 if [ -n "$INBOX" ]; then
+  # P569: FIFO는 ~/.config/dira 밖에 둔다(BSD grep -r이 FIFO를 열다 영영 막힌다). 실행 상한이 90분이라
+  # 24시간 넘은 FIFO의 주인은 없다 - 옛 자리와 새 자리에서 그것과 .human을 치운다. 일반 파일은 건드리지 않는다.
+  mkdir -p "$INBOXDIR" && chmod 700 "$INBOXDIR" 2>/dev/null
+  for _d in "$LOCAL/run" "$INBOXDIR"; do
+    [ -d "$_d" ] && find "$_d" -maxdepth 1 -name 'inbox-*' -type p -mmin +1440 \
+      -exec sh -c 'rm -f "$1" "$1.human"' _ {} \; 2>/dev/null
+  done
   rm -f "$INBOX"; mkfifo "$INBOX" || { log "ERROR mkfifo 실패 $INBOX"; INBOX=""; }
 fi
 if [ -n "$INBOX" ]; then

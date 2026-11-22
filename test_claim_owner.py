@@ -81,7 +81,7 @@ try:
     root = os.path.join(tmp, "dira")
     local = os.path.join(tmp, "local")
     os.makedirs(local)
-    env = dict(os.environ, TICKET_LOCAL=local)
+    env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
     tickets = os.path.join(root, "tickets")
     runlog = os.path.join(root, "workers", "runner.log")
 

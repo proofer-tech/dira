@@ -1005,7 +1005,7 @@ sleep 60
 
     def dryrun(worker, local):
         r = subprocess.run([worker, "dryrun"], capture_output=True, text=True,
-                           env=dict(os.environ, TICKET_LOCAL=local), timeout=60)
+                           env=dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox"), timeout=60)
         assert r.returncode == 0, "dryrun rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
         return r.stdout
 
@@ -1053,7 +1053,7 @@ sleep 60
         assert not os.path.exists(os.path.join(root, "tickets", "c0c00001.wip.md"))
 
         r = subprocess.run([worker, "tick"], capture_output=True, text=True,
-                           env=dict(os.environ, TICKET_LOCAL=local), timeout=90)
+                           env=dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox"), timeout=90)
         assert r.returncode == 0, "tick rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
 
         captured_path = os.path.join(tmp, "captured-prime.jsonl")
@@ -1120,7 +1120,7 @@ sleep 60
             "en인데 지침 블록이 여전히 실렸다\n" + full_prompt_en
 
         r = subprocess.run([worker, "tick"], capture_output=True, text=True,
-                           env=dict(os.environ, TICKET_LOCAL=local), timeout=90)
+                           env=dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox"), timeout=90)
         assert r.returncode == 0, "en tick rc={}\n{}{}".format(r.returncode, r.stdout, r.stderr)
 
         with open(captured_path, encoding="utf-8") as f:

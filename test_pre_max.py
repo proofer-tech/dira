@@ -93,7 +93,7 @@ try:
     def tick(**over):
         t = time.time()
         r = subprocess.run([w1], capture_output=True, text=True,
-                           env=dict(os.environ, TICKET_LOCAL=local, **over), timeout=180)
+                           env=dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox", **over), timeout=180)
         return r, time.time() - t
 
     def tick_term(sidtext):
@@ -101,7 +101,7 @@ try:
         flag = os.path.join(tmp, "other-sid")
         mkfile(flag, sidtext)
         p = subprocess.Popen([w1], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             env=dict(os.environ, TICKET_LOCAL=local))
+                             env=dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox"))
         procs.append(p)
         t = time.time()
         while not os.path.exists(flag + ".ready") and time.time() - t < 150 and p.poll() is None:

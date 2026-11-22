@@ -66,7 +66,7 @@ def run(fixture):
         os.chmod(eng, 0o755)
         with open(os.path.join(root, "tickets", "bg0001.md"), "w", encoding="utf-8") as f:
             f.write("---\nticket: bg0001\ntitle: t\n---\n\n## Goal\ntest\n")
-        env = dict(os.environ, TICKET_LOCAL=local)
+        env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
         subprocess.run([w, "tick"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                        env=env, timeout=120)
         lg = os.path.join(root, "workers", "runner.log")

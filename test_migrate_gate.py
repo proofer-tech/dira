@@ -48,7 +48,7 @@ try:
     mk(os.path.join(mig, "0001_touch.py"), ITEM)
     mk(os.path.join(tmp, "fake-engine.sh"), ENGINE, 0o755)
     w1 = mk(os.path.join(root, "workers", "w1.sh"), WORKER.format(tmp=tmp, tick=TICK), 0o755)
-    env = dict(os.environ, TICKET_LOCAL=local, DIRA_MIGRATIONS_DIR=mig)
+    env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox", DIRA_MIGRATIONS_DIR=mig)
     t = mk(os.path.join(tdir, "aaaa0001.md"), "---\nticket: aaaa0001\ntitle: t\nkind: work\n---\n\n## Goal\ntest\n")
     runlog = os.path.join(root, "workers", "runner.log")
 

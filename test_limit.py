@@ -86,7 +86,7 @@ try:
     tdir = os.path.join(root, "tickets")
     runlog = os.path.join(root, "workers", "runner.log")
     slock = os.path.join(local, "run", "select.lock")
-    env = dict(os.environ, TICKET_LOCAL=local)
+    env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
 
     mkfile(os.path.join(tmp, "fake-engine.sh"), ENGINE.format(tmp=tmp), 0o755)
     WS = {}

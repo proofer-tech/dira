@@ -219,7 +219,7 @@ try:
 
     def dryrun():
         r = subprocess.run([w1, "dryrun"], capture_output=True, text=True,
-                           env=dict(os.environ, TICKET_LOCAL=local), timeout=30)
+                           env=dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox"), timeout=30)
         assert r.returncode == 0, r.stdout + r.stderr
         return r.stdout
 
@@ -270,7 +270,7 @@ try:
 
     def tick():
         r = subprocess.run([w2, "tick"], capture_output=True, text=True,
-                           env=dict(os.environ, TICKET_LOCAL=local), timeout=60)
+                           env=dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox"), timeout=60)
         assert r.returncode == 0, r.stdout + r.stderr
 
     # (마감) 단독 - 자기 파생이 기준을 덮고, 그 위에 더 얹히는 상속이 없다.
@@ -343,7 +343,7 @@ TICKET_ENGINE=("{tmp}/fake-stream-engine.sh" --input-format stream-json)
     workers = os.path.join(root, "workers")
     local3 = os.path.join(tmp, "local3")
     os.makedirs(local3, exist_ok=True)
-    penv = dict(os.environ, TICKET_LOCAL=local3)
+    penv = dict(os.environ, TICKET_LOCAL=local3, DIRA_INBOX_DIR=local3 + "-inbox")
     mkfile(os.path.join(tmp, "fake-stream-engine.sh"), FAKE_ENGINE, 0o755)
     w1 = mkfile(os.path.join(workers, "w1.sh"),
                 WORKER_TMPL.format(name="w1", tmp=tmp, tick=TICK), 0o755)

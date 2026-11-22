@@ -91,7 +91,7 @@ TICKET_ENGINE=("{tmp}/fake-engine.sh" --input-format stream-json)
         tickets = os.path.join(root, "tickets")
         local = os.path.join(tmp, "local")
         os.makedirs(local)
-        env = dict(os.environ, TICKET_LOCAL=local)
+        env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
         mkfile(os.path.join(tmp, "fake-engine.sh"), FAKE_ENGINE, 0o755)
         w1 = mkfile(os.path.join(root, "workers", "w1.sh"),
                     WORKER.format(name="w1", tmp=tmp, tick=TICK, maxrun=120), 0o755)
@@ -335,7 +335,7 @@ else:
 
         sid = "malformed-sid"
         mkfile(os.path.join(tickets, "aaaa0001.wip.md"), WIP.format(h="aaaa0001", sid=sid))
-        env = dict(os.environ, TICKET_LOCAL=local, HOME=home, FAKE_SID=sid)
+        env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox", HOME=home, FAKE_SID=sid)
 
         r = subprocess.run([w1, "unassign", "aaaa0001"], capture_output=True, text=True,
                             timeout=60, env=env)

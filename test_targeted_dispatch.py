@@ -97,7 +97,7 @@ try:
     workers = os.path.join(root, "workers")
     local = os.path.join(tmp, "local")
     os.makedirs(local)
-    env = dict(os.environ, TICKET_LOCAL=local)
+    env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
     runlog_path = os.path.join(workers, "runner.log")
 
     def runlog():

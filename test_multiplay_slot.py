@@ -66,7 +66,7 @@ try:
     w1 = mkfile(os.path.join(root, "workers", "w1.sh"), WORKER.format(name="w1", tmp=tmp, tick=TICK), 0o755)
     w2 = mkfile(os.path.join(root, "workers", "w2.sh"), WORKER.format(name="w2", tmp=tmp, tick=TICK), 0o755)
     runlog = os.path.join(root, "workers", "runner.log")
-    env = dict(os.environ, TICKET_LOCAL=local)
+    env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
 
     def mode(m):
         mkfile(os.path.join(tmp, "mode"), m + "\n")

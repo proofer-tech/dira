@@ -111,7 +111,7 @@ class Case:
 
         raw = mk(root, "plan0001", body)
         self.wip = raw[:-3] + ".wip.md"
-        env = dict(os.environ, TICKET_LOCAL=local)
+        env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
         self.proc = subprocess.Popen([w, "tick"], stdout=subprocess.DEVNULL,
                                       stderr=subprocess.DEVNULL, env=env)
         self.stdinf = os.path.join(self.tmp, "engine-stdin.jsonl")

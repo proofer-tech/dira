@@ -107,7 +107,7 @@ try:
 
     def dry(w, **e):
         r = subprocess.run([w, "dryrun"], capture_output=True, text=True,
-                           env=dict(os.environ, TICKET_LOCAL=local, **e), timeout=60)
+                           env=dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox", **e), timeout=60)
         assert r.returncode == 0, r.stdout + r.stderr
         return r.stdout
 
@@ -162,7 +162,7 @@ time.sleep(60)
                 'TICKET_ENGINE=("%s" "%s" "%s" --input-format stream-json)\n. "%s"\n'
                 % (tmp, eng, rcs, os.path.join(r2, "tickets"), TICK))
     os.chmod(w, 0o755)
-    tr = subprocess.run([w, "tick"], capture_output=True, text=True, env=dict(os.environ, TICKET_LOCAL=l2), timeout=90)
+    tr = subprocess.run([w, "tick"], capture_output=True, text=True, env=dict(os.environ, TICKET_LOCAL=l2, DIRA_INBOX_DIR=l2 + "-inbox"), timeout=90)
     if not os.path.exists(rcs):
         print(tr.stdout, tr.stderr, open(os.path.join(r2, "workers", "runner.log")).read())
     got = open(rcs).read().split("\n")

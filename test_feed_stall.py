@@ -61,7 +61,7 @@ try:
     root = os.path.join(tmp, "dira")
     local = os.path.join(tmp, "local")
     os.makedirs(local)
-    env = dict(os.environ, TICKET_LOCAL=local)
+    env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
     mkfile(os.path.join(tmp, "deaf-engine.sh"), DEAF_ENGINE, 0o755)
 
     # --- 1) 귀먹은 엔진 + 버퍼보다 큰 프롬프트: 정지가 아니라 STALL로 떨어져야 한다 ---

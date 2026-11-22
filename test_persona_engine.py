@@ -62,7 +62,7 @@ try:
     tickets = os.path.join(root, "tickets")
     runlog = os.path.join(root, "workers", "runner.log")
     ranlog = os.path.join(tmp, "ran.log")
-    env = dict(os.environ, TICKET_LOCAL=local)
+    env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
 
     mkfile(os.path.join(tmp, "engine-base.sh"), ENGINE.format(tmp=tmp), 0o755)
     mkfile(os.path.join(tmp, "engine-pm.sh"), ENGINE.format(tmp=tmp), 0o755)

@@ -160,7 +160,7 @@ try:
 
     def dryrun():
         r = subprocess.run([w1, "dryrun"], capture_output=True, text=True,
-                           env=dict(os.environ, TICKET_LOCAL=local), timeout=30)
+                           env=dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox"), timeout=30)
         assert r.returncode == 0, r.stdout + r.stderr
         return r.stdout
 
@@ -229,7 +229,7 @@ TICKET_ENGINE=("{tmp}/fake-engine.sh" --input-format stream-json)
     workers = os.path.join(root, "workers")
     local2 = os.path.join(tmp, "local2")
     os.makedirs(local2, exist_ok=True)
-    penv = dict(os.environ, TICKET_LOCAL=local2)
+    penv = dict(os.environ, TICKET_LOCAL=local2, DIRA_INBOX_DIR=local2 + "-inbox")
     mkfile(os.path.join(tmp, "fake-engine.sh"), FAKE_ENGINE, 0o755)
     w1 = mkfile(os.path.join(workers, "w1.sh"),
                 WORKER_TMPL.format(name="w1", tmp=tmp, tick=TICK), 0o755)

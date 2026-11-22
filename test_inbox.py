@@ -91,7 +91,26 @@ try:
     os.chmod(eng, 0o755)
 
     wip = mk(root, "feed0001")[:-3] + ".wip.md"
-    env = dict(os.environ, TICKET_LOCAL=local)
+    inbox_dir = os.path.join(tmp, "inbox-dir")
+    env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=inbox_dir)
+
+    # 정리 판정용 씨앗(P569-1): 옛 자리(local/run)와 새 자리에 25시간 전 FIFO+.human, 1시간 전 FIFO,
+    # 25시간 전 일반 파일 inbox-zzz. 25시간 전 FIFO와 그 .human만 사라져야 한다.
+    old_run = os.path.join(local, "run")
+    os.makedirs(old_run)
+    os.makedirs(inbox_dir)
+    seeds = {}
+    for d in (old_run, inbox_dir):
+        for name, kind, age in (("inbox-old", "p", 25), ("inbox-new", "p", 1), ("inbox-zzz", "f", 25)):
+            path = os.path.join(d, name)
+            if kind == "p":
+                os.mkfifo(path)
+            else:
+                open(path, "w").close()
+            t = time.time() - age * 3600
+            os.utime(path, (t, t))
+        open(os.path.join(d, "inbox-old.human"), "w").close()
+        seeds[d] = 1
     started = time.time()
     proc = subprocess.Popen([w, "tick"], stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, env=env)
@@ -106,6 +125,16 @@ try:
         time.sleep(0.25)
     assert inbox, "도는 동안 fm에 inbox:가 안 써졌다"
     assert stat.S_ISFIFO(os.stat(inbox).st_mode), "inbox 경로가 FIFO가 아니다: " + inbox
+
+    assert os.path.dirname(inbox) == inbox_dir, "inbox가 DIRA_INBOX_DIR 밖이다: " + inbox
+    out = subprocess.run(["find", local, "-type", "p", "!", "-name", "inbox-new"], capture_output=True, text=True).stdout
+    assert out.strip() == "", "TICKET_LOCAL 아래 FIFO가 남았다: " + out
+    for d in (old_run, inbox_dir):
+        assert not os.path.exists(os.path.join(d, "inbox-old")), "25시간 전 FIFO가 안 치워졌다: " + d
+        assert not os.path.exists(os.path.join(d, "inbox-old.human")), ".human이 안 치워졌다: " + d
+        assert os.path.exists(os.path.join(d, "inbox-zzz")), "일반 파일이 지워졌다: " + d
+    assert stat.S_ISFIFO(os.stat(os.path.join(old_run, "inbox-new")).st_mode), "1시간 전 FIFO(옛 자리)가 사라졌다"
+    assert stat.S_ISFIFO(os.stat(os.path.join(inbox_dir, "inbox-new")).st_mode), "1시간 전 FIFO(새 자리)가 사라졌다"
 
     # 2) 그 입구로 참견 한 줄을 밀어 넣으면 엔진의 stdin에 도착한다
     with open(inbox, "w", encoding="utf-8") as f:
@@ -141,6 +170,26 @@ try:
     subprocess.run([sys.executable, PY, "clear", done], check=True, timeout=30)
     assert fm_get(done, "inbox") == "", "clear가 inbox를 안 비웠다"
     assert fm_get(done, "session_id") == "", "clear가 session_id를 안 비웠다"
+
+    # 6) DIRA_INBOX_DIR이 없으면 ${TMPDIR}/dira-inbox-<uid>, 권한 drwx------ (P569-1)
+    tmpd = os.path.join(tmp, "tmpd")
+    os.makedirs(tmpd)
+    env2 = {k: v for k, v in os.environ.items() if k != "DIRA_INBOX_DIR"}
+    env2.update(TICKET_LOCAL=local, TMPDIR=tmpd)
+    wip2 = mk(root, "feed0002")[:-3] + ".wip.md"
+    p2 = subprocess.Popen([w, "tick"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env=env2)
+    ib2 = ""
+    for _ in range(120):
+        if os.path.exists(wip2):
+            ib2 = fm_get(wip2, "inbox")
+            if ib2:
+                break
+        time.sleep(0.25)
+    assert ib2, "기본 자리 디스패치에서 inbox:가 안 써졌다"
+    want = os.path.join(tmpd, "dira-inbox-%d" % os.getuid())
+    assert os.path.dirname(ib2) == want, "기본 자리가 틀렸다: " + ib2
+    assert stat.S_IMODE(os.stat(want).st_mode) == 0o700, "권한이 700이 아니다"
+    p2.wait(timeout=90)
 
     print("PASS 참견 입구(FIFO)·최초 프롬프트 JSONL·result 종료·clear")
 finally:

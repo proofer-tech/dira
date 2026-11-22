@@ -180,7 +180,7 @@ try:
                    WORKER.format(root_parent=os.path.dirname(root), engine=fake_engine,
                                  plan=plan_path, stdinlog=stdinlog, tick=TICK,
                                  extra_env=extra_env), 0o755)
-        env = dict(os.environ, TICKET_LOCAL=local)
+        env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox")
         # rc는 여기서 안 잰다 - 세그먼트가 err로 끝나는 시나리오(⑤)는 tick.sh가 실패로
         # 143/1을 그대로 내는 것이 옳다(§4-9). 성공을 기대하는 시나리오는 각자 runlog로 확인한다.
         r = subprocess.run([w, "tick"], capture_output=True, text=True, env=env, timeout=timeout)
@@ -347,7 +347,7 @@ try:
     w8 = mkfile(os.path.join(root8, "workers", "w1.sh"),
                 NOREUSE_WORKER.format(root_parent=os.path.dirname(root8), engine=eng,
                                       tick=TICK, extra_env="", wip=wip_of(tickets8, h14)), 0o755)
-    env8 = dict(os.environ, TICKET_LOCAL=local8)
+    env8 = dict(os.environ, TICKET_LOCAL=local8, DIRA_INBOX_DIR=local8 + "-inbox")
     r8 = subprocess.run([w8, "tick"], capture_output=True, text=True, env=env8, timeout=30)
     assert r8.returncode == 0, "⑧b rc={}\n{}".format(r8.returncode, r8.stderr)
     with open(os.path.join(root8, "workers", "runner.log"), encoding="utf-8") as f:

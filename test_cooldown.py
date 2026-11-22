@@ -146,7 +146,7 @@ try:
     __import__("shutil").copy2(os.path.join(HERE, "packages", "dira-protocols", "CORE.md"), os.path.join(root, "protocols", "CORE.md"))
     local = os.path.join(tmp, "local")
     os.makedirs(local)
-    env = dict(os.environ, TICKET_LOCAL=local, EXTRA="")
+    env = dict(os.environ, TICKET_LOCAL=local, DIRA_INBOX_DIR=local + "-inbox", EXTRA="")
     cool = os.path.join(local, "run", "cooldown-fake-engine.sh")
     token = os.path.join(local, "oauth-token")
     tickets = os.path.join(root, "tickets")
