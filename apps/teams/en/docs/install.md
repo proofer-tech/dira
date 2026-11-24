@@ -160,6 +160,56 @@ If several items were skipped, run it once per ID. `apply` without `--id` leaves
 they are. Once every remaining item is applied, that project dispatches again. The full command
 list is in [CLI](/docs/ref-cli#migrate-py-project-migration).
 
+## Removing dira
+
+Move `dira.app` in the `Applications` folder to the Trash. You do not need to empty the Trash. Once the app has been missing for 10 minutes, dira removes the lines it put in your crontab and shuts down the daemon (sweep) that started workers in the background. This check runs every minute, so cleanup actually happens between 10 and 12 minutes after you discard the app. Sessions that are already running are not cut off. They are left to finish.
+
+There is a reason for waiting 10 minutes instead of cleaning up immediately: it keeps dira from mistaking a few seconds of an auto-update swapping the app, or the time you spend moving the app to another folder, for a deletion. For the same reason, if there is even one copy of `dira.app` outside the Trash, dira treats the app as still installed.
+
+Check in a terminal whether cleanup has finished. If both commands print nothing, it is done.
+
+```bash
+crontab -l | grep -E 'dira-worker|dispatch\.py" sweep|mcp/keepalive\.sh'
+pgrep -fl 'dispatch\.py sweep'
+```
+
+### Cleaning up right away without waiting 10 minutes
+
+Move the app to the Trash, then delete the engine folder the app extracted. A missing engine is not waited out: the next check cleans it up immediately, so it finishes within 1 minute. Run the check commands above after 1 minute.
+
+```bash
+rm -rf ~/Library/Application\ Support/dira/engine
+```
+
+If you were running the app straight from the DMG window, dira does not judge the app as deleted. Use this method to clean up in that case too.
+
+### What stays after you delete it
+
+dira does not delete the work people made or the settings used when you reinstall. Three things remain.
+
+| Path | What it holds |
+|---|---|
+| `<project>/.dira/` | The queue. Tickets, team packages, worker files, and the workers' git worktrees (`.dira/worktrees/`) |
+| `~/Library/Application Support/dira` | The engine the app extracted (`engine/`), window layout, screen cache |
+| `~/.config/dira` | The list of registered projects, login tokens, app settings, tools such as `apm`, and the uninstall cleanup record |
+
+If you will not use dira again, delete them yourself. **Always delete `~/.config/dira` last, after the check commands above print nothing.** The script that cleans up the cron lines lives inside this folder, so if you delete it first, dira's cron lines are left behind.
+
+```bash
+rm -rf <project>/.dira                           # the ticket history disappears with it
+git -C <project> worktree prune                  # clean up git's record of the deleted worktrees
+rm -rf ~/Library/Application\ Support/dira
+rm -rf ~/.config/dira                            # only after you confirm cleanup has finished
+```
+
+Worker branches (`wt/<worker>`) stay in the project repository. Delete them with `git branch -D` if you do not need them. dira does not touch cron lines set by other programs.
+
+### If you reinstall
+
+Reinstalling and opening `dira.app` brings worker registration back. When dira cleans up, it writes the crontab lines it removed, unchanged, to `~/.config/dira/run/uninstalled.crontab`. When the app starts, it re-adds only the lines from this file that are not in the current crontab, and renames the file to `uninstalled.crontab.restored-<time>`. If you did not delete the queue, each worker picks up tickets again in the same project it had before the removal.
+
+If you deleted `~/.config/dira` as well, this record is gone too, so you must register the workers again from scratch.
+
 ## Running the engine without the app
 
 For when you do not need the screen, or you are running on Linux. This route clones the repo
