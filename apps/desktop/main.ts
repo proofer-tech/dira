@@ -36,6 +36,7 @@ import { describeReadyTimeout, readyTimeoutHint, type ReadyTimeoutState } from "
 import { decideRevive, isExternalDeath } from "./revive.ts";
 import { HANG_PROMPT_MS, askedAfterUnresponsive, shouldAskReload, shouldCloseDialogOnResponsive } from "./hang-prompt.ts";
 import { mcpCronEdit } from "./mcp-install.ts";
+import { restoreCron, restoredName } from "./cron-restore.ts";
 import { installShellPath } from "./shell-path.ts";
 import { readBootLayout } from "./boot-shell.ts";
 import { writePackagedOps } from "./ops-json.ts";
@@ -1024,7 +1025,12 @@ async function installMcpKeepalive() {
     const err = e as { stdout?: string; stderr?: string };
     if (err.stdout || !/no crontab for/i.test(err.stderr ?? "")) throw e; // 못 읽으면 쓰지 않는다
   }
-  const next = mcpCronEdit(tab, home, tick);
+  // 삭제 정리가 뺀 줄을 되살린다(P570 결정 7). 못 읽었으면 위에서 이미 던졌으니 여기까지 오지 않는다
+  const recFile = join(home, ".config", "dira", "run", "uninstalled.crontab");
+  const record = existsSync(recFile) ? readFileSync(recFile, "utf8") : null;
+  const restored = restoreCron(tab, record);
+  if (restored.next !== null) tab = restored.next;
+  const next = mcpCronEdit(tab, home, tick) ?? restored.next;
   if (next !== null) {
     // 쓰기는 macOS 권한 창(앱 관리)을 사람이 누를 때까지 기다린다 - workers.ts와 같은 상한
     await new Promise<void>((resolve, reject) => {
@@ -1032,6 +1038,8 @@ async function installMcpKeepalive() {
       c.stdin!.end(next);
     });
   }
+  // 쓰기가 성공한 뒤에만 기록을 옮긴다 - 실패하면 다음 기동이 다시 시도한다
+  if (restored.archive) renameSync(recFile, join(dirname(recFile), restoredName(new Date())));
   await run(dst, [tick], { env: { ...process.env, PATH: userPath() }, timeout: 60_000 });
 }
 
