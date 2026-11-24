@@ -1,11 +1,13 @@
 #!/bin/bash
-# dira 엔진 MCP 감시 (docs/DESIGN.md P480 값 표) - cron이 매분 부른다. 인자: <엔진>/tick.sh
+# dira 엔진 MCP 감시 (docs/DESIGN.md P480 값 표) - cron이 매분 부른다. 인자: <엔진>/tick.sh [<앱 번들>]
 #   살아 있음: mcp.json의 pid가 mcp_server.py면 아무것도 안 쓴다
 #   띄우기:    서버를 떼어 띄우고 첫 줄 {"url"}을 받아 mcp.json(0600)을 쓴다
-#   제거:      엔진이 없으면 서버-mcp.json-crontab 줄-mcp/ 디렉터리를 치운다 (인자가 비면 아무것도 안 뺀다)
+#   제거:      엔진이 없거나(즉시) 앱이 10분째 없으면(P570, 둘째 인자가 비면 판정 안 함) 서버-crontab 줄들-sweep 데몬-mcp/를 치운다
+#              (첫째 인자가 비면 아무것도 안 뺀다). 뺀 줄은 run/uninstalled.crontab에 남긴다
 # ponytail: 포트 점검 없이 47823을 먼저 띄워 보고 서버가 못 묶으면 0(빈 포트)으로 다시 띄운다.
 
 engine=${1:-}
+app=${2:-}
 [ -n "$engine" ] || exit 0
 
 local_dir=$HOME/.config/dira
@@ -20,28 +22,68 @@ pid_alive() { # mcp.json의 pid가 살아 있고 명령줄에 mcp_server.py가 �
   [ -n "$p" ] && ps -p "$p" -o command= 2>/dev/null | grep -q 'mcp_server\.py'
 }
 
-if [ ! -f "$engine" ]; then
+cleanup() { # 엔진이나 앱이 지워졌다 (P570 결정 5)
+  local edir p c tab keep removed cut l w drop
+  edir=$(dirname "$engine")
   p=$(sed -n 's/.*"pid": *\([0-9][0-9]*\).*/\1/p' "$json" 2>/dev/null | head -1)
   if [ -n "$p" ] && ps -p "$p" -o command= 2>/dev/null | grep -q 'mcp_server\.py'; then kill -TERM "$p" 2>/dev/null; fi
   rm -f "$json"
   tab=$(crontab -l 2>/dev/null) || tab=
   if [ -n "$tab" ]; then
-    keep= cut=0
+    keep= removed= cut=0
     while IFS= read -r l; do
+      drop=0
       case $l in
-        '#'*) keep="$keep$l
-" ;;
-        *mcp/keepalive.sh*) cut=1 ;;
-        *) keep="$keep$l
-" ;;
+        '# dira-worker '*|'#dira-worker '*) drop=w ;;
+        '#'*) ;;
+        *mcp/keepalive.sh*) drop=1 ;;
+        *"\"$edir/dispatch.py\" sweep"*|*"\"$edir/remote.py\" sync-all"*) drop=1 ;;
+        *) drop=w ;;
       esac
+      if [ "$drop" = w ]; then
+        drop=0
+        w=$(printf '%s' "$l" | sed -n 's/.*"\([^"]*\/workers\/[^"\/]*\.sh\)".*/\1/p' | head -1)
+        if [ -n "$w" ] && { [ ! -f "$w" ] || grep -qF "$edir/tick.sh" "$w" 2>/dev/null; }; then drop=1; fi
+      fi
+      if [ "$drop" = 1 ]; then cut=1; removed="$removed$l
+"; else keep="$keep$l
+"; fi
     done <<EOT
 $tab
 EOT
-    [ "$cut" = 1 ] && printf '%s' "$keep" | crontab -
+    if [ "$cut" = 1 ]; then
+      mkdir -p -m 700 "$run"
+      printf '%s' "$removed" >> "$run/uninstalled.crontab"
+      printf '%s' "$keep" | crontab -
+    fi
   fi
-  rm -rf "$mdir" "$lock"
-  exit 0
+  # sweep 데몬: 명령줄에 <엔진>/dispatch.py와 sweep이 함께 있는 프로세스 (돌고 있는 tick과 세션은 건드리지 않는다)
+  ps -axo pid=,command= 2>/dev/null | while read -r p c; do
+    case $c in *"$edir/dispatch.py"*" sweep"*) kill -TERM "$p" 2>/dev/null ;; esac
+  done
+  rm -rf "$mdir" "$lock" "$run/app-missing"
+}
+
+app_present() { # 앱 삭제 판정 (P570 결정 3) - 하나라도 있으면 0
+  [ -d "$app" ] && return 0
+  [ -d "${DIRA_APPS_DIR:-/Applications}/dira.app" ] && return 0
+  [ -d "$HOME/Applications/dira.app" ] && return 0
+  mdfind "kMDItemCFBundleIdentifier == 'dev.dira.desktop'" 2>/dev/null | grep -v '/\.Trash/' | grep -q .
+}
+
+if [ ! -f "$engine" ]; then cleanup; exit 0; fi
+
+if [ -n "$app" ]; then
+  if app_present; then
+    rm -f "$run/app-missing"
+  else
+    now=$(date +%s)
+    since=$(cat "$run/app-missing" 2>/dev/null)
+    case $since in
+      ''|*[!0-9]*) mkdir -p -m 700 "$run"; echo "$now" > "$run/app-missing" ;;
+      *) [ $((now - since)) -ge 600 ] && { cleanup; exit 0; } ;;
+    esac
+  fi
 fi
 
 pid_alive && exit 0

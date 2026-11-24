@@ -1009,6 +1009,9 @@ async function installMcpKeepalive() {
   const tick = app.isPackaged
     ? join(app.getPath("userData"), "engine", "tick.sh")
     : fileURLToPath(new URL("../../tick.sh", import.meta.url));
+  // P570 결정 2: 앱 번들 = execPath의 3단계 위. 격리 실행-DMG 실행-소스 실행은 빈 문자열(앱 삭제 판정 안 함)
+  let bundle = app.isPackaged ? dirname(dirname(dirname(process.execPath))) : "";
+  if (bundle.includes("/AppTranslocation/") || bundle.startsWith("/Volumes/")) bundle = "";
   const body = readFileSync(src);
   if (!existsSync(dst) || !readFileSync(dst).equals(body)) {
     mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -1030,7 +1033,7 @@ async function installMcpKeepalive() {
   const record = existsSync(recFile) ? readFileSync(recFile, "utf8") : null;
   const restored = restoreCron(tab, record);
   if (restored.next !== null) tab = restored.next;
-  const next = mcpCronEdit(tab, home, tick) ?? restored.next;
+  const next = mcpCronEdit(tab, home, tick, bundle) ?? restored.next;
   if (next !== null) {
     // 쓰기는 macOS 권한 창(앱 관리)을 사람이 누를 때까지 기다린다 - workers.ts와 같은 상한
     await new Promise<void>((resolve, reject) => {

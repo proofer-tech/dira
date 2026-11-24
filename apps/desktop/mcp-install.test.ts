@@ -25,3 +25,11 @@ test("줄이 둘이면 하나로 줄이고 주석 줄은 우리 줄이 아니다
   const c = `# ${old}\n`;
   assert.equal(mcpCronEdit(c, H, T), c + want + "\n");
 });
+
+test("둘째 인자가 줄에 들어가고, 비면 빈 문자열이 들어간다", () => {
+  assert.match(mcpCronLine(H, T, "/Applications/dira.app"), /keepalive\.sh" "\/e\/tick\.sh" "\/Applications\/dira\.app" >>/);
+  assert.match(mcpCronLine(H, T), /keepalive\.sh" "\/e\/tick\.sh" "" >>/);
+  const app = mcpCronEdit(other + want + "\n", H, T, "/Applications/dira.app");
+  assert.equal(app, other + mcpCronLine(H, T, "/Applications/dira.app") + "\n");
+  assert.equal(mcpCronEdit(app!, H, T, "/Applications/dira.app"), null);
+});

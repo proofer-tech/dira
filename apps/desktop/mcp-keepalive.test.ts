@@ -1,7 +1,7 @@
 /** `mcp-keepalive.sh` - 임시 HOME + PATH 앞의 가짜 crontab으로 진짜 bash를 돌려 세 갈래를 밟는다. */
 import assert from "node:assert/strict";
-import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
+import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,10 +25,13 @@ function setup(tab: string | null) {
   const engine = join(home, "engine");
   mkdirSync(engine);
   for (const f of ["mcp_server.py", "mcp_tools.py", "tickets.py", "tick.sh"]) cpSync(join(repo, f), join(engine, f));
-  const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` };
+  // 가짜 mdfind: mdfind.out을 그대로 낸다
+  writeFileSync(join(bin, "mdfind"), `#!/bin/sh\n[ -f "${home}/mdfind.out" ] && cat "${home}/mdfind.out"; exit 0\n`);
+  chmodSync(join(bin, "mdfind"), 0o755);
+  const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, DIRA_APPS_DIR: join(home, "SysApps") };
   const json = join(home, ".config/dira/run/mcp.json");
-  const run = (arg: string) => {
-    const r = spawnSync("bash", [script, arg], { env, encoding: "utf8", timeout: 30_000 });
+  const run = (arg: string, app?: string) => {
+    const r = spawnSync("bash", app === undefined ? [script, arg] : [script, arg, app], { env, encoding: "utf8", timeout: 30_000 });
     // 서버 stderr는 임시 HOME의 mcp.log에만 남는다 - 실패하면 CI 로그에 꺼내 둔다
     if (r.status !== 0) {
       const log = join(home, ".config/dira/run/mcp.log");
@@ -88,7 +91,7 @@ test("죽어 있으면 띄우고 살아 있으면 안 건드린다 - 두 번 띄
 });
 
 test("엔진이 없으면 서버-mcp.json-mcp 디렉터리-keepalive 줄이 사라지고 남의 줄은 바이트 그대로", async () => {
-  const other = "# 메모\n\n*/5 * * * * \"/x/workers/w1.sh\"\n0 3 * * * echo  '남의   줄'\n";
+  const other = "# 메모\n\n*/5 * * * * echo \"/x/w1.sh\"\n0 3 * * * echo  '남의   줄'\n";
   const mine = `* * * * * "/h/.config/dira/mcp/keepalive.sh" "/e/tick.sh" >> /h/mcp.log 2>&1\n`;
   const s = setup(other + mine);
   try {
@@ -115,4 +118,103 @@ test("인자가 빈 문자열이면 아무것도 안 뺀다", () => {
   assert.equal(readFileSync(s.store, "utf8"), tab);
   assert.ok(existsSync(join(s.home, ".config/dira/mcp")));
   assert.ok(!existsSync(s.json));
+});
+
+// ---- P570: 앱 삭제 판정과 정리 ----
+function p570() {
+  const s = setup(null);
+  const edir = s.engine;
+  const w1 = join(s.home, "ws/workers/w1.sh"); // 이 엔진을 source한다
+  const w2 = join(s.home, "ws/workers/w2.sh"); // 다른 엔진
+  mkdirSync(dirname(w1), { recursive: true });
+  writeFileSync(w1, `source "${edir}/tick.sh"\n`);
+  writeFileSync(w2, `source "/다른/엔진/tick.sh"\n`);
+  const keep = `# dira-worker "${w2}"\n0 3 * * * echo  '남의   줄'\n`;
+  const gone = [
+    `* * * * * "/h/.config/dira/mcp/keepalive.sh" "${s.tick}" "/없는/dira.app" >> /h/mcp.log 2>&1\n`,
+    `* * * * * python3 "${edir}/dispatch.py" sweep >> /h/sweep.log 2>&1\n`,
+    `# dira-worker "${w1}"\n`,
+  ];
+  const tab = gone.join("") + keep;
+  writeFileSync(s.store, tab);
+  const run = join(s.home, ".config/dira/run");
+  const missing = join(run, "app-missing");
+  const app = join(s.home, "없는/dira.app");
+  const backdate = () => writeFileSync(missing, String(Math.floor(Date.now() / 1000) - 660));
+  return { s, tab, keep, gone, run, missing, app, backdate, edir };
+}
+
+test("P570 1: 앱이 없어도 10분 유예, 지나면 줄 셋이 빠지고 남의 줄은 그대로, 뺀 줄은 기록된다", () => {
+  const t = p570();
+  assert.equal(t.s.run(t.s.tick, t.app).status, 0);
+  assert.equal(readFileSync(t.s.store, "utf8"), t.tab);
+  assert.ok(existsSync(t.missing));
+  t.backdate();
+  assert.equal(t.s.run(t.s.tick, t.app).status, 0);
+  assert.equal(readFileSync(t.s.store, "utf8"), t.keep);
+  assert.equal(readFileSync(join(t.run, "uninstalled.crontab"), "utf8"), t.gone.join(""));
+  assert.ok(!existsSync(t.missing));
+});
+
+test("P570 2: 휴지통 경로는 삭제로 보고 다른 경로는 삭제로 보지 않고 app-missing을 지운다", () => {
+  const t = p570();
+  writeFileSync(join(t.s.home, "mdfind.out"), join(t.s.home, ".Trash/dira.app") + "\n");
+  t.s.run(t.s.tick, t.app);
+  assert.ok(existsSync(t.missing));
+  t.backdate();
+  t.s.run(t.s.tick, t.app);
+  assert.equal(readFileSync(t.s.store, "utf8"), t.keep);
+
+  const u = p570();
+  u.s.run(u.s.tick, u.app);
+  assert.ok(existsSync(u.missing));
+  writeFileSync(join(u.s.home, "mdfind.out"), "/Users/x/Desktop/dira.app\n");
+  u.s.run(u.s.tick, u.app);
+  assert.ok(!existsSync(u.missing));
+  assert.equal(readFileSync(u.s.store, "utf8"), u.tab);
+});
+
+test("P570 3: 엔진이 없으면 유예 없이 정리하고, 첫째 인자가 비거나 crontab -l이 실패하면 쓰지 않는다", () => {
+  const t = p570();
+  rmSync(t.s.tick);
+  assert.equal(t.s.run(t.s.tick).status, 0);
+  assert.equal(readFileSync(t.s.store, "utf8"), t.keep);
+
+  const u = p570();
+  u.s.run("", u.app);
+  assert.equal(readFileSync(u.s.store, "utf8"), u.tab);
+  rmSync(u.s.store); // crontab -l 실패
+  rmSync(u.s.tick);
+  assert.equal(u.s.run(u.s.tick).status, 0);
+  assert.ok(!existsSync(u.s.store));
+});
+
+test("P570 4: 둘째 인자가 없거나 비면 번들과 mdfind가 없어도 삭제 판정을 하지 않는다", () => {
+  const t = p570();
+  try {
+    t.s.run(t.s.tick);
+    t.s.run(t.s.tick, "");
+    assert.ok(!existsSync(t.missing));
+    assert.equal(readFileSync(t.s.store, "utf8"), t.tab);
+  } finally {
+    t.s.kill();
+  }
+});
+
+test("P570 5: 정리하면 그 엔진의 sweep 데몬이 SIGTERM을 받고 다른 프로세스는 살아 있다", async () => {
+  const t = p570();
+  const daemon = spawn("sh", ["-c", `sleep 300; : "${t.edir}/dispatch.py" sweep`], { stdio: "ignore" });
+  const other = spawn("sh", ["-c", `sleep 300; : "${t.edir}/dispatch.py" poll`], { stdio: "ignore" });
+  try {
+    await new Promise((r) => setTimeout(r, 200));
+    rmSync(t.s.tick);
+    assert.equal(t.s.run(t.s.tick).status, 0);
+    await new Promise((r) => setTimeout(r, 300));
+    assert.ok(daemon.signalCode === "SIGTERM" || daemon.exitCode !== null);
+    assert.equal(other.exitCode, null);
+    assert.equal(other.signalCode, null);
+  } finally {
+    daemon.kill("SIGKILL");
+    other.kill("SIGKILL");
+  }
 });

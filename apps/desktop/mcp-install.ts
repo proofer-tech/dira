@@ -3,14 +3,15 @@
 
 export const MCP_MARK = "mcp/keepalive.sh";
 
-export function mcpCronLine(home: string, tick: string): string {
-  return `* * * * * "${home}/.config/dira/mcp/keepalive.sh" "${tick}" >> "${home}/.config/dira/run/mcp.log" 2>&1`;
+/** `app`은 앱 번들 경로(P570 결정 2). 빈 문자열이면 keepalive가 앱 삭제 판정을 하지 않는다. */
+export function mcpCronLine(home: string, tick: string, app = ""): string {
+  return `* * * * * "${home}/.config/dira/mcp/keepalive.sh" "${tick}" "${app}" >> "${home}/.config/dira/run/mcp.log" 2>&1`;
 }
 
 /** crontab 본문 -> 새 본문. 줄이 정확히 하나로 이미 맞으면 `null`(쓰지 않는다). 남의 줄은 바이트 그대로다.
  *  ponytail: 주석 줄은 cron이 실행하지 않으니 우리 줄로 안 센다. 둘 이상이면 첫 줄만 남기고 나머지를 뺀다. */
-export function mcpCronEdit(tab: string, home: string, tick: string): string | null {
-  const want = mcpCronLine(home, tick);
+export function mcpCronEdit(tab: string, home: string, tick: string, app = ""): string | null {
+  const want = mcpCronLine(home, tick, app);
   const lines = tab === "" ? [] : tab.replace(/\n$/, "").split("\n");
   const mine = lines.filter((l) => !l.startsWith("#") && l.includes(MCP_MARK));
   if (mine.length === 1 && mine[0] === want) return null;
