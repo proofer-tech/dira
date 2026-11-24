@@ -9054,11 +9054,11 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P570-1 | 결정 1-6: `mcp-keepalive.sh` 앱 삭제 판정과 정리 확장 + `mcpCronLine`-`installMcpKeepalive`의 둘째 인자 + 임시 HOME-가짜 `crontab`-가짜 `mdfind`로 진짜 bash를 돌리는 테스트 | developer | - | 미발행 |
-| P570-2 | 결정 7: 앱 기동 때 `uninstalled.crontab` 복원(순수 함수 + 단위 테스트 + `main.ts` 호출) | developer | - | 미발행 |
-| P570-3 | 결정 8: 매뉴얼 `apps/teams/docs/install.md`에 "dira 지우기" 절(한국어) | writer | - | 미발행 |
-| P570-4 | 결정 8의 영어판 `apps/teams/en/docs/install.md` | translator | P570-3 | 미발행 |
-| P570-5 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P570-1, P570-2 | 미발행 |
+| P570-1 | 결정 1-6: `mcp-keepalive.sh` 앱 삭제 판정과 정리 확장 + `mcpCronLine`-`installMcpKeepalive`의 둘째 인자 + 임시 HOME-가짜 `crontab`-가짜 `mdfind`로 진짜 bash를 돌리는 테스트 | developer | - | 발행 `60bb4040` |
+| P570-2 | 결정 7: 앱 기동 때 `uninstalled.crontab` 복원(순수 함수 + 단위 테스트 + `main.ts` 호출) | developer | - | 발행 `bbec6341` |
+| P570-3 | 결정 8: 매뉴얼 `apps/teams/docs/install.md`에 "dira 지우기" 절(한국어) | writer | - | 발행 `a5b6dae9` |
+| P570-4 | 결정 8의 영어판 `apps/teams/en/docs/install.md` | translator | P570-3 | 발행 `635e738d` |
+| P570-5 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P570-1, P570-2 | 발행 `b803263d` |
 
 #### 수용조건
 
