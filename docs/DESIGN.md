@@ -8988,6 +8988,90 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P570. 앱이나 엔진을 지우면 dira의 cron 줄과 sweep 데몬이 10분 안에 사라지고, 다시 설치하면 등록이 돌아온다 (요구 `de085595`, 왕복 0회)
+
+사람 요구(2026-11-24): *dira 삭제 시 cron이 안없어진다는 제보가 들어왔습니다.* 제보자가 어떤 방법으로 지웠는지는
+없다. 그래서 이 절은 흔한 두 방법(앱을 휴지통에 버린다, 엔진 디렉터리까지 지운다)을 모두 다룬다.
+
+#### 실측 - 2026-11-24, 코드 확인(재현은 안 했다)
+
+- 설치본의 엔진은 userData(`~/Library/Application Support/dira/engine`)에 꺼내 둔다. 워커가 앱보다 오래 살게 하려는
+  의도적인 설계다(`apps/desktop/main.ts` `extractEngine()`, 데스크톱 고정하는 것 8). 그래서 `/Applications/dira.app`만
+  지우면 엔진의 `tick.sh`가 그대로 있다.
+- 그 결과 cron 줄을 치우는 두 장치가 모두 "dira가 살아 있다"고 판정한다. `self-heal.sh`(§4-4) ①과
+  `mcp-keepalive.sh`(P480)의 제거 갈래는 둘 다 엔진 `tick.sh`가 없는 것만 삭제로 본다. 앱 번들의 존재를 확인하는
+  코드는 없다. sweep 기동 줄, `# dira-worker` 표지 줄, keepalive 줄이 남고, sweep 데몬이 계속 워커를 띄운다.
+- 엔진까지 지우면 sweep 데몬은 코드 mtime이 바뀐 것을 보고 RELOAD하다가 없는 `dispatch.py`를 띄우고 끝난다. P565
+  이후 워커 `.sh`를 실행하는 주체는 데몬 하나이므로 `self-heal.sh` ①이 돌 기회가 없다. `self-heal.sh`의 sweep 줄
+  정리 코드는 cron이 워커 `.sh`를 직접 부르던 P565 이전 구조를 전제로 한다. 남는 sweep 줄은 매분 실패한다.
+  keepalive는 이때 자기 줄만 뺀다.
+- 앱이 지워진 뒤에도 매분 도는 dira 코드는 `~/.config/dira/mcp/keepalive.sh` 하나다. 이 파일은 엔진과 앱 밖에
+  있다. 앱은 켜질 때마다 keepalive 줄을 `mcpCronLine` 그대로 다시 쓰므로(`mcpCronEdit`), 줄에 인자를 더하면 다음
+  기동에 모든 설치본에 퍼진다.
+- 엔진 `remote.py`의 `sync-all` 시계 줄도 설치본에서는 엔진 경로를 가리킨다.
+
+#### 결정
+
+1. **삭제 감지는 keepalive가 맡는다.** 엔진(`dispatch.py`-`tick.sh`)은 고치지 않는다. 엔진이 지워졌거나 앱이
+   지워진 뒤에도 매분 도는 것이 keepalive뿐이기 때문이다.
+2. **keepalive 줄의 인자를 둘로 늘린다:** `keepalive.sh "<엔진>/tick.sh" "<앱 번들>"`. 앱 번들은 `process.execPath`의
+   3단계 위(`/Applications/dira.app`)다. 경로에 `/AppTranslocation/`이 있거나 `/Volumes/` 아래면(격리 실행, DMG에서
+   실행) 둘째 인자를 빈 문자열로 둔다. 소스 실행(`!app.isPackaged`)도 빈 문자열이다. 둘째 인자가 비면 앱 삭제
+   판정을 하지 않는다(옛 한 인자 줄도 같다).
+3. **앱 삭제 판정.** 아래 넷이 모두 거짓인 상태가 **연속 10분** 이어지면 앱이 지워진 것으로 본다.
+   - 둘째 인자 경로에 디렉터리가 있다.
+   - `/Applications/dira.app` 또는 `$HOME/Applications/dira.app`이 있다.
+   - `mdfind "kMDItemCFBundleIdentifier == 'dev.dira.desktop'"` 결과 중 `/.Trash/` 아래가 아닌 경로가 하나 있다.
+     `mdfind`는 앞의 둘이 거짓일 때만 부른다.
+   처음 거짓이 된 시각을 `~/.config/dira/run/app-missing`에 적고, 하나라도 참이 되면 그 파일을 지운다. 10분 유예는
+   자동 업데이트가 번들을 갈아 끼우는 몇 초와 사람이 앱을 옮기는 동안을 덮는다.
+4. **엔진 삭제 판정은 지금과 같다:** 첫째 인자의 파일이 없다(인자가 비면 아무것도 안 뺀다). 유예 없이 바로 정리한다.
+5. **정리 - 두 판정이 같은 일을 한다.** `crontab -l`이 실패하거나 비었으면 crontab은 쓰지 않는다. 아래 줄을 빼고,
+   나머지 줄은 바이트 그대로 둔다.
+   - `mcp/keepalive.sh` 줄(지금과 같다)
+   - 이 엔진의 sweep 기동 줄: `"<엔진 디렉터리>/dispatch.py" sweep`를 포함하는 줄
+   - 이 엔진의 `"<엔진 디렉터리>/remote.py" sync-all`을 포함하는 줄
+   - `# dira-worker "<워커 경로>"` 표지 줄 중 워커 파일이 없거나 그 파일에 `<엔진 디렉터리>/tick.sh`가 들어 있는 줄
+   - 옛 워커 실행 줄(cron이 `<...>/workers/<이름>.sh`를 직접 부르는 줄) 중 같은 조건에 맞는 줄
+   뺀 줄은 바이트 그대로 `~/.config/dira/run/uninstalled.crontab`에 덧붙인다(복원용 기록). 그다음 명령줄에
+   `<엔진 디렉터리>/dispatch.py`와 `sweep`이 함께 있는 프로세스에 SIGTERM을 보내고, MCP 서버와 `mcp.json`,
+   `~/.config/dira/mcp/`를 지금처럼 치운다. 이미 돌고 있는 tick과 세션은 건드리지 않는다.
+6. **지우지 않는 것.** 큐(`.dira/`), 워크트리, userData 엔진, `~/.config/dira`의 다른 파일은 사람의 작업물이거나
+   재설치 때 다시 쓰이므로 남긴다.
+7. **재설치하면 등록이 돌아온다.** 앱이 켜질 때 `~/.config/dira/run/uninstalled.crontab`이 있으면 그 줄 중 지금
+   crontab에 없는 줄을 덧붙이고, 파일을 `uninstalled.crontab.restored-<UTC 시각>`으로 옮긴다. 줄을 판정하는 일은
+   순수 함수로 빼서 단위 테스트한다. keepalive 줄은 기존 `installMcpKeepalive`가 다시 쓴다.
+8. **매뉴얼.** 설치 장에 "dira 지우기" 절을 둔다. 앱을 지우면 10분 안에 cron이 정리된다는 것, 바로 정리하려면
+   무엇을 지우면 되는지, 지워도 남는 것(큐-워크트리-설정)과 그것을 직접 지우는 경로를 적는다.
+
+```autonomy
+주도성 5 판단: 제보에 삭제 방법이 없어서 되묻지 않고 두 방법(앱만, 엔진까지)을 모두 다루기로 했다. 둘 다 코드에서 빈틈이 확인됐다.
+주도성 5 판단: 감지 주체를 엔진 sweep 데몬이 아니라 keepalive.sh로 정했다. 엔진이 지워진 경우에는 데몬이 살아 있지 않고, keepalive는 앱과 엔진 밖에 있으며 매분 이미 돈다. 그래서 엔진 수정(사람 승인 대상) 없이 두 경로를 한 곳에서 닫을 수 있다.
+주도성 5 판단: 뺀 줄을 지우지 않고 uninstalled.crontab에 남겨 재설치 때 되살린다. P565 결정 4에서 워커 등록의 원천이 crontab 자체이므로, 그대로 지우면 재설치한 사람이 워커를 전부 다시 등록해야 한다. 오판(앱을 옮겼는데 삭제로 본 경우)의 비용도 다음 기동 한 번으로 줄어든다.
+주도성 5 판단: 앱 안 "dira 제거" 메뉴는 이번에 넣지 않는다. 제보는 앱을 지운 뒤에 남는 문제이고, 메뉴는 앱을 지우기 전에 사람이 기억해야 쓸 수 있다.
+주도성 5 판단: 에픽을 열지 않는다. 티켓이 넷이고 디자인 산출물이 없다.
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P570-1 | 결정 1-6: `mcp-keepalive.sh` 앱 삭제 판정과 정리 확장 + `mcpCronLine`-`installMcpKeepalive`의 둘째 인자 + 임시 HOME-가짜 `crontab`-가짜 `mdfind`로 진짜 bash를 돌리는 테스트 | developer | - | 미발행 |
+| P570-2 | 결정 7: 앱 기동 때 `uninstalled.crontab` 복원(순수 함수 + 단위 테스트 + `main.ts` 호출) | developer | - | 미발행 |
+| P570-3 | 결정 8: 매뉴얼 `apps/teams/docs/install.md`에 "dira 지우기" 절(한국어) | writer | - | 미발행 |
+| P570-4 | 결정 8의 영어판 `apps/teams/en/docs/install.md` | translator | P570-3 | 미발행 |
+| P570-5 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P570-1, P570-2 | 미발행 |
+
+#### 수용조건
+
+- [ ] 임시 HOME에서 crontab에 keepalive 줄(둘째 인자는 없는 번들 경로), sweep 기동 줄, 표지 줄 2개(하나는 그 엔진을 source하는 워커, 하나는 다른 엔진을 source하는 워커), 남의 줄 1개를 두고, `/Applications/dira.app`-`~/Applications/dira.app`이 없고 가짜 `mdfind`가 빈 출력을 내게 하면: 처음 실행에서는 crontab이 바뀌지 않고 `run/app-missing`이 생긴다. `app-missing` 시각을 11분 전으로 고친 뒤 실행하면 crontab에 다른 엔진의 표지 줄과 남의 줄만 바이트 그대로 남고, 뺀 세 줄이 `run/uninstalled.crontab`에 있다.
+- [ ] 같은 조건에서 가짜 `mdfind`가 `~/.Trash/dira.app`만 내면 삭제로 보고, `/Users/x/Desktop/dira.app`을 내면 삭제로 보지 않고 `app-missing`을 지운다.
+- [ ] 첫째 인자의 `tick.sh`가 없으면 유예 없이 첫 실행에서 결정 5의 줄이 빠진다. 첫째 인자가 비었거나 `crontab -l`이 실패하면 crontab을 쓰지 않는다.
+- [ ] 둘째 인자가 빈 줄(옛 한 인자 줄 포함)에서는 번들과 `mdfind` 결과가 없어도 앱 삭제 판정을 하지 않는다.
+- [ ] 정리 뒤 `pgrep -f "<엔진 디렉터리>/dispatch.py"`에 sweep 데몬이 없다(테스트는 가짜 데몬 프로세스로 확인한다).
+- [ ] 복원 함수에 (가) 파일 없음 (나) 지금 crontab에 일부 줄이 이미 있음 (다) 모든 줄이 이미 있음을 넣으면 각각 변경 없음, 없는 줄만 덧붙임, 변경 없음이 나오고, (나)-(다) 모두 기록 파일을 `.restored-<시각>`으로 옮긴다.
+- [ ] 설치본에서 `/Applications/dira.app`을 휴지통으로 옮기고 11분 기다리면 `crontab -l`에 `dira-worker`-`dispatch.py" sweep`-`mcp/keepalive.sh`가 한 줄도 없고 sweep 데몬 프로세스가 없다. 앱을 다시 설치해 켜면 1분 안에 표지 줄과 sweep 기동 줄이 돌아온다.
+- [ ] `apps/teams/docs/install.md`와 영어판에 "dira 지우기" 절이 있고, 앱을 지운 뒤 10분이라는 시간과 남는 경로 셋(큐, `~/Library/Application Support/dira`, `~/.config/dira`)이 적혀 있다.
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`과 바뀐 파일의 테스트가 통과하고, `git diff --stat`에 `tick.sh`-`tickets.py`-`dispatch.py`가 없다.
+
 ### P569. 에이전트가 `~/.config/dira`를 재귀 검색해도 대화가 멈추지 않고, 백그라운드 작업만 남은 대화는 `답하는 중` 대신 그 사실을 보인다 (요구 `91ffbf1b`, 왕복 0회)
 
 사람 요구(2026-11-23): *"이 대화가 죽었어요 응답을안합니다"* 다음에 *"같은문제가 발생하지 않도록 해주세요"*.
