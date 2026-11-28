@@ -8988,6 +8988,52 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P574. 페르소나 기준 디렉터리가 아직 없는 큐에서도 엔진 - 상한 - 스킬 저장이 실패하지 않는다 (요구 `63a6efe3`, 왕복 0회)
+
+사람 요구(2026-11-28): 페르소나 프로필이 없는 상태에서 오류가 난다. 첨부 화면은 §5 엔진 팝오버에서 `claude` -
+`sonnet` - `xhigh`를 고르고 저장한 결과이고, `엔진을 저장하지 못했습니다` 아래에 `ENOENT: no such file or directory,
+realpath '/Users/hsol/Projects/quiry/.dira/personas'`가 떠 있다.
+
+#### 원인 - 2026-11-28 코드 확인
+
+- 저장 경로는 `savePersonaEngineAction` -> `lib/ops/persona.ts` `personaEngineSet` -> `lib/skills.ts`
+  `writePersonaEngine` -> `lib/projects.ts` `personaFilePath` -> `lib/paths.ts` `resolveWithin`이다.
+  `resolveWithin`은 기준 디렉터리를 `realpath`하므로, 기준 디렉터리(해석된 `TICKET_PERSONAS`)가 없으면 ENOENT로 실패한다.
+- 새로 만든 큐는 페르소나를 팀 패키지(`.dira/team/`)에서 받으므로 `<루트>/personas`가 없을 수 있다. 화면 속
+  `quiry` 큐는 23:26에 `team/`이 생겼고, `personas/`는 23:35에 `archive-manager`가 처음 만들었다. 사람이 저장한 시점에는
+  `personas/`가 없었다.
+- 프로필 저장(`savePersona` - `createPersona`)은 이미 `mkdir(기준 디렉터리, recursive)`를 먼저 하므로 같은 상황에서도 성공한다.
+  먼저 만들지 않는 쓰기는 셋이다: `writePersonaEngine`, `writePersonaLimit`, `writeSkillsSidecar`(`skills.md` -
+  `skills-off.md`).
+
+#### 결정
+
+1. **쓰기 셋은 `personaFilePath`를 부르기 전에 기준 디렉터리를 `mkdir(..., { recursive: true })`로 만든다.** 선례는
+   `savePersona`의 첫 줄이다. 지우기(`id === null`, `limit === null`, 빈 스킬 목록)도 같은 함수 안이므로 함께 통과한다.
+2. **읽기는 바꾸지 않는다.** `readPersonaEngine` - `readPersonaLimit` - 메모리 읽기는 이미 ENOENT를 `null` - `[]`로 받는다.
+   읽기가 디렉터리를 만들면 목록만 열어도 큐에 디렉터리가 생긴다.
+3. **`resolveWithin`은 바꾸지 않는다.** 기준 디렉터리가 없는 것을 실패로 보는 판정은 다른 호출자(경로 검증)에도 걸려 있다.
+4. **엔진(`tick.sh` - `tickets.py`)은 바꾸지 않는다.** 디렉터리가 없을 때 엔진은 이미 페르소나 없이 디스패치한다.
+
+```autonomy
+주도성 5 판단: 첨부 화면과 코드만으로 원인이 하나로 정해져 되묻지 않았다. 요구 문장의 "프로필 없는상태"는 기준 디렉터리 자체가 없는 상태로 해석했다(quiry 큐의 생성 시각이 그 근거다).
+주도성 5 판단: 엔진 저장만이 아니라 같은 결함을 가진 상한 - 스킬 저장까지 범위에 넣었다. 같은 화면에서 사람이 다음에 누를 버튼이고, 고치는 방식이 한 줄로 같다.
+주도성 5 판단: 에픽을 열지 않는다. 티켓이 둘이고 화면 문구 변화가 없다(writer - designer 0장).
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P574-1 | 결정 1: `writePersonaEngine` - `writePersonaLimit` - `writeSkillsSidecar`가 기준 디렉터리를 먼저 만든다 + 없는 기준 디렉터리로 셋을 부르는 단위 테스트(`lib/skills.test.ts`) | developer | - | 발행 |
+| P574-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P574-1 | 발행 |
+
+#### 수용조건
+
+- [ ] 존재하지 않는 임시 경로 `<tmp>/personas`를 기준 디렉터리로 `writePersonaEngine(dir, "pm", "claude", "sonnet", "xhigh")`를 부르면 예외 없이 끝나고, `<tmp>/personas/pm/engine`이 생기며 `readPersonaEngine`이 `{ engineId: "claude", model: "sonnet", effort: "xhigh" }`를 돌려준다. 이 단위 테스트가 `cd apps/teams && pnpm test` 안에 있고 통과한다.
+- [ ] 같은 조건에서 `writePersonaLimit(dir, "pm", 3)`이 `<tmp>/personas/pm/limit`에 `3\n`을 쓰고, `writePersonaSkills`가 `<tmp>/personas/pm/skills.md`를 쓴다. 둘 다 단위 테스트로 통과한다.
+- [ ] `personas/` 디렉터리가 없는 큐를 앱에 열고 §5에서 페르소나 하나의 엔진 팝오버로 `claude` - `sonnet` - `xhigh`를 저장하면, `엔진을 저장하지 못했습니다`가 뜨지 않고 팝오버가 닫히며 그 줄에 `claude · sonnet · effort xhigh`가 보인다. 디스크에 `personas/<이름>/engine`이 생긴다.
+- [ ] `personas/`가 없는 큐에서 §5 목록만 열고 아무것도 저장하지 않으면 `personas/`가 여전히 없다.
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`이 통과하고, `git diff --stat master`에 `tick.sh` - `tickets.py` - `lib/paths.ts`가 없다.
+
 ### P573. 홈 대화의 Bash 명령이 120초를 넘기면 백그라운드로 넘어가지 않고 그 자리에서 실패한다 (요구 `639d8fb8`, 왕복 0회)
 
 사람 요구(2026-11-28): 홈 대화가 `claude`를 띄울 때 명령이 자동으로 백그라운드로 넘어가지 않게 한다. 그러면
