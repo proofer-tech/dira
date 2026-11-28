@@ -9023,8 +9023,8 @@ realpath '/Users/hsol/Projects/quiry/.dira/personas'`가 떠 있다.
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P574-1 | 결정 1: `writePersonaEngine` - `writePersonaLimit` - `writeSkillsSidecar`가 기준 디렉터리를 먼저 만든다 + 없는 기준 디렉터리로 셋을 부르는 단위 테스트(`lib/skills.test.ts`) | developer | - | 발행 |
-| P574-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P574-1 | 발행 |
+| P574-1 | 결정 1: `writePersonaEngine` - `writePersonaLimit` - `writeSkillsSidecar`가 기준 디렉터리를 먼저 만든다 + 없는 기준 디렉터리로 셋을 부르는 단위 테스트(`lib/skills.test.ts`) | developer | - | 발행 `373b7379` |
+| P574-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P574-1 | 발행 `17db3d47` |
 
 #### 수용조건
 
