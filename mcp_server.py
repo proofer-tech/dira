@@ -81,12 +81,14 @@ def handle_old(i, method, p):
         try:
             out = mcp_tools.call_tool(p.get("name"), p.get("arguments"))
             err = False
+            links = out.pop("_links", None) if isinstance(out, dict) else None
         except mcp_tools.ToolError as e:
-            out, err = {"error": str(e)}, True
+            out, err, links = {"error": str(e)}, True, None
         except Exception as e:  # 도구 하나의 실패가 서버를 죽이지 않는다
-            out, err = {"error": "%s: %s" % (type(e).__name__, e)}, True
-        return reply(i, {"content": [{"type": "text", "text": json.dumps(out, ensure_ascii=False)}],
-                         "isError": err})
+            out, err, links = {"error": "%s: %s" % (type(e).__name__, e)}, True, None
+        content = [{"type": "text", "text": json.dumps(out, ensure_ascii=False)}]
+        content += [{"type": "resource_link", "uri": u, "name": u.split("?")[0].rsplit("/", 1)[-1]} for u in links or []]
+        return reply(i, {"content": content, "isError": err})
     return reply(i, error={"code": -32601, "message": "Method not found: %s" % method})
 
 

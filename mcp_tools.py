@@ -10,7 +10,10 @@ import re
 import subprocess
 import sys
 import unicodedata
+import time
 import uuid
+from datetime import datetime, timezone
+from urllib.parse import parse_qs, quote, unquote, urlparse
 
 ENGINE_DIR = os.path.dirname(os.path.realpath(__file__))
 IN_PROGRESS = os.environ.get("TICKET_INPROGRESS") or ".wip"
@@ -809,6 +812,182 @@ def t_project_slim(a):
     return view
 
 
+# ---------------------------------------------------------------- 티켓 작업 상태 (P571 결정 2, 3, 5, 7)
+
+POLL_MS = 5000
+HANDOFF_RE = re.compile(r"->\s*([0-9a-f]{8})\b")
+
+
+def ticket_uri(root, h):
+    return "dira://ticket/%s?root=%s" % (quote(h, safe=""), quote(root, safe=""))
+
+
+def parse_uri(uri):
+    """dira:// URI -> (종류, 해시 또는 None, 루트 또는 None). 종류: ticket - queue - awaiting - projects."""
+    u = urlparse(str(uri))
+    if u.scheme != "dira" or u.netloc not in ("ticket", "queue", "awaiting", "projects"):
+        raise ToolError("모르는 URI입니다: %s" % (uri,))
+    q = parse_qs(u.query)
+    root = q["root"][0] if q.get("root") else None
+    h = unquote(u.path.lstrip("/")) or None
+    if u.netloc == "ticket" and not h:
+        raise ToolError("ticket URI에 해시가 없습니다: %s" % (uri,))
+    return u.netloc, h, root
+
+
+def _section(lines, end, head):
+    """`## <head>` 절의 본문 줄들. 다음 `## `에서 끝난다."""
+    out, on = [], False
+    for line in lines[end + 1:]:
+        if re.match(r"^##\s", line):
+            if on:
+                break
+            on = line.startswith("## " + head)
+            continue
+        if on:
+            out.append(line)
+    return out if on or out else None
+
+
+def _ticket_state(root, h):
+    """해시 -> (접미사, 경로). 같은 해시에 파일이 여럿이면 .done - .wip - 열림 순."""
+    f = stems(root, h)
+    for sfx in (DONE, IN_PROGRESS, ""):
+        if sfx in f:
+            return sfx, f[sfx]
+    raise ToolError("티켓을 못 찾음: %s" % h)
+
+
+def _iso(t):
+    return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def input_requests(items):
+    out = {}
+    for it in items:
+        opts = [o["letter"] for o in it["options"]]
+        msg = it["title"] + "".join("\n(%s) %s" % (o["letter"], o["label"]) for o in it["options"])
+        out["q" + it["number"].rstrip(".")] = {
+            "method": "elicitation/create",
+            "params": {"message": msg, "requestedSchema": {"type": "object", "properties": {
+                "letters": {"type": "array", "items": {"type": "string", "enum": opts}},
+                "note": {"type": "string"}}}}}
+    return out
+
+
+def responses_to_picks(responses):
+    """tasks/update의 inputResponses -> ticket_answer의 picks. 키 q<번호> -> 번호 `<번호>.`"""
+    if not isinstance(responses, dict):
+        raise ToolError("inputResponses는 객체여야 합니다")
+    picks = []
+    for k, v in responses.items():
+        m = re.match(r"q(\d+(?:-\d+)*)\Z", str(k))
+        if not m or not isinstance(v, dict):
+            raise ToolError("inputResponses 키가 올바르지 않습니다: %r" % (k,))
+        picks.append({"number": m.group(1) + ".", "letters": v.get("letters") or [], "note": v.get("note") or ""})
+    return picks
+
+
+def _result_of(root, h, path, lines, end):
+    sec = _section(lines, end, "결과")
+    text = "\n".join(sec).strip() if sec is not None else ""
+    T = _tickets()
+    follow = []
+    for p in T.tickets_in(root):
+        try:
+            fm = T.read_fm(p)[0]
+        except (OSError, UnicodeDecodeError):
+            continue
+        t = T.ticket_hash(p, fm)
+        if _unq(fm.get("req")) == h and t != h and t not in follow:
+            follow.append(t)
+    for t in HANDOFF_RE.findall(text):
+        if t != h and t not in follow:
+            follow.append(t)
+    uris = [ticket_uri(root, t) for t in follow]
+    state = {"hash": h, "state": "done", "result": text, "followups": uris}
+    return {"content": [{"type": "text", "text": text}] +
+                       [{"type": "resource_link", "uri": u, "name": u.split("?")[0].rsplit("/", 1)[-1]} for u in uris],
+            "structuredContent": state, "isError": False}
+
+
+def ticket_task(root, h):
+    """티켓 하나의 작업 상태. 파일만 읽는다(작업 표 없음). continued:는 끝까지 따라간다(순환은 멈춘다)."""
+    T = _tickets()
+    sfx, path = _ticket_state(root, h)
+    first_path, seen, mtime = path, {nfc(h)}, os.path.getmtime(path)
+    while True:
+        fm, lines, end = T.read_fm(path)
+        nxt = _unq(fm.get("continued"))
+        if sfx != DONE or not nxt or nfc(nxt) in seen:
+            break
+        try:
+            sfx, path = _ticket_state(root, nxt)
+        except ToolError:
+            break
+        seen.add(nfc(nxt))
+        mtime = max(mtime, os.path.getmtime(path))
+    last = T.ticket_hash(path, fm)
+    task = {"taskId": ticket_uri(root, h), "ticketHash": h}
+    if sfx == DONE:
+        task.update(status="completed", statusMessage="완료", result=_result_of(root, last, path, lines, end))
+    elif sfx == IN_PROGRESS:
+        blk = _section(lines, end, "블록")
+        first = next((x.strip() for x in blk or [] if x.strip()), "")
+        task.update(status="working", statusMessage=("막힘 - " + first) if first else "진행 중 - " + _unq(fm.get("owner")))
+    else:
+        row = next((r for r in awaiting_rows(root) if r[1] == path), None)
+        if row:
+            secs = question_sections("\n".join(lines[end + 1:]))
+            task.update(status="input_required", statusMessage=secs[-1][0] if secs else "질문",
+                        inputRequests=input_requests(question_items(secs[-1][1])) if secs else {})
+        else:
+            task.update(status="working", statusMessage="대기 - 아직 워커가 안 잡았다")
+    created = _unq(fm.get("assigned_at")) if path == first_path else ""
+    if not created:
+        st = os.stat(first_path)
+        created = _iso(getattr(st, "st_birthtime", st.st_mtime))
+    task.update(createdAt=created, lastUpdatedAt=_iso(mtime), ttlMs=None, pollIntervalMs=POLL_MS)
+    return task
+
+
+def _target(a):
+    """hash 또는 uri -> (root, hash)."""
+    if a.get("uri"):
+        kind, h, r = parse_uri(a["uri"])
+        if kind != "ticket":
+            raise ToolError("ticket URI가 아닙니다: %s" % a["uri"])
+        return get_root({"root": r or a.get("root")}), h
+    return get_root(a), a.get("hash")
+
+
+def t_ticket_status(a):
+    if a.get("hashes"):
+        root, out = get_root(a), []
+        for h in a["hashes"]:
+            try:
+                out.append(ticket_task(root, h))
+            except ToolError as e:
+                out.append({"ticketHash": h, "error": str(e)})
+        return {"tasks": out}
+    return ticket_task(*_target(a))
+
+
+def t_ticket_wait(a):
+    root, h = _target(a)
+    since = a.get("since")
+    try:
+        limit = min(max(float(a.get("timeout_s", 50)), 0), 300)
+    except (TypeError, ValueError):
+        raise ToolError("timeout_s가 숫자가 아닙니다")
+    end = time.monotonic() + limit
+    while True:
+        t = ticket_task(root, h)
+        if since is None or t["status"] != since or time.monotonic() >= end:
+            return {"changed": since is None or t["status"] != since, **t}
+        time.sleep(1)
+
+
 # ---------------------------------------------------------------- 도구 표
 
 def _s(desc, props=None, req=()):
@@ -850,6 +1029,10 @@ TOOLS = {
     "reap": ("스테일 티켓 회수(<w>.sh reap)", _s("", W), lambda a: worker_cmd(a, "reap")),
     "unassign": ("티켓 할당 풀기", _s("", {**H, **W, "force": BOOL}, ["hash"]), t_unassign),
     "ticket_find": ("해시로 티켓 경로 찾기(tickets.py find)", _s("", H, ["hash"]), t_ticket_find),
+    "ticket_status": ("티켓 작업 상태(working-input_required-completed). hash 또는 uri 또는 hashes",
+                      _s("", {**H, "uri": STR, "hashes": {"type": "array", "items": STR}}), t_ticket_status),
+    "ticket_wait": ("since 상태에서 바뀔 때까지(기본 50초, 상한 300) 기다려 {changed, ...작업 상태}",
+                    _s("", {**H, "uri": STR, "since": STR, "timeout_s": {"type": "number"}}), t_ticket_wait),
     "ticket_read": ("티켓 본문 전문", _s("", H, ["hash"]), t_ticket_read),
     "ticket_create": ("새 티켓 파일 만들기. 이미 있으면 실패",
                       _s("", {"hash": STR, "fm": {"type": "object"}, "body": STR}), t_ticket_create),
@@ -983,9 +1166,20 @@ def list_tools():
                  for n, t in _ops_tools().items()]
 
 
+LINKING = ("ticket_create", "ticket_answer", "dispatch_now")
+
+
+def _with_links(name, args, out):
+    """결정 5: 티켓을 만들거나 건드린 도구의 결과에 그 티켓 URI를 `_links`로 싣는다(mcp_server가 resource_link로 바꾼다)."""
+    if name in LINKING and isinstance(out, dict) and out.get("hash") and "error" not in out:
+        out["_links"] = [ticket_uri(get_root(args), out["hash"])]
+    return out
+
+
 def call_tool(name, args):
     if name in TOOLS:
-        return TOOLS[name][2](args or {})
+        args = args or {}
+        return _with_links(name, args, TOOLS[name][2](args))
     cfg, _ = _ops_cfg()
     if cfg:
         out = _ops_run(cfg, ["call", str(name)], json.dumps(args or {}), CALL_TIMEOUT)

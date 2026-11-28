@@ -297,7 +297,7 @@ assert open(os.path.join(root, "slim-checkout")).read().split("\n")[0] == "on"
 
 # 8. P559-3 실행기 전달: 가짜 실행기(파이썬 스크립트)
 base = len(rpc([INIT, LIST])[1]["result"]["tools"])
-assert base == 36, base  # 35 + ops_status
+assert base == 38, base  # 35 + ops_status + ticket_status + ticket_wait
 st, _ = call("ops_status")
 assert st["available"] is False and "앱" in st["error"], st
 assert call("nope_tool")[1]
