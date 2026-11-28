@@ -191,7 +191,7 @@ def case_source_time():
 코드 디렉터리마다 tick.sh 사본과 source-time 파일을 두고 같은 임시 HOME에서 dryrun으로 돌린다.
 """
     HERE = os.path.dirname(os.path.abspath(__file__))
-    FILES = "mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py dispatch.py slim.py".split()
+    FILES = "mcp_server.py mcp_tools.py tickets.py graph.py learn.py remote.py ontology_read.py dispatch.py slim.py session_digest.py".split()
 
 
     def mkcode(tmp, name, stamp):
