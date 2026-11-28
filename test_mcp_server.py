@@ -346,7 +346,8 @@ mcp_src = open(os.path.join(HERE, "mcp_tools.py")).read()
 assert "LIST_TIMEOUT, CALL_TIMEOUT = 20, 300" in mcp_src
 
 # P571-1: 이전 규격 응답 불변 + 2026-07-28 경로
-assert out[0]["result"] == {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}, "resources": {}},
+assert out[0]["result"] == {"protocolVersion": "2025-06-18", "capabilities": {"tools": {"listChanged": True},
+                                             "resources": {"subscribe": True, "listChanged": True}},
                             "serverInfo": {"name": "dira-engine", "version": "1"}}, out[0]
 assert set(out[1]["result"]) == {"tools"}, "이전 규격 tools/list에 새 키가 붙으면 안 된다"
 V = lambda v: {"protocolVersion": v, "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}
@@ -393,6 +394,145 @@ for meta in (None, {M: "2026-07-28"}):
     assert {k: v for k, v in t.items() if k in ts} == ts and t["title"] == "rt" and t["kind"] == "work", t
     for bad in ("dira://nope", "http://x", "dira://ticket/zzzzzzzz?root=" + quote(root, safe=""), "dira://ticket/"):
         assert R("resources/read", uri=bad)["error"]["code"] == -32602, bad
+
+# P571-4: 구독
+import http.client  # noqa: E402
+import queue  # noqa: E402
+import threading  # noqa: E402
+sys.path.insert(0, HERE)
+import mcp_server  # noqa: E402
+assert not [t for t in threading.enumerate() if t.name == "mcp-watch"], "구독 없이 감시 스레드가 돈다"
+mcp_server.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+assert not [t for t in threading.enumerate() if t.name == "mcp-watch"], "구독 없이 감시 스레드가 돈다"
+LOCAL_ = os.path.join(tmp, "local")
+senv = dict(env, DIRA_MCP_WATCH_S="0.5")
+
+
+def next_note(q, method, timeout=5):
+    end = time.time() + timeout
+    while time.time() < end:
+        try:
+            m = q.get(timeout=max(0.05, end - time.time()))
+        except queue.Empty:
+            break
+        if m.get("method") == method:
+            return m
+    raise AssertionError("알림 %s 없음" % method)
+
+
+def gather(q, methods, timeout=5):
+    got, end = {}, time.time() + timeout
+    while set(methods) - set(got) and time.time() < end:
+        try:
+            m = q.get(timeout=0.2)
+        except queue.Empty:
+            continue
+        got[m.get("method")] = m
+    assert set(methods) <= set(got), (methods, got)
+    return got
+
+
+def reader(stream):
+    q = queue.Queue()
+
+    def run():
+        for ln in stream:
+            ln = (ln.decode() if isinstance(ln, bytes) else ln).strip()
+            if ln.startswith("data: "):
+                ln = ln[6:]
+            if ln.startswith("{"):
+                q.put(json.loads(ln))
+    threading.Thread(target=run, daemon=True).start()
+    return q
+
+
+def churn(tag):
+    """티켓 rename, ops.json 생성, 등록부 변경을 한 번씩 낸다."""
+    for n in os.listdir(os.path.join(root, "tickets")):
+        if n.startswith("feed0001"):
+            os.rename(os.path.join(root, "tickets", n), os.path.join(root, "tickets", "feed0001.wip.md" if n == "feed0001.md" else "feed0001.md"))
+    open(os.path.join(LOCAL_, "ops.json"), "w").write(json.dumps({"tag": tag}))
+    reg_ = os.path.join(LOCAL_, "gui-projects.json")
+    d_ = json.load(open(reg_))
+    d_["projects"][0]["name"] = "Renamed" + tag
+    open(reg_, "w").write(json.dumps(d_))
+
+
+for tag, first in (("old", dict(INIT)), ("new", None)):
+    sp = subprocess.Popen([sys.executable, SERVER], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=senv)
+    q = reader(sp.stdout)
+
+    def send(m):
+        sp.stdin.write(json.dumps(m) + "\n")
+        sp.stdin.flush()
+    try:
+        if first:
+            send(first)
+            assert q.get(timeout=5)["result"]["capabilities"]["resources"]["subscribe"]
+            send({"jsonrpc": "2.0", "id": 2, "method": "resources/subscribe", "params": {"uri": turl}})
+            assert q.get(timeout=5)["result"] == {}
+            send({"jsonrpc": "2.0", "id": 3, "method": "resources/subscribe", "params": {"uri": "dira://nope"}})
+            assert q.get(timeout=5)["error"]["code"] == -32602
+        else:
+            send({"jsonrpc": "2.0", "id": 2, "method": "subscriptions/listen", "params": {
+                "_meta": {M: "2026-07-28"}, "notifications": {
+                    "toolsListChanged": True, "resourcesListChanged": True,
+                    "resourceSubscriptions": [turl, "dira://nope"], "taskIds": [turl]}}})
+            ack = q.get(timeout=5)
+            assert ack["method"] == "notifications/subscriptions/acknowledged", ack
+            assert ack["params"]["notifications"] == {"toolsListChanged": True, "resourcesListChanged": True,
+                                                       "resourceSubscriptions": [turl]}, ack
+            assert ack["params"]["_meta"][mcp_server.SUBID] == "2", ack
+        time.sleep(1)
+        churn(tag)
+        got = gather(q, ["notifications/resources/updated", "notifications/tools/list_changed",
+                         "notifications/resources/list_changed"])
+        assert got["notifications/resources/updated"]["params"]["uri"] == turl, got
+        for m in got.values():
+            sid = m["params"].get("_meta", {}).get(mcp_server.SUBID)
+            assert sid == (None if first else "2"), (tag, m)
+        if not first:
+            send({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 2}})
+            send({"jsonrpc": "2.0", "id": 3, "method": "ping", "params": {"_meta": {M: "2026-07-28"}}})
+            assert q.get(timeout=5)["id"] == 3
+    finally:
+        sp.stdin.close()
+        sp.wait(timeout=10)
+
+# HTTP SSE
+srv = subprocess.Popen([sys.executable, SERVER, "--http", "127.0.0.1:0"], stdout=subprocess.PIPE, text=True, env=senv)
+try:
+    ready = json.loads(srv.stdout.readline())
+    host, port = ready["url"].split("//")[1].split("/")[0].split(":")
+    hdr = {"Authorization": "Bearer " + ready["token"], "Content-Type": "application/json"}
+    c = http.client.HTTPConnection(host, int(port), timeout=10)
+    c.request("POST", "/mcp", json.dumps({"jsonrpc": "2.0", "id": 7, "method": "subscriptions/listen", "params": {
+        "_meta": {M: "2026-07-28"}, "notifications": {"resourcesListChanged": True, "resourceSubscriptions": [turl]}}}), hdr)
+    resp = c.getresponse()
+    assert resp.status == 200 and resp.getheader("Content-Type") == "text/event-stream", resp.getheaders()
+    q = reader(resp)
+    assert next_note(q, "notifications/subscriptions/acknowledged")["params"]["_meta"][mcp_server.SUBID] == "7"
+    c2 = http.client.HTTPConnection(host, int(port), timeout=10)
+    c2.request("POST", "/mcp", json.dumps({"jsonrpc": "2.0", "id": 8, "method": "tools/list"}), hdr)
+    r2 = c2.getresponse()
+    assert r2.status == 200 and r2.getheader("Content-Type") == "application/json" and json.loads(r2.read())["result"]["tools"]
+    time.sleep(1)
+    churn("http")
+    got = gather(q, ["notifications/resources/updated", "notifications/resources/list_changed"])
+    assert got["notifications/resources/updated"]["params"]["uri"] == turl
+    c.close()
+    h0 = http.client.HTTPConnection(host, int(port), timeout=10)
+    h0.request("POST", "/mcp", json.dumps(dict(INIT)), hdr)
+    assert "listChanged" not in json.dumps(json.loads(h0.getresponse().read())["result"]["capabilities"])
+finally:
+    srv.kill()
+
+# 구독을 지우면 감시 스레드도 끝난다
+sub_ = mcp_server.add_sub({"id": "x", "sink": lambda m: None, "tools": True, "list": True, "uris": []})
+assert [t for t in threading.enumerate() if t.name == "mcp-watch"]
+mcp_server.drop(sub_)
+time.sleep(mcp_server.WATCH_S + 1)
+assert not [t for t in threading.enumerate() if t.name == "mcp-watch"], "구독이 없는데 스레드가 남았다"
 
 diff = subprocess.run(["git", "diff", "master", "--", "tickets.py"], cwd=HERE, capture_output=True,
                       text=True).stdout

@@ -15,6 +15,7 @@ import os
 import secrets
 import sys
 import threading
+import time
 import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
@@ -26,7 +27,12 @@ OLD_VERSIONS = ("2025-06-18", "2025-11-25")  # initialize 협상 대상
 STATELESS = "2026-07-28"
 SUPPORTED = (STATELESS,) + OLD_VERSIONS
 META_VERSION = "io.modelcontextprotocol/protocolVersion"
-CAPS = {"tools": {}, "resources": {}}  # ponytail: subscribe - listChanged는 P571-4
+CAPS = {"tools": {}, "resources": {}}  # 이전 규격 HTTP. stdio는 CAPS_STDIO
+CAPS_STDIO = {"tools": {"listChanged": True}, "resources": {"subscribe": True, "listChanged": True}}
+CAPS_NEW = CAPS_STDIO  # 2026-07-28은 subscriptions/listen이 두 전송 모두에 있다
+STDIO = False
+SUBID = "io.modelcontextprotocol/subscriptionId"
+WATCH_S = float(os.environ.get("DIRA_MCP_WATCH_S") or 2)
 SERVER_INFO = {"name": "dira-engine", "version": "1"}
 _out_lock = threading.Lock()  # stdio 쓰기는 write_line 하나로 모아 응답과 알림이 섞여도 줄이 깨지지 않게 한다
 JSON_MIME = "application/json"
@@ -60,14 +66,14 @@ def handle(msg):
     if method == "initialize":
         want = p.get("protocolVersion") if isinstance(p, dict) else None
         return reply(i, {"protocolVersion": want if want in OLD_VERSIONS else PROTOCOL,
-                         "capabilities": CAPS, "serverInfo": SERVER_INFO})
+                         "capabilities": CAPS_STDIO if STDIO else CAPS, "serverInfo": SERVER_INFO})
     if ver is None and method != "server/discover":
         return handle_old(i, method, p)
     if ver is not None and ver != STATELESS:
         return reply(i, error={"code": -32022, "message": "Unsupported protocol version: %s" % ver,
                                "data": {"supported": list(SUPPORTED)}})
     r = handle_old(i, method, p) if method != "server/discover" else reply(i, {
-        "supportedVersions": list(SUPPORTED), "capabilities": CAPS, "serverInfo": SERVER_INFO})
+        "supportedVersions": list(SUPPORTED), "capabilities": CAPS_NEW, "serverInfo": SERVER_INFO})
     if "result" in r:
         r["result"]["resultType"] = "complete"
         r["result"].setdefault("_meta", {})["serverInfo"] = SERVER_INFO
@@ -91,6 +97,13 @@ def handle_old(i, method, p):
         content = [{"type": "text", "text": json.dumps(out, ensure_ascii=False)}]
         content += [{"type": "resource_link", "uri": u, "name": u.split("?")[0].rsplit("/", 1)[-1]} for u in links or []]
         return reply(i, {"content": content, "isError": err})
+    if method in ("resources/subscribe", "resources/unsubscribe") and STDIO:
+        try:
+            mcp_tools.parse_uri(p.get("uri"))
+        except mcp_tools.ToolError as e:
+            return reply(i, error={"code": -32602, "message": str(e)})
+        old_subscribe(p["uri"], method == "resources/subscribe")
+        return reply(i, {})
     if method == "resources/list":
         return reply(i, {"resources": resources_list()})
     if method == "resources/templates/list":
@@ -135,6 +148,177 @@ def resource_read(uri):
     return {"uri": uri, "mimeType": JSON_MIME, "text": json.dumps(out, ensure_ascii=False)}
 
 
+# ---------------------------------------------------------------- 구독과 감시 스레드 (P571 결정 6)
+# ponytail: 2초마다 전량 재서명(파일 mtime - 목록 JSON). 큐가 아주 커지면 inotify/FSEvents.
+_subs, _subs_lock, _thread = {}, threading.Lock(), None
+_memo = {}
+
+
+def _stat_sig(path, whole=False):
+    try:
+        if whole:
+            with open(path, "rb") as f:
+                return f.read()
+        st = os.stat(path)
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
+def signature(key):
+    """key: 'ops' | 'projects' | dira:// URI -> 바뀌면 달라지는 값."""
+    if key in _memo:
+        return _memo[key]
+    local = mcp_tools._local()
+    try:
+        if key == "ops":
+            v = _stat_sig(os.path.join(local, "ops.json"), True)
+        elif key == "projects" or key == "dira://projects":
+            v = _stat_sig(os.path.join(local, "gui-projects.json"), True)
+        else:
+            kind, h, root = mcp_tools.parse_uri(key)
+            if kind == "awaiting":
+                a = mcp_tools.t_awaiting_list({"root": root} if root else {})
+                v = json.dumps([(r["root"], r["hash"], r["awaiting"], r["round"]) for r in a["awaiting"]])
+            else:
+                tdir = os.path.join(mcp_tools.get_root({"root": root}), "tickets")
+                names = sorted(os.listdir(tdir))
+                if kind == "queue":
+                    v = names
+                else:
+                    v = [(n, _stat_sig(os.path.join(tdir, n))) for n in names
+                         if mcp_tools.nfc(n).startswith(mcp_tools.nfc(h))]
+    except (mcp_tools.ToolError, OSError) as e:
+        v = "err:%s" % e
+    _memo[key] = v
+    return v
+
+
+def _note(sub, method, params=None):
+    params = dict(params or {})
+    if sub["id"] is not None:
+        params["_meta"] = {SUBID: sub["id"]}
+    return {"jsonrpc": "2.0", "method": method, "params": params}
+
+
+def _push(sub, msg):
+    try:
+        sub["sink"](msg)
+        return True
+    except Exception:
+        drop(sub)
+        return False
+
+
+def _tick():
+    _memo.clear()
+    with _subs_lock:
+        subs = list(_subs.values())
+    for sub in subs:
+        if sub.get("sse"):
+            try:
+                sub["heartbeat"]()
+            except Exception:
+                drop(sub)
+                continue
+        for key in ["ops", "projects"] + list(sub["uris"]):
+            now = signature(key)
+            if sub["sig"].get(key, now) == now:
+                sub["sig"][key] = now
+                continue
+            sub["sig"][key] = now
+            if key == "ops":
+                if sub["tools"]:
+                    _push(sub, _note(sub, "notifications/tools/list_changed"))
+            else:
+                if key == "projects" and sub["list"]:
+                    _push(sub, _note(sub, "notifications/resources/list_changed"))
+                if key in sub["uris"]:
+                    _push(sub, _note(sub, "notifications/resources/updated", {"uri": key}))
+
+
+def _watch():
+    global _thread
+    while True:
+        time.sleep(WATCH_S)
+        with _subs_lock:
+            if not _subs:
+                _thread = None
+                return
+        try:
+            _tick()
+        except Exception:
+            pass  # 감시 한 바퀴의 실패가 구독을 끊지 않는다
+
+
+def add_sub(sub):
+    global _thread
+    _memo.clear()
+    sub["sig"] = {k: signature(k) for k in ["ops", "projects"] + list(sub["uris"])}
+    sub["done"] = threading.Event()
+    with _subs_lock:
+        _subs[id(sub)] = sub
+        if _thread is None:
+            _thread = threading.Thread(target=_watch, name="mcp-watch", daemon=True)
+            _thread.start()
+    return sub
+
+
+def drop(sub):
+    with _subs_lock:
+        _subs.pop(id(sub), None)
+    sub["done"].set()
+
+
+_old = None  # 이전 규격 stdio 구독 하나(연결이 곧 세션)
+
+
+def old_subscribe(uri, on):
+    global _old
+    if _old is None:
+        if not on:
+            return
+        _old = add_sub({"id": None, "sink": write_line, "tools": True, "list": True, "uris": []})
+    if on and uri not in _old["uris"]:
+        _old["uris"].append(uri)
+        _memo.clear()
+        _old["sig"][uri] = signature(uri)
+    elif not on and uri in _old["uris"]:
+        _old["uris"].remove(uri)
+        _old["sig"].pop(uri, None)
+
+
+def listen(msg, sink):
+    """2026-07-28 subscriptions/listen -> 구독 dict(등록됨) 또는 오류 응답 dict."""
+    p = msg.get("params") or {}
+    n = p.get("notifications") if isinstance(p.get("notifications"), dict) else {}
+    uris = []
+    for u in n.get("resourceSubscriptions") or []:
+        try:
+            mcp_tools.parse_uri(u)
+            uris.append(u)
+        except mcp_tools.ToolError:
+            pass  # 지원하는 부분만 acknowledged에 돌려준다
+    ack = {}
+    if n.get("toolsListChanged"):
+        ack["toolsListChanged"] = True
+    if n.get("resourcesListChanged"):
+        ack["resourcesListChanged"] = True
+    if uris:
+        ack["resourceSubscriptions"] = uris
+    sub = {"id": str(msg["id"]), "rid": msg["id"], "sink": sink, "tools": bool(ack.get("toolsListChanged")),
+           "list": bool(ack.get("resourcesListChanged")), "uris": uris}
+    sink(_note(sub, "notifications/subscriptions/acknowledged", {"notifications": ack}))
+    return add_sub(sub)
+
+
+def is_listen(msg):
+    p = msg.get("params") if isinstance(msg, dict) else None
+    meta = p.get("_meta") if isinstance(p, dict) else None
+    return (isinstance(msg, dict) and msg.get("method") == "subscriptions/listen" and "id" in msg
+            and isinstance(meta, dict) and meta.get(META_VERSION) == STATELESS)
+
+
 def handle_text(text):
     try:
         data = json.loads(text)
@@ -147,11 +331,30 @@ def handle_text(text):
 
 
 def serve_stdio():
+    global STDIO
+    STDIO = True
+    listens = {}
     for line in sys.stdin:
-        if line.strip():
-            r = handle_text(line)
-            if r is not None:
-                write_line(r)
+        if not line.strip():
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            msg = None
+        if is_listen(msg):
+            listens[msg["id"]] = listen(msg, write_line)
+            continue
+        if isinstance(msg, dict) and msg.get("method") == "notifications/cancelled":
+            sub = listens.pop((msg.get("params") or {}).get("requestId"), None)
+            if sub:
+                drop(sub)
+            continue
+        r = handle_text(line)
+        if r is not None:
+            write_line(r)
+    for rid, sub in listens.items():  # 서버가 끝낼 때는 원래 요청에 complete로 답한다
+        drop(sub)
+        write_line(reply(rid, {"resultType": "complete"}))
 
 
 def origin_ok(origin):
@@ -183,10 +386,33 @@ def make_handler(token):
             n = int(self.headers.get("Content-Length") or 0)
             if n > MAX_BODY:
                 return self.send(413, b'{"error":"too large"}')
-            r = handle_text(self.rfile.read(n).decode("utf-8", "replace"))
+            body = self.rfile.read(n).decode("utf-8", "replace")
+            try:
+                msg = json.loads(body)
+            except ValueError:
+                msg = None
+            if is_listen(msg):
+                return self.stream(msg)
+            r = handle_text(body)
             if r is None:
                 return self.send(202)
             self.send(200, json.dumps(r, ensure_ascii=False).encode())
+
+        def stream(self, msg):
+            """subscriptions/listen: 이 POST의 응답을 SSE로 열어 둔다. 연결이 닫히면(쓰기 실패) 구독도 끝난다."""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
+
+            def out(data):
+                self.wfile.write(data)
+                self.wfile.flush()
+            sub = listen(msg, lambda m: out(b"data: " + json.dumps(m, ensure_ascii=False).encode() + b"\n\n"))
+            sub["sse"], sub["heartbeat"] = True, lambda: out(b": ping\n\n")
+            sub["done"].wait()
 
         do_GET = do_DELETE = lambda self: self.send(405, b'{"error":"method not allowed"}')
 
