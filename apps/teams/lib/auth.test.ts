@@ -301,7 +301,7 @@ test("startSetup — 토큰 다음 줄에 CHA로 이어 붙은 안내문이 와�
   process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-nextline-"));
   const TOKEN = "sk-ant-oat01-" + "x".repeat(188); // 200자
   const WORDS = ["Store", "this", "token", "securely.", "You", "won"];
-  const GLUED = WORDS.map((w, k) => `\\033[${k + 1}G${w}`).join("");
+  const GLUED = WORDS.map((w, k) => (k === 0 ? w : `\\033[${k + 1}G${w}`)).join("");
   stubClaude(
     `printf 'Your OAuth token (valid for 1 year):\\r\\n\\r\\n${TOKEN}\\r\\n\\r\\n${GLUED}\\r\\n'\nsleep 60`,
   );
