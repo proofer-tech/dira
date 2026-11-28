@@ -26,8 +26,10 @@ OLD_VERSIONS = ("2025-06-18", "2025-11-25")  # initialize 협상 대상
 STATELESS = "2026-07-28"
 SUPPORTED = (STATELESS,) + OLD_VERSIONS
 META_VERSION = "io.modelcontextprotocol/protocolVersion"
+CAPS = {"tools": {}, "resources": {}}  # ponytail: subscribe - listChanged는 P571-4
 SERVER_INFO = {"name": "dira-engine", "version": "1"}
 _out_lock = threading.Lock()  # stdio 쓰기는 write_line 하나로 모아 응답과 알림이 섞여도 줄이 깨지지 않게 한다
+JSON_MIME = "application/json"
 MAX_BODY = 8 * 1024 * 1024
 
 
@@ -58,14 +60,14 @@ def handle(msg):
     if method == "initialize":
         want = p.get("protocolVersion") if isinstance(p, dict) else None
         return reply(i, {"protocolVersion": want if want in OLD_VERSIONS else PROTOCOL,
-                         "capabilities": {"tools": {}}, "serverInfo": SERVER_INFO})
+                         "capabilities": CAPS, "serverInfo": SERVER_INFO})
     if ver is None and method != "server/discover":
         return handle_old(i, method, p)
     if ver is not None and ver != STATELESS:
         return reply(i, error={"code": -32022, "message": "Unsupported protocol version: %s" % ver,
                                "data": {"supported": list(SUPPORTED)}})
     r = handle_old(i, method, p) if method != "server/discover" else reply(i, {
-        "supportedVersions": list(SUPPORTED), "capabilities": {"tools": {}}, "serverInfo": SERVER_INFO})
+        "supportedVersions": list(SUPPORTED), "capabilities": CAPS, "serverInfo": SERVER_INFO})
     if "result" in r:
         r["result"]["resultType"] = "complete"
         r["result"].setdefault("_meta", {})["serverInfo"] = SERVER_INFO
@@ -89,7 +91,48 @@ def handle_old(i, method, p):
         content = [{"type": "text", "text": json.dumps(out, ensure_ascii=False)}]
         content += [{"type": "resource_link", "uri": u, "name": u.split("?")[0].rsplit("/", 1)[-1]} for u in links or []]
         return reply(i, {"content": content, "isError": err})
+    if method == "resources/list":
+        return reply(i, {"resources": resources_list()})
+    if method == "resources/templates/list":
+        return reply(i, {"resourceTemplates": [{"uriTemplate": "dira://ticket/{hash}{?root}", "name": "ticket",
+                                                "mimeType": JSON_MIME}]})
+    if method == "resources/read":
+        try:
+            return reply(i, {"contents": [resource_read(p.get("uri"))]})
+        except ValueError as e:
+            return reply(i, error={"code": -32602, "message": str(e)})
     return reply(i, error={"code": -32601, "message": "Method not found: %s" % method})
+
+
+def resources_list():
+    from urllib.parse import quote
+    rs = [{"uri": "dira://awaiting", "name": "awaiting", "mimeType": JSON_MIME},
+          {"uri": "dira://projects", "name": "projects", "mimeType": JSON_MIME}]
+    for pr in mcp_tools.t_projects({})["projects"]:
+        if pr.get("root"):
+            rs.append({"uri": "dira://queue?root=" + quote(pr["root"], safe=""),
+                       "name": "queue " + str(pr.get("name") or pr.get("id") or pr["root"]), "mimeType": JSON_MIME})
+    return rs
+
+
+def resource_read(uri):
+    try:
+        kind, h, root = mcp_tools.parse_uri(uri)
+        if kind == "projects":
+            out = mcp_tools.t_projects({})
+        elif kind == "awaiting":
+            out = mcp_tools.t_awaiting_list({"root": root} if root else {})
+        elif kind == "queue":
+            out = mcp_tools.t_queue_list({"root": root} if root else {})
+        else:
+            root = mcp_tools.get_root({"root": root})
+            out = mcp_tools.ticket_task(root, h)
+            fm = mcp_tools._tickets().read_fm(mcp_tools._ticket_state(root, h)[1])[0]
+            for k in ("title", "kind", "persona", "owner"):
+                out[k] = mcp_tools._unq(fm.get(k))
+    except mcp_tools.ToolError as e:
+        raise ValueError(str(e))
+    return {"uri": uri, "mimeType": JSON_MIME, "text": json.dumps(out, ensure_ascii=False)}
 
 
 def handle_text(text):

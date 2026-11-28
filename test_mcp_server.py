@@ -346,7 +346,7 @@ mcp_src = open(os.path.join(HERE, "mcp_tools.py")).read()
 assert "LIST_TIMEOUT, CALL_TIMEOUT = 20, 300" in mcp_src
 
 # P571-1: 이전 규격 응답 불변 + 2026-07-28 경로
-assert out[0]["result"] == {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}},
+assert out[0]["result"] == {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}, "resources": {}},
                             "serverInfo": {"name": "dira-engine", "version": "1"}}, out[0]
 assert set(out[1]["result"]) == {"tools"}, "이전 규격 tools/list에 새 키가 붙으면 안 된다"
 V = lambda v: {"protocolVersion": v, "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}
@@ -360,6 +360,39 @@ r = rpc([{"jsonrpc": "2.0", "id": 6, "method": "tools/list", "params": {"_meta":
 assert r["resultType"] == "complete" and r["_meta"]["serverInfo"]["name"] == "dira-engine" and r["tools"], r
 e = rpc([{"jsonrpc": "2.0", "id": 7, "method": "tools/list", "params": {"_meta": {M: "1999-01-01"}}}])[0]
 assert e["error"]["code"] == -32022, e
+
+# P571-3: 리소스
+from urllib.parse import quote  # noqa: E402
+call("ticket_create", hash="feed0001", fm={"title": "rt", "kind": "work", "persona": "developer"}, body="## Goal\nx")
+call("project_register", path=mkq("pr"), name="Res")
+prj = call("projects")[0]["projects"]
+qroot = next(p["root"] for p in prj if p["name"] == "Res")
+qurl = "dira://queue?root=" + quote(qroot, safe="")
+turl = "dira://ticket/feed0001?root=" + quote(root, safe="")
+for meta in (None, {M: "2026-07-28"}):
+    def R(method, **pa):
+        if meta:
+            pa["_meta"] = meta
+        return rpc([{"jsonrpc": "2.0", "id": 11, "method": method, "params": pa}])[0]
+    lst = R("resources/list")["result"]["resources"]
+    uris = [x["uri"] for x in lst]
+    assert uris[:2] == ["dira://awaiting", "dira://projects"] and qurl in uris, uris
+    assert all(x["mimeType"] == "application/json" for x in lst), lst
+    tl = R("resources/templates/list")["result"]["resourceTemplates"]
+    assert [t["uriTemplate"] for t in tl] == ["dira://ticket/{hash}{?root}"], tl
+
+    def read(u):
+        c = R("resources/read", uri=u)["result"]["contents"][0]
+        assert c["uri"] == u and c["mimeType"] == "application/json", c
+        return json.loads(c["text"])
+    assert read("dira://projects") == call("projects", root=root)[0]
+    assert read("dira://awaiting") == call("awaiting_list", root="")[0]
+    assert read(qurl) == call("queue_list", root=qroot)[0]
+    t = read(turl)
+    ts = call("ticket_status", hash="feed0001")[0]
+    assert {k: v for k, v in t.items() if k in ts} == ts and t["title"] == "rt" and t["kind"] == "work", t
+    for bad in ("dira://nope", "http://x", "dira://ticket/zzzzzzzz?root=" + quote(root, safe=""), "dira://ticket/"):
+        assert R("resources/read", uri=bad)["error"]["code"] == -32602, bad
 
 diff = subprocess.run(["git", "diff", "master", "--", "tickets.py"], cwd=HERE, capture_output=True,
                       text=True).stdout
