@@ -134,9 +134,12 @@ export function OntologyMap({ graph, projectId, sidebarOff }: { graph: OntologyG
 
   // 배치 - 화면 밖에서 수렴시킨 뒤 정지 상태로 처음 그린다(모션 예외를 안 연다, §80 (11)).
   const sim = useRef({ pos: [] as Point[], pairs: [] as [number, number][], pinned: new Set<number>(), vel: [] as Point[], alpha: 0, raf: 0, dragging: false });
-  const [pos, setPos] = useState<Point[] | null>(null);
+  // 좌표는 계산에 쓴 nodes/edges와 함께 둔다 - 그래프가 바뀐 직후 렌더에 옛 좌표로 새 노드를 그리지 않는다.
+  const [laidOut, setLaidOut] = useState<{ pos: Point[]; nodes: GraphNode[]; edges: typeof edges } | null>(null);
+  const pos = laidOut && laidOut.nodes === nodes && laidOut.edges === edges ? laidOut.pos : null;
   const ready = pos !== null;
   const [, setTick] = useState(0);
+  const [userView, setView] = useState<View | null>(null);
   useEffect(() => {
     const pairs = edges.map((e) => [e.source, e.target] as [number, number]);
     const id = setTimeout(() => {
@@ -145,7 +148,8 @@ export function OntologyMap({ graph, projectId, sidebarOff }: { graph: OntologyG
       const laid = nodes.length ? layoutGraph(nodes.length, pairs, { seed: 1 }) : initialLayout(0);
       sim.current.pos = laid;
       sim.current.vel = laid.map(() => ({ x: 0, y: 0 }));
-      setPos(laid);
+      setLaidOut({ pos: laid, nodes, edges });
+      setView(null);
     }, 0);
     return () => clearTimeout(id);
   }, [nodes, edges]);
@@ -172,7 +176,6 @@ export function OntologyMap({ graph, projectId, sidebarOff }: { graph: OntologyG
   // 화면 맞춤 - 처음 한 번, 안쪽 여백 24px, 0.25~1.5로 자른다.
   const box = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
-  const [userView, setView] = useState<View | null>(null);
   useEffect(() => {
     const el = box.current;
     if (!el) return;
