@@ -9033,8 +9033,8 @@ timeout 인자 없이 실행하게 했다. 모델은 haiku였다.
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P573-1 | 결정 1: 홈 대화 `claude` 환경에 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` + 그 값이 들어가는지 보는 단위 테스트(환경 조립을 순수 함수로 빼도 된다) | developer | - | 발행 대기 |
-| P573-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P573-1 | 발행 대기 |
+| P573-1 | 결정 1: 홈 대화 `claude` 환경에 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` + 그 값이 들어가는지 보는 단위 테스트(환경 조립을 순수 함수로 빼도 된다) | developer | - | 발행 `e0a49e25` |
+| P573-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P573-1 | 발행 `5a7bfe61` |
 
 #### 수용조건
 
