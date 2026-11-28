@@ -111,4 +111,68 @@ assert len(out.encode()) <= 20000 and "(전체 200건 생략" in out and tok not
 # 4. 못 찾음: 종료 코드 0, 한 줄과 찾아본 디렉터리
 out = digest("cccc3333")
 assert out.startswith("세션 기록을 찾지 못했다") and pdir in out, out
+
+# 5. grok updates.jsonl와 codex rollout (P572-2): 같은 머리 - 도중 입력 - 도구 호출 - 마지막 응답
+import shutil
+shutil.rmtree(pdir)
+from urllib.parse import quote
+gdir = os.path.join(home, ".grok", "sessions", quote(os.path.abspath(wt), safe="!~*'()"), "gsid-1")
+os.makedirs(gdir)
+
+
+def gk(ts, upd):
+    return {"timestamp": ts, "params": {"update": upd}}
+
+
+def chunk(kind, text):
+    return {"sessionUpdate": kind, "content": {"type": "text", "text": text}}
+
+
+G = [gk(1000, chunk("user_message_chunk", (FMT % H)[:20])), gk(1000, chunk("user_message_chunk", (FMT % H)[20:])),
+     gk(1001, {"sessionUpdate": "tool_call", "toolCallId": "c1", "rawInput": {"file_path": "/g/a.py"},
+               "_meta": {"x.ai/tool": {"label": "Write"}}}),
+     gk(1002, {"sessionUpdate": "tool_call_update", "toolCallId": "c1", "status": "failed",
+               "content": [{"type": "content", "content": {"type": "text", "text": "oops"}}]}),
+     gk(1003, chunk("user_message_chunk", "grok 참견")),
+     gk(1004, chunk("agent_message_chunk", "grok 마지막 ")), gk(1004, chunk("agent_message_chunk", "응답")),
+     gk(1005, {"sessionUpdate": "hook_execution"}),
+     gk(1006, chunk("user_message_chunk", FMT % OTHER)), gk(1007, chunk("agent_message_chunk", "남의 응답"))]
+with open(os.path.join(gdir, "updates.jsonl"), "w") as f:
+    f.write("".join(json.dumps(r) + "\n" for r in G))
+out = digest()
+assert out.count("## 회차 ") == 1 and "grok session_id=gsid-1" in out, out
+assert "[참견] grok 참견" in out and "Write: /g/a.py (실패)" in out and "grok 마지막 응답" in out, out
+assert "남의 응답" not in out and "1970-01-01T00:16:40Z" in out, out
+
+shutil.rmtree(os.path.join(home, ".grok"))
+cdir = os.path.join(tmp, "codexhome", "sessions", "2026", "11", "28")
+os.makedirs(cdir)
+os.environ["CODEX_HOME"] = os.path.join(tmp, "codexhome")
+
+
+def cx(ts, payload, typ="response_item"):
+    return {"timestamp": ts, "type": typ, "payload": payload}
+
+
+def msg(role, text):
+    return {"type": "message", "role": role, "content": [{"type": "input_text" if role == "user" else "output_text",
+                                                          "text": text}]}
+
+
+C = [cx("2026-11-28T11:00:00Z", {"cwd": wt, "id": "x"}, "session_meta"),
+     cx("2026-11-28T11:00:01Z", msg("user", FMT % H)),
+     cx("2026-11-28T11:00:02Z", {"type": "function_call", "name": "shell", "call_id": "k1",
+                                  "arguments": json.dumps({"command": ["ls"]})}),
+     cx("2026-11-28T11:00:03Z", {"type": "function_call_output", "call_id": "k1", "output": "ok"}),
+     cx("2026-11-28T11:00:04Z", msg("user", "codex 참견")),
+     cx("2026-11-28T11:00:05Z", {"type": "reasoning", "summary": []}),
+     cx("2026-11-28T11:00:06Z", msg("assistant", "codex 마지막 응답")),
+     cx("2026-11-28T11:00:07Z", msg("user", FMT % OTHER)), cx("2026-11-28T11:00:08Z", msg("assistant", "남의 응답"))]
+with open(os.path.join(cdir, "rollout-2026-11-28T11-00-00-abc.jsonl"), "w") as f:
+    f.write("".join(json.dumps(r) + "\n" for r in C))
+out = digest()
+assert out.count("## 회차 ") == 1 and "codex session_id=rollout-" in out, out
+assert "[참견] codex 참견" in out and 'shell: {"command": ["ls"]}' in out and "codex 마지막 응답" in out, out
+assert "남의 응답" not in out and "2026-11-28T11:00:01Z" in out, out
+
 print("OK")

@@ -4,7 +4,8 @@
     python3 session_digest.py <큐 루트> <대상 해시>
 
 기록을 읽기만 한다. 표준 라이브러리만 쓴다. 이 파일은 claude 기록 갈래다. grok - codex는 fold()가
-레코드를 claude 모양으로 접게 되면 같은 요약기를 탄다(P572-2).
+레코드를 claude 모양으로 접은 뒤 같은 요약기를 탄다(P572-2). 형식 해석 근거는
+apps/teams/lib/transcript.ts의 grokRecord와 codexRecord다.
 회차가 없으면 한 줄과 찾아본 디렉터리를 내고 종료 코드 0이다.
 """
 import glob
@@ -13,6 +14,8 @@ import os
 import re
 import sys
 import unicodedata
+from datetime import datetime, timezone
+from urllib.parse import quote
 
 LIMIT = 20000
 TOOL_MAX = 80
@@ -31,9 +34,79 @@ def nfc(s):
     return unicodedata.normalize("NFC", s)
 
 
-def fold(rec):
-    """ponytail: claude 레코드는 그대로 쓴다. P572-2가 grok - codex 레코드를 claude 모양으로 접는 자리."""
-    return rec
+def _gtext(c):
+    t = (c or {}).get("text") if isinstance(c, dict) else None
+    return t if isinstance(t, str) else ""
+
+
+def _mk(role, ts, content):
+    return {"type": role, "timestamp": ts, "message": {"role": role, "content": content}}
+
+
+def fold_grok(rec):
+    """grok updates.jsonl 한 줄 -> claude 모양 레코드(접히지 않으면 None). timestamp는 unix 초다."""
+    if not isinstance(rec, dict) or not isinstance(rec.get("timestamp"), (int, float)):
+        return None
+    ts = datetime.fromtimestamp(rec["timestamp"], timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    u = ((rec.get("params") or {}).get("update")) or {}
+    k, tid = u.get("sessionUpdate"), u.get("toolCallId")
+    if k == "user_message_chunk":
+        return _mk("user", ts, [{"type": "text", "text": _gtext(u.get("content"))}])
+    if k == "agent_message_chunk":
+        return _mk("assistant", ts, [{"type": "text", "text": _gtext(u.get("content"))}])
+    if k == "tool_call":
+        label = (((u.get("_meta") or {}).get("x.ai/tool")) or {}).get("label")
+        return _mk("assistant", ts, [{"type": "tool_use", "name": label, "input": u.get("rawInput") or {}, "id": tid}])
+    if k == "tool_call_update":
+        txt = "".join(_gtext(b.get("content")) if b.get("type") == "content" else str(b.get("path") or "")
+                      for b in (u.get("content") or []) if isinstance(b, dict))
+        if not txt.strip():
+            return None
+        return _mk("user", ts, [{"type": "tool_result", "tool_use_id": tid, "content": txt,
+                                 "is_error": u.get("status") == "failed"}])
+    return None
+
+
+def fold_codex(rec):
+    """codex rollout response_item -> claude 모양 레코드. 그 밖의 줄(event_msg 등)은 None."""
+    if not isinstance(rec, dict) or rec.get("type") != "response_item" or not isinstance(rec.get("timestamp"), str):
+        return None
+    ts, p = rec["timestamp"], rec.get("payload") or {}
+    t = p.get("type")
+    text = lambda v: "\n".join(_gtext(b) for b in v if _gtext(b)) if isinstance(v, list) else ""
+    if t == "message" and p.get("role") in ("user", "assistant"):
+        x = text(p.get("content"))
+        return _mk(p["role"], ts, [{"type": "text", "text": x}]) if x else None
+    if t in ("function_call", "custom_tool_call"):
+        inp = p.get("arguments") if t == "function_call" else p.get("input")
+        if isinstance(inp, str):
+            try:
+                inp = json.loads(inp)
+            except ValueError:
+                inp = {"input": inp}
+        return _mk("assistant", ts, [{"type": "tool_use", "name": p.get("name"), "input": inp if isinstance(inp, dict) else {},
+                                      "id": p.get("call_id")}])
+    if t in ("function_call_output", "custom_tool_call_output"):
+        return _mk("user", ts, [{"type": "tool_result", "tool_use_id": p.get("call_id"), "content": ""}])
+    return None
+
+
+def fold(rec, engine):
+    """엔진 형식의 레코드 하나를 claude 모양으로 접는다. claude는 그대로다."""
+    return fold_grok(rec) if engine == "grok" else fold_codex(rec) if engine == "codex" else rec
+
+
+def merge_chunks(recs):
+    """grok의 연속 텍스트 조각(같은 역할)을 한 메시지로 잇는다. 줄 번호는 첫 조각 것이다."""
+    out = []
+    for n, r in recs:
+        b = (r.get("message") or {}).get("content")
+        solo = isinstance(b, list) and len(b) == 1 and b[0].get("type") == "text"
+        if out and solo and out[-1][2] and out[-1][1]["type"] == r["type"]:
+            out[-1][1]["message"]["content"][0]["text"] += b[0]["text"]
+            continue
+        out.append([n, r, solo])
+    return [(n, r) for n, r, _ in out]
 
 
 def prompt_re():
@@ -58,6 +131,23 @@ def fm_of(path):
     return out
 
 
+def engine_of(path):
+    if os.sep + ".grok" + os.sep in path:
+        return "grok"
+    return "codex" if os.path.basename(path).startswith("rollout-") else "claude"
+
+
+def codex_cwd(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            for _, line in zip(range(50), f):
+                if '"session_meta"' in line:
+                    return (json.loads(line).get("payload") or {}).get("cwd") or ""
+    except (OSError, ValueError):
+        pass
+    return ""
+
+
 def enc_dir(cwd):
     return re.sub(r"[^A-Za-z0-9]", "-", cwd)
 
@@ -79,20 +169,34 @@ def candidates(root, h):
             files[os.path.realpath(tr)] = True
         sid = fm.get("session_id", "")
         if re.match(r"^[A-Za-z0-9._-]+$", sid or ""):
-            for g in glob.glob(os.path.join(home, ".claude", "projects", "*", sid + ".jsonl")):
+            for g in (glob.glob(os.path.join(home, ".claude", "projects", "*", sid + ".jsonl"))
+                      + glob.glob(os.path.join(home, ".grok", "sessions", "*", sid, "updates.jsonl"))):
                 files[os.path.realpath(g)] = True
-    seen = set()
+    seen, cwds = set(), set()
     for w in sorted(glob.glob(os.path.join(root, "worktrees", "*"))):
         for cwd in (os.path.abspath(w), os.path.realpath(w)):
-            d = os.path.join(home, ".claude", "projects", enc_dir(cwd))
-            if d in seen:
-                continue
-            seen.add(d)
-            searched.append(d)
-            for f in glob.glob(os.path.join(d, "*.jsonl")):
-                f = os.path.realpath(f)
-                if f not in files and os.path.getmtime(f) >= (birth or 0):
-                    files[f] = False
+            cwds.add(cwd)
+            for d, pat in ((os.path.join(home, ".claude", "projects", enc_dir(cwd)), "*.jsonl"),
+                           (os.path.join(home, ".grok", "sessions", quote(cwd, safe="!~*'()")),
+                            os.path.join("*", "updates.jsonl"))):
+                if d in seen:
+                    continue
+                seen.add(d)
+                searched.append(d)
+                for f in glob.glob(os.path.join(d, pat)):
+                    f = os.path.realpath(f)
+                    if f not in files and os.path.getmtime(f) >= (birth or 0):
+                        files[f] = False
+    cx = os.path.join(os.environ.get("CODEX_HOME") or os.path.join(home, ".codex"), "sessions")
+    searched.append(cx)
+    # ponytail: rollout은 날짜 디렉터리 전체를 훑는다(해시 선필터가 비용을 줄인다). 수천 개면 날짜 창으로 줄인다
+    for f in glob.glob(os.path.join(cx, "**", "rollout-*.jsonl"), recursive=True):
+        f = os.path.realpath(f)
+        if f in files or os.path.getmtime(f) < (birth or 0):
+            continue
+        c = codex_cwd(f)
+        if any(c == w or c.startswith(w + os.sep) for w in cwds):
+            files[f] = False
     return files, searched
 
 
@@ -132,14 +236,16 @@ def segments(path, fmt_re, h, from_fm):
         return []
     if h.encode() not in raw and not from_fm:
         return []
-    recs = []
+    engine, recs = engine_of(path), []
     for i, line in enumerate(raw.decode("utf-8", "replace").split("\n")):
         try:
-            r = json.loads(line)
+            r = fold(json.loads(line), engine)
         except ValueError:
             continue
         if isinstance(r, dict):
-            recs.append((i + 1, fold(r)))
+            recs.append((i + 1, r))
+    if engine == "grok":
+        recs = merge_chunks(recs)
     segs, cur = [], None
     for n, r in recs:
         t = user_text(r)
@@ -159,7 +265,7 @@ def segments(path, fmt_re, h, from_fm):
     if not segs and from_fm and recs:  # 디스패치 문장이 없는 기록(손 클레임 등)은 통째로 한 회차다
         segs = [{"start": recs[0][0], "end": recs[-1][0], "recs": recs}]
     for s in segs:
-        s["file"] = path
+        s["file"], s["engine"] = path, engine
     return segs
 
 
@@ -206,8 +312,9 @@ def render(sums, cap):
     out = []
     for k, s in enumerate(sums, 1):
         sg = s["seg"]
-        sid = os.path.splitext(os.path.basename(sg["file"]))[0]
-        out += ["## 회차 %d - claude session_id=%s" % (k, sid), "기록: %s" % sg["file"],
+        sid = (os.path.basename(os.path.dirname(sg["file"])) if sg["engine"] == "grok"
+               else os.path.splitext(os.path.basename(sg["file"]))[0])
+        out += ["## 회차 %d - %s session_id=%s" % (k, sg["engine"], sid), "기록: %s" % sg["file"],
                 "구간: 줄 %d-%d, %s ~ %s" % (sg["start"], sg["end"], s["from"] or "?", s["to"] or "?"), "",
                 "### 도중 입력"]
         out += ["- %s [%s] %s" % (ts, kind, " ".join(t[:cap(s)].split())) for ts, kind, t in s["inputs"]] or ["(없음)"]
