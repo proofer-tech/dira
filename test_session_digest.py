@@ -175,4 +175,17 @@ assert out.count("## 회차 ") == 1 and "codex session_id=rollout-" in out, out
 assert "[참견] codex 참견" in out and 'shell: {"command": ["ls"]}' in out and "codex 마지막 응답" in out, out
 assert "남의 응답" not in out and "2026-11-28T11:00:01Z" in out, out
 
+# 6. 회차 60개: 오래된 회차를 생략하고 최신 회차는 남긴다, 줄 중간에서 끊기지 않는다
+shutil.rmtree(cdir)
+os.makedirs(pdir, exist_ok=True)
+for f in os.listdir(pdir):
+    os.remove(os.path.join(pdir, f))
+for k in range(60):
+    write("m%02d" % k, [user(FMT % H), reply("응답%02d " % k + "가" * 1400 + " 끝%02d." % k)])
+out = digest()
+n = out.count("## 회차 ")
+assert len(out.encode()) <= 20000 and 1 < n < 60, (len(out.encode()), n, out)
+assert out.startswith("(회차 ") and "개 생략: 오래된" in out.split("\n")[0], out[:100]
+assert "끝59." in out and "끝00." not in out and out.rstrip().endswith("끝59."), out[-200:]
+
 print("OK")

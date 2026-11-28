@@ -308,9 +308,9 @@ def render_calls(s):
     return [l for _, l in calls]
 
 
-def render(sums, cap):
+def render(sums, cap, first=1):
     out = []
-    for k, s in enumerate(sums, 1):
+    for k, s in enumerate(sums, first):
         sg = s["seg"]
         sid = (os.path.basename(os.path.dirname(sg["file"])) if sg["engine"] == "grok"
                else os.path.splitext(os.path.basename(sg["file"]))[0])
@@ -354,8 +354,17 @@ def main(root, h):
         narrow.add(id(s))
         text = render(sums, lambda x: 200 if id(x) in narrow else 800)
     text = mask(text)
-    while len(text.encode("utf-8")) > LIMIT:  # 마지막 방어선: 원문은 회차 머리의 경로로 읽는다
-        text = text[: int(len(text) * 0.9)]
+    drop = 0
+    while size(text) > LIMIT and drop < len(sums) - 1:  # 마지막 방어선: 오래된 회차를 통째로 생략하고 최신 회차는 남긴다
+        drop += 1
+        note = "(회차 %d개 생략: 오래된 회차 1-%d. 원문은 회차 머리의 경로로 읽는다)" % (drop, drop)
+        text = mask(note + "\n\n" + render(sums[drop:], lambda x: 200 if id(x) in narrow else 800, drop + 1))
+    if size(text) > LIMIT:  # 최신 회차 하나가 한도를 넘으면 줄 단위로 자른다
+        lines = text.split("\n")
+        tail = "(줄 %d개 생략: 뒤쪽. 원문은 회차 머리의 경로로 읽는다)"
+        while lines and size("\n".join(lines) + "\n" + tail % 999999) > LIMIT:
+            lines.pop()
+        text = "\n".join(lines) + "\n" + tail % (len(text.split("\n")) - len(lines))
     print(text)
 
 
