@@ -29,6 +29,8 @@ MCP를 지원하는 클라이언트(Claude Code, Claude Desktop, Cursor 등)에�
 | `interject` | 진행 중인 세션에 참견 한 줄을 보냅니다. 화면의 참견과 같은 길로 갑니다 |
 | `awaiting_list` | 답변 대기 티켓과 그 질문을 모아 봅니다. `root`를 빼면 등록된 프로젝트 전부를 훑습니다. 아래 [답변 대기를 다른 에이전트에게 맡기기](#답변-대기를-다른-에이전트에게-맡기기) |
 | `ticket_answer` | 답변 대기 티켓에 답을 답니다. 화면의 `답변 쓰기`와 같은 파일을 만듭니다 |
+| `ticket_status` | 티켓의 지금 상태를 돌려줍니다. 인자는 `hash` 또는 `uri`이고, `hashes`로 여러 장을 한 번에 받습니다. 아래 [티켓 상태 받아보기](#티켓-상태-받아보기) |
+| `ticket_wait` | 티켓 상태가 `since`와 달라질 때까지 기다렸다가 돌려줍니다. 아래 [티켓 상태 받아보기](#티켓-상태-받아보기) |
 | `graph_query` | 온톨로지에 묻습니다(`graph.py query`) |
 | `ontology_objects` `ontology_object` `ontology_search` | 온톨로지 객체를 목록-하나-검색으로 읽습니다. 아래 [온톨로지 읽기](#온톨로지-읽기) |
 | `ontology_versions` `ontology_version` `ontology_schema` | 객체의 지난 판과 온톨로지 스키마를 읽습니다. 아래 [온톨로지 읽기](#온톨로지-읽기) |
@@ -133,6 +135,146 @@ MCP를 지원하는 클라이언트(Claude Code, Claude Desktop, Cursor 등)에�
 있게 됩니다. 도구는 이어서 워커를 한 번 깨웁니다. 응답은 `{path, round, body, dispatch}`이고
 `dispatch`에 그 결과가 실립니다. 워커를 깨우지 못해도 답 파일은 남으므로, 그 티켓은 다음 워커
 실행 때 가져갑니다.
+
+### 티켓 상태 받아보기
+
+MCP로 티켓을 만든 뒤에도 그 티켓이 어떻게 되는지 같은 대화에서 받아 볼 수 있습니다. 워커가 티켓을
+잡았는지, 질문을 남기고 멈췄는지, 끝났는지를 `ticket_read`로 다시 읽어 확인하지 않아도 됩니다. 받는
+방법은 MCP 호스트(dira MCP를 붙인 클라이언트)가 무엇을 지원하느냐에 따라 셋으로 나뉩니다. 도구 목록에
+`ticket_status`와 `ticket_wait`가 없으면 앱을 올리세요.
+
+#### 내 호스트는 어디에 해당하나
+
+| 호스트가 지원하는 것 | 받는 방법 |
+|---|---|
+| MCP 규격 `2026-07-28`과 tasks 확장(`io.modelcontextprotocol/tasks`) | [작업 핸들 따라가기](#작업-핸들-따라가기) |
+| 리소스 구독. 이전 규격(`2025-06-18` `2025-11-25`)이면 stdio로 붙였을 때만 해당합니다 | [리소스 구독](#리소스-구독) |
+| 둘 다 없거나, 이전 규격 호스트를 HTTP로 붙였을 때 | [도구로 폴링](#도구로-폴링) |
+
+어디에 해당하는지는 호스트 문서에서 지원하는 MCP 규격 버전과 "tasks", "resource subscriptions" 항목을
+찾아 보면 압니다. 문서로 가리기 어려우면 `ticket_create`를 한 번 불러 응답을 봅니다. 응답이
+`"resultType": "task"`와 `task` 객체로 오면 첫째 경우입니다. 평소처럼 결과 JSON이 오고 끝에
+`dira://ticket/...` 링크(`resource_link`)가 붙어 있으면 호스트가 tasks 확장을 선언하지 않은 것입니다.
+이때는 그 링크를 구독할 수 있느냐가 둘째와 셋째를 가릅니다.
+
+셋째 방법은 어느 호스트에서나 됩니다. 앞의 두 방법이 되는지 확신이 서지 않으면 `ticket_wait`부터 쓰세요.
+
+#### 상태 넷
+
+세 방법 모두 같은 상태 값을 돌려줍니다. 티켓 상태를 MCP 작업 상태(`status`)로 옮긴 것이고,
+`statusMessage`에 사람이 읽을 설명이 붙습니다.
+
+| 티켓 | `status` | `statusMessage` | 할 일 |
+|---|---|---|---|
+| 대기 | `working` | `대기 - 아직 워커가 안 잡았다` | 기다립니다 |
+| 진행 중 | `working` | `진행 중 - <맡은 워커>`. 세션이 막혔으면 `막힘 - <블록 첫 줄>` | 기다립니다. `막힘`이면 `ticket_read`로 `## 블록` 절을 읽어 봅니다 |
+| 답변 대기 | `input_required` | 마지막 `## 질문 n` 절의 제목 | 답을 답니다(아래) |
+| 완료 | `completed` | `완료` | `result`를 읽습니다(아래) |
+
+대기와 진행 중은 `status`가 둘 다 `working`이므로 `statusMessage`의 앞말로 구분합니다. 세션이 일을 다
+못 끝내고 이어받기 티켓을 낸 경우에는 원래 티켓이 `.done`이어도 완료로 치지 않습니다. 이어받은 티켓을
+끝까지 따라가 마지막 티켓의 상태를 돌려줍니다. dira는 `failed`와 `cancelled`를 쓰지 않습니다. 해시에
+맞는 티켓 파일이 없으면 상태 대신 오류(-32602)가 옵니다.
+
+**답변 대기일 때.** 상태에 `inputRequests`가 함께 옵니다. 마지막 질문 절의 문항마다 `q1` `q2` 같은 키가
+하나씩 있고, 값에 문항 제목과 선택지 글자가 들어 있습니다. 답은 두 가지 중 편한 쪽으로 답니다.
+
+- tasks 확장을 쓰는 호스트는 `tasks/update`의 `inputResponses`에 같은 키로 답을 넣습니다. 값은
+  `{"letters": ["a"], "note": "덧붙일 말"}` 꼴이고 `note`는 빼도 됩니다.
+- 그 밖의 호스트는 `ticket_answer`를 부릅니다. 인자는
+  [답변 대기를 다른 에이전트에게 맡기기](#답변-대기를-다른-에이전트에게-맡기기)에 있습니다.
+
+두 길 모두 화면의 `답변 쓰기`와 같은 파일을 만듭니다. 답이 달리면 그 티켓은 다시 큐에 오르고 상태도
+`working`으로 돌아갑니다.
+
+**완료일 때.** `result`에 그 티켓의 결과가 도구 결과 모양으로 들어 있습니다. `content`의 첫 항목은
+티켓 본문의 `## 결과` 절 전문이고, 이어서 후속 티켓마다 `dira://ticket/...` 링크가 하나씩 붙습니다.
+후속 티켓은 그 티켓을 `req:`로 가리키는 티켓과 `## 결과`에 `-> <해시>`로 적힌 핸드오프 티켓입니다.
+같은 내용이 `structuredContent`에 `{hash, state, result, followups}`로도 실립니다. 후속 티켓의 상태도
+알고 싶으면 그 링크를 같은 방법으로 다시 따라가면 됩니다.
+
+#### 작업 핸들 따라가기
+
+호스트가 요청의 `_meta`에 `io.modelcontextprotocol/protocolVersion: "2026-07-28"`을 싣고, 요청의
+`clientCapabilities.extensions`에 `io.modelcontextprotocol/tasks`를 선언하면 이 방법을 씁니다.
+선언하지 않은 요청에는 작업 핸들을 돌려주지 않습니다. 이 경우 도구 셋이 평소 결과 대신 작업 핸들을
+돌려줍니다.
+
+| 도구 | 핸들이 가리키는 티켓 |
+|---|---|
+| `ticket_create` | 만든 티켓 |
+| `ticket_answer` | 답을 단 원래 티켓 |
+| `dispatch_now`(워커를 지금 띄웁니다) | `hash`로 지목한 티켓. `hash`를 빼면 핸들 없이 평소 결과가 옵니다 |
+
+핸들은 이렇게 생겼습니다.
+
+```json
+{"resultType": "task",
+ "task": {"taskId": "dira://ticket/caff757c?root=%2FUsers%2F<나>%2FProjects%2Fapp%2F.dira",
+          "ticketHash": "caff757c", "status": "working",
+          "statusMessage": "대기 - 아직 워커가 안 잡았다",
+          "ttlMs": null, "pollIntervalMs": 5000}}
+```
+
+호스트는 `taskId`를 그대로 들고 `tasks/get`을 불러 상태를 다시 읽습니다. `pollIntervalMs`가 5000이므로
+5초에 한 번이면 충분합니다. 기다리지 않고 바뀔 때만 받으려면 `subscriptions/listen`의
+`notifications.taskIds`에 `taskId`를 넣습니다. 그러면 상태가 바뀔 때마다 `notifications/tasks`로 작업
+상태 전체가 옵니다. tasks 확장을 선언하지 않은 요청에서 `taskIds`를 신청하면 오류(-32021)가 납니다.
+
+`taskId`는 티켓 해시와 큐 루트를 담은 URI라서 만료되지 않고(`ttlMs`가 `null`), MCP 서버가 다시 떠도
+그대로 통합니다. `tasks/cancel`은 빈 응답만 돌려주고 티켓은 건드리지 않습니다. 티켓은 큐에 그대로
+남아 워커가 계속 처리합니다.
+
+#### 리소스 구독
+
+티켓 하나하나와 큐 목록이 MCP 리소스로도 열려 있습니다. 읽으면 JSON(`application/json`)이 옵니다.
+
+| URI | 읽으면 |
+|---|---|
+| `dira://ticket/<해시>?root=<큐 루트>` | 위의 작업 상태에 `title` `kind` `persona` `owner`를 더한 것 |
+| `dira://queue?root=<큐 루트>` | `queue_list`와 같은 열린 티켓 목록 |
+| `dira://awaiting` | `awaiting_list`와 같은 답변 대기 목록(등록된 프로젝트 전부) |
+| `dira://projects` | `projects`와 같은 프로젝트 목록 |
+
+`resources/list`에는 큐 목록과 답변 대기, 프로젝트 목록만 나옵니다. 티켓 URI는 템플릿
+`dira://ticket/{hash}{?root}`로만 나오므로, 티켓을 만든 응답에 붙은 링크를 그대로 쓰는 편이 쉽습니다.
+`root`는 큐 루트 절대 경로를 퍼센트 인코딩한 값입니다.
+
+구독하는 방법은 호스트가 말하는 규격에 따라 다릅니다.
+
+- 이전 규격 호스트를 stdio로 붙였다면 `resources/subscribe`에 URI를 줍니다. 그 리소스가 바뀌면
+  `notifications/resources/updated`가 그 URI와 함께 오고, 호스트는 `resources/read`로 새 내용을 읽습니다.
+  구독을 끊을 때는 `resources/unsubscribe`를 부릅니다.
+- `2026-07-28` 호스트는 `subscriptions/listen` 요청 하나로 신청합니다. `resourceSubscriptions`에 URI
+  목록을 넣고, 프로젝트가 등록되거나 빠지는 것도 받으려면 `resourcesListChanged`를, 도구 목록이 바뀌는
+  것도 받으려면 `toolsListChanged`를 켭니다. 서버는 먼저 `notifications/subscriptions/acknowledged`에
+  받아들인 항목을 돌려주고, 그 뒤로 바뀔 때마다 알림을 보냅니다. HTTP로 붙였으면 그 요청의 응답이
+  이벤트 스트림(SSE)으로 열린 채 남고, 연결을 닫으면 구독도 끝납니다. stdio로 붙였으면
+  `notifications/cancelled`로 그 요청을 취소할 때 끝납니다.
+
+서버는 2초마다 구독된 큐의 티켓 파일을 살펴 바뀜을 찾습니다. 그래서 알림은 실제 바뀜보다 2초 안팎 늦게
+옵니다. 이전 규격 호스트를 HTTP로 붙였다면 서버가 먼저 보낼 길이 없어서 구독을 받지 않습니다. 이때는
+다음 방법을 씁니다.
+
+#### 도구로 폴링
+
+호스트가 tasks 확장도 리소스 구독도 쓰지 않아도, 도구 두 개로 같은 상태를 받습니다. 둘 다 위의
+상태 넷과 같은 JSON을 돌려줍니다.
+
+- `ticket_status`는 지금 상태를 바로 돌려줍니다. `hash`나 `uri` 하나를 주거나, `hashes`에 해시 배열을
+  주면 여러 장을 `{tasks: [...]}`로 한 번에 받습니다.
+- `ticket_wait`는 `since`에 직전에 받은 `status`를 주면 그 값과 달라질 때까지 기다렸다가 돌려줍니다.
+  기다리는 상한은 `timeout_s`이고 기본 50초, 최대 300초입니다. 결과의 `changed`가 `true`면 상태가
+  바뀐 것이고, `false`면 시간이 다 되어 돌아온 것입니다. `since`를 빼면 기다리지 않고 바로 돌려줍니다.
+
+에이전트에게는 이렇게 맡기면 됩니다.
+
+> dira MCP로 티켓을 만들고, `ticket_wait`를 직전 `status`로 거듭 불러서 상태가 바뀔 때마다 알려 줘.
+> `input_required`가 되면 질문을 보여 주고, `completed`가 되면 `## 결과`를 요약해 줘.
+
+`since`는 `status`만 비교합니다. 대기에서 진행 중으로 넘어가는 것은 둘 다 `working`이라 바뀜으로 치지
+않고, 그 사이 `ticket_wait`는 `timeout_s`가 다 될 때까지 기다립니다. 워커가 잡았는지까지 알고 싶으면
+`changed`가 `false`로 돌아올 때마다 `statusMessage`를 확인하세요.
 
 ### 프로젝트 등록과 설정을 다른 에이전트에게 맡기기
 
