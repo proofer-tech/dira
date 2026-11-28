@@ -8988,6 +8988,61 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P573. 홈 대화의 Bash 명령이 120초를 넘기면 백그라운드로 넘어가지 않고 그 자리에서 실패한다 (요구 `639d8fb8`, 왕복 0회)
+
+사람 요구(2026-11-28): 홈 대화가 `claude`를 띄울 때 명령이 자동으로 백그라운드로 넘어가지 않게 한다. 그러면
+120초를 넘긴 명령은 그 자리에서 실패하고, 에이전트가 범위를 좁혀 다시 시도한다.
+
+#### 실측 - 2026-11-28, 설치본 `~/.config/dira/bin/engines/claude` 2.1.321
+
+검증용으로 `BASH_DEFAULT_TIMEOUT_MS=5000`을 주고, 40초 걸리는 명령(`python3 -c 'import time; time.sleep(40)'`)을
+timeout 인자 없이 실행하게 했다. 모델은 haiku였다.
+
+- `-p`에 argv 프롬프트를 주는 실행에서는 변수가 없어도 5초에 `Exit code 143 / Command timed out after 5s`로
+  실패했다. 자동 백그라운드 전환은 일어나지 않았다.
+- 홈 대화와 같은 `--input-format stream-json` 실행에서는 변수가 없으면 5초에 `moved to the background`로 넘어갔다.
+  `result`를 낸 뒤에도 프로세스는 명령이 끝날 때까지(약 40초) 살아 있었다. 이것이 사람이 본 화면의 원인이다.
+- 같은 stream-json 실행에 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`을 주면 5초에 `Exit code 143 / Command timed out
+  after 5s`로 실패했고, 프로세스는 `result` 직후 끝났다.
+- `CLAUDE_AUTO_BACKGROUND_TASKS=0`과 `CLAUDE_CODE_AUTO_BACKGROUND_TIMEOUT_MS=0`은 효과가 없었다. 둘 다 백그라운드로
+  넘어갔다.
+- `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`이면 Bash 도구의 인자가 `command` `description` `timeout`
+  `dangerouslyDisableSandbox`뿐이고, `run_in_background`가 사라진다. `Monitor`와 `TaskStop` 도구는 남는다.
+- 기본 타임아웃(120초)과 `timeout` 인자의 상한(600초)은 이 변수와 관계가 없다(`BASH_DEFAULT_TIMEOUT_MS`,
+  `BASH_MAX_TIMEOUT_MS`가 따로 정한다).
+
+#### 결정
+
+1. **홈 대화가 띄우는 `claude`의 환경에 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`을 넣는다.** 자리는
+   `apps/teams/lib/home-session.ts`에서 `env.DIRA_SESSION_KIND = "home"`을 넣는 곳과 같은 블록이다. 사람 셸에 같은
+   이름의 값이 있어도 덮어쓴다.
+2. **타임아웃 값은 바꾸지 않는다.** 기본 120초, `timeout` 인자로 최대 600초 그대로다. 에이전트가 오래 걸릴 것을
+   알면 `timeout`을 늘려 부를 수 있다.
+3. **에이전트가 의도해서 백그라운드로 돌리는 길(`run_in_background`)도 함께 닫힌다.** 이것을 받아들인다. 홈 대화는
+   한 턴에 답하고 끝나는 대화이고, 답을 마친 뒤 남은 작업이 바로 이번 문제다.
+4. **워커 세션(`tick.sh`)은 바꾸지 않는다.** 요구 범위가 홈 대화이고, 엔진 수정은 사람 승인 대상이다.
+5. **P569 결정 3(`background` 활동 줄)은 그대로 둔다.** `Monitor`처럼 이 변수가 막지 않는 경로로 작업이 남으면
+   여전히 그 화면이 사실을 보여 준다.
+
+```autonomy
+주도성 5 판단: 사람이 "관련 환경변수가 있는지 확인하지 않았다"고 적었으므로, 후보 세 변수를 실제 CLI로 돌려 하나(CLAUDE_CODE_DISABLE_BACKGROUND_TASKS)만 효과가 있음을 확인하고 그 변수로 정했다.
+주도성 5 판단: run_in_background까지 사라지는 부작용을 받아들인다. 요구의 목적이 답이 끝난 뒤 남는 작업을 없애는 것이고, 의도한 백그라운드 작업도 같은 화면을 만든다.
+주도성 5 판단: Monitor 도구는 이번 범위에 넣지 않는다. 16건의 원인이 모두 Bash 자동 전환이었고, Monitor를 막는 변수는 확인하지 않았다.
+주도성 5 판단: 에픽을 열지 않는다. 티켓이 둘이고 designer-writer 산출물이 없다(화면 문구 변화 없음).
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P573-1 | 결정 1: 홈 대화 `claude` 환경에 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1` + 그 값이 들어가는지 보는 단위 테스트(환경 조립을 순수 함수로 빼도 된다) | developer | - | 발행 대기 |
+| P573-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P573-1 | 발행 대기 |
+
+#### 수용조건
+
+- [ ] 홈 대화 `claude`의 환경을 조립하는 코드에 사람 셸 값 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=0`을 넣고 조립하면 결과가 `1`이다. 이 단위 테스트가 `cd apps/teams && pnpm test` 안에 있고 통과한다.
+- [ ] 앱에서 홈 대화를 열고 `python3 -c 'import time; time.sleep(150)'`을 timeout 인자 없이 실행하라고 시키면, 도구 결과가 `Command timed out`을 포함한 실패이고 `moved to the background`가 없다. 답이 끝난 뒤 활동 줄에 `백그라운드 작업을 기다리는 중`이 뜨지 않고 30초 안에 입력을 다시 받는다.
+- [ ] 같은 대화 중 `ps -E -p <claude pid>`(또는 `ps eww`)에 `CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1`이 보인다.
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`이 통과하고, `git diff --stat master`에 `tick.sh` - `tickets.py`가 없다.
+
 ### P572. 아카이브 매니저가 대상 티켓을 처리한 세션의 기록(회차 전부)을 요약으로 읽고, 실제 작업 경과와 도중 참견까지 반영한다 (요구 `d48238f7`, 왕복 0회)
 
 사람 요구(2026-11-28, archive-manager 홈 대화에서 옮김): *"지금 읽고 있는것에 티켓 세션스크립트도 보도록 해줬으면
