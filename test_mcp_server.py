@@ -345,6 +345,22 @@ import time
 mcp_src = open(os.path.join(HERE, "mcp_tools.py")).read()
 assert "LIST_TIMEOUT, CALL_TIMEOUT = 20, 300" in mcp_src
 
+# P571-1: 이전 규격 응답 불변 + 2026-07-28 경로
+assert out[0]["result"] == {"protocolVersion": "2025-06-18", "capabilities": {"tools": {}},
+                            "serverInfo": {"name": "dira-engine", "version": "1"}}, out[0]
+assert set(out[1]["result"]) == {"tools"}, "이전 규격 tools/list에 새 키가 붙으면 안 된다"
+V = lambda v: {"protocolVersion": v, "capabilities": {}, "clientInfo": {"name": "t", "version": "0"}}
+assert rpc([dict(INIT, params=V("2025-11-25"))])[0]["result"]["protocolVersion"] == "2025-11-25"
+assert rpc([dict(INIT, params=V("2099-01-01"))])[0]["result"]["protocolVersion"] == "2025-06-18"
+M = "io.modelcontextprotocol/protocolVersion"
+d = rpc([{"jsonrpc": "2.0", "id": 5, "method": "server/discover", "params": {}}])[0]["result"]
+assert set(d["supportedVersions"]) == {"2026-07-28", "2025-11-25", "2025-06-18"} and d["resultType"] == "complete", d
+assert "tools" in d["capabilities"] and d["serverInfo"]["name"] == "dira-engine", d
+r = rpc([{"jsonrpc": "2.0", "id": 6, "method": "tools/list", "params": {"_meta": {M: "2026-07-28"}}}])[0]["result"]
+assert r["resultType"] == "complete" and r["_meta"]["serverInfo"]["name"] == "dira-engine" and r["tools"], r
+e = rpc([{"jsonrpc": "2.0", "id": 7, "method": "tools/list", "params": {"_meta": {M: "1999-01-01"}}}])[0]
+assert e["error"]["code"] == -32022, e
+
 diff = subprocess.run(["git", "diff", "master", "--", "tickets.py"], cwd=HERE, capture_output=True,
                       text=True).stdout
 assert diff == "", "tickets.py가 바뀌었다"

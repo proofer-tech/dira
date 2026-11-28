@@ -14,6 +14,7 @@ import json
 import os
 import secrets
 import sys
+import threading
 import socketserver
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
@@ -21,6 +22,12 @@ from urllib.parse import urlparse
 import mcp_tools
 
 PROTOCOL = "2025-06-18"
+OLD_VERSIONS = ("2025-06-18", "2025-11-25")  # initialize 협상 대상
+STATELESS = "2026-07-28"
+SUPPORTED = (STATELESS,) + OLD_VERSIONS
+META_VERSION = "io.modelcontextprotocol/protocolVersion"
+SERVER_INFO = {"name": "dira-engine", "version": "1"}
+_out_lock = threading.Lock()  # stdio 쓰기는 write_line 하나로 모아 응답과 알림이 섞여도 줄이 깨지지 않게 한다
 MAX_BODY = 8 * 1024 * 1024
 
 
@@ -33,6 +40,12 @@ def reply(i, result=None, error=None):
     return m
 
 
+def write_line(obj):
+    with _out_lock:
+        sys.stdout.write(json.dumps(obj, ensure_ascii=False) + "\n")
+        sys.stdout.flush()
+
+
 def handle(msg):
     """JSON-RPC 메시지 하나 -> 응답 dict 또는 None(알림)."""
     if not isinstance(msg, dict) or msg.get("jsonrpc") != "2.0":
@@ -40,9 +53,26 @@ def handle(msg):
     method, i, p = msg.get("method"), msg.get("id"), msg.get("params") or {}
     if "id" not in msg:
         return None
+    meta = p.get("_meta") if isinstance(p, dict) else None
+    ver = meta.get(META_VERSION) if isinstance(meta, dict) else None
     if method == "initialize":
-        return reply(i, {"protocolVersion": PROTOCOL, "capabilities": {"tools": {}},
-                         "serverInfo": {"name": "dira-engine", "version": "1"}})
+        want = p.get("protocolVersion") if isinstance(p, dict) else None
+        return reply(i, {"protocolVersion": want if want in OLD_VERSIONS else PROTOCOL,
+                         "capabilities": {"tools": {}}, "serverInfo": SERVER_INFO})
+    if ver is None and method != "server/discover":
+        return handle_old(i, method, p)
+    if ver is not None and ver != STATELESS:
+        return reply(i, error={"code": -32022, "message": "Unsupported protocol version: %s" % ver,
+                               "data": {"supported": list(SUPPORTED)}})
+    r = handle_old(i, method, p) if method != "server/discover" else reply(i, {
+        "supportedVersions": list(SUPPORTED), "capabilities": {"tools": {}}, "serverInfo": SERVER_INFO})
+    if "result" in r:
+        r["result"]["resultType"] = "complete"
+        r["result"].setdefault("_meta", {})["serverInfo"] = SERVER_INFO
+    return r
+
+
+def handle_old(i, method, p):
     if method == "ping":
         return reply(i, {})
     if method == "tools/list":
@@ -76,8 +106,7 @@ def serve_stdio():
         if line.strip():
             r = handle_text(line)
             if r is not None:
-                sys.stdout.write(json.dumps(r, ensure_ascii=False) + "\n")
-                sys.stdout.flush()
+                write_line(r)
 
 
 def origin_ok(origin):
