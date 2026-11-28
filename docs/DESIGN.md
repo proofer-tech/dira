@@ -9011,7 +9011,7 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - 참견은 `interject.ts` - `mcp_tools.py` `t_interject`가 FIFO에 `{"type":"user", ...}` 한 줄로 넣으므로, 기록에서는
   첫 디스패치 문장 뒤에 들어온 사용자 문자열 메시지로 남는다. 엔진이 넣는 계획 넛지(`check_plan_nudge`)도 같은
   통로를 쓴다.
-- 기록은 크다(티켓 한 장에 수 MB). 아카이브 세션의 첫 턴 예산(§다이어트)과 archive-manager의 PROFILE+skills
+- 기록은 크다(티켓 한 장에 수 MB). 아카이브 세션의 첫 턴 예산(다이어트 절)과 archive-manager의 PROFILE+skills
   예산(4,950 / 5,000 B)을 생각하면 기록을 프롬프트에 통째로 실을 수 없다.
 - 엔진 파이썬 파일은 `apps/desktop/package.json` extraResources로 앱 번들에 실리고, `~/.config/dira/bin/engines/`에도
   사본이 놓인다. 새 파일을 이 목록에 넣지 않으면 설치본에 빠진다(같은 사고가 `dispatch.py`에서 있었다).
@@ -9065,10 +9065,10 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P572-1 | 결정 1-5의 claude 갈래: `session_digest.py`(회차 찾기 - 구간 자르기 - 요약 - 상한 - 가리기) + `test_session_digest.py` 가짜 기록 테스트 + 배포 목록 셋 | developer | - | 발행 예정 |
-| P572-2 | 결정 2-3의 grok - codex 갈래(형식을 claude 레코드로 접는 함수) + 테스트 | developer | P572-1 | 발행 예정 |
-| P572-3 | 결정 6-7: `완료-트리거.md` heredoc, `ontology.md`, archive-manager PROFILE 한 줄(예산 안) + materialize | developer | P572-1 | 발행 예정 |
-| P572-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P572-2, P572-3 | 발행 예정 |
+| P572-1 | 결정 1-5의 claude 갈래: `session_digest.py`(회차 찾기 - 구간 자르기 - 요약 - 상한 - 가리기) + `test_session_digest.py` 가짜 기록 테스트 + 배포 목록 셋 | developer | - | 발행 `057fe4e1` |
+| P572-2 | 결정 2-3의 grok - codex 갈래(형식을 claude 레코드로 접는 함수) + 테스트 | developer | P572-1 | 발행 `3e878348` |
+| P572-3 | 결정 6-7: `완료-트리거.md` heredoc, `ontology.md`, archive-manager PROFILE 한 줄(예산 안) + materialize | developer | P572-1 | 발행 `0639ec16` |
+| P572-4 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P572-2, P572-3 | 발행 `f7705765` |
 
 #### 수용조건
 
