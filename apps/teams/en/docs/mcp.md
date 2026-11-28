@@ -31,6 +31,8 @@ Common operations are named tools.
 | `interject` | Sends one interjection line to a running session, by the same path as the screen's interject |
 | `awaiting_list` | Collects tickets awaiting an answer, with their questions. Without `root` it scans every registered project. See [Handing answers to another agent](#handing-answers-to-another-agent) |
 | `ticket_answer` | Answers a ticket that is awaiting an answer. Creates the same file as the screen's `Write an answer` form |
+| `ticket_status` | Returns a ticket's current state. Takes `hash` or `uri`, and `hashes` fetches several tickets at once. See [Following a ticket's status](#following-a-tickets-status) |
+| `ticket_wait` | Waits until the ticket's state differs from `since`, then returns it. See [Following a ticket's status](#following-a-tickets-status) |
 | `graph_query` | Asks the ontology (`graph.py query`) |
 | `ontology_objects` `ontology_object` `ontology_search` | Read ontology objects as a list, one at a time, or by search. See [Reading the ontology](#reading-the-ontology) |
 | `ontology_versions` `ontology_version` `ontology_schema` | Read an object's past versions and the ontology schema. See [Reading the ontology](#reading-the-ontology) |
