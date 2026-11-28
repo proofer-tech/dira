@@ -84,10 +84,37 @@ def digest(d):
     return h.hexdigest()
 
 
+def lock_dirs(site):
+    """P576: lock 항목이 가리키는 apm_modules 설치 자리 집합. lock 이 없으면 None(전부 센다)."""
+    lock = site / "apm.lock.yaml"
+    if not lock.exists():
+        return None
+    out, cur = [], None
+    for line in lock.read_text().splitlines():
+        if line.startswith("- "):
+            cur = {}
+            out.append(cur)
+        m = re.match(r"^\s*-?\s*(repo_url|virtual_path):\s*(.+?)\s*$", line)
+        if m and cur is not None:
+            cur[m.group(1)] = m.group(2).strip("'\"")
+    base = site / "apm_modules"
+    res = set()
+    for c in out:
+        if c.get("repo_url"):
+            res.add(base / c["repo_url"])
+            if c.get("virtual_path"):
+                res.add(base / c["repo_url"] / c["virtual_path"])
+    return res
+
+
 def installed(site):
-    """site/apm_modules 안 패키지들: {name: [dir...]} (내용이 같은 사본은 하나로 센다)."""
+    """site/apm_modules 안 패키지들: {name: [dir...]} (내용이 같은 사본은 하나로 센다).
+    lock 이 있으면 lock 항목이 가리키는 디렉터리만 센다(고아 사본 무시, 지우지는 않는다)."""
     byname = {}
+    want = lock_dirs(site)
     for d in packages(site / "apm_modules") if (site / "apm_modules").is_dir() else []:
+        if want is not None and d not in want:
+            continue
         n = read_yml(d / "apm.yml")["name"]
         if n:
             lst = byname.setdefault(n, {})

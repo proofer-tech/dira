@@ -52,6 +52,25 @@ class T(unittest.TestCase):
             for n in ("pm", "qa")))
         self.assertEqual(run("check", self.root)[0], 0)
 
+    def _orphan(self, lock):  # P576: lock 이 가리키는 공용 사본 + lock 에 없는 옛 _local 사본(내용 다름)
+        pkg(self.team / "apm_modules/proofer-tech/dira/packages/persona-pm", "persona-pm", skills=("persona-pm",))
+        pkg(self.team / "apm_modules/_local/pm", "persona-pm", skills=("persona-pm",))
+        w(self.team / "apm_modules/_local/pm/extra.md", "옛 사본")
+        if lock:
+            w(self.team / "apm.lock.yaml", "dependencies:\n- repo_url: proofer-tech/dira\n  name: persona-pm\n"
+              "  virtual_path: packages/persona-pm\n  is_virtual: true\n")
+
+    def test_lock_ignores_orphan_local(self):  # P576
+        self._orphan(True)
+        rc, out, _ = run("resolve", self.root, "persona", "pm")
+        self.assertEqual((rc, out), (0, str(self.team / "apm_modules/proofer-tech/dira/packages/persona-pm")))
+        rc, out, _ = run("check", self.root)
+        self.assertNotIn("스킬 이름 충돌", out)
+
+    def test_no_lock_counts_all(self):  # P576
+        self._orphan(False)
+        self.assertEqual(run("resolve", self.root, "persona", "pm")[0], 1)
+
     def test_drift_relative_modified(self):  # P506-11 (b)
         self._relative_lock()
         with open(self.team / "apm_modules/_local/pm/skills.md", "a") as f:
