@@ -8988,6 +8988,164 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P571. MCP로 만든 티켓의 상태변화를 클라이언트가 표준 MCP 방식으로 받는다 - tasks 확장과 구독 (요구 `7958429e`, 왕복 0회)
+
+사람 요구(2026-11-28): *"dira MCP 에 티켓을 만들면 그 상태변화도 받아볼 수 있게 해주세요. 티켓 생성 말고도 이런게
+필요한곳들에 다 추가해주세요. 이 기능에 표준화된 프로토콜이 있는지 찾아서 그걸 사용해주세요"*
+
+#### 실측 - 2026-11-28, 코드와 규격 확인
+
+- `mcp_server.py`는 `PROTOCOL = "2025-06-18"` 하나만 말한다. capability는 `tools` 하나이고, 서버가 먼저 보내는
+  메시지가 없다. stdio는 요청 한 줄에 응답 한 줄이고, HTTP는 `POST /mcp`에 `application/json` 응답만 낸다
+  (`GET`은 405). 그래서 지금 클라이언트가 상태를 알려면 `ticket_read`-`queue_list`-`awaiting_list`를 다시 부르는
+  수밖에 없다.
+- 티켓의 상태는 파일 이름이 정한다(없음 - `.wip` - `.done`). 답변 대기는 `awaiting_rows`(열림 + `awaiting:` +
+  미충족 dep)가 이미 판정한다. 결과는 본문 `## 결과` 절에 있고, 이어받기는 fm `continued:`, 요구에서 쪼갠
+  티켓은 fm `req:`가 가리킨다.
+- **표준은 MCP 안에 있다.** 최신 규격 `2026-07-28`이 두 가지를 정한다.
+  - **Tasks 확장**(`io.modelcontextprotocol/tasks`, ext-tasks 저장소). 서버가 `tools/call`에 결과 대신
+    `resultType: "task"`인 `CreateTaskResult`(작업 핸들)를 돌려주고, 클라이언트가 `tasks/get`으로 상태를 읽는다.
+    상태는 `working` - `input_required` - `completed` - `failed` - `cancelled`이고, `input_required`이면
+    `inputRequests`를 보이고 클라이언트가 `tasks/update`의 `inputResponses`로 답한다. 푸시는
+    `subscriptions/listen`의 `notifications.taskIds`로 신청하면 `notifications/tasks`로 온다. 규격이 겨냥하는
+    용례에 "사람의 승인 단계"와 "작업 ID가 있는 외부 작업 시스템"이 명시되어 있다. 티켓 큐가 정확히 그것이다.
+  - **구독**(`subscriptions/listen`). 하나의 오래 사는 요청으로 `toolsListChanged` - `resourcesListChanged` -
+    `resourceSubscriptions`(URI 목록)를 신청하면 서버가 `notifications/subscriptions/acknowledged`를 먼저 보내고
+    그 뒤로 `notifications/tools/list_changed` - `notifications/resources/list_changed` -
+    `notifications/resources/updated`를 보낸다. 알림마다 `_meta`의 `io.modelcontextprotocol/subscriptionId`가
+    붙는다. 이전 규격(`2025-06-18` - `2025-11-25`)의 `resources/subscribe`를 대체한다.
+- `2026-07-28`은 상태 없는(stateless) 규격이다. `initialize` 대신 요청마다 `_meta`에
+  `io.modelcontextprotocol/protocolVersion` - `clientCapabilities`를 싣고, 서버는 `server/discover`를
+  구현해야 하며, 모든 결과에 `resultType`이 붙는다. 이전 규격 클라이언트(`initialize`를 보내는 쪽)는 지금도 많다.
+- `2025-11-25`의 실험적 tasks(`task` 파라미터 - `tasks/result` - `notifications/tasks/status`)는 `2026-07-28`이
+  다시 설계해 확장으로 옮겼다. 낡은 형식이므로 구현하지 않는다.
+
+#### 결정
+
+1. **두 규격을 함께 말한다.** `initialize`가 오면 이전 규격 경로다. 클라이언트가 요청한 버전이
+   `2025-06-18` - `2025-11-25` 중 하나면 그 버전으로, 아니면 `2025-06-18`로 답한다. 요청 `_meta`에
+   `io.modelcontextprotocol/protocolVersion: "2026-07-28"`이 있거나 `server/discover`가 오면 `2026-07-28`
+   경로다. 이 경로의 결과에는 `resultType`을 붙이고(`"complete"` 또는 `"task"`), `server/discover`는 지원 버전
+   목록 - capability - `serverInfo`를 돌려준다. 모르는 버전은 `UnsupportedProtocolVersion`(-32022)이다. 지금의
+   `2025-06-18` 클라이언트 동작은 한 바이트도 바뀌지 않는다(기존 `test_mcp_server.py`가 그대로 통과한다).
+2. **티켓 하나 = 리소스 하나 = 작업(task) 하나, 식별자는 URI 하나다.**
+   `dira://ticket/<hash>?root=<큐 루트 절대 경로, 퍼센트 인코딩>`. 이 URI가 리소스 URI이자 `taskId`다. 서버는
+   작업 표를 따로 들고 있지 않고 매번 URI를 풀어 파일을 읽는다. 그래서 서버가 다시 떠도 같은 ID가 그대로
+   통한다(규격의 "durable handle"). `ttlMs`는 `null`(무기한), `pollIntervalMs`는 5000이다.
+3. **상태 대응표.** 티켓 상태를 작업 상태로 이렇게 옮긴다. `continued:`가 있는 `.done`은 끝까지 따라가서
+   마지막 티켓으로 판정한다(일이 이어받기로 넘어갔을 뿐 끝나지 않았기 때문이다).
+
+   | 티켓 | 작업 `status` | `statusMessage` | 덧붙는 필드 |
+   |---|---|---|---|
+   | 열림, 답변 대기 아님 | `working` | `대기 - 아직 워커가 안 잡았다` | - |
+   | `.wip` | `working` | `진행 중 - <owner>`. 본문에 `## 블록`이 있으면 `막힘 - <블록 첫 줄>` | - |
+   | 열림 + 답변 대기(`awaiting_rows`) | `input_required` | 마지막 `## 질문 n` 제목 | `inputRequests` |
+   | `.done`(이어받기 끝까지) | `completed` | `완료` | `result` |
+
+   - `inputRequests`는 질문 문항마다 키 `q<문항 번호>` 하나다. 값은 `elicitation/create` 형식이고
+     `requestedSchema`가 `letters`(선택지 글자 배열, enum)와 `note`(문자열)를 받는다. `tasks/update`의
+     `inputResponses`는 `ticket_answer`와 같은 함수로 같은 파일을 쓴다(화면 답변 쓰기와 같은 결과). 그 뒤 원래
+     티켓은 열림으로 돌아가므로 다음 `tasks/get`은 `working`이다.
+   - `result`는 원래 `tools/call`의 결과 모양(`CallToolResult`)이다. `content`의 첫 항목은 `## 결과` 절 전문 텍스트,
+     이어서 후속 티켓마다 `resource_link` 하나다. 후속 티켓은 그 티켓을 `req:`로 가리키는 티켓과 `## 결과`의
+     `-> <해시>` 핸드오프다. `structuredContent`는 `{hash, state, result, followups: [uri]}`다.
+   - `failed` - `cancelled`는 쓰지 않는다. 티켓 파일을 못 찾으면 `tasks/get`이 JSON-RPC 오류 -32602다.
+     `tasks/cancel`은 빈 결과로 응답만 하고 티켓은 건드리지 않는다. 규격이 취소를 협조적(cooperative)이라
+     정했고, 티켓 삭제는 큐 규약 밖이기 때문이다.
+4. **작업 핸들을 돌려주는 도구는 셋이다.** 클라이언트가 그 요청의 `clientCapabilities.extensions`에
+   `io.modelcontextprotocol/tasks`를 선언했을 때만 핸들을 돌려준다(규격 의무). 선언하지 않았으면 지금과 같은 결과에
+   그 티켓의 `resource_link`만 덧붙인다.
+
+   | 도구 | 핸들이 가리키는 티켓 |
+   |---|---|
+   | `ticket_create` | 만든 티켓 |
+   | `ticket_answer` | 답을 단 원래 티켓(답변 stem이 아니다) |
+   | `dispatch_now` + `hash` | 그 티켓. `hash`가 없으면 핸들 없이 지금과 같다 |
+
+   핸들의 `_meta`에 `io.modelcontextprotocol/model-immediate-response`로 "티켓 `<hash>`를 만들었고 상태는 작업
+   핸들로 이어진다"는 한 줄을 넣는다. 핸들을 지원하는 호스트가 모델에 바로 돌려줄 문장이다.
+5. **리소스는 넷이다.** `resources/list`는 목록형 셋을 돌려주고 티켓 하나하나는 템플릿으로만 연다(티켓 수천 장을
+   목록에 싣지 않는다).
+
+   | URI | 읽으면 | 바뀌는 때 |
+   |---|---|---|
+   | `dira://ticket/{hash}{?root}`(템플릿) | 결정 3의 작업 상태와 같은 JSON + `title` - `kind` - `persona` - `owner` | 그 티켓의 파일 이름 - mtime이 바뀔 때 |
+   | `dira://queue{?root}`(등록 프로젝트마다 하나씩 목록에) | `queue_list`와 같은 열린 티켓 목록 | 그 큐의 티켓 파일 집합이나 이름이 바뀔 때 |
+   | `dira://awaiting` | `awaiting_list`와 같다(전 프로젝트) | 답변 대기 집합이 바뀔 때 |
+   | `dira://projects` | `projects`와 같다 | `gui-projects.json`이 바뀔 때. 이때 `resources/list_changed`도 보낸다 |
+
+   읽기 결과의 `mimeType`은 `application/json`이다. 도구 결과에도 `resource_link`를 붙인다:
+   `ticket_create` - `ticket_answer` - `ticket_append` - `ticket_done` - `unassign` - `dispatch_now`(hash)는 그 티켓,
+   `queue_list`는 그 큐, `awaiting_list`는 `dira://awaiting`이다.
+6. **알림을 보내는 곳.** 바뀜을 아는 방법은 감시 스레드 하나가 2초마다 구독된 루트의 `tickets/` 목록(이름 -
+   mtime)과 `gui-projects.json` - `ops.json`의 mtime을 보는 것이다(표준 라이브러리, 구독이 없으면 돌지 않는다).
+
+   | 바뀜 | 이전 규격(stdio만) | `2026-07-28` |
+   |---|---|---|
+   | 티켓 상태 | `resources/subscribe` 한 URI -> `notifications/resources/updated` | `resourceSubscriptions` 또는 `taskIds` -> `notifications/resources/updated` 또는 `notifications/tasks`(작업 전체 상태) |
+   | 큐 - 답변 대기 목록 | 같다 | `resourceSubscriptions` |
+   | 프로젝트 등록 | `notifications/resources/list_changed` | `resourcesListChanged` |
+   | 실행기 도구가 붙고 떨어짐(`ops.json`, P559) | `notifications/tools/list_changed` | `toolsListChanged` |
+
+   - capability: 이전 규격 경로는 stdio일 때만 `resources: {subscribe: true, listChanged: true}` -
+     `tools: {listChanged: true}`를 선언하고, HTTP일 때는 `resources: {}` - `tools: {}`다. 이전 규격 HTTP에서
+     푸시하려면 세션과 `GET` SSE가 필요한데, 이 규격은 그것을 버렸으므로 새로 만들지 않는다. 그 클라이언트는
+     `tasks/get` 대신 결정 7의 도구로 폴링한다.
+   - `2026-07-28` HTTP의 `subscriptions/listen`은 그 `POST`의 응답을 `text/event-stream`으로 열어 둔 채 알림을
+     흘린다. 다른 요청은 지금처럼 `application/json`이다. 클라이언트가 연결을 닫으면 구독도 끝난다. stdio에서는
+     `notifications/cancelled`가 구독 요청 ID를 가리키면 끝난다. 서버가 끝낼 때는 원래 요청에
+     `{resultType: "complete"}` 응답을 보낸다.
+   - stdio에서 응답과 알림이 섞여도 줄이 깨지지 않게 stdout 쓰기는 잠금 하나로 묶는다.
+   - tasks 확장을 선언하지 않은 클라이언트가 `taskIds`를 신청하면 -32021(`Missing required client capability`)이다.
+7. **표준을 못 쓰는 클라이언트를 위한 도구 둘.** 지금 쓰이는 MCP 호스트 상당수가 tasks 확장도 리소스 구독도
+   쓰지 않는다. 그래서 같은 상태를 도구로도 낸다. 둘 다 결정 3의 대응표를 그대로 돌려준다(한 함수).
+   - `ticket_status {hash 또는 uri, root?}` - 작업 상태 JSON 하나를 즉시 돌려준다. `hashes: [...]`로 여러 장을 한
+     번에 받는다.
+   - `ticket_wait {hash 또는 uri, root?, since?, timeout_s?}` - `since`(직전에 받은 `status`)와 다른 상태가 되거나
+     `timeout_s`(기본 50, 상한 300)가 지나면 돌려준다. 결과에 `changed: true|false`가 있다.
+8. **엔진 수정은 `mcp_server.py` - `mcp_tools.py` 둘이다.** `tickets.py` - `tick.sh` - `dispatch.py`는 안 고친다.
+   큐 상태 규칙(파일 이름 셋, claim 락)은 읽기만 한다.
+9. **매뉴얼.** `apps/teams/docs/mcp.md`(ko)와 영어판에 "티켓 상태 받아보기" 절을 둔다. 독자가 덮고 나서 할 수 있어야
+   하는 것: 자기 MCP 호스트가 tasks 확장 - 구독 - 둘 다 없음 중 어디에 해당하는지 가리고, 각 경우에 티켓을 만든 뒤
+   상태를 받는 방법(핸들 따라가기 - `dira://` URI 구독 - `ticket_wait` 폴링)과 상태 넷의 뜻을 안다.
+
+```autonomy
+주도성 5 판단: 표준으로 MCP 2026-07-28의 tasks 확장과 subscriptions/listen을 골랐다. 사람이 쓰는 통로가 이미 MCP이고, tasks 확장의 상태 넷(working - input_required - completed - 취소/실패)이 티켓의 열림 - 답변 대기 - 완료와 거의 그대로 겹친다. Webhook - SSE 단독 - CloudEvents 같은 MCP 밖 방식은 클라이언트가 따로 받아야 해서 뺐다.
+주도성 5 판단: 이전 규격 클라이언트를 버리지 않으려고 두 규격을 함께 말한다. 2025-11-25의 실험적 tasks는 후속 규격이 갈아엎은 형식이라 구현하지 않는다.
+주도성 5 판단: 표준 밖 도구 ticket_status - ticket_wait를 더한다. 요구는 "표준을 사용"이고 표준은 결정 2-6에서 쓴다. 다만 지금 dira MCP를 가장 많이 부르는 쪽이 에이전트 세션이고, 그 호스트가 tasks 확장과 구독을 지원한다는 근거를 찾지 못했다. 도구가 없으면 그 클라이언트에게는 기능이 없는 것과 같다.
+주도성 5 판단: 엔진 파일(mcp_server.py - mcp_tools.py)을 고치지만 사람 승인을 기다리지 않는다. P543 - P559와 같이 새 서브커맨드도 큐 상태 규칙 변경도 없고, MCP 서버 두 파일 안에서 끝난다.
+주도성 5 판단: 이전 규격 HTTP에는 푸시를 만들지 않는다. 그 규격의 세션 - GET SSE는 2026-07-28이 버린 것이고, 그 클라이언트는 tasks/get 대신 ticket_wait로 같은 상태를 받는다.
+주도성 5 판단: 티켓이 여덟 장이고 엔진 프로토콜 층 개편이라 에픽 P571을 연다.
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P571-1 | 결정 1, 6의 stdout 잠금: `2026-07-28` 경로(`server/discover`, `_meta` 버전 판정, `resultType`, -32022)와 이전 규격 버전 협상 + `test_mcp_server.py` | developer | - | 발행 예정 |
+| P571-2 | 결정 2, 3, 7: URI 만들기 - 풀기, 티켓 작업 상태 함수 하나(대응표 - 이어받기 추적 - `inputRequests` - `result`), `ticket_status` - `ticket_wait`, 결정 5의 도구 결과 `resource_link` + 테스트 | developer | - | 발행 예정 |
+| P571-3 | 결정 5: `resources/list` - `resources/templates/list` - `resources/read`와 capability | developer | P571-1, P571-2 | 발행 예정 |
+| P571-4 | 결정 6: 감시 스레드, 이전 규격 stdio `resources/subscribe` - `unsubscribe`, `subscriptions/listen`(stdio + HTTP SSE), 목록 바뀜 알림 셋 | developer | P571-3 | 발행 예정 |
+| P571-5 | 결정 3, 4: tasks 확장 - 도구 셋의 `CreateTaskResult`, `tasks/get` - `tasks/update` - `tasks/cancel`, `taskIds` 구독 -> `notifications/tasks` | developer | P571-4 | 발행 예정 |
+| P571-6 | 결정 9: 매뉴얼 `apps/teams/docs/mcp.md` "티켓 상태 받아보기" 절(한국어) | writer | P571-5 | 발행 예정 |
+| P571-7 | 결정 9의 영어판 `apps/teams/en/docs/mcp.md` | translator | P571-6 | 발행 예정 |
+| P571-8 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P571-5 | 발행 예정 |
+
+#### 수용조건
+
+- [ ] `python3 test_mcp_server.py`가 통과하고, 기존 `2025-06-18` `initialize` - `tools/list` - `tools/call` 응답이 이 에픽 전과 바이트 단위로 같다(`resultType` 등 새 필드가 없다).
+- [ ] stdio 서버에 `{"method":"server/discover"}`를 보내면 결과의 지원 버전에 `2026-07-28` - `2025-11-25` - `2025-06-18`이 있고, `capabilities.extensions`에 `io.modelcontextprotocol/tasks`가 있으며 `resultType`이 `complete`다. `_meta` 버전이 `1999-01-01`인 요청은 오류 코드 -32022다.
+- [ ] 임시 큐에서 `_meta`에 tasks 확장을 선언하고 `tools/call ticket_create`를 부르면 결과의 `resultType`이 `task`이고 `taskId`가 `dira://ticket/<hash>?root=...`이며 `status`가 `working`이다. 선언 없이 부르면 결과는 지금과 같고 `content`에 그 URI의 `resource_link`가 하나 더 있다.
+- [ ] 그 `taskId`로 `tasks/get`을 부르면 (가) 파일이 열림이면 `working`과 `대기`로 시작하는 `statusMessage` (나) `.wip`으로 바꾸면 `working`과 `진행 중` (다) 열림으로 돌리고 `awaiting:` + 미충족 dep + `## 질문 1` 절(문항 둘)을 두면 `input_required`와 키 `q1` - `q2`의 `inputRequests` (라) `.done`에 `## 결과`를 두면 `completed`와 `result.content[0].text`에 그 절 내용이 나온다.
+- [ ] (다) 상태에서 `tasks/update {inputResponses: {q1: {letters:["a"]}, q2: {letters:["b"], note:"x"}}}`를 부르면 빈 결과가 오고, 큐에 `ticket_answer`로 같은 답을 썼을 때와 같은 답변 파일이 생기며, 다음 `tasks/get`이 `working`이다.
+- [ ] `.done`에 `continued: <새 해시>`가 있고 새 해시 티켓이 `.wip`이면 원래 `taskId`의 `tasks/get`이 `working`이다. 새 티켓이 `.done`이 되면 `completed`이고 `result`가 새 티켓의 `## 결과`다.
+- [ ] stdio에서 tasks 확장을 선언하고 `subscriptions/listen {notifications: {taskIds: [<uri>], resourceSubscriptions: ["dira://awaiting"]}}`를 보내면 첫 메시지가 `notifications/subscriptions/acknowledged`이고, 그 티켓을 `.wip`으로 rename하면 5초 안에 `notifications/tasks`(`status: working`, `statusMessage`가 `진행 중`)가 오고, 모든 알림의 `_meta.io.modelcontextprotocol/subscriptionId`가 구독 요청 ID와 같다. 확장을 선언하지 않고 `taskIds`를 보내면 -32021이다.
+- [ ] HTTP 서버에 같은 `subscriptions/listen`을 `POST`하면 응답 `Content-Type`이 `text/event-stream`이고 같은 알림이 SSE `data:` 줄로 온다. 같은 동안 다른 `POST tools/call`은 `application/json`으로 정상 응답한다.
+- [ ] 이전 규격 stdio에서 `initialize` 결과의 `capabilities.resources.subscribe`가 `true`이고, `resources/subscribe {uri: <티켓 URI>}` 뒤 그 티켓을 rename하면 5초 안에 `notifications/resources/updated {uri}`가 온다. 이전 규격 HTTP의 `initialize`에는 `subscribe`가 없다.
+- [ ] `resources/list`에 `dira://awaiting` - `dira://projects` - 등록 프로젝트마다 `dira://queue?root=...`가 있고, `resources/templates/list`에 `dira://ticket/{hash}{?root}`가 있으며, `resources/read`가 각각 `awaiting_list` - `projects` - `queue_list` - `ticket_status`와 같은 JSON을 돌려준다.
+- [ ] `ops.json`을 만들거나 지우면 `toolsListChanged`를 구독한 연결에 5초 안에 `notifications/tools/list_changed`가 온다. `gui-projects.json`을 바꾸면 `notifications/resources/list_changed`가 온다.
+- [ ] `ticket_wait {hash, since: "working", timeout_s: 3}`는 상태가 그대로면 3초 뒤 `changed: false`로, 그동안 `.done`이 되면 바로 `changed: true` - `status: completed`로 돌아온다. `ticket_status {hashes: [a, b]}`가 두 장을 같은 형식으로 돌려준다.
+- [ ] `python3 test_mcp_server.py`와 `python3 test_mcp_parity.py`가 통과하고, `git diff --stat master~N`(이 에픽 커밋들)에 `tickets.py` - `tick.sh` - `dispatch.py`가 없다.
+- [ ] `apps/teams/docs/mcp.md`와 영어판에 "티켓 상태 받아보기" 절이 있고 `tasks/get` - `subscriptions/listen` - `ticket_wait`가 모두 나온다.
+
 ### P570. 앱이나 엔진을 지우면 dira의 cron 줄과 sweep 데몬이 10분 안에 사라지고, 다시 설치하면 등록이 돌아온다 (요구 `de085595`, 왕복 0회)
 
 사람 요구(2026-11-24): *dira 삭제 시 cron이 안없어진다는 제보가 들어왔습니다.* 제보자가 어떤 방법으로 지웠는지는
