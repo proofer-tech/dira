@@ -9120,14 +9120,14 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 
 | ID | 무엇 | 페르소나 | deps | 상태 |
 |---|---|---|---|---|
-| P571-1 | 결정 1, 6의 stdout 잠금: `2026-07-28` 경로(`server/discover`, `_meta` 버전 판정, `resultType`, -32022)와 이전 규격 버전 협상 + `test_mcp_server.py` | developer | - | 발행 예정 |
-| P571-2 | 결정 2, 3, 7: URI 만들기 - 풀기, 티켓 작업 상태 함수 하나(대응표 - 이어받기 추적 - `inputRequests` - `result`), `ticket_status` - `ticket_wait`, 결정 5의 도구 결과 `resource_link` + 테스트 | developer | - | 발행 예정 |
-| P571-3 | 결정 5: `resources/list` - `resources/templates/list` - `resources/read`와 capability | developer | P571-1, P571-2 | 발행 예정 |
-| P571-4 | 결정 6: 감시 스레드, 이전 규격 stdio `resources/subscribe` - `unsubscribe`, `subscriptions/listen`(stdio + HTTP SSE), 목록 바뀜 알림 셋 | developer | P571-3 | 발행 예정 |
-| P571-5 | 결정 3, 4: tasks 확장 - 도구 셋의 `CreateTaskResult`, `tasks/get` - `tasks/update` - `tasks/cancel`, `taskIds` 구독 -> `notifications/tasks` | developer | P571-4 | 발행 예정 |
-| P571-6 | 결정 9: 매뉴얼 `apps/teams/docs/mcp.md` "티켓 상태 받아보기" 절(한국어) | writer | P571-5 | 발행 예정 |
-| P571-7 | 결정 9의 영어판 `apps/teams/en/docs/mcp.md` | translator | P571-6 | 발행 예정 |
-| P571-8 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P571-5 | 발행 예정 |
+| P571-1 | 결정 1, 6의 stdout 잠금: `2026-07-28` 경로(`server/discover`, `_meta` 버전 판정, `resultType`, -32022)와 이전 규격 버전 협상 + `test_mcp_server.py` | developer | - | 발행 `d5159a55` |
+| P571-2 | 결정 2, 3, 7: URI 만들기 - 풀기, 티켓 작업 상태 함수 하나(대응표 - 이어받기 추적 - `inputRequests` - `result`), `ticket_status` - `ticket_wait`, 결정 5의 도구 결과 `resource_link` + 테스트 | developer | - | 발행 `1287e231` |
+| P571-3 | 결정 5: `resources/list` - `resources/templates/list` - `resources/read`와 capability | developer | P571-1, P571-2 | 발행 `f6a0b2be` |
+| P571-4 | 결정 6: 감시 스레드, 이전 규격 stdio `resources/subscribe` - `unsubscribe`, `subscriptions/listen`(stdio + HTTP SSE), 목록 바뀜 알림 셋 | developer | P571-3 | 발행 `108e2fe6` |
+| P571-5 | 결정 3, 4: tasks 확장 - 도구 셋의 `CreateTaskResult`, `tasks/get` - `tasks/update` - `tasks/cancel`, `taskIds` 구독 -> `notifications/tasks` | developer | P571-4 | 발행 `670dcb10` |
+| P571-6 | 결정 9: 매뉴얼 `apps/teams/docs/mcp.md` "티켓 상태 받아보기" 절(한국어) | writer | P571-5 | 발행 `409a90b0` |
+| P571-7 | 결정 9의 영어판 `apps/teams/en/docs/mcp.md` | translator | P571-6 | 발행 `f76223b1` |
+| P571-8 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P571-5 | 발행 `860de041` |
 
 #### 수용조건
 
