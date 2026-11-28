@@ -8988,6 +8988,61 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P576. 공용 패키지로 넘어간 큐에 남은 옛 로컬 사본(`apm_modules/_local`) 때문에 페르소나가 `프로필 없음`으로 뜨지 않는다 (요구 `ed2a038d`, 왕복 0회)
+
+사람 요구(2026-11-28, proofer.tech 홈 대화): 마켓에서 페르소나와 스쿼드를 가져와도 계속 `프로필 없음`만 뜬다. 홈 대화가
+원인을 찾고 "엔진에서 근본적으로 막자"고 제안했으며, 사람이 "그렇게 해주세요"로 승인했다.
+
+#### 원인 - 2026-11-28 홈 대화 조사와 2026-11-29 코드 확인
+
+- `dira_apm.py resolve <루트> persona pm`이 rc 1과 `같은 이름 패키지 2개: persona-pm`을 냈다. 화면(`apps/teams/lib/apm.ts`
+  `resolveHome`)은 rc가 0이 아니면 옛 자리 `.dira/personas/<이름>/`로 돌아가고, 그 자리에 PROFILE.md가 없어서 배지가 붙었다.
+- 두 번째 패키지는 `team/apm_modules/_local/<이름>/`(그리고 `_local/<해시>/<스킬>/`)이다. 11월 6일 공용 패키지
+  (`proofer-tech/dira/packages/persona-*`)로 바꾸기 전에 설치된 로컬 패키지 사본이다. `apm.lock.yaml`은 이 사본을 참조하지
+  않는다. APM은 lock에서 빠진 사본을 지우지 않는다.
+- `installed()`(`dira_apm.py`)는 `apm_modules` 아래에서 `apm.yml`이 있는 디렉터리를 lock과 대조하지 않고 모두 센다. 그래서
+  내용이 다른 옛 사본이 같은 이름의 두 번째 패키지로 잡혔다. `installed()`는 `resolve` - `listing` - `materialize` -
+  `drift` - `check`가 함께 쓰므로, 같은 고아 사본이 `materialize`의 `dira-protocols` 선택과 `check`의 스킬 이름 충돌에도 섞일 수 있다.
+- proofer.tech - stocky - stream - hsol.info - pofol - gallae - with-cto 일곱 큐에서 같은 증상이 있었다. 홈 대화는 고아 사본을
+  각 큐의 `.dira/.trash-apm-local-20261128/`로 옮겨 증상만 걷었다. 다른 큐가 로컬 패키지에서 공용 패키지로 넘어가면 다시 생긴다.
+- 실제 lock은 항목마다 `repo_url`을 갖고, 설치 자리는 `apm_modules/<repo_url>`(공용이면 그 뒤에 `/<virtual_path>`)이다.
+  예: `repo_url: _local/protocols` -> `apm_modules/_local/protocols`, `repo_url: proofer-tech/dira` +
+  `virtual_path: packages/persona-pm` -> `apm_modules/proofer-tech/dira/packages/persona-pm`.
+
+#### 결정
+
+1. **`installed(site)`는 `site/apm.lock.yaml`이 있으면 lock 항목이 가리키는 디렉터리만 센다.** 항목마다 `apm_modules/<repo_url>`과,
+   `virtual_path`가 있으면 `apm_modules/<repo_url>/<virtual_path>`를 후보로 만들고, `packages()`가 찾은 디렉터리 가운데
+   후보와 경로가 같은 것만 남긴다. 그 밖의 계약(이름별 묶음, 내용이 같은 사본은 하나로 센다)은 그대로다.
+2. **lock 파일이 없으면 지금처럼 전부 센다.** 첫 설치 전이나 lock 없이 만든 테스트 큐의 동작을 바꾸지 않는다.
+3. **고아 사본은 지우지 않는다.** 읽는 쪽에서 무시하면 증상이 사라지고, 사람이 만든 데이터를 엔진이 지우는 일을 만들지 않는다.
+   일곱 큐의 `.trash-apm-local-20261128/`도 그대로 둔다.
+4. **lock은 지금처럼 줄 단위로 읽는다.** `lock_locals`와 같은 방식으로 `repo_url` - `virtual_path`를 더 읽는다. YAML 의존성을 더하지 않는다.
+5. **화면(`apps/teams/lib/apm.ts`)은 고치지 않는다.** `resolve`가 rc 0을 내면 `resolveHome`이 올바른 자리를 받는다.
+   `tick.sh` - `tickets.py`도 바꾸지 않는다.
+
+```autonomy
+주도성 5 판단: 엔진 파일(`dira_apm.py`) 수정이다. 사람이 홈 대화에서 "엔진에서 막자"는 제안을 승인했으므로 그 승인을 근거로 삼는다.
+주도성 5 판단: 제안한 두 방법(lock에 있는 것만 세기, 설치 때 고아 정리) 가운데 앞의 것만 고른다. 지우는 쪽은 데이터 삭제라 오토파일럿이 하지 않는 일이고, 앞의 것만으로 증상의 원인이 사라진다.
+주도성 5 판단: 에픽을 열지 않는다. 티켓이 둘이고 화면 문구 변화가 없다.
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P576-1 | 엔진 - 결정 1 - 2 - 4: `installed()`가 lock 항목의 설치 자리만 센다 + `test_dira_apm.py` 테스트 | developer | - | 미발행 |
+| P576-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P576-1 | 미발행 |
+
+#### 수용조건
+
+- [ ] `python3 test_dira_apm.py`가 통과한다. 그 안의 새 테스트는 임시 팀 디렉터리에 lock이 가리키는
+  `apm_modules/proofer-tech/dira/packages/persona-pm`과, lock에 없고 내용이 다른 `apm_modules/_local/pm`(둘 다 `name: persona-pm`)을
+  만든다. 이때 `dira_apm.py resolve <루트> persona pm`이 rc 0과 함께 앞의 경로를 낸다.
+- [ ] 같은 조건에서 `dira_apm.py check <루트>`(가짜 apm)가 `persona-pm`에 대한 스킬 이름 충돌을 내지 않는다.
+- [ ] lock 파일이 없는 팀 디렉터리에서는 `apm_modules`의 `name`이 같고 내용이 다른 두 사본에 대해 `resolve`가 지금처럼 rc 1을 낸다(기존 동작 유지).
+- [ ] 기존 `test_dira_apm.py` 테스트를 고치지 않은 채로 통과한다.
+- [ ] 실물: `.trash-apm-local-20261128/`의 사본 하나를 `apm_modules/_local/`로 복사해 되돌린 큐에서 `python3 dira_apm.py resolve <루트> persona pm`이 rc 0이고 공용 패키지 경로를 낸다. 확인한 뒤 복사본을 지운다.
+- [ ] `git diff --stat master`에 `tick.sh` - `tickets.py` - `apps/teams/`가 없다.
+
 ### P575. 브라우저로 인증에서 CLI가 토큰 다음 줄에 안내문을 그려도 토큰만 잘라 저장한다 (요구 `1994f671`, 왕복 0회)
 
 사람 요구(2026-11-28): claude 브라우저 토큰 불러오기가 안 된다. 첨부 화면은 설정의 `브라우저로 인증` 다이얼로그다. 진행
