@@ -133,6 +133,10 @@
         "to": "engine/slim.py"
       },
       {
+        "from": "../../session_digest.py",
+        "to": "engine/session_digest.py"
+      },
+      {
         "from": "../../remote.py",
         "to": "engine/remote.py"
       },
