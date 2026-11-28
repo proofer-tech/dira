@@ -297,6 +297,31 @@ test("startSetup — 발급 성공 뒤 CLI 안내문이 낱말 사이 공백 없
   stopSetup();
 });
 
+test("startSetup — 토큰 다음 줄에 CHA로 이어 붙은 안내문이 와도 토큰만 저장한다 (§P575)", async () => {
+  process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-nextline-"));
+  const TOKEN = "sk-ant-oat01-" + "x".repeat(188); // 200자
+  const WORDS = ["Store", "this", "token", "securely.", "You", "won"];
+  const GLUED = WORDS.map((w, k) => `\\033[${k + 1}G${w}`).join("");
+  stubClaude(
+    `printf 'Your OAuth token (valid for 1 year):\\r\\n\\r\\n${TOKEN}\\r\\n\\r\\n${GLUED}\\r\\n'\nsleep 60`,
+  );
+  armPidfile();
+  await withFetch(
+    (n) => (n === TOKEN.length ? 200 : 401),
+    async () => {
+      startSetup();
+      await until(() => !!pollSetup().savedAt || !!pollSetup().error);
+    },
+  );
+  const s = pollSetup();
+  assert.strictEqual(s.error, undefined, s.error);
+  const saved = await import("node:fs/promises").then((fs) => fs.readFile(tokenPath(), "utf8"));
+  assert.strictEqual(saved, TOKEN);
+  assert.ok(s.lines.some((l) => l.includes("sk-ant-…")), s.lines.join("|"));
+  assert.ok(!s.lines.some((l) => l.includes(TOKEN) || l.includes("Storethistoken")), s.lines.join("|"));
+  stopSetup();
+});
+
 test("startSetup — 토큰을 잡고 저장이 기록되기 전에 폴링이 끼어도 running:false+savedAt 없음+error 없음인 순간이 없다 (§0-13 §저장이 끝나면)", async () => {
   process.env.TICKET_LOCAL = mkdtempSync(path.join(tmpdir(), "fst-auth-window-"));
   stubClaude(`printf 'sk-ant-oat01-${"y".repeat(40)}\\r\\n'\nsleep 60`);

@@ -741,7 +741,8 @@ function foldRaw(raw: string): { text: string; rawIndex: number[]; gapAt: boolea
     CSI_Y.lastIndex = i;
     const csi = CSI_Y.exec(raw);
     if (csi) {
-      if (/[GC]$/.test(csi[0])) pendingGap = true; // ptyLines와 같은 판정(CHA·CUF)
+      // ptyLines와 같은 판정(CHA·CUF) + 세로 이동(CUU·CUD·CNL·CPL·CUP·HVP)은 줄이 바뀐 자리다(§P575)
+      if (/[GCABEFHf]$/.test(csi[0])) pendingGap = true;
       i += csi[0].length;
       continue;
     }
@@ -751,6 +752,7 @@ function foldRaw(raw: string): { text: string; rawIndex: number[]; gapAt: boolea
       continue;
     }
     if (ch === "\r" || ch === "\n") {
+      pendingGap = true; // 줄바꿈도 낱말 사이 간격 후보다(§P575)
       i += 1;
       continue;
     }
