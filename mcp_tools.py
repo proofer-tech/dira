@@ -1167,12 +1167,22 @@ def list_tools():
 
 
 LINKING = ("ticket_create", "ticket_answer", "dispatch_now")
+ARGS_LINKING = ("ticket_append", "ticket_done", "unassign")  # 결과에 해시가 없어 인자의 hash를 쓴다
 
 
 def _with_links(name, args, out):
-    """결정 5: 티켓을 만들거나 건드린 도구의 결과에 그 티켓 URI를 `_links`로 싣는다(mcp_server가 resource_link로 바꾼다)."""
-    if name in LINKING and isinstance(out, dict) and out.get("hash") and "error" not in out:
+    """결정 5: 티켓을 만들거나 건드린 도구의 결과에 그 티켓 URI를 `_links`로 싣는다(mcp_server가 resource_link로 바꾼다).
+    queue_list는 그 큐 URI, awaiting_list는 dira://awaiting."""
+    if not isinstance(out, dict) or "error" in out:
+        return out
+    if name in LINKING and out.get("hash"):
         out["_links"] = [ticket_uri(get_root(args), out["hash"])]
+    elif name in ARGS_LINKING and args.get("hash"):
+        out["_links"] = [ticket_uri(get_root(args), args["hash"])]
+    elif name == "queue_list":
+        out["_links"] = ["dira://queue?root=" + quote(get_root(args), safe="")]
+    elif name == "awaiting_list":
+        out["_links"] = ["dira://awaiting"]
     return out
 
 

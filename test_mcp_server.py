@@ -615,6 +615,30 @@ mcp_server.drop(sub_)
 time.sleep(mcp_server.WATCH_S + 1)
 assert not [t for t in threading.enumerate() if t.name == "mcp-watch"], "구독이 없는데 스레드가 남았다"
 
+# P571 결정 5: 나머지 도구의 resource_link
+def links(tool, **args):
+    args.setdefault("root", root)
+    r = rpc([{"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {"name": tool, "arguments": args}}])[0]["result"]
+    return r["content"], r["isError"]
+
+
+from urllib.parse import quote as _q  # noqa: E402
+call("ticket_create", hash="5c5c5c01", fm={"title": "t", "kind": "work", "persona": "developer"}, body="## Goal\nx")
+call("engine_exec", program="tickets.py", args=["handclaim", os.path.join(root, "tickets", "5c5c5c01.md")])
+for tool, extra in (("ticket_append", {"text": "## 결과\nx"}), ("unassign", {}), ("ticket_done", {})):
+    c, e = links(tool, hash="5c5c5c01", **extra)
+    rl = [x for x in c if x["type"] == "resource_link"]
+    assert len(rl) == 1 and rl[0]["uri"] == "dira://ticket/5c5c5c01?root=" + _q(os.path.realpath(root), safe=""), (tool, c)
+    assert c[0]["type"] == "text", c
+    if tool == "ticket_append":
+        assert not e and set(json.loads(c[0]["text"])) == {"path"}, c
+c, e = links("queue_list")
+assert [x["uri"] for x in c if x["type"] == "resource_link"] == ["dira://queue?root=" + _q(os.path.realpath(root), safe="")], c
+c, e = links("awaiting_list")
+assert [x["uri"] for x in c if x["type"] == "resource_link"] == ["dira://awaiting"], c
+c, e = links("ticket_append", hash="ffffffff", text="x")
+assert e and not [x for x in c if x["type"] == "resource_link"], c
+
 diff = subprocess.run(["git", "diff", "master", "--", "tickets.py"], cwd=HERE, capture_output=True,
                       text=True).stdout
 assert diff == "", "tickets.py가 바뀌었다"
