@@ -9175,7 +9175,8 @@ timeout 인자 없이 실행하게 했다. 모델은 haiku였다.
    `io.modelcontextprotocol/protocolVersion: "2026-07-28"`이 있거나 `server/discover`가 오면 `2026-07-28`
    경로다. 이 경로의 결과에는 `resultType`을 붙이고(`"complete"` 또는 `"task"`), `server/discover`는 지원 버전
    목록 - capability - `serverInfo`를 돌려준다. 모르는 버전은 `UnsupportedProtocolVersion`(-32022)이다. 지금의
-   `2025-06-18` 클라이언트 동작은 한 바이트도 바뀌지 않는다(기존 `test_mcp_server.py`가 그대로 통과한다).
+   `2025-06-18` 클라이언트가 받는 응답에는 `resultType` 같은 새 규격 필드가 붙지 않는다. 바뀌는 것은 결정 5의
+   `resource_link`, 결정 6의 capability, 결정 7의 도구 둘뿐이다(기존 `test_mcp_server.py`가 그대로 통과한다).
 2. **티켓 하나 = 리소스 하나 = 작업(task) 하나, 식별자는 URI 하나다.**
    `dira://ticket/<hash>?root=<큐 루트 절대 경로, 퍼센트 인코딩>`. 이 URI가 리소스 URI이자 `taskId`다. 서버는
    작업 표를 따로 들고 있지 않고 매번 URI를 풀어 파일을 읽는다. 그래서 서버가 다시 떠도 같은 ID가 그대로
@@ -9279,7 +9280,7 @@ timeout 인자 없이 실행하게 했다. 모델은 haiku였다.
 
 #### 수용조건
 
-- [ ] `python3 test_mcp_server.py`가 통과하고, 기존 `2025-06-18` `initialize` - `tools/list` - `tools/call` 응답이 이 에픽 전과 바이트 단위로 같다(`resultType` 등 새 필드가 없다).
+- [ ] `python3 test_mcp_server.py`가 통과한다. 이 에픽 전 서버와 같은 입력으로 `2025-06-18` `initialize` - `tools/list` - `tools/call`을 보내 대조하면 (가) `initialize`는 `capabilities`만 다르고 그 차이는 결정 6의 `resources` - `tools` 선언뿐이다 (나) `tools/list`는 기존 도구의 이름 - 설명 - 입력 스키마가 같고 늘어난 도구는 `ticket_status` - `ticket_wait` 둘뿐이다 (다) `tools/call` 결과는 `content`의 기존 `text` 항목이 같고, 늘어난 것은 결정 5가 정한 도구의 `resource_link` 항목뿐이다. 결정 5의 목록에 없는 도구(`ticket_read` - `projects` 등)의 결과와 오류 응답은 바이트 단위로 같다. 어느 응답에도 `resultType`이 없다.
 - [ ] stdio 서버에 `{"method":"server/discover"}`를 보내면 결과의 지원 버전에 `2026-07-28` - `2025-11-25` - `2025-06-18`이 있고, `capabilities.extensions`에 `io.modelcontextprotocol/tasks`가 있으며 `resultType`이 `complete`다. `_meta` 버전이 `1999-01-01`인 요청은 오류 코드 -32022다.
 - [ ] 임시 큐에서 `_meta`에 tasks 확장을 선언하고 `tools/call ticket_create`를 부르면 결과의 `resultType`이 `task`이고 `taskId`가 `dira://ticket/<hash>?root=...`이며 `status`가 `working`이다. 선언 없이 부르면 결과는 지금과 같고 `content`에 그 URI의 `resource_link`가 하나 더 있다.
 - [ ] 그 `taskId`로 `tasks/get`을 부르면 (가) 파일이 열림이면 `working`과 `대기`로 시작하는 `statusMessage` (나) `.wip`으로 바꾸면 `working`과 `진행 중` (다) 열림으로 돌리고 `awaiting:` + 미충족 dep + `## 질문 1` 절(문항 둘)을 두면 `input_required`와 키 `q1` - `q2`의 `inputRequests` (라) `.done`에 `## 결과`를 두면 `completed`와 `result.content[0].text`에 그 절 내용이 나온다.
