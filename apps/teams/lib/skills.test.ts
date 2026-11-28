@@ -1158,3 +1158,19 @@ test("defaultSkillsFor — 이미 있어 건너뛴 이름도 목록에 있으면
   const skipped: Skill[] = [{ name: "stop-slop", description: "이미 있던 사본" }];
   assert.deepEqual(defaultSkillsFor("pm", skipped, false).map((s) => s.name), ["stop-slop"]);
 });
+
+test("기준 디렉터리가 없어도 엔진 상한 스킬 저장이 성공한다", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "p574-"));
+  try {
+    const personas = path.join(root, "personas");
+    await writePersonaEngine(personas, "pm", "claude", "sonnet", "xhigh");
+    const got = await readPersonaEngine(personas, "pm");
+    assert.deepStrictEqual(got, { engineId: "claude", model: "sonnet", effort: "xhigh" });
+    await writePersonaLimit(personas, "pm", 3);
+    assert.strictEqual(readFileSync(path.join(personas, "pm", "limit"), "utf8"), "3\n");
+    await writePersonaSkills(personas, "pm", [{ name: "shadcn", description: "컴포넌트" }]);
+    assert.ok(existsSync(path.join(personas, "pm", "skills.md")));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

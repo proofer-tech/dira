@@ -569,6 +569,7 @@ async function writeSkillsSidecar(
   file: string,
   header: string,
 ): Promise<void> {
+  await mkdir(expandHome(dir), { recursive: true }); // 새 큐는 personas가 없고 resolveWithin이 기준을 realpath한다
   const filePath = await personaFilePath(dir, name, file);
   if (skills.length === 0) {
     await rm(filePath, { force: true });
@@ -712,6 +713,7 @@ export async function readPersonaLimit(dir: string, name: string): Promise<numbe
  *  **정수가 아닌 값은 거절한다.** 여기서 조용히 넘어가면 화면이 쓴 상한이 엔진에서
  *  `상한 없음`이 되고 화면에는 아무 이상이 안 보인다(§5-4가 짚은 바로 그 자리다). */
 export async function writePersonaLimit(dir: string, name: string, limit: number | null): Promise<void> {
+  await mkdir(expandHome(dir), { recursive: true }); // 새 큐는 personas가 없고 resolveWithin이 기준을 realpath한다
   const file = await personaFilePath(dir, name, "limit");
   if (limit === null) {
     await rm(file, { force: true });
@@ -779,6 +781,7 @@ export async function writePersonaEngine(
   effort: string = NO_EFFORT,
   force = false,
 ): Promise<{ engineId: EngineId; model: string; effort: string } | null> {
+  await mkdir(expandHome(dir), { recursive: true }); // 새 큐는 personas가 없고 resolveWithin이 기준을 realpath한다
   const file = await personaFilePath(dir, name, "engine");
   if (id === null) {
     await rm(file, { force: true });
