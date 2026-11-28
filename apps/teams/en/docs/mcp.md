@@ -145,6 +145,159 @@ ticket goes back on the queue for a worker to pick up. The tool then wakes a wor
 response is `{path, round, body, dispatch}`, with that result in `dispatch`. If waking the worker
 fails, the answer file still stays, and the next worker run picks the ticket up.
 
+### Following a ticket's status
+
+After you create a ticket over MCP, you can keep receiving what happens to it in the same conversation. You
+don't have to re-read it with `ticket_read` to find out whether a worker picked it up, stopped with a
+question, or finished. There are three ways to receive updates, depending on what your MCP host (the client
+you attached dira MCP to) supports. If `ticket_status` and `ticket_wait` are missing from the tool list,
+bring the app up.
+
+#### Which one is my host?
+
+| What the host supports | How to receive |
+|---|---|
+| MCP spec `2026-07-28` and the tasks extension (`io.modelcontextprotocol/tasks`) | [Following a task handle](#following-a-task-handle) |
+| Resource subscriptions. On earlier specs (`2025-06-18`, `2025-11-25`) this applies only when attached over stdio | [Resource subscriptions](#resource-subscriptions) |
+| Neither, or an earlier-spec host attached over HTTP | [Polling with tools](#polling-with-tools) |
+
+To find out which applies, look in the host's documentation for the MCP spec version it supports and for
+the "tasks" and "resource subscriptions" entries. If the documentation doesn't settle it, call
+`ticket_create` once and look at the response. If it arrives as `"resultType": "task"` with a `task`
+object, you are in the first case. If the usual result JSON arrives with a `dira://ticket/...` link
+(`resource_link`) at the end, the host did not declare the tasks extension. In that case, whether you can
+subscribe to that link separates the second case from the third.
+
+The third way works on every host. If you aren't sure the first two work, start with `ticket_wait`.
+
+#### The four states
+
+All three ways return the same state values. They map the ticket's state onto the MCP task state
+(`status`), with a human-readable explanation in `statusMessage`.
+
+| Ticket | `status` | `statusMessage` | What to do |
+|---|---|---|---|
+| Waiting | `working` | `대기 - 아직 워커가 안 잡았다` (waiting - no worker has picked it up) | Wait |
+| In progress | `working` | `진행 중 - <the worker that has it>`. If the session is stuck, `막힘 - <first line of the block>` (blocked) | Wait. If blocked, read the `## 블록` section with `ticket_read` |
+| Awaiting an answer | `input_required` | The title of the last `## 질문 n` section | Post an answer (below) |
+| Done | `completed` | `완료` (done) | Read `result` (below) |
+
+Waiting and in progress both have `status` `working`, so tell them apart by the leading words of
+`statusMessage`. When a session couldn't finish the job and filed a continuation ticket, the original
+ticket doesn't count as done even if it is `.done`. dira follows the continuation tickets to the end and
+returns the state of the last one. dira doesn't use `failed` or `cancelled`. If no ticket file matches the
+hash, you get an error (-32602) instead of a state.
+
+**When awaiting an answer.** The state comes with `inputRequests`. Each question in the last question
+section has one key such as `q1` or `q2`, and the value holds the question title and the letters of the
+choices. You can answer either of two ways, whichever is easier.
+
+- A host that uses the tasks extension puts the answer under the same key in `inputResponses` of
+  `tasks/update`. The value looks like `{"letters": ["a"], "note": "anything to add"}`, and `note` can be
+  omitted.
+- Any other host calls `ticket_answer`. Its arguments are in
+  [Handing answers to another agent](#handing-answers-to-another-agent).
+
+Both paths create the same file as `Write an answer` on the screen. Once the answer is posted, the ticket
+goes back on the queue and its state returns to `working`.
+
+**When done.** `result` holds the ticket's result in the shape of a tool result. The first item of
+`content` is the full text of the ticket's `## 결과` section, followed by one `dira://ticket/...` link per
+follow-up ticket. Follow-up tickets are the tickets that point to this one with `req:` and the handoff
+tickets written as `-> <hash>` in `## 결과`. The same content is also in `structuredContent` as
+`{hash, state, result, followups}`. To learn a follow-up ticket's state, follow its link the same way
+again.
+
+#### Following a task handle
+
+You use this way when the host puts `io.modelcontextprotocol/protocolVersion: "2026-07-28"` in the
+request's `_meta` and declares `io.modelcontextprotocol/tasks` in the request's
+`clientCapabilities.extensions`. A request that doesn't declare it gets no task handle. In this case the
+three tools below return a task handle instead of the usual result.
+
+| Tool | The ticket the handle points to |
+|---|---|
+| `ticket_create` | The ticket it created |
+| `ticket_answer` | The original ticket you answered |
+| `dispatch_now` (launches a worker right now) | The ticket named by `hash`. If you leave out `hash`, the usual result arrives with no handle |
+
+A handle looks like this.
+
+```json
+{"resultType": "task",
+ "task": {"taskId": "dira://ticket/caff757c?root=%2FUsers%2F<나>%2FProjects%2Fapp%2F.dira",
+          "ticketHash": "caff757c", "status": "working",
+          "statusMessage": "대기 - 아직 워커가 안 잡았다",
+          "ttlMs": null, "pollIntervalMs": 5000}}
+```
+
+The host keeps the `taskId` as is and calls `tasks/get` to read the state again. `pollIntervalMs` is 5000,
+so once every 5 seconds is enough. To receive updates only when something changes, without waiting, put
+the `taskId` in `notifications.taskIds` of `subscriptions/listen`. Then every time the state changes, the
+whole task state arrives in `notifications/tasks`. If you request `taskIds` on a request that didn't
+declare the tasks extension, you get an error (-32021).
+
+The `taskId` is a URI that holds the ticket hash and the queue root, so it never expires (`ttlMs` is
+`null`) and still resolves after the MCP server restarts. `tasks/cancel` returns only an empty response
+and doesn't touch the ticket. The ticket stays on the queue and workers keep handling it.
+
+#### Resource subscriptions
+
+Each ticket and the queue list are also open as MCP resources. Reading one returns JSON
+(`application/json`).
+
+| URI | What you get when you read it |
+|---|---|
+| `dira://ticket/<hash>?root=<queue root>` | The task state above plus `title`, `kind`, `persona`, and `owner` |
+| `dira://queue?root=<queue root>` | The open ticket list, the same as `queue_list` |
+| `dira://awaiting` | The awaiting-answer list, the same as `awaiting_list` (all registered projects) |
+| `dira://projects` | The project list, the same as `projects` |
+
+`resources/list` shows only the queue list, the awaiting-answer list, and the project list. A ticket URI
+appears only as the template `dira://ticket/{hash}{?root}`, so it is easier to use the link attached to the
+response that created the ticket. `root` is the absolute path of the queue root, percent-encoded.
+
+How you subscribe depends on the spec the host speaks.
+
+- If you attached an earlier-spec host over stdio, give the URI to `resources/subscribe`. When that
+  resource changes, `notifications/resources/updated` arrives with that URI, and the host reads the new
+  content with `resources/read`. To end the subscription, call `resources/unsubscribe`.
+- A `2026-07-28` host subscribes with a single `subscriptions/listen` request. Put the list of URIs in
+  `resourceSubscriptions`. Turn on `resourcesListChanged` to also receive projects being registered or
+  removed, and `toolsListChanged` to also receive changes to the tool list. The server first returns the
+  accepted items in `notifications/subscriptions/acknowledged`, then sends a notification each time
+  something changes. If you attached over HTTP, the response to that request stays open as an event stream
+  (SSE), and closing the connection ends the subscription. If you attached over stdio, it ends when you
+  cancel that request with `notifications/cancelled`.
+
+The server checks the subscribed queue's ticket files every 2 seconds to find changes, so a notification
+arrives about 2 seconds after the actual change. If you attached an earlier-spec host over HTTP, the
+server has no way to send anything first, so it doesn't accept subscriptions. Use the next way in that
+case.
+
+#### Polling with tools
+
+Even if the host uses neither the tasks extension nor resource subscriptions, two tools give you the same
+state. Both return the same JSON as the four states above.
+
+- `ticket_status` returns the current state right away. Give it one `hash` or `uri`, or give `hashes` an
+  array of hashes to get several tickets at once as `{tasks: [...]}`.
+- `ticket_wait` takes the `status` you received last in `since`, and waits until the state differs from
+  that value before returning. The upper limit on the wait is `timeout_s`, 50 seconds by default and 300
+  at most. If `changed` in the result is `true`, the state changed. If it is `false`, it returned because
+  time ran out. If you leave out `since`, it returns right away without waiting.
+
+You can hand it to an agent like this.
+
+> Create a ticket with dira MCP, call `ticket_wait` repeatedly with the last `status`, and tell me each
+> time the state changes. When it becomes `input_required`, show me the question, and when it becomes
+> `completed`, summarize the `## 결과`.
+
+`since` compares only `status`. Going from waiting to in progress is not counted as a change because both
+are `working`, and `ticket_wait` keeps waiting until `timeout_s` runs out in the meantime. If you want to
+know whether a worker has picked the ticket up, check `statusMessage` every time `changed` comes back
+`false`.
+
 ### Handing project registration and settings to another agent
 
 The app's project list and settings can be changed over MCP too. The tools write the same files the
