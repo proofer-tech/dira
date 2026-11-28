@@ -29,7 +29,8 @@ SUPPORTED = (STATELESS,) + OLD_VERSIONS
 META_VERSION = "io.modelcontextprotocol/protocolVersion"
 CAPS = {"tools": {}, "resources": {}}  # 이전 규격 HTTP. stdio는 CAPS_STDIO
 CAPS_STDIO = {"tools": {"listChanged": True}, "resources": {"subscribe": True, "listChanged": True}}
-CAPS_NEW = CAPS_STDIO  # 2026-07-28은 subscriptions/listen이 두 전송 모두에 있다
+TASKS_EXT = "io.modelcontextprotocol/tasks"
+CAPS_NEW = dict(CAPS_STDIO, extensions={TASKS_EXT: {}})  # 2026-07-28은 subscriptions/listen이 두 전송 모두에 있다
 STDIO = False
 SUBID = "io.modelcontextprotocol/subscriptionId"
 WATCH_S = float(os.environ.get("DIRA_MCP_WATCH_S") or 2)
@@ -75,9 +76,30 @@ def handle(msg):
     r = handle_old(i, method, p) if method != "server/discover" else reply(i, {
         "supportedVersions": list(SUPPORTED), "capabilities": CAPS_NEW, "serverInfo": SERVER_INFO})
     if "result" in r:
-        r["result"]["resultType"] = "complete"
+        r["result"].setdefault("resultType", "complete")
         r["result"].setdefault("_meta", {})["serverInfo"] = SERVER_INFO
     return r
+
+
+def declares_tasks(p):
+    meta = p.get("_meta") if isinstance(p, dict) else None
+    if not isinstance(meta, dict) or meta.get(META_VERSION) != STATELESS:
+        return False
+    ext = (meta.get("io.modelcontextprotocol/clientCapabilities") or meta.get("clientCapabilities") or {}).get("extensions")
+    return isinstance(ext, dict) and TASKS_EXT in ext
+
+
+def task_handle_hash(p, out, err):
+    """핸들이 가리킬 티켓 해시. ticket_create는 만든 티켓, ticket_answer와 dispatch_now는 인자의 hash."""
+    if err or not isinstance(out, dict):
+        return None
+    a = p.get("arguments") or {}
+    return {"ticket_create": out.get("hash"), "ticket_answer": a.get("hash"),
+            "dispatch_now": a.get("hash")}.get(p.get("name"))
+
+
+def out_root(p):
+    return {"root": (p.get("arguments") or {}).get("root")}
 
 
 def handle_old(i, method, p):
@@ -94,9 +116,29 @@ def handle_old(i, method, p):
             out, err, links = {"error": str(e)}, True, None
         except Exception as e:  # 도구 하나의 실패가 서버를 죽이지 않는다
             out, err, links = {"error": "%s: %s" % (type(e).__name__, e)}, True, None
+        h = task_handle_hash(p, out, err)
+        if h and declares_tasks(p):
+            t = mcp_tools.ticket_task(mcp_tools.get_root(out_root(p)), h)
+            return reply(i, {"resultType": "task", "task": t, "_meta": {
+                "io.modelcontextprotocol/model-immediate-response":
+                    "티켓 %s을 만들었고 상태는 작업 핸들(taskId)로 이어진다" % h}})
         content = [{"type": "text", "text": json.dumps(out, ensure_ascii=False)}]
         content += [{"type": "resource_link", "uri": u, "name": u.split("?")[0].rsplit("/", 1)[-1]} for u in links or []]
         return reply(i, {"content": content, "isError": err})
+    if method in ("tasks/get", "tasks/update", "tasks/cancel"):
+        try:
+            kind, h, r = mcp_tools.parse_uri(p.get("taskId"))
+            if kind != "ticket":
+                raise mcp_tools.ToolError("ticket URI가 아닙니다: %s" % p.get("taskId"))
+            root = mcp_tools.get_root({"root": r})
+            if method == "tasks/update":
+                picks = mcp_tools.responses_to_picks(p.get("inputResponses") or {})
+                mcp_tools.t_ticket_answer({"root": root, "hash": h, "picks": picks})
+                return reply(i, {})
+            t = mcp_tools.ticket_task(root, h)  # 없는 티켓이면 ToolError
+            return reply(i, {} if method == "tasks/cancel" else t)  # ponytail: 취소는 응답만, 티켓은 불변
+        except mcp_tools.ToolError as e:
+            return reply(i, error={"code": -32602, "message": str(e)})
     if method in ("resources/subscribe", "resources/unsubscribe") and STDIO:
         try:
             mcp_tools.parse_uri(p.get("uri"))
@@ -176,6 +218,11 @@ def signature(key):
         elif key == "projects" or key == "dira://projects":
             v = _stat_sig(os.path.join(local, "gui-projects.json"), True)
         else:
+            if key.startswith("task:"):
+                kind, h, root = mcp_tools.parse_uri(key[5:])
+                v = json.dumps(mcp_tools.ticket_task(mcp_tools.get_root({"root": root}), h), sort_keys=True)
+                _memo[key] = v
+                return v
             kind, h, root = mcp_tools.parse_uri(key)
             if kind == "awaiting":
                 a = mcp_tools.t_awaiting_list({"root": root} if root else {})
@@ -221,13 +268,20 @@ def _tick():
             except Exception:
                 drop(sub)
                 continue
-        for key in ["ops", "projects"] + list(sub["uris"]):
+        for key in ["ops", "projects"] + list(sub["uris"]) + ["task:" + u for u in sub.get("tasks", [])]:
             now = signature(key)
             if sub["sig"].get(key, now) == now:
                 sub["sig"][key] = now
                 continue
             sub["sig"][key] = now
-            if key == "ops":
+            if key.startswith("task:"):
+                try:
+                    kind, h, root = mcp_tools.parse_uri(key[5:])
+                    t = mcp_tools.ticket_task(mcp_tools.get_root({"root": root}), h)
+                except mcp_tools.ToolError:
+                    continue
+                _push(sub, _note(sub, "notifications/tasks", t))
+            elif key == "ops":
                 if sub["tools"]:
                     _push(sub, _note(sub, "notifications/tools/list_changed"))
             else:
@@ -254,7 +308,7 @@ def _watch():
 def add_sub(sub):
     global _thread
     _memo.clear()
-    sub["sig"] = {k: signature(k) for k in ["ops", "projects"] + list(sub["uris"])}
+    sub["sig"] = {k: signature(k) for k in ["ops", "projects"] + list(sub["uris"]) + ["task:" + u for u in sub.get("tasks", [])]}
     sub["done"] = threading.Event()
     with _subs_lock:
         _subs[id(sub)] = sub
@@ -299,7 +353,16 @@ def listen(msg, sink):
             uris.append(u)
         except mcp_tools.ToolError:
             pass  # 지원하는 부분만 acknowledged에 돌려준다
+    tids = []
+    for u in n.get("taskIds") or []:
+        try:
+            if mcp_tools.parse_uri(u)[0] == "ticket":
+                tids.append(u)
+        except mcp_tools.ToolError:
+            pass
     ack = {}
+    if tids:
+        ack["taskIds"] = tids
     if n.get("toolsListChanged"):
         ack["toolsListChanged"] = True
     if n.get("resourcesListChanged"):
@@ -307,9 +370,18 @@ def listen(msg, sink):
     if uris:
         ack["resourceSubscriptions"] = uris
     sub = {"id": str(msg["id"]), "rid": msg["id"], "sink": sink, "tools": bool(ack.get("toolsListChanged")),
-           "list": bool(ack.get("resourcesListChanged")), "uris": uris}
+           "list": bool(ack.get("resourcesListChanged")), "uris": uris, "tasks": tids}
     sink(_note(sub, "notifications/subscriptions/acknowledged", {"notifications": ack}))
     return add_sub(sub)
+
+
+def listen_error(msg):
+    """tasks 확장을 선언하지 않고 taskIds를 신청하면 -32021."""
+    p = msg.get("params") or {}
+    n = p.get("notifications") if isinstance(p.get("notifications"), dict) else {}
+    if n.get("taskIds") and not declares_tasks(p):
+        return reply(msg["id"], error={"code": -32021, "message": "Missing required client capability",
+                                       "data": {"required": {"extensions": {TASKS_EXT: {}}}}})
 
 
 def is_listen(msg):
@@ -342,7 +414,11 @@ def serve_stdio():
         except ValueError:
             msg = None
         if is_listen(msg):
-            listens[msg["id"]] = listen(msg, write_line)
+            err = listen_error(msg)
+            if err:
+                write_line(err)
+            else:
+                listens[msg["id"]] = listen(msg, write_line)
             continue
         if isinstance(msg, dict) and msg.get("method") == "notifications/cancelled":
             sub = listens.pop((msg.get("params") or {}).get("requestId"), None)
@@ -392,6 +468,9 @@ def make_handler(token):
             except ValueError:
                 msg = None
             if is_listen(msg):
+                err = listen_error(msg)
+                if err:
+                    return self.send(200, json.dumps(err, ensure_ascii=False).encode())
                 return self.stream(msg)
             r = handle_text(body)
             if r is None:

@@ -369,7 +369,7 @@ call("project_register", path=mkq("pr"), name="Res")
 prj = call("projects")[0]["projects"]
 qroot = next(p["root"] for p in prj if p["name"] == "Res")
 qurl = "dira://queue?root=" + quote(qroot, safe="")
-turl = "dira://ticket/feed0001?root=" + quote(root, safe="")
+turl = "dira://ticket/feed0001?root=" + quote(os.path.realpath(root), safe="")
 for meta in (None, {M: "2026-07-28"}):
     def R(method, **pa):
         if meta:
@@ -477,7 +477,7 @@ for tag, first in (("old", dict(INIT)), ("new", None)):
             send({"jsonrpc": "2.0", "id": 2, "method": "subscriptions/listen", "params": {
                 "_meta": {M: "2026-07-28"}, "notifications": {
                     "toolsListChanged": True, "resourcesListChanged": True,
-                    "resourceSubscriptions": [turl, "dira://nope"], "taskIds": [turl]}}})
+                    "resourceSubscriptions": [turl, "dira://nope"]}}})
             ack = q.get(timeout=5)
             assert ack["method"] == "notifications/subscriptions/acknowledged", ack
             assert ack["params"]["notifications"] == {"toolsListChanged": True, "resourcesListChanged": True,
@@ -526,6 +526,87 @@ try:
     assert "listChanged" not in json.dumps(json.loads(h0.getresponse().read())["result"]["capabilities"])
 finally:
     srv.kill()
+
+# P571-5: tasks 확장
+TX = "io.modelcontextprotocol/tasks"
+CC = "io.modelcontextprotocol/clientCapabilities"
+DECL = {M: "2026-07-28", CC: {"extensions": {TX: {}}}}
+UNDECL = {M: "2026-07-28", CC: {}}
+
+
+def R5(method, meta=DECL, **pa):
+    return rpc([{"jsonrpc": "2.0", "id": 21, "method": method, "params": dict(pa, _meta=meta)}])[0]
+
+
+def tool5(name, meta=DECL, **args):
+    args.setdefault("root", root)
+    return R5("tools/call", meta, name=name, arguments=args)["result"]
+
+
+def tu(h):
+    return "dira://ticket/%s?root=%s" % (h, quote(os.path.realpath(root), safe=""))
+
+
+# 3: 핸들 반환, 미선언이면 기존 결과
+r = tool5("ticket_create", hash="7a5c0001", fm={"title": "h", "kind": "work"}, body="## Goal\nx")
+assert r["resultType"] == "task" and r["task"]["taskId"] == tu("7a5c0001") and r["task"]["status"] == "working", r
+assert "7a5c0001" in r["_meta"]["io.modelcontextprotocol/model-immediate-response"], r
+r = tool5("ticket_create", UNDECL, hash="7a5c0002", fm={"title": "h", "kind": "work"}, body="## Goal\nx")
+assert r["resultType"] == "complete" and "task" not in r and r["content"][0]["type"] == "text", r
+assert tool5("ticket_create", hash="7a5c0002")["isError"] is True  # 실패는 핸들 없이 오류
+assert tool5("ticket_create", UNDECL, hash="7a5c0004", fm={"title": "h"}, body="x")["resultType"] == "complete"
+assert not mcp_server.declares_tasks({"_meta": {CC: {"extensions": {TX: {}}}}}), "2026 버전 표지가 없으면 선언이 아니다"
+
+# 4: tasks/get 넷 + tasks/update + cancel
+g = R5("tasks/get", taskId=tu("7a5c0001"))["result"]
+assert g["status"] == "working" and g["taskId"] == tu("7a5c0001"), g
+Q5 = "## 질문 1\n\n### 1. 무엇부터\n\n- (a) 엔진만\n- (b) 화면까지\n"
+call("ticket_create", hash="7a5c0003", fm={"title": "물음", "kind": "request", "awaiting": "7a5c00b1",
+                                         "deps": "[7a5c00b1]"}, body="## Goal\nx\n\n" + Q5)
+g = R5("tasks/get", taskId=tu("7a5c0003"))["result"]
+assert g["status"] == "input_required" and set(g["inputRequests"]) == {"q1"}, g
+assert R5("tasks/update", taskId=tu("7a5c0003"), inputResponses={"q1": {"letters": ["a"], "note": "ok"}})["result"].keys() <= {"resultType", "_meta"}
+assert files("7a5c00b1") == ["7a5c00b1.done.md"], files("7a5c00b1")
+assert R5("tasks/get", taskId=tu("7a5c0003"))["result"]["status"] == "working"
+assert R5("tasks/update", taskId=tu("7a5c0001"), inputResponses={"q1": {}})["error"]["code"] == -32602
+before = files("7a5c0001")
+assert R5("tasks/cancel", taskId=tu("7a5c0001"))["result"].keys() <= {"resultType", "_meta"} and files("7a5c0001") == before
+assert R5("tasks/get", taskId=tu("7a5c9999"))["error"]["code"] == -32602
+tk = os.path.join(root, "tickets")
+open(os.path.join(tk, "7a5c0005.done.md"), "w").write("---\nticket: 7a5c0005\ntitle: d\n---\n\n## 결과\n\n끝\n")
+g = R5("tasks/get", taskId=tu("7a5c0005"))["result"]
+assert g["status"] == "completed" and "끝" in g["result"]["content"][0]["text"], g
+# continued: 이어받기를 끝까지 따라간다
+open(os.path.join(tk, "7a5c0006.done.md"), "w").write("---\nticket: 7a5c0006\ncontinued: 7a5c0007\n---\n\n## 결과\n\n절반\n")
+open(os.path.join(tk, "7a5c0007.md"), "w").write("---\nticket: 7a5c0007\n---\n\n## Goal\n\nx\n")
+assert R5("tasks/get", taskId=tu("7a5c0006"))["result"]["status"] == "working"
+os.rename(os.path.join(tk, "7a5c0007.md"), os.path.join(tk, "7a5c0007.done.md"))
+assert R5("tasks/get", taskId=tu("7a5c0006"))["result"]["status"] == "completed"
+# discover
+d5 = rpc([{"jsonrpc": "2.0", "id": 5, "method": "server/discover", "params": {}}])[0]["result"]
+assert TX in d5["capabilities"]["extensions"], d5
+
+# 7: taskIds 구독 - 선언했을 때 notifications/tasks, 안 했을 때 -32021
+sp = subprocess.Popen([sys.executable, SERVER], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, env=senv)
+q = reader(sp.stdout)
+try:
+    def send5(m):
+        sp.stdin.write(json.dumps(m) + "\n")
+        sp.stdin.flush()
+    nt = {"taskIds": [tu("7a5c0001")]}
+    send5({"jsonrpc": "2.0", "id": 30, "method": "subscriptions/listen", "params": {"_meta": UNDECL, "notifications": nt}})
+    assert q.get(timeout=5)["error"]["code"] == -32021
+    send5({"jsonrpc": "2.0", "id": 31, "method": "subscriptions/listen", "params": {"_meta": DECL, "notifications": nt}})
+    ack = q.get(timeout=5)
+    assert ack["params"]["notifications"] == {"taskIds": [tu("7a5c0001")]}, ack
+    time.sleep(1)
+    os.rename(os.path.join(tk, "7a5c0001.md"), os.path.join(tk, "7a5c0001.wip.md"))
+    n = next_note(q, "notifications/tasks")
+    assert n["params"]["taskId"] == tu("7a5c0001") and n["params"]["status"] == "working", n
+    assert "진행 중" in n["params"]["statusMessage"] and n["params"]["_meta"][mcp_server.SUBID] == "31", n
+finally:
+    sp.stdin.close()
+    sp.wait(timeout=10)
 
 # 구독을 지우면 감시 스레드도 끝난다
 sub_ = mcp_server.add_sub({"id": "x", "sink": lambda m: None, "tools": True, "list": True, "uris": []})
