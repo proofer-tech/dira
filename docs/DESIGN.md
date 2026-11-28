@@ -8988,6 +8988,58 @@ pofol PM이 이 큐로 옮겼다. 원문에 어느 URL을 눌렀는지는 없지
 - [ ] 답이 돌지 않을 때 보낸 글에는 버튼이 없다.
 - [ ] `cd apps/teams && pnpm test`와 `pnpm exec tsc --noEmit`이 통과하고, `git diff --stat`에 `tick.sh` - `tickets.py`가 없다.
 
+### P575. 브라우저로 인증에서 CLI가 토큰 다음 줄에 안내문을 그려도 토큰만 잘라 저장한다 (요구 `1994f671`, 왕복 0회)
+
+사람 요구(2026-11-28): claude 브라우저 토큰 불러오기가 안 된다. 첨부 화면은 설정의 `브라우저로 인증` 다이얼로그다. 진행
+로그에 `Long-lived authentication token created successfully! Your OAuth token (valid for 1 year): sk-ant-…'t be able to
+see it again.`이 보이고, 그 아래에 `토큰을 받지 못했습니다 - CLI 화면에서 읽은 값이 인증되지 않습니다`가 떠 있다.
+
+#### 원인 - 2026-11-28 코드와 설치본 CLI(2.1.321) 확인
+
+- 진행 로그의 `sk-ant-…`는 `maskTokens`가 매치 구간을 가린 자리다. 가린 구간이 `'t` 바로 앞에서 끝났으므로,
+  `TOKEN_RE` 매치가 토큰 뒤의 안내문 `Store this token securely. You won`까지 삼켰다.
+- 설치본 CLI 번들은 토큰과 안내문을 `flexDirection: "column", gap: 1` 상자 안의 **서로 다른 `Text` 둘**로 그린다
+  (토큰은 `color: "warning"`, 안내문 `Store this token securely. You won't be able to see it again.`은 `dimColor`).
+  그래서 토큰과 안내문 사이의 경계는 커서 가로 이동(CHA - CUF)이 아니라 **줄바꿈**이다.
+- `foldRaw`는 줄바꿈(`\r` - `\n`)을 지우기만 하고 `gapAt`을 세우지 않는다. 그래서 `tokenGapCuts`가 안내문 안의 낱말
+  경계는 후보로 내지만 토큰과 안내문 사이 경계는 내지 않는다. 남는 한 자씩 줄이기(`MAX_TRIM` 24자)는 붙은 꼬리
+  `Storethistokensecurely.Youwon`(29자)에 닿지 못한다. 그래서 모든 후보가 401이고 `auth.verify.notAuthenticated`가 뜬다.
+- P359-2(`eabc009b`)는 같은 줄에서 CHA로 이어 붙은 안내문만 다뤘다. 이번에는 CLI가 안내문을 다음 줄로 옮긴 경우다.
+
+#### 결정
+
+1. **`foldRaw`는 줄바꿈과 세로 커서 이동이 있던 자리에도 `gapAt`을 세운다.** 줄바꿈 문자(`\r` - `\n`)와 세로 이동
+   CSI(CUU `A` - CUD `B` - CNL `E` - CPL `F` - CUP `H` - HVP `f`)가 대상이다. 접은 텍스트(`text`)와 `rawIndex`는 바뀌지
+   않는다. 바뀌는 것은 `tokenGapCuts`가 내는 후보뿐이다.
+2. **토큰이 폭 때문에 줄로 접혀 들어와도 그대로 잡힌다.** 접힌 자리도 후보가 되지만, `verifiedToken`은 원문 길이를
+   먼저 확인하고 후보는 401이면 넘어가므로 잘못 자르지 않는다. 늘어나는 것은 401 확인 요청 몇 번뿐이다.
+3. **`MAX_TRIM`, `TOKEN_RE`, 확인 요청(`probeClaudeToken`)은 바꾸지 않는다.** 꼬리 길이에 맞춰 상수를 늘리는 수선은
+   P359-2가 닫은 방향이다. 토큰 형식도 하드코딩하지 않는다(§0-4).
+4. **엔진(`tick.sh` - `tickets.py`)과 화면 문구는 바꾸지 않는다.**
+
+```autonomy
+주도성 5 판단: 첨부 화면의 가림 구간 끝(`'t`)과 설치본 CLI 번들의 레이아웃 코드로 원인이 하나로 정해져 되묻지 않았다.
+주도성 5 판단: 에픽을 열지 않는다. 티켓이 둘이고 화면 문구 변화가 없다(writer - designer 0장).
+```
+
+| ID | 무엇 | 페르소나 | deps | 상태 |
+|---|---|---|---|---|
+| P575-1 | 결정 1: `foldRaw`가 줄바꿈과 세로 커서 이동 자리에 `gapAt`을 세운다 + 토큰 다음 줄에 안내문이 오는 화면을 재구성한 `startSetup` 단위 테스트(`lib/auth.test.ts`) | developer | - | 발행 예정 |
+| P575-2 | QA - 아래 수용조건을 `kind: tc`로 발행하고 한 줄씩 판정한다 | qa | P575-1 | 발행 예정 |
+
+#### 수용조건
+
+- [ ] `lib/auth.test.ts`에 새 `startSetup` 테스트가 있다. 스텁 CLI가 `Your OAuth token (valid for 1 year):\r\n\r\n<토큰>\r\n\r\n`
+  다음에 `Store this token securely. You won` 낱말들을 공백 없이 `\033[<n>G`로 이어 출력하고, 가짜 확인 요청은 진짜 토큰
+  길이에서만 200을 준다. 이때 `pollSetup().error`가 없고 `tokenPath()`의 내용이 토큰과 정확히 같다. `cd apps/teams && pnpm test`
+  안에서 통과한다.
+- [ ] 같은 테스트에서 진행 로그(`pollSetup().lines`)에 `sk-ant-…`가 있고, 토큰 원문과 `Storethistoken`이 없다.
+- [ ] 기존 P359-2 테스트(`발급 성공 뒤 CLI 안내문이 낱말 사이 공백 없이 커서 이동 escape로 이어져도`)와 `토막난 토큰(커서 이동
+  escape·줄바꿈으로 갈린)도 이어 집고` 테스트가 고치지 않은 채로 통과한다.
+- [ ] 실물 확인: 설정 > Claude 토큰 > `브라우저로 인증`을 눌러 새 탭에서 승인하고 코드를 붙여 넣으면 `토큰을 받지
+  못했습니다`가 뜨지 않고 저장되며, 목록에 새 토큰이 생긴다(CLI 2.1.321 이상).
+- [ ] `cd apps/teams && pnpm exec tsc --noEmit`이 통과하고, `git diff --stat master`에 `tick.sh` - `tickets.py`가 없다.
+
 ### P574. 페르소나 기준 디렉터리가 아직 없는 큐에서도 엔진 - 상한 - 스킬 저장이 실패하지 않는다 (요구 `63a6efe3`, 왕복 0회)
 
 사람 요구(2026-11-28): 페르소나 프로필이 없는 상태에서 오류가 난다. 첨부 화면은 §5 엔진 팝오버에서 `claude` -
