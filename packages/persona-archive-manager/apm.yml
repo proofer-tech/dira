@@ -1,5 +1,5 @@
 name: persona-archive-manager
-version: 1.0.2
+version: 1.0.3
 description: dira persona-archive-manager package
 dependencies:
   apm:
