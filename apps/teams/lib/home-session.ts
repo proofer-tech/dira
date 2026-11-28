@@ -134,6 +134,14 @@ const TOOLS = "Read,Glob,Grep,Write,Edit,Bash";
  *
  *  **`home-session.test.ts`가 이 반환값을 검증한다.** `root`·`ontologyDir`는 더 이상 스코프에
  *  안 쓰이지만 §7-4 결정 3(페르소나가 안 섞인다)이 고정한 인자 개수(둘)는 유지한다. */
+/** 홈 대화 claude의 환경 두 값. 뒤 값은 120초 넘는 Bash의 백그라운드 자동 전환을 꺼서 그 자리에서 실패하게 한다
+ *  (P573). 사람 셸에 같은 이름이 있어도 `1`로 덮는다. */
+export function homeEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  env.DIRA_SESSION_KIND = "home";
+  env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = "1";
+  return env;
+}
+
 export function toolFlags(root: string, ontologyDir: string): string[] {
   void root;
   void ontologyDir;
@@ -1921,7 +1929,7 @@ export async function runClaudeAt(
   if (tok?.trim()) env.CLAUDE_CODE_OAUTH_TOKEN = tok.replace(/[\r\n]/g, "");
   // §11-13 결정 1 — 브라우저 슬롯의 owner 판정 셋 중 홈 세션을 가르는 유일한 값.
   // browse.sh가 이 한 줄만 보고 owner를 home으로 적는다.
-  env.DIRA_SESSION_KIND = "home";
+  homeEnv(env);
 
   return await new Promise((resolve) => {
     const child = spawn(bin, args, { cwd, env });

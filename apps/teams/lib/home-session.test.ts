@@ -42,6 +42,7 @@ const {
   deleteSchedule,
   workerSessions,
   toolFlags,
+  homeEnv,
   personaBlock,
   snapshotOf,
   isOnceWhen,
@@ -2865,4 +2866,10 @@ test("eatLine - result 줄은 background 활동을 두고 text_delta가 answerin
   assert.equal(typeof (live.activity as { since: number }).since, "number");
   eatLine('{"type":"stream_event","event":{"type":"content_block_delta","delta":{"type":"text_delta","text":"x"}}}', live);
   assert.equal(live.activity?.kind, "answering");
+});
+
+test("homeEnv — P573: 사람 셸의 CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=0도 1로 덮는다", () => {
+  const env = homeEnv({ CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "0" });
+  assert.strictEqual(env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS, "1");
+  assert.strictEqual(env.DIRA_SESSION_KIND, "home");
 });
